@@ -226,17 +226,18 @@ const App = (() => {
       if (!s) return;
 
       // ── Restore tempo ──────────────────────────────────────
-      if (typeof s.tempo === 'number' && s.tempo !== 1.0) {
+      if (typeof s.tempo === 'number') {
         Player.setTempo(s.tempo);
-        const sliderVal = Math.round(s.tempo * 100);
+        const sliderVal    = Math.round(s.tempo * 100);
+        const display      = s.tempo.toFixed(2) + '×';
         const tempoSlider  = document.getElementById('tempo-slider');
         const tempoVal     = document.getElementById('tempo-val');
         const oSlider      = document.getElementById('overlay-tempo-slider');
         const oVal         = document.getElementById('overlay-tempo-val');
-        if (tempoSlider) tempoSlider.value     = sliderVal;
-        if (tempoVal)    tempoVal.textContent  = s.tempo.toFixed(2) + '×';
-        if (oSlider)     oSlider.value         = sliderVal;
-        if (oVal)        oVal.textContent      = s.tempo.toFixed(2) + '×';
+        if (tempoSlider) tempoSlider.value    = sliderVal;
+        if (tempoVal)    tempoVal.textContent = display;
+        if (oSlider)     oSlider.value        = sliderVal;
+        if (oVal)        oVal.textContent     = display;
       }
 
       // ── Restore EQ enabled state ───────────────────────────
@@ -244,6 +245,9 @@ const App = (() => {
       if (eqToggle) {
         const isOn = s.eqEnabled !== false; // default on
         eqToggle.classList.toggle('on', isOn);
+        // Apply visual disabled state to sliders panel and EQ screen
+        document.getElementById('eq-sliders')?.classList.toggle('eq-off', !isOn);
+        document.getElementById('screen-eq')?.classList.toggle('eq-controls-off', !isOn);
       }
 
       // ── Restore EQ gains ───────────────────────────────────

@@ -325,7 +325,9 @@ const DB = (() => {
    */
   async function addRecent(item) {
     const store = _tx('recents', 'readwrite');
-    await _promisify(store.put({ ...item, accessedAt: Date.now() }));
+    // Preserve the item's own accessedAt if it was set (e.g. synced from another device).
+    // Fall back to Date.now() for regular use where no timestamp is provided.
+    await _promisify(store.put({ ...item, accessedAt: item.accessedAt ?? Date.now() }));
     await _trimRecents();
   }
 

@@ -265,14 +265,16 @@ const Sync = (() => {
       }
 
       case 'recents': {
+        const validRecents = (data || []).filter(r => r && r.id);
         await DB.clearRecents();
-        for (const item of (data || [])) await DB.addRecent(item);
+        for (const item of validRecents) await DB.addRecent(item);
         break;
       }
 
       case 'playcounts': {
         // Apply remote counts; songs only on this device keep their local counts
-        for (const item of (data || [])) await DB.setMeta(item.id, item);
+        const validCounts = (data || []).filter(r => r && r.id);
+        for (const item of validCounts) await DB.setMeta(item.id, item);
         break;
       }
 
@@ -418,6 +420,16 @@ const Sync = (() => {
    */
   async function init() {
     _ready = false;
+
+    // Helper: run a merge step, logging errors without aborting other steps
+    async function _mergeStep(name, fn) {
+      try {
+        await fn();
+      } catch (err) {
+        console.warn(`[Sync] Merge step "${name}" failed (skipped):`, err.message || err);
+      }
+    }
+
     try {
       await _refreshFileList();
 
@@ -440,24 +452,27 @@ const Sync = (() => {
       _remoteTs = { ...manifest };
 
       // ── Merge favorites ───────────────────────────────────
-      if (Array.isArray(remoteFavs) && remoteFavs.length > 0) {
+      await _mergeStep('favorites', async () => {
+        if (!Array.isArray(remoteFavs) || remoteFavs.length === 0) return;
         const local = await DB.getStarred();
         const localData = local.map(m => ({ id: m.id, name: m.name, displayName: m.displayName, artist: m.artist, albumName: m.albumName, thumbnailUrl: m.thumbnailUrl, folderId: m.folderId }));
         const { toAdd } = _mergeFavorites(localData, remoteFavs);
         for (const item of toAdd) await DB.setMeta(item.id, { ...item, starred: true });
         if (toAdd.length) console.log(`[Sync] Merged ${toAdd.length} remote favorites`);
-      }
+      });
 
       // ── Merge playlists ───────────────────────────────────
-      if (Array.isArray(remotePlaylists) && remotePlaylists.length > 0) {
+      await _mergeStep('playlists', async () => {
+        if (!Array.isArray(remotePlaylists) || remotePlaylists.length === 0) return;
         const local = await DB.getPlaylists();
         const { toUpsert } = _mergePlaylists(local, remotePlaylists);
         for (const pl of toUpsert) await DB.putPlaylist(pl);
         if (toUpsert.length) console.log(`[Sync] Merged ${toUpsert.length} remote playlists`);
-      }
+      });
 
       // ── Merge pinned ──────────────────────────────────────
-      if (remotePinned && typeof remotePinned === 'object') {
+      await _mergeStep('pinned', async () => {
+        if (!remotePinned || typeof remotePinned !== 'object') return;
         const localMeta = (await DB.getState('pinnedMeta')) || {};
         const localIds  = (await DB.getState('pinned'))     || [];
         const merged    = _mergePinned(localMeta, remotePinned);
@@ -465,33 +480,41 @@ const Sync = (() => {
         await DB.setState('pinnedMeta', merged);
         await DB.setState('pinned', [...localIds, ...newIds]);
         if (newIds.length) console.log(`[Sync] Merged ${newIds.length} remote pinned`);
-      }
+      });
 
       // ── Merge recents ─────────────────────────────────────
-      if (Array.isArray(remoteRecents) && remoteRecents.length > 0) {
+      await _mergeStep('recents', async () => {
+        if (!Array.isArray(remoteRecents) || remoteRecents.length === 0) return;
+        // Filter out any malformed items (null, missing id) to prevent aborting the loop
+        const validRemote = remoteRecents.filter(r => r && r.id);
+        if (!validRemote.length) return;
         const local = await DB.getRecents(CONFIG.RECENTS_MAX);
-        const { toAdd } = _mergeRecents(local, remoteRecents);
+        const { toAdd } = _mergeRecents(local, validRemote);
         for (const item of toAdd) await DB.addRecent(item);
         if (toAdd.length) console.log(`[Sync] Merged ${toAdd.length} remote recents`);
-      }
+      });
 
       // ── Merge play counts ─────────────────────────────────
-      if (Array.isArray(remotePlaycounts) && remotePlaycounts.length > 0) {
+      await _mergeStep('playcounts', async () => {
+        if (!Array.isArray(remotePlaycounts) || remotePlaycounts.length === 0) return;
+        const validRemote = remotePlaycounts.filter(r => r && r.id);
+        if (!validRemote.length) return;
         const local = await DB.getTopPlayed(10000);
-        const { toUpsert } = _mergePlaycounts(local, remotePlaycounts);
+        const { toUpsert } = _mergePlaycounts(local, validRemote);
         for (const item of toUpsert) await DB.setMeta(item.id, item);
         if (toUpsert.length) console.log(`[Sync] Merged ${toUpsert.length} remote playcounts`);
-      }
+      });
 
       // ── Merge settings ────────────────────────────────────
-      if (remoteSettings && typeof remoteSettings === 'object') {
+      await _mergeStep('settings', async () => {
+        if (!remoteSettings || typeof remoteSettings !== 'object') return;
         const localSettings = (await DB.getState('settings')) || null;
         const merged = _mergeSettings(localSettings, remoteSettings);
         if (merged !== localSettings) {
           await DB.setState('settings', merged);
           console.log('[Sync] Merged remote settings');
         }
-      }
+      });
 
       // Push merged state back + update manifest
       const now = Date.now();
