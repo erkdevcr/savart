@@ -33,6 +33,9 @@ const SHELL_FILES = [
   `${BASE}/manifest.json`,
   `${BASE}/icons/icon-192.png`,
   `${BASE}/icons/icon-512.png`,
+  `${BASE}/icons/icon-512-maskable.png`,
+  `${BASE}/icon-preview.svg`,
+  `${BASE}/images/bg1.webp`,
 ];
 
 /* ── Install ─────────────────────────────────────────────── */

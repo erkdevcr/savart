@@ -349,12 +349,51 @@ img { display: block; }
   align-items: center;
   justify-content: center;
   padding: 32px 24px;
-  gap: 32px;
+  overflow: hidden;
   background: var(--bg-base);
+}
+
+/* Background image layer — blurred independently from the card */
+#screen-login::before {
+  content: '';
+  position: absolute;
+  inset: -20px;
+  background: url('images/bg1.webp') center / cover no-repeat;
+  filter: blur(6px);
+  transform: scale(1.05);
+  z-index: 0;
+}
+
+/* Dark overlay over the image for contrast */
+#screen-login::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(6, 6, 12, 0.32);
+  z-index: 1;
 }
 
 #screen-login.active {
   display: flex;
+}
+
+/* Login card — sits above the blurred bg */
+.login-card {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  width: 100%;
+  max-width: 340px;
+  padding: 40px 32px;
+  background: rgba(12, 12, 18, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 24px;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
 }
 
 .login-logo {
@@ -2469,12 +2508,15 @@ img { display: block; }
   display: flex;
   align-items: center;
   justify-content: center;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 1),
+              0 0 18px 4px rgba(74, 136, 245, 0.12);
 }
 
 .login-logo {
-  font-size: 28px;
-  font-weight: 500;
-  letter-spacing: -0.03em;
+  font-family: 'Baskervville', Georgia, serif;
+  font-size: 32px;
+  font-weight: 400;
+  letter-spacing: 0.01em;
   color: var(--text-primary);
 }
 
