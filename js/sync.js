@@ -39,6 +39,11 @@ const Sync = (() => {
   let _ready     = false;    // true after init() completes (or fails gracefully)
   let _timers    = {};       // debounce timers per type
 
+  /* ── Error types ────────────────────────────────────────── */
+  class SyncScopeError extends Error {
+    constructor() { super('drive.appdata scope not granted'); this.isScope = true; }
+  }
+
   /* ── Auth helper ────────────────────────────────────────── */
   function _token() {
     const t = Auth.getValidToken();
@@ -56,6 +61,11 @@ const Sync = (() => {
     });
     if (!res.ok) {
       const body = await res.text().catch(() => res.statusText);
+      // 403 = token exists but scope not granted (drive.appdata missing)
+      if (res.status === 403) {
+        console.error('[Sync] 403 — drive.appdata scope not granted. Body:', body);
+        throw new SyncScopeError();
+      }
       throw new Error(`[Sync] Drive API ${res.status}: ${body}`);
     }
     return res;
@@ -281,9 +291,16 @@ const Sync = (() => {
         _pushPinned(),
       ]);
 
-      console.log('[Sync] Init complete.');
+      console.log('[Sync] Init complete ✓');
     } catch (err) {
-      console.warn('[Sync] init() failed (non-fatal):', err.message);
+      if (err.isScope) {
+        // drive.appdata scope not in token — need fresh consent
+        console.warn('[Sync] Missing drive.appdata scope — requesting consent.');
+        // Small delay so the app UI is fully visible before the popup
+        setTimeout(() => Auth.requestTokenWithConsent(), 800);
+      } else {
+        console.warn('[Sync] init() failed (non-fatal):', err.message);
+      }
     } finally {
       _ready = true;
     }
@@ -306,7 +323,8 @@ const Sync = (() => {
       else if (type === 'playlists') await _pushPlaylists();
       else if (type === 'pinned')    await _pushPinned();
     } catch (err) {
-      console.warn(`[Sync] push(${type}) failed (non-fatal):`, err.message);
+      if (err.isScope) return; // already notified in init()
+      console.warn(`[Sync] push(${type}) failed:`, err.message);
     }
   }
 

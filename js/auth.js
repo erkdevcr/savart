@@ -174,6 +174,18 @@ const Auth = (() => {
   }
 
   /**
+   * Request a token forcing the Google consent screen.
+   * Use when a new scope was added and the existing token doesn't include it.
+   * MUST be called from a user gesture.
+   */
+  function requestTokenWithConsent() {
+    _tryCreateClient();
+    if (!_tokenClient) return;
+    console.log('[Auth] Requesting token with forced consent screen');
+    _tokenClient.requestAccessToken({ prompt: 'consent' });
+  }
+
+  /**
    * Request a new access token.
    * MUST be called from a user-driven event (click/tap).
    * If the user already has an active Google session, the GIS popup
@@ -253,6 +265,7 @@ const Auth = (() => {
     tryAutoLogin,
     fetchUserInfo,
     requestToken,
+    requestTokenWithConsent,
     getValidToken,
     isAuthenticated,
     wasAuthenticated,
