@@ -1,0 +1,786 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#0C0C0F">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+  <title>Savart</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+
+  <!-- DM Sans from Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════
+     LOGIN SCREEN
+════════════════════════════════════════════════════════ -->
+<div id="screen-login" class="screen">
+  <!-- Wave/tilde logo mark -->
+  <div class="login-mark">
+    <svg width="48" height="32" viewBox="0 0 48 32" fill="none">
+      <path d="M6 22 C10 10, 14 10, 18 16 C22 22, 26 22, 30 16 C34 10, 38 10, 42 22"
+            stroke="#4A88F5" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    </svg>
+  </div>
+  <div class="login-logo">Savart</div>
+  <div class="login-tagline">Tu música de Google Drive,<br>donde quieras.</div>
+  <button id="btn-login" class="btn-primary">
+    <svg width="18" height="18" viewBox="0 0 24 24">
+      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+    </svg>
+    Continuar con Google
+  </button>
+  <p class="login-disclaimer">Al continuar, Savart accederá a tus archivos de Google Drive en modo solo lectura.</p>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     APP SHELL (visible after login)
+════════════════════════════════════════════════════════ -->
+<div id="app">
+
+  <!-- Token renewal banner -->
+  <div id="token-banner">
+    <span data-i18n="session_expiring">La sesión expirará pronto.</span>
+    <button id="btn-renew-token" data-i18n="renew">Renovar</button>
+  </div>
+
+  <!-- Sidebar (desktop) -->
+  <nav id="sidebar">
+    <div class="sidebar-logo">
+      <svg width="20" height="13" viewBox="0 0 48 32" fill="none" aria-hidden="true">
+        <path d="M6 22 C10 10, 14 10, 18 16 C22 22, 26 22, 30 16 C34 10, 38 10, 42 22"
+              stroke="#4A88F5" stroke-width="3.5" stroke-linecap="round" fill="none"/>
+      </svg>
+      Savart
+    </div>
+    <nav>
+      <button class="nav-item active" data-nav="home" data-view="home">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+        <span data-i18n="home">Inicio</span>
+      </button>
+      <button class="nav-item" data-nav="browse" data-view="browse">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>
+        <span data-i18n="browse">Examinar</span>
+      </button>
+      <button class="nav-item" data-nav="search" data-view="search">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <span data-i18n="search">Buscar</span>
+      </button>
+      <button class="nav-item" data-nav="library" data-view="library">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M4 6h2v12H4zm3 0h2v12H7zm3 0h12v2H10V6zm0 4h12v2H10v-2zm0 4h12v2H10v-2z"/></svg>
+        <span data-i18n="library">Biblioteca</span>
+      </button>
+      <button class="nav-item" data-nav="settings" data-view="settings">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94s-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96a7.02 7.02 0 0 0-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84a.484.484 0 0 0-.47.41l-.36 2.54a7.024 7.024 0 0 0-1.62.94l-2.39-.96a.479.479 0 0 0-.59.22L2.74 8.87a.479.479 0 0 0 .12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.27.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54a7.024 7.024 0 0 0 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32a.49.49 0 0 0-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z"/></svg>
+        <span data-i18n="settings">Ajustes</span>
+      </button>
+    </nav>
+  </nav>
+
+  <!-- Main content -->
+  <div id="main">
+
+    <!-- ── HOME ──────────────────────────────────────────── -->
+    <div id="screen-home" class="screen active">
+      <div class="home-header">
+        <div class="home-header-brand">
+          <svg width="22" height="14" viewBox="0 0 48 32" fill="none" aria-hidden="true">
+            <path d="M6 22 C10 10, 14 10, 18 16 C22 22, 26 22, 30 16 C34 10, 38 10, 42 22"
+                  stroke="#4A88F5" stroke-width="3.5" stroke-linecap="round" fill="none"/>
+          </svg>
+          <span>Savart</span>
+        </div>
+        <div class="home-header-actions">
+          <button class="home-action-btn" id="btn-home-search" aria-label="Buscar">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          </button>
+          <button class="home-action-btn" aria-label="Info">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="home-content">
+        <!-- Sections rendered dynamically by UI.renderHome() -->
+        <div class="empty-state" id="home-empty-state" style="margin-top:60px">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z"/></svg>
+          <p>Bienvenido a Savart.<br>Explora tu Drive para empezar.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── BROWSE ─────────────────────────────────────────── -->
+    <div id="screen-browse" class="screen">
+      <!-- Browse header: sticky · current folder name + parent breadcrumb + actions -->
+      <div class="browse-header">
+        <!-- Row 1: current folder name (prominent) -->
+        <div class="browse-title-row">
+          <svg class="browse-folder-icon" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>
+          <h1 class="browse-current-name" id="browse-folder-name">Mi Drive</h1>
+        </div>
+        <!-- Row 2: parent path (all crumbs before current — each clickable) -->
+        <div class="browse-path">
+          <!-- Rendered by UI.renderBreadcrumb() — hidden when at root -->
+        </div>
+        <!-- Row 3: actions bar (always present) -->
+        <div id="browse-action-bar">
+          <button id="btn-browse-back" class="btn-sort-toggle" aria-label="Carpeta anterior" style="display:none">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+            <span data-i18n="browse_back">Atrás</span>
+          </button>
+          <span id="browse-item-count" class="browse-item-count"></span>
+          <div id="sort-wrap" style="position:relative;margin-left:auto">
+            <button id="btn-browse-sort" class="btn-sort-toggle" aria-label="Ordenar">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg>
+              <span id="sort-label">A–Z</span>
+              <svg id="sort-chevron" width="10" height="10" viewBox="0 0 24 24" fill="currentColor" style="transition:transform 0.2s"><path d="M7 10l5 5 5-5z"/></svg>
+            </button>
+            <div id="sort-dropdown" class="sort-dropdown" style="display:none">
+              <button class="sort-option" data-mode="name_asc">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg>
+                A–Z
+              </button>
+              <button class="sort-option" data-mode="name_desc">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="transform:scaleY(-1)"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg>
+                Z–A
+              </button>
+              <button class="sort-option" data-mode="size_desc">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M9 3L5 6.99h3V14h2V6.99h3L9 3zm7 14.01V10h-2v7.01h-3L15 21l4-3.99h-3z"/></svg>
+                Tamaño
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Item list rendered by UI.renderFolderContents() -->
+    </div>
+
+    <!-- ── SEARCH ─────────────────────────────────────────── -->
+    <div id="screen-search" class="screen">
+      <div class="screen-header">
+        <h1 data-i18n="search">Buscar</h1>
+      </div>
+      <div class="search-bar-wrap">
+        <div class="search-bar">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          <input id="search-input" type="search" placeholder="Canciones, carpetas…" data-i18n-placeholder="search_placeholder" autocomplete="off" autocorrect="off" spellcheck="false">
+        </div>
+      </div>
+      <div class="search-filters">
+        <button class="filter-chip active" data-filter="all"  data-i18n="filter_all">Todo</button>
+        <button class="filter-chip"        data-filter="songs" data-i18n="filter_songs">Canciones</button>
+        <button class="filter-chip"        data-filter="folders" data-i18n="filter_folders">Carpetas</button>
+      </div>
+      <div id="search-results" class="item-list">
+        <!-- Results rendered dynamically -->
+      </div>
+    </div>
+
+    <!-- ── LIBRARY ────────────────────────────────────────── -->
+    <div id="screen-library" class="screen">
+      <div class="screen-header">
+        <h1 data-i18n="library">Biblioteca</h1>
+      </div>
+      <div class="lib-layout">
+        <!-- Left sidebar: Favoritos + Playlists -->
+        <div class="lib-sidebar" id="lib-sidebar">
+          <div class="lib-sidebar-item active" id="lib-fav-item" data-type="favorites">
+            <div class="lib-sidebar-thumb lib-sidebar-thumb--fav">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+            </div>
+            <span class="lib-sidebar-name" data-i18n="lib_favorites">Favoritos</span>
+          </div>
+          <div class="lib-sidebar-label">PLAYLISTS</div>
+          <div class="lib-sidebar-item lib-sidebar-new" id="btn-new-playlist">
+            <div class="lib-sidebar-thumb">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+            </div>
+            <span class="lib-sidebar-name" data-i18n="lib_new_playlist">Nueva playlist</span>
+          </div>
+          <div id="playlists-list"></div>
+        </div>
+        <!-- Right: detail pane -->
+        <div class="lib-detail" id="lib-detail">
+          <div id="lib-detail-content"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── SETTINGS ───────────────────────────────────────── -->
+    <div id="screen-settings" class="screen">
+      <div class="screen-header">
+        <h1 data-i18n="settings">Ajustes</h1>
+      </div>
+
+      <!-- EQ panel: static/embedded on desktop; JS moves to body on mobile -->
+      <div id="screen-eq">
+        <div class="eq-header">
+          <button id="btn-eq-close" class="eq-back-btn" aria-label="Cerrar EQ">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+          </button>
+          <h2 class="eq-title">Ecualizador</h2>
+          <div style="display:flex;align-items:center;gap:10px;margin-left:auto">
+            <button id="btn-eq-reset" class="eq-reset-btn">Resetear</button>
+            <div class="toggle" id="eq-toggle"></div>
+          </div>
+        </div>
+        <div class="eq-presets-scroll">
+          <button class="eq-preset-chip" data-preset="flat">Plano</button>
+          <button class="eq-preset-chip active" data-preset="rock">Rock</button>
+          <button class="eq-preset-chip" data-preset="pop">Pop</button>
+          <button class="eq-preset-chip" data-preset="jazz">Jazz</button>
+          <button class="eq-preset-chip" data-preset="classical">Clásica</button>
+          <button class="eq-preset-chip" data-preset="bass">Bass boost</button>
+          <button class="eq-preset-chip" data-preset="vocal">Vocal</button>
+        </div>
+        <div class="eq-sliders-wrap">
+          <div class="eq-sliders" id="eq-sliders"></div>
+        </div>
+        <div class="eq-curve-wrap" id="eq-curve-wrap">
+          <svg id="eq-curve-svg" viewBox="0 0 900 80" preserveAspectRatio="none"></svg>
+        </div>
+        <div class="eq-custom-section">
+          <div class="eq-custom-header">
+            <span class="t-label" style="color:var(--text-muted)">Mis presets</span>
+            <button id="btn-eq-save" class="btn-primary" style="padding:6px 14px;font-size:12px">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+              Guardar actual
+            </button>
+          </div>
+          <div class="eq-custom-list" id="eq-custom-list"></div>
+        </div>
+      </div>
+
+      <!-- Desktop: 2 columns. Mobile: single column (no wrapper) -->
+      <div class="settings-columns">
+
+      <!-- LEFT COLUMN: Reproducción + Biblioteca -->
+      <div class="settings-col-left">
+
+      <!-- REPRODUCCIÓN -->
+      <div class="settings-section">
+        <div class="settings-section-title" data-i18n="settings_playback">Reproducción</div>
+
+        <!-- EQ -->
+        <div class="settings-row" id="settings-eq-row">
+          <div>
+            <div class="settings-row-label" data-i18n="settings_eq">Ecualizador</div>
+            <div class="settings-row-sub" data-i18n="settings_eq_12band">12 bandas</div>
+          </div>
+          <button id="btn-open-eq" class="btn-outline-accent" data-i18n-label="settings_open_eq">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/></svg>
+            Abrir EQ
+          </button>
+        </div>
+
+        <!-- Tempo -->
+        <div class="settings-slider-row">
+          <div class="settings-row-label" data-i18n="settings_tempo">Tempo</div>
+          <span id="tempo-val" class="settings-value-label">1.0×</span>
+        </div>
+        <div class="slider-with-steps">
+          <button class="step-btn" data-target="tempo-slider" data-dir="-1" aria-label="Bajar tempo">−</button>
+          <div class="settings-slider-wrap" style="flex:1;padding:0">
+            <span class="slider-bound">0.5×</span>
+            <input id="tempo-slider" type="range" min="50" max="200" value="100" step="1" class="settings-slider">
+            <span class="slider-bound">2.0×</span>
+          </div>
+          <button class="step-btn" data-target="tempo-slider" data-dir="1" aria-label="Subir tempo">+</button>
+        </div>
+
+        <!-- Sleep timer -->
+        <div class="settings-row" style="flex-direction:column;align-items:flex-start;gap:10px">
+          <div style="display:flex;align-items:center;gap:10px;width:100%">
+            <div class="settings-row-label" data-i18n="settings_sleep_timer">Sleep timer</div>
+            <span id="sleep-timer-status" class="settings-value-label" style="margin-left:auto"></span>
+            <div class="toggle" id="sleep-timer-toggle"></div>
+          </div>
+          <div class="sleep-pills" id="sleep-timer-pills">
+            <button class="sleep-pill" data-mins="15">15 min</button>
+            <button class="sleep-pill" data-mins="30">30 min</button>
+            <button class="sleep-pill" data-mins="60">60 min</button>
+            <button class="sleep-pill" data-mins="custom">Custom</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- BIBLIOTECA -->
+      <div class="settings-section">
+        <div class="settings-section-title" data-i18n="settings_library">Biblioteca</div>
+        <div class="settings-row">
+          <div>
+            <div class="settings-row-label" data-i18n="settings_root_folder">Carpeta raíz</div>
+            <div class="settings-row-sub" id="root-folder-name">MSK</div>
+          </div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="color:var(--text-muted)"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+        </div>
+      </div>
+
+      </div><!-- /.settings-col-left -->
+
+      <!-- RIGHT COLUMN: Almacenamiento + Apariencia + Cuenta -->
+      <div class="settings-col-right">
+
+      <!-- ALMACENAMIENTO -->
+      <div class="settings-section">
+        <div class="settings-section-title" data-i18n="settings_storage">Almacenamiento</div>
+        <div class="settings-row" style="flex-direction:column;align-items:flex-start;gap:8px">
+          <div style="display:flex;align-items:center;gap:10px;width:100%">
+            <div class="settings-row-label" data-i18n="settings_cache">Caché</div>
+            <span id="cache-size-label" class="settings-value-label" style="margin-left:auto">—</span>
+          </div>
+          <div class="cache-bar-track">
+            <div class="cache-bar-fill" id="cache-bar-fill" style="width:0%"></div>
+          </div>
+        </div>
+        <div class="settings-row">
+          <div class="settings-row-label" data-i18n="settings_cache_limit">Límite de caché</div>
+          <select id="select-cache-limit" class="settings-select">
+            <option value="524288000">500 MB</option>
+            <option value="1073741824" selected>1 GB</option>
+            <option value="2147483648">2 GB</option>
+            <option value="5368709120">5 GB</option>
+            <option value="10737418240">10 GB</option>
+            <option value="21474836480">20 GB</option>
+          </select>
+        </div>
+        <div class="settings-row">
+          <div>
+            <button id="btn-clear-cache" data-i18n="settings_clear_cache" style="color:var(--error);font-size:14px;background:none;border:none;cursor:pointer;padding:0">Borrar caché</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- APARIENCIA -->
+      <div class="settings-section">
+        <div class="settings-section-title" data-i18n="settings_appearance">Apariencia</div>
+        <div class="settings-row">
+          <div class="settings-row-label" data-i18n="settings_language">Idioma</div>
+          <div class="lang-toggle">
+            <button class="lang-btn active" data-lang="es">ES</button>
+            <button class="lang-btn" data-lang="en">EN</button>
+          </div>
+        </div>
+        <div class="settings-row">
+          <div class="settings-row-label" data-i18n="settings_text_size">Tamaño de texto</div>
+          <div class="text-size-picker" id="text-size-picker">
+            <button class="text-size-btn" data-size="small" style="font-size:11px">A</button>
+            <button class="text-size-btn active" data-size="normal" style="font-size:14px">A</button>
+            <button class="text-size-btn" data-size="large" style="font-size:18px">A</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- CUENTA -->
+      <div class="settings-section">
+        <div class="settings-section-title" data-i18n="settings_account">Cuenta</div>
+        <div class="settings-row">
+          <div style="display:flex;align-items:center;gap:12px">
+            <div class="account-avatar" id="account-avatar">E</div>
+            <div>
+              <div class="settings-row-label" id="account-email">erick.sojo@alquemis.com</div>
+              <div class="settings-row-sub" data-i18n="settings_drive_linked">Google Drive vinculado</div>
+            </div>
+          </div>
+        </div>
+        <div class="settings-row">
+          <div>
+            <button id="btn-logout" data-i18n="logout" style="color:var(--error);font-size:14px;font-weight:500;background:none;border:none;cursor:pointer;padding:0">Cerrar sesión</button>
+          </div>
+        </div>
+      </div>
+
+      <div style="padding:24px 16px;text-align:center">
+        <span style="font-size:11px;color:var(--text-disabled)">Savart — versión 0.9.0</span>
+      </div>
+
+      </div><!-- /.settings-col-right -->
+      </div><!-- /.settings-columns -->
+    </div>
+
+  </div><!-- /#main -->
+
+<!-- ═══════════════════════════════════════════════════════
+     EXPANDED PLAYER (full-screen on mobile, right panel desktop)
+════════════════════════════════════════════════════════ -->
+<div id="player-expanded">
+
+  <!-- Mobile top bar -->
+  <div class="pexp-topbar">
+    <button id="btn-pexp-close" class="pexp-icon-btn" aria-label="Cerrar">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/></svg>
+    </button>
+    <span class="pexp-topbar-title" data-i18n="queue_now_playing">Reproduciendo ahora</span>
+    <button class="pexp-icon-btn" id="btn-pexp-more" aria-label="Más opciones">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
+    </button>
+  </div>
+
+  <!-- ── Now Playing view ─────────────────────────────────── -->
+  <div class="pexp-now-playing-view">
+
+    <!-- Album art panel -->
+    <div class="pexp-art-panel">
+      <div class="pexp-art" id="pexp-art">
+        <img id="pexp-art-img" src="" alt="" style="display:none">
+        <div class="pexp-art-placeholder" id="pexp-art-placeholder">
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z"/></svg>
+        </div>
+      </div>
+      <!-- File info badges -->
+      <div class="pexp-badges" id="pexp-badges" style="display:none">
+        <span class="pexp-badge" id="pexp-badge-type"></span>
+        <span class="pexp-badge" id="pexp-badge-kbps"></span>
+        <span class="pexp-badge" id="pexp-badge-size"></span>
+      </div>
+    </div>
+
+    <!-- Info + controls panel -->
+    <div class="pexp-info-panel">
+
+      <!-- Desktop-only header -->
+      <div class="pexp-panel-hdr">
+        <button id="btn-pexp-show-album" class="pexp-show-album-btn" aria-label="Mostrar álbum">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>
+          MOSTRAR ÁLBUM
+        </button>
+      </div>
+
+      <!-- Track info + favorite -->
+      <div class="pexp-track-row">
+        <div class="pexp-track-info">
+          <div class="pexp-title" id="pexp-title">—</div>
+          <div class="pexp-artist" id="pexp-artist"></div>
+          <div class="pexp-album" id="pexp-album"></div>
+          <div class="pexp-file" id="pexp-file"></div>
+        </div>
+        <button class="pexp-fav-btn" id="btn-pexp-fav" aria-label="Favorito">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+        </button>
+      </div>
+
+      <!-- Progress slider -->
+      <div class="pexp-progress-wrap">
+        <div class="pexp-progress-track" id="pexp-progress-track">
+          <div class="pexp-progress-fill" id="pexp-progress-fill" style="width:0%">
+            <div class="pexp-thumb"></div>
+          </div>
+        </div>
+      </div>
+      <div class="pexp-times">
+        <span id="pexp-time-cur">0:00</span>
+        <span id="pexp-time-tot">0:00</span>
+      </div>
+
+      <!-- Playback controls -->
+      <div class="pexp-controls">
+        <button class="pexp-ctrl-btn" id="btn-pexp-shuffle" aria-label="Aleatorio">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg>
+        </button>
+        <button class="pexp-ctrl-btn" id="btn-pexp-prev" aria-label="Anterior">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>
+        </button>
+        <button class="pexp-play-btn" id="btn-pexp-play" aria-label="Play/Pausa">
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+        </button>
+        <button class="pexp-ctrl-btn" id="btn-pexp-next" aria-label="Siguiente">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M16 6h2v12h-2zM6 6v12l8.5-6z"/></svg>
+        </button>
+        <button class="pexp-ctrl-btn" id="btn-pexp-repeat" aria-label="Repetir">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>
+        </button>
+      </div>
+
+      <!-- Action shortcuts -->
+      <div class="pexp-actions">
+        <button class="pexp-action-btn" id="btn-pexp-queue">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg>
+          <span data-i18n="queue_title">Cola</span>
+        </button>
+        <button class="pexp-action-btn" id="btn-pexp-eq-open">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg>
+          <span>EQ</span>
+        </button>
+        <button class="pexp-action-btn" id="btn-pexp-speed">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M20.38 8.57l-1.23 1.85a8 8 0 0 1-.22 7.58H5.07A8 8 0 0 1 15.58 6.85l1.85-1.23A10 10 0 0 0 3.35 19a2 2 0 0 0 1.72 1h13.85a2 2 0 0 0 1.74-1 10 10 0 0 0-.27-10.44zm-9.79 6.84a2 2 0 0 0 2.83 0l5.66-8.49-8.49 5.66a2 2 0 0 0 0 2.83z"/></svg>
+          <span data-i18n="player_speed">Velocidad</span>
+        </button>
+        <button class="pexp-action-btn" id="btn-pexp-timer">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67V7z"/></svg>
+          <span data-i18n="player_timer">Temporizador</span>
+        </button>
+      </div>
+
+    </div><!-- /.pexp-info-panel -->
+  </div><!-- /.pexp-now-playing-view -->
+
+  <!-- ── Queue view ──────────────────────────────────────────── -->
+  <div class="pexp-queue-view" id="pexp-queue-view">
+    <div class="queue-header">
+      <button class="queue-back-btn" id="btn-queue-back" aria-label="Volver">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+      </button>
+      <span class="queue-header-title" data-i18n="queue_title">Cola</span>
+      <span class="queue-count" id="queue-count"></span>
+    </div>
+    <div class="queue-list" id="queue-list">
+      <!-- Populated by JS -->
+    </div>
+  </div><!-- /.pexp-queue-view -->
+
+</div><!-- /#player-expanded -->
+
+</div><!-- /#app -->
+
+
+<!-- ═══════════════════════════════════════════════════════
+     PERSISTENT UI (outside screen flow)
+════════════════════════════════════════════════════════ -->
+
+<!-- Bottom nav (mobile) -->
+<nav id="bottom-nav" style="display:none">
+  <button class="nav-tab active" data-nav="home" data-view="home">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+    <span data-i18n="home">Inicio</span>
+  </button>
+  <button class="nav-tab" data-nav="browse" data-view="browse">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>
+    <span data-i18n="browse">Examinar</span>
+  </button>
+  <button class="nav-tab" data-nav="search" data-view="search">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+    <span data-i18n="search">Buscar</span>
+  </button>
+  <button class="nav-tab" data-nav="library" data-view="library">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M4 6h2v12H4zm3 0h2v12H7zm3 0h12v2H10V6zm0 4h12v2H10v-2zm0 4h12v2H10v-2z"/></svg>
+    <span data-i18n="library">Biblioteca</span>
+  </button>
+  <button class="nav-tab" data-nav="settings" data-view="settings">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94s-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96a7.02 7.02 0 0 0-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84a.484.484 0 0 0-.47.41l-.36 2.54a7.024 7.024 0 0 0-1.62.94l-2.39-.96a.479.479 0 0 0-.59.22L2.74 8.87a.479.479 0 0 0 .12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.27.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54a7.024 7.024 0 0 0 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32a.49.49 0 0 0-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z"/></svg>
+    <span data-i18n="settings">Ajustes</span>
+  </button>
+</nav>
+
+<!-- Mini-player -->
+<div id="mini-player">
+  <div class="mini-thumb">
+    <img src="" alt="" style="display:none">
+    <div class="thumb-placeholder">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z"/></svg>
+    </div>
+    <div class="eq-bars">
+      <div class="eq-bar"></div>
+      <div class="eq-bar"></div>
+      <div class="eq-bar"></div>
+      <div class="eq-bar"></div>
+    </div>
+  </div>
+  <div class="mini-info">
+    <div class="mini-title">—</div>
+    <div class="mini-artist"></div>
+  </div>
+  <!-- Desktop: progress + times (hidden on mobile) -->
+  <div class="mini-progress-desktop">
+    <span id="mini-time-current" class="mini-time">0:00</span>
+    <div class="mini-progress-track" id="mini-progress-track">
+      <div class="mini-progress-fill" id="mini-progress-fill" style="width:0%"></div>
+    </div>
+    <span id="mini-time-total" class="mini-time">0:00</span>
+  </div>
+  <!-- Mobile controls: Next · Play · Prev (per mockup) -->
+  <div class="mini-controls">
+    <button class="btn-next-mini" aria-label="Siguiente">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M16 6h2v12h-2zM6 6v12l8.5-6z"/></svg>
+    </button>
+    <button class="btn-play-mini" aria-label="Play/Pausa">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+    </button>
+    <button class="btn-prev-mini" aria-label="Anterior">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>
+    </button>
+  </div>
+  <!-- Desktop extras: skip-prev · prev · play · next · skip-next + volume -->
+  <div class="mini-extras">
+    <button class="mini-extra-btn mini-skip-prev" aria-label="Inicio de pista">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>
+    </button>
+    <button class="mini-extra-btn btn-prev-mini-desk" aria-label="Anterior">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M15.41 16.59L10.83 12l4.58-4.59L14 6l-6 6 6 6z"/></svg>
+    </button>
+    <button class="mini-extra-btn btn-play-mini-desk" aria-label="Play/Pausa">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+    </button>
+    <button class="mini-extra-btn btn-next-mini-desk" aria-label="Siguiente">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6z"/></svg>
+    </button>
+    <button class="mini-extra-btn mini-skip-next" aria-label="Fin de pista">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M16 6h2v12h-2zM6 6v12l8.5-6z"/></svg>
+    </button>
+    <div class="mini-volume">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/></svg>
+      <input type="range" id="mini-volume-slider" min="0" max="100" value="100" class="mini-vol-slider">
+    </div>
+    <button class="mini-extra-btn" id="btn-mini-star" aria-label="Favorita">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+    </button>
+    <button class="mini-extra-btn" id="btn-mini-queue" aria-label="Cola">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg>
+    </button>
+  </div>
+  <!-- Mobile: thin progress bar anchored to bottom -->
+  <div class="mini-progress" style="width:0%"></div>
+</div>
+
+<!-- Context menu -->
+<div id="context-menu"></div>
+
+<!-- Playlist picker (Spotify-style floating panel) -->
+<div id="playlist-picker">
+  <div class="pl-picker-search-wrap">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+    <input id="pl-picker-input" type="search" placeholder="Busca una playlist" data-i18n-placeholder="pl_picker_search" autocomplete="off" autocorrect="off" spellcheck="false">
+  </div>
+  <div class="pl-picker-new" id="pl-picker-new">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+    <span data-i18n="lib_new_playlist">Nueva playlist</span>
+  </div>
+  <div class="pl-picker-create" id="pl-picker-create">
+    <input id="pl-picker-create-input" type="text" placeholder="Nombre de la playlist" data-i18n-placeholder="pl_picker_name" autocomplete="off" maxlength="80">
+    <button id="pl-picker-create-confirm" aria-label="Confirmar">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+    </button>
+  </div>
+  <div class="pl-picker-sep"></div>
+  <div class="pl-picker-list" id="pl-picker-list"></div>
+</div>
+
+<!-- Toast container -->
+<div id="toast-container"></div>
+
+<!-- ── Ctrl sheets — Speed / Timer (mobile overlays) ── -->
+<div id="overlay-speed" class="ctrl-sheet">
+  <div class="ctrl-sheet-backdrop"></div>
+  <div class="ctrl-sheet-card">
+    <div class="ctrl-sheet-hdr">
+      <span class="ctrl-sheet-title">Tempo</span>
+      <button class="ctrl-sheet-close-btn" aria-label="Cerrar">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+      </button>
+    </div>
+    <div style="margin-top:4px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span class="ctrl-sheet-big-val" id="overlay-tempo-val" style="font-size:18px">1.00×</span>
+      </div>
+      <div class="slider-with-steps">
+        <button class="step-btn" data-target="overlay-tempo-slider" data-dir="-1" aria-label="Bajar tempo">−</button>
+        <div class="settings-slider-wrap" style="flex:1;padding:0">
+          <span class="slider-bound">0.5×</span>
+          <input id="overlay-tempo-slider" type="range" min="50" max="200" value="100" step="1" class="settings-slider">
+          <span class="slider-bound">2.0×</span>
+        </div>
+        <button class="step-btn" data-target="overlay-tempo-slider" data-dir="1" aria-label="Subir tempo">+</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="overlay-timer" class="ctrl-sheet">
+  <div class="ctrl-sheet-backdrop"></div>
+  <div class="ctrl-sheet-card">
+    <div class="ctrl-sheet-hdr">
+      <span class="ctrl-sheet-title">Sleep Timer</span>
+      <button class="ctrl-sheet-close-btn" aria-label="Cerrar">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+      </button>
+    </div>
+    <div class="sleep-pills" id="overlay-timer-pills">
+      <button class="sleep-pill" data-mins="15">15 min</button>
+      <button class="sleep-pill" data-mins="30">30 min</button>
+      <button class="sleep-pill" data-mins="60">60 min</button>
+      <button class="sleep-pill" data-mins="custom">Custom</button>
+      <button class="sleep-pill active" data-mins="off">Off</button>
+    </div>
+    <div class="ctrl-sheet-timer-status" id="overlay-timer-status"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     SCRIPTS
+     Loaded in dependency order (no ES modules — plain globals)
+════════════════════════════════════════════════════════ -->
+
+<!-- Google Identity Services -->
+<script src="https://accounts.google.com/gsi/client" onload="Auth?.onGISLoad()" async defer></script>
+
+<!-- Savart modules -->
+<script src="js/config.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/drive.js"></script>
+<script src="js/db.js"></script>
+<script src="js/player.js"></script>
+<script src="js/meta.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/app.js"></script>
+
+<!-- Inline: additional bindings that need the DOM -->
+<script>
+  // ── Library sidebar: Favoritos item ───────────────────
+  document.getElementById('lib-fav-item')?.addEventListener('click', () => {
+    document.querySelectorAll('#view-library .lib-sidebar-item').forEach(i => i.classList.remove('active'));
+    document.getElementById('lib-fav-item').classList.add('active');
+    App._loadStarred?.();
+  });
+
+  // ── Home search shortcut ───────────────────────────────
+  document.getElementById('btn-home-search')?.addEventListener('click', () => {
+    App.onNavClick?.('search');
+  });
+
+  // ── Search input debounce ──────────────────────────────
+  let _searchTimer = null;
+  document.getElementById('search-input')?.addEventListener('input', (e) => {
+    clearTimeout(_searchTimer);
+    const term = e.target.value.trim();
+    if (!term) {
+      document.getElementById('search-results').innerHTML = '';
+      return;
+    }
+    _searchTimer = setTimeout(() => App._doSearch?.(term), 400);
+  });
+
+  // ── Search filter chips ────────────────────────────────
+  document.querySelectorAll('[data-filter]').forEach(chip => {
+    chip.addEventListener('click', () => {
+      document.querySelectorAll('[data-filter]').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      // Re-run search with new filter if there's a term
+      const term = document.getElementById('search-input')?.value.trim();
+      if (term) App._doSearch?.(term);
+    });
+  });
+
+  // ── PWA service worker registration ────────────────────
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js')
+        .then(reg => console.log('[SW] Registered:', reg.scope))
+        .catch(err => console.warn('[SW] Registration failed:', err));
+    });
+  }
+</script>
+
+</body>
+</html>

@@ -1,0 +1,40 @@
+{
+  "name": "Savart",
+  "short_name": "Savart",
+  "description": "Tu biblioteca de Google Drive, en cualquier dispositivo.",
+  "start_url": "/savart/",
+  "display": "standalone",
+  "background_color": "#0C0C0F",
+  "theme_color": "#0C0C0F",
+  "orientation": "any",
+  "lang": "es",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["music", "entertainment"],
+  "shortcuts": [
+    {
+      "name": "Examinar",
+      "short_name": "Examinar",
+      "url": "/savart/?view=browse",
+      "description": "Navegar carpetas de música"
+    },
+    {
+      "name": "Buscar",
+      "short_name": "Buscar",
+      "url": "/savart/?view=search",
+      "description": "Buscar canciones"
+    }
+  ]
+}

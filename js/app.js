@@ -1,0 +1,2374 @@
+/* ============================================================
+   Savart — App entry point
+   Wires Auth, Drive, DB, Player, and UI together.
+   ============================================================
+   Boot sequence:
+   1. DB.open()
+   2. Auth.init()
+   3. If user was previously authenticated → show renew banner
+      else → show login screen
+   4. On token ready → show Home, load home data
+
+   All user-triggered events from the UI route through App.*
+   so that the UI module stays free of business logic.
+   ============================================================ */
+
+const App = (() => {
+
+  /* ── Browse state ────────────────────────────────────────── */
+  let _breadcrumb    = [];    // [{ id, name }] from root to current
+  let _rootFolderId  = 'root';
+
+  /* ── Folder cover art cache ──────────────────────────────── */
+  // folderId → object URL string | null (null = no image found)
+  const _folderCoverCache = new Map();
+
+  /* ── Blob size cache ─────────────────────────────────────── */
+  // fileId → blob.size (bytes). Populated in _onBlobReady.
+  // Needed because queue items loaded from recents lack a size field,
+  // and _onPlayPause calls _enrichTrack which would otherwise show "—".
+  const _blobSizeCache = new Map();
+
+  /* ── Loading-spinner timer ───────────────────────────────── */
+  // We delay showing the spinner by 120ms to avoid a visual flash for
+  // cached (instantly loaded) tracks.
+  let _loadingTimer = null;
+
+  function _startLoadingSpinner() {
+    _cancelLoadingSpinner();
+    _loadingTimer = setTimeout(() => {
+      UI.setPlayerLoading(true);
+      _loadingTimer = null;
+    }, 120);
+  }
+
+  function _cancelLoadingSpinner() {
+    if (_loadingTimer !== null) { clearTimeout(_loadingTimer); _loadingTimer = null; }
+    UI.setPlayerLoading(false);
+  }
+
+  /* ── Boot ───────────────────────────────────────────────── */
+
+  async function boot() {
+    console.log('[App] Booting Savart', CONFIG.VERSION);
+
+    // 1. Open IndexedDB
+    try {
+      await DB.open();
+    } catch (err) {
+      console.error('[App] DB init failed:', err);
+      // App can still work without cache — continue
+    }
+
+    // 2. Restore user preferences
+    const savedLang = localStorage.getItem('savart_lang') || 'es';
+    UI.setLanguage(savedLang);
+
+    // 3. Root folder is fixed to MSK — never changes
+    _rootFolderId = CONFIG.ROOT_FOLDER_ID;
+
+    // 4. Init player
+    Player.init({
+      onTrackChange: _onTrackChange,
+      onPlayPause:   _onPlayPause,
+      onProgress:    _onProgress,
+      onQueueChange: _onQueueChange,
+      onError:       _onPlayerError,
+      onBlobReady:   _onBlobReady,
+    });
+
+    // 5. Init auth
+    Auth.init({
+      onReady:    _onTokenReady,
+      onExpiring: _onTokenExpiring,
+      onLogout:   _onLogout,
+    });
+
+    // 6. Bind static UI events
+    _bindEvents();
+
+    // 6b. Desktop: pre-build EQ sliders (EQ is already in settings HTML)
+    if (window.matchMedia('(min-width: 768px)').matches) {
+      _buildEQSliders();
+      _applyEQPreset(_currentPreset || 'flat');
+      _loadCustomPresets();
+    }
+
+    // 7. Decide initial screen
+    if (Auth.isAuthenticated()) {
+      _onTokenReady();
+    } else {
+      UI.showView('login');
+    }
+  }
+
+  /* ── Auth events ─────────────────────────────────────────── */
+
+  function _onTokenReady() {
+    UI.hideTokenBanner();
+    UI.showView('home');
+    _loadHomeData();
+  }
+
+  function _onTokenExpiring() {
+    UI.showTokenBanner();
+  }
+
+  function _onLogout() {
+    UI.showView('login');
+    UI.hideTokenBanner();
+  }
+
+  /* ── Player events ───────────────────────────────────────── */
+
+  function _onTrackChange(track, index, total) {
+    // Show loading spinner (delayed 120ms to avoid flash for cached tracks)
+    _startLoadingSpinner();
+    // Enrich immediately if metadata was already cached (e.g. track played before)
+    const enriched = _enrichTrack(track);
+    UI.updateMiniPlayer(enriched, true);
+    UI.updateExpandedPlayer(enriched, true);
+    UI.setActiveSongRow(track?.id);
+    document.title = track ? `${track.displayName} — Savart` : 'Savart';
+
+    // Sync heart button state with DB
+    UI.setHeartActive(false); // reset while loading
+    if (track?.id) {
+      DB.getMeta(track.id).then(m => {
+        // Only apply if this is still the current track
+        if (Player.getCurrentTrack()?.id === track.id) {
+          UI.setHeartActive(!!m?.starred);
+        }
+      }).catch(() => {});
+    }
+
+    // Save to recents (type: 'song') so Home shows it in "Canciones recientes"
+    if (track) {
+      const recentData = {
+        id:           track.id,
+        name:         track.name,
+        displayName:  track.displayName || track.name || '',
+        type:         'song',
+        artist:       track.artist       || '',
+        thumbnailUrl:  (() => { const u = track.thumbnailUrl || track.thumbnailLink || null; return (u && u.startsWith('blob:')) ? (track.thumbnailLink || null) : u; })(),
+        thumbnailLink: track.thumbnailLink || null,
+        folderId:     track.parents?.[0]  || track.folderId || null,
+      };
+      DB.addRecent(recentData).catch(() => {});
+      // Also persist display fields to metadata store so topPlayed can show them
+      DB.setMeta(track.id, {
+        name:         recentData.name,
+        displayName:  recentData.displayName,
+        thumbnailUrl: recentData.thumbnailUrl,
+        artist:       recentData.artist,
+        folderId:     recentData.folderId,
+      }).catch(() => {});
+    }
+  }
+
+  function _onPlayPause(isPlaying) {
+    // Cancel loading spinner the moment audio actually starts playing
+    if (isPlaying) _cancelLoadingSpinner();
+    const track = Player.getCurrentTrack();
+    const enriched = _enrichTrack(track);
+    UI.updateMiniPlayer(enriched, isPlaying);
+    UI.updateExpandedPlayer(enriched, isPlaying);
+  }
+
+  function _onProgress(currentTime, duration) {
+    UI.updateProgress(currentTime, duration);
+    if (UI.isExpandedPlayerVisible()) {
+      UI.updateExpandedPlayerProgress(currentTime, duration);
+    }
+  }
+
+  function _onQueueChange(queue, index) {
+    // Re-render queue panel if it's currently open
+    if (UI.isQueuePanelVisible()) {
+      UI.renderQueuePanel(queue, index);
+      _prefetchQueueCovers(queue).catch(() => {});
+    }
+  }
+
+  function _onPlayerError({ type, message, item }) {
+    UI.showToast(message, 'error');
+    if (type === 'auth') {
+      UI.showTokenBanner();
+    }
+  }
+
+  /* ── Metadata / cover art ────────────────────────────────── */
+
+  /**
+   * Enrich a DriveItem with cached ID3 metadata (cover art, artist, album, year).
+   * Returns the original item if no metadata is cached yet.
+   * @param {DriveItem|null} track
+   * @returns {DriveItem|null}
+   */
+  function _enrichTrack(track) {
+    if (!track || typeof Meta === 'undefined') return track;
+    const meta = Meta.getCached(track.id);
+    if (!meta) return track;
+    return {
+      ...track,
+      displayName:   meta.title        || track.displayName,
+      artist:        meta.artist       || track.artist    || '',
+      albumName:     meta.album        || track.albumName || '',
+      year:          meta.year         || track.year      || '',
+      thumbnailUrl:  meta.coverUrl     || track.thumbnailUrl,
+      bitrate:       meta.bitrate      ?? track.bitrate      ?? null,
+      sampleRate:    meta.sampleRate   ?? track.sampleRate   ?? null,
+      bitsPerSample: meta.bitsPerSample ?? track.bitsPerSample ?? null,
+      // Use cached blob size if the queue item lacks one (e.g. loaded from recents)
+      size:          _blobSizeCache.get(track.id) ?? track.size ?? 0,
+    };
+  }
+
+  /**
+   * Called by Player once the blob is ready (cache hit or fresh download).
+   * Parses ID3/FLAC tags and applies cover art + text metadata to UI.
+   * @param {DriveItem} item
+   * @param {Blob}      blob
+   */
+  async function _onBlobReady(item, blob) {
+    if (typeof Meta === 'undefined') return;
+    try {
+      const meta = await Meta.parse(item.id, blob);
+
+      // Cache blob.size so _enrichTrack can always provide it (even after _onPlayPause re-renders)
+      if (blob.size > 0) {
+        _blobSizeCache.set(item.id, blob.size);
+        item = { ...item, size: blob.size };
+      }
+
+      // Persist coverBlob to DB immediately so playlists / favorites can show it
+      // across sessions without needing to re-parse the file.
+      if (meta?.coverBlob) {
+        DB.setMeta(item.id, { coverBlob: meta.coverBlob }).catch(() => {});
+      }
+
+      // No embedded cover art → try folder cover image as fallback
+      if (!meta.coverUrl) {
+        const folderId = item.parents?.[0];
+        if (folderId) meta.coverUrl = await _getFolderCover(folderId);
+      }
+
+      _applyMeta(item, meta);
+    } catch (err) {
+      console.warn('[App] Meta parse error:', err);
+    }
+  }
+
+  /**
+   * Find (and cache) a cover image from a Drive folder.
+   * First call: hits Drive API, downloads the image blob, creates object URL.
+   * Subsequent calls for same folder: returns cached URL instantly.
+   * @param {string} folderId
+   * @returns {Promise<string|null>}
+   */
+  async function _getFolderCover(folderId) {
+    if (_folderCoverCache.has(folderId)) return _folderCoverCache.get(folderId);
+
+    // Check for a persisted cover blob from a previous session
+    try {
+      const stored = await DB.getState('folderCover:' + folderId);
+      if (stored?.blob) {
+        const url = URL.createObjectURL(stored.blob);
+        _folderCoverCache.set(folderId, url);
+        return url;
+      }
+    } catch (_) {}
+
+    try {
+      const imgFile = await Drive.findCoverImage(folderId);
+      if (!imgFile) {
+        _folderCoverCache.set(folderId, null);
+        return null;
+      }
+
+      // Use thumbnailLink if available (saves a full download)
+      if (imgFile.thumbnailLink) {
+        // thumbnailLink is a Google-signed URL — works as <img src>
+        _folderCoverCache.set(folderId, imgFile.thumbnailLink);
+        return imgFile.thumbnailLink;
+      }
+
+      // Otherwise download the full image blob, make an object URL, and persist it
+      const blob = await Drive.downloadFile(imgFile.id);
+      const url  = URL.createObjectURL(blob);
+      _folderCoverCache.set(folderId, url);
+      DB.setState('folderCover:' + folderId, { blob }).catch(() => {});
+      return url;
+    } catch (err) {
+      console.warn('[App] Folder cover fetch failed:', err.message);
+      _folderCoverCache.set(folderId, null);
+      return null;
+    }
+  }
+
+  /**
+   * Background cover art loader for a folder view.
+   *
+   * Pass 1 — in-memory Meta cache (instant, songs played this session).
+   * Pass 2 — IndexedDB cached blobs (parallel parse, 3 workers).
+   * Pass 3 — folder cover.jpg fallback for anything still missing.
+   *
+   * @param {string}      folderId
+   * @param {DriveItem[]} files
+   */
+  async function _prefetchAndApplyFolderCovers(folderId, files) {
+    if (!files || files.length === 0) return;
+
+    // ── Pass 0: persisted cover blobs from IndexedDB (instant, no re-parse) ─
+    if (typeof Meta !== 'undefined') {
+      await Promise.allSettled(files.map(async file => {
+        try {
+          const dbMeta = await DB.getMeta(file.id);
+          if (dbMeta?.coverBlob) {
+            const url = Meta.injectCover(file.id, dbMeta.coverBlob);
+            if (url) _updateRowThumbnail(file.id, url);
+          }
+        } catch (_) {}
+      }));
+    }
+
+    // ── Pass 1: instant — use in-memory Meta cache ────────────
+    files.forEach(file => {
+      const meta = (typeof Meta !== 'undefined') ? Meta.getCached(file.id) : null;
+      if (meta?.coverUrl) _updateRowThumbnail(file.id, meta.coverUrl);
+    });
+
+    // ── Pass 2: read cached blobs from IndexedDB, parse ID3 ───
+    // Only files whose row still has no img (no cover yet)
+    const needCover = files.filter(file => !_rowHasCover(file.id));
+    if (needCover.length > 0 && typeof Meta !== 'undefined') {
+      const CONCURRENCY = 3;
+      const queue = [...needCover];
+
+      async function worker() {
+        while (queue.length > 0) {
+          const file = queue.shift();
+          try {
+            // Try cached blob first (free), then fall back to 1MB range request
+            let blob = await DB.getCachedBlob(file.id);
+            if (!blob) blob = await Drive.downloadFileHead(file.id);
+            if (!blob) continue;
+            const meta = await Meta.parse(file.id, blob);
+            if (meta?.coverUrl) {
+              _updateRowThumbnail(file.id, meta.coverUrl);
+              // Persist cover blob for future sessions (no re-parse needed)
+              if (meta.coverBlob) DB.setMeta(file.id, { coverBlob: meta.coverBlob }).catch(() => {});
+              if (Player.getCurrentTrack()?.id === file.id) _applyMeta(file, meta);
+            }
+          } catch (_) { /* non-fatal */ }
+        }
+      }
+
+      await Promise.allSettled(
+        Array.from({ length: CONCURRENCY }, () => worker())
+      );
+    }
+
+    // ── Pass 3: folder cover.jpg fallback ─────────────────────
+    const stillNeed = files.filter(file => !_rowHasCover(file.id));
+    if (stillNeed.length > 0) {
+      const folderCover = await _getFolderCover(folderId);
+      if (folderCover) {
+        stillNeed.forEach(file => _updateRowThumbnail(file.id, folderCover));
+      }
+    }
+  }
+
+  /**
+   * Returns true if the song row already has a cover image set.
+   * @param {string} fileId
+   */
+  function _rowHasCover(fileId) {
+    const row = document.querySelector(`.song-row[data-id="${CSS.escape(fileId)}"]`);
+    const img = row?.querySelector('.song-thumb img');
+    return !!(img && img.src && !img.src.endsWith(window.location.href));
+  }
+
+  /**
+   * Apply parsed metadata to all relevant UI surfaces.
+   * @param {DriveItem} item
+   * @param {Object}    meta  — { title, artist, album, year, track, coverUrl }
+   */
+  function _applyMeta(item, meta) {
+    if (!meta) return;
+
+    // Build enriched display name from ID3 tags if available
+    const title  = meta.title  || item.displayName;
+    const artist = meta.artist || '';
+
+    // Only update if this is still the current track
+    const currentTrack = Player.getCurrentTrack();
+    if (currentTrack?.id !== item.id) return;
+
+    // Update mini-player and expanded player with cover art + richer names
+    // ui.js reads thumbnailUrl, artist, albumName, year — map ID3 fields accordingly
+    // By the time _applyMeta runs the audio element has the real duration —
+    // use it as fallback when Drive API didn't return videoMediaMetadata.durationMillis.
+    const audioDur    = Player.getDuration(); // seconds, finite once blob is loaded
+    const audioDurMs  = (isFinite(audioDur) && audioDur > 0) ? Math.round(audioDur * 1000) : 0;
+    const enriched = {
+      ...item,
+      displayName:   title,
+      artist:        artist,
+      albumName:     meta.album        || item.albumName    || '',
+      year:          meta.year         || item.year         || '',
+      thumbnailUrl:  meta.coverUrl     || item.thumbnailUrl,
+      bitrate:       meta.bitrate      ?? item.bitrate      ?? null,
+      sampleRate:    meta.sampleRate   ?? item.sampleRate   ?? null,
+      bitsPerSample: meta.bitsPerSample ?? item.bitsPerSample ?? null,
+      // Prefer real audio-element duration; fall back to Drive API field
+      durationMs:    audioDurMs || item.durationMs || 0,
+    };
+    UI.updateMiniPlayer(enriched, Player.isPlaying());
+    UI.updateExpandedPlayer(enriched, Player.isPlaying());
+
+    // Update the song row thumbnail in the browse list (if visible)
+    if (meta.coverUrl) {
+      _updateRowThumbnail(item.id, meta.coverUrl);
+    }
+  }
+
+  /**
+   * Swap the thumbnail in a visible song row with the cover art URL.
+   * @param {string} fileId
+   * @param {string} coverUrl — object URL from Meta.parse
+   */
+  function _updateRowThumbnail(fileId, coverUrl) {
+    const row   = document.querySelector(`.song-row[data-id="${CSS.escape(fileId)}"]`);
+    if (!row) return;
+    const thumb = row.querySelector('.song-thumb');
+    if (!thumb) return;
+    const img   = thumb.querySelector('img');
+    if (img) {
+      // Already has an img — just update src
+      img.src = coverUrl;
+    } else {
+      // Only placeholder icon exists — replace with img
+      thumb.innerHTML = `<img src="${coverUrl}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover" onerror="this.parentNode.innerHTML='<div class=\\'thumb-placeholder\\'></div>'">`;
+    }
+  }
+
+  /**
+   * Update a home card's thumbnail image (song cover art).
+   * @param {string} fileId
+   * @param {string} coverUrl
+   */
+  function _updateHomeCardThumbnail(fileId, coverUrl) {
+    const card = document.querySelector(`#screen-home .home-card[data-id="${CSS.escape(fileId)}"]`);
+    if (!card) return;
+    const art = card.querySelector('.home-card-art');
+    if (!art) return;
+    let img = art.querySelector('img');
+    if (img) {
+      img.src = coverUrl;
+    } else {
+      art.innerHTML = `<img src="${coverUrl}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover">`;
+    }
+  }
+
+  /**
+   * Background cover prefetch for Home song cards.
+   * Pass 1: Meta in-memory cache (instant).
+   * Pass 2: IndexedDB cached blobs → parse ID3 (async, non-blocking).
+   * @param {Object[]} items — recents array from DB
+   */
+  async function _prefetchHomeCovers(items) {
+    const songs = items.filter(r => r.type === 'song');
+    if (!songs.length || typeof Meta === 'undefined') return;
+
+    // Pass 0: persisted cover blobs from IndexedDB (instant)
+    await Promise.allSettled(songs.map(async song => {
+      try {
+        const dbMeta = await DB.getMeta(song.id);
+        if (dbMeta?.coverBlob) {
+          const url = Meta.injectCover(song.id, dbMeta.coverBlob);
+          if (url) _updateHomeCardThumbnail(song.id, url);
+        }
+      } catch (_) {}
+    }));
+
+    const stillNeed = [];
+
+    // Pass 1: in-memory Meta cache
+    songs.forEach(song => {
+      const meta = Meta.getCached(song.id);
+      if (meta?.coverUrl) {
+        _updateHomeCardThumbnail(song.id, meta.coverUrl);
+      } else {
+        stillNeed.push(song);
+      }
+    });
+
+    if (!stillNeed.length) return;
+
+    // Pass 2: IndexedDB blobs → parse ID3 (2 parallel workers)
+    const queue = [...stillNeed];
+    async function worker() {
+      while (queue.length > 0) {
+        const song = queue.shift();
+        try {
+          const blob = await DB.getCachedBlob(song.id);
+          if (!blob) continue;
+          const meta = await Meta.parse(song.id, blob);
+          if (meta?.coverUrl) {
+            _updateHomeCardThumbnail(song.id, meta.coverUrl);
+            if (meta.coverBlob) DB.setMeta(song.id, { coverBlob: meta.coverBlob }).catch(() => {});
+          }
+        } catch (_) { /* non-fatal */ }
+      }
+    }
+    await Promise.allSettled([worker(), worker()]);
+  }
+
+  /**
+   * Background cover prefetch for Top Played list items.
+   * Reads cached blobs → parses ID3 → updates .top-list-item thumbnails.
+   * @param {Object[]} items — topPlayed array
+   */
+  async function _prefetchTopPlayedCovers(items) {
+    if (!items || !items.length || typeof Meta === 'undefined') return;
+
+    // Pass 0: persisted cover blobs from IndexedDB (instant)
+    await Promise.allSettled(items.map(async item => {
+      try {
+        const dbMeta = await DB.getMeta(item.id);
+        if (dbMeta?.coverBlob) {
+          const url = Meta.injectCover(item.id, dbMeta.coverBlob);
+          if (url) _updateTopListThumb(item.id, url);
+        }
+      } catch (_) {}
+    }));
+
+    // Pass 1: in-memory Meta cache (instant)
+    items.forEach(item => {
+      const meta = Meta.getCached(item.id);
+      if (meta?.coverUrl) _updateTopListThumb(item.id, meta.coverUrl);
+    });
+
+    // Pass 2: IndexedDB cached blobs → parse ID3 (2 workers)
+    const stillNeed = items.filter(item => !_topListHasCover(item.id));
+    if (!stillNeed.length) return;
+
+    const queue = [...stillNeed];
+    async function worker() {
+      while (queue.length > 0) {
+        const item = queue.shift();
+        try {
+          const blob = await DB.getCachedBlob(item.id);
+          if (!blob) continue;
+          const meta = await Meta.parse(item.id, blob);
+          if (meta?.coverUrl) {
+            _updateTopListThumb(item.id, meta.coverUrl);
+            if (meta.coverBlob) DB.setMeta(item.id, { coverBlob: meta.coverBlob }).catch(() => {});
+          }
+        } catch (_) { /* non-fatal */ }
+      }
+    }
+    await Promise.allSettled([worker(), worker()]);
+  }
+
+  function _topListHasCover(fileId) {
+    const el = document.querySelector(`.top-list-item[data-id="${CSS.escape(fileId)}"]`);
+    return !!(el && el.querySelector('.top-list-thumb img'));
+  }
+
+  function _updateTopListThumb(fileId, coverUrl) {
+    // Find the top-list-item for this fileId via a data attribute we'll add
+    const el = document.querySelector(`.top-list-item[data-id="${CSS.escape(fileId)}"]`);
+    if (!el) return;
+    const thumb = el.querySelector('.top-list-thumb');
+    if (!thumb) return;
+    const img = thumb.querySelector('img');
+    if (img) {
+      img.src = coverUrl;
+    } else {
+      thumb.innerHTML = `<img src="${coverUrl}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover">`;
+    }
+  }
+
+  /**
+   * Update the name label on a Home song card (recents row).
+   * @param {string} fileId
+   * @param {string} displayName
+   */
+  function _updateHomeCardName(fileId, displayName) {
+    const card = document.querySelector(`#screen-home .home-card[data-id="${CSS.escape(fileId)}"]`);
+    if (!card) return;
+    const nameEl = card.querySelector('.home-card-name');
+    if (nameEl && displayName) nameEl.textContent = displayName;
+  }
+
+  /**
+   * Update the title label on a Top-Played list item.
+   * @param {string} fileId
+   * @param {string} displayName
+   */
+  function _updateTopListName(fileId, displayName) {
+    const el = document.querySelector(`.top-list-item[data-id="${CSS.escape(fileId)}"]`);
+    if (!el) return;
+    const titleEl = el.querySelector('.top-list-title');
+    if (titleEl && displayName) titleEl.textContent = displayName;
+  }
+
+  /**
+   * For any items in enrichedRecents / topPlayed that still have no displayName,
+   * fetch the filename from Drive API and backfill the DB + DOM.
+   * Non-fatal — silently ignored if offline or auth-expired.
+   * @param {Object[]} enrichedRecents
+   * @param {Object[]} topPlayed
+   */
+  async function _fixMissingNames(enrichedRecents, topPlayed) {
+    if (!Auth.isAuthenticated()) return;
+
+    // Collect all song items across both lists, de-duplicate by id
+    const allItems = [
+      ...enrichedRecents.filter(r => r.type === 'song'),
+      ...topPlayed,
+    ];
+    const noName = [];
+    const seen   = new Set();
+    for (const item of allItems) {
+      if (seen.has(item.id)) continue;
+      seen.add(item.id);
+      if (!item.displayName || !item.displayName.trim()) {
+        noName.push(item);
+      }
+    }
+
+    if (!noName.length) return;
+
+    for (const item of noName) {
+      try {
+        const info = await Drive.getFileInfo(item.id);
+        if (!info?.name) continue;
+
+        // Build clean display name (strip extension + separators)
+        const dispName = info.name.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ').trim()
+                      || info.name;
+
+        // Persist to DB so future renders have the name
+        DB.setMeta(item.id, {
+          name:        info.name,
+          displayName: dispName,
+        }).catch(() => {});
+
+        DB.addRecent({
+          ...item,
+          name:        info.name,
+          displayName: dispName,
+        }).catch(() => {});
+
+        // Update visible DOM cards immediately (no full re-render needed)
+        _updateHomeCardName(item.id, dispName);
+        _updateTopListName(item.id, dispName);
+      } catch (_) {
+        // Non-fatal: Drive API unavailable, auth expired, etc.
+      }
+    }
+  }
+
+  /* ── Home ────────────────────────────────────────────────── */
+
+  async function _loadHomeData() {
+    try {
+      const [pinned, recents, topPlayedRaw] = await Promise.all([
+        DB.getPinnedFolders(),
+        DB.getRecents(20),
+        DB.getTopPlayed(20),
+      ]);
+
+      // Load metadata store records for all song recents (for name/cover backfill)
+      const metaRecords = await Promise.all(
+        recents.filter(r => r.type === 'song').map(r => DB.getMeta(r.id).catch(() => null))
+      );
+      const metaMap = new Map();
+      recents.filter(r => r.type === 'song').forEach((r, i) => {
+        if (metaRecords[i]) metaMap.set(r.id, metaRecords[i]);
+      });
+
+      // Helper: pick first non-empty value
+      const _pick = (...vals) => vals.find(v => v && String(v).trim() !== '') || '';
+
+      // Enrich recents songs with metadata store data (fixes bare/empty-name records)
+      const enrichedRecents = recents.map(r => {
+        if (r.type !== 'song') return r;
+        const dbMeta = metaMap.get(r.id);
+        const inMem  = (typeof Meta !== 'undefined') ? Meta.getCached(r.id) : null;
+        return {
+          ...r,
+          displayName:  _pick(inMem?.title, r.displayName, dbMeta?.displayName, r.name, dbMeta?.name),
+          name:         _pick(r.name, dbMeta?.name),
+          thumbnailUrl: _pick(inMem?.coverUrl, r.thumbnailUrl, dbMeta?.thumbnailUrl, dbMeta?.coverUrl),
+          artist:       _pick(inMem?.artist,   r.artist,      dbMeta?.artist),
+        };
+      });
+
+      // Enrich topPlayed with recents + metadata store + in-memory Meta cache
+      const recentMap = new Map(enrichedRecents.map(r => [r.id, r]));
+      const topPlayed = topPlayedRaw.map(item => {
+        const r     = recentMap.get(item.id);
+        const dbMeta = metaMap.get(item.id);
+        const inMem  = (typeof Meta !== 'undefined') ? Meta.getCached(item.id) : null;
+        return {
+          ...item,
+          displayName:  _pick(inMem?.title,   item.displayName, r?.displayName, dbMeta?.displayName, r?.name, item.name, dbMeta?.name),
+          name:         _pick(item.name,       r?.name,          dbMeta?.name),
+          thumbnailUrl: _pick(inMem?.coverUrl, item.thumbnailUrl, item.coverUrl, r?.thumbnailUrl, dbMeta?.thumbnailUrl, dbMeta?.coverUrl),
+          artist:       _pick(inMem?.artist,   item.artist,      r?.artist,      dbMeta?.artist),
+          albumName:    _pick(inMem?.album,    item.albumName,   item.album,     r?.albumName,    dbMeta?.album),
+          year:         _pick(inMem?.year,     item.year,        r?.year,        dbMeta?.year),
+        };
+      });
+
+      UI.renderHome({ pinned, recents: enrichedRecents, topPlayed });
+
+      // Async: load cover art for song cards and top-played in the background
+      _prefetchHomeCovers(enrichedRecents).catch(() => {});
+      _prefetchTopPlayedCovers(topPlayed).catch(() => {});
+      _prefetchPinnedCovers(pinned).catch(() => {});
+
+      // Async: fix any items still with no name by fetching from Drive API
+      _fixMissingNames(enrichedRecents, topPlayed).catch(() => {});
+    } catch (err) {
+      console.error('[App] Home data error:', err);
+    }
+  }
+
+  function onHomeCardClick(item) {
+    if (item.isFolder || item.type === 'folder') {
+      _breadcrumb = []; // fresh context — don't inherit stale browse history
+      _openFolder({ id: item.id, name: item.name });
+    } else {
+      // Single song — play it directly
+      Player.setQueue([item], 0);
+    }
+  }
+
+  /* ── Browse ──────────────────────────────────────────────── */
+
+  /**
+   * Builds the full breadcrumb trail from root down to the given folder.
+   * Walks up Drive hierarchy via getFileInfo(parents[0]) until hitting root.
+   * Returns [{id, name}, ...] from root to folder (inclusive).
+   */
+  async function _buildBreadcrumbForFolder(folderId) {
+    const chain = [];
+    let currentId = folderId;
+    const visited = new Set();
+
+    while (currentId && currentId !== 'root' && currentId !== _rootFolderId && !visited.has(currentId)) {
+      visited.add(currentId);
+      try {
+        const info = await Drive.getFileInfo(currentId);
+        if (!info) break;
+        chain.unshift({ id: info.id, name: info.name });
+        const parentId = info.parents?.[0];
+        if (!parentId || parentId === 'root' || parentId === _rootFolderId) break;
+        currentId = parentId;
+      } catch (err) {
+        console.warn('[App] breadcrumb walk error at', currentId, err);
+        break;
+      }
+    }
+
+    // Always prepend root (MSK) so breadcrumb starts from the top
+    if (chain.length > 0) {
+      chain.unshift({ id: _rootFolderId, name: CONFIG.ROOT_FOLDER_NAME });
+    }
+
+    return chain;
+  }
+
+  async function _openFolder(folder, appendToBreadcrumb = true) {
+    UI.showView('browse');
+
+    // Detect "fresh navigation" — breadcrumb was reset before this call
+    const freshNavigation = _breadcrumb.length === 0 && appendToBreadcrumb;
+
+    if (appendToBreadcrumb) {
+      // Check if folder is already in breadcrumb (going back via breadcrumb chips)
+      const existingIdx = _breadcrumb.findIndex(b => b.id === folder.id);
+      if (existingIdx >= 0) {
+        _breadcrumb = _breadcrumb.slice(0, existingIdx + 1);
+      } else {
+        _breadcrumb.push({ id: folder.id, name: folder.name });
+      }
+    }
+
+    UI.renderBreadcrumb(_breadcrumb);
+    UI.showLoading('screen-browse');
+
+    // If fresh navigation (from Recents/Home), resolve full path in parallel
+    if (freshNavigation) {
+      _buildBreadcrumbForFolder(folder.id).then(fullPath => {
+        if (fullPath.length > 0) {
+          // Only update if breadcrumb still points to the same folder
+          const last = _breadcrumb[_breadcrumb.length - 1];
+          if (last?.id === folder.id) {
+            _breadcrumb = fullPath;
+            UI.renderBreadcrumb(_breadcrumb);
+          }
+        }
+      }).catch(() => {});
+    }
+
+    try {
+      const result = await Drive.listFolderAll(folder.id);
+      _sortItems(result.folders, result.files);
+      const activeSong = Player.getCurrentTrack();
+      UI.renderFolderContents(result.folders, result.files, activeSong?.id);
+
+      // Update item count badge
+      const total = result.folders.length + result.files.length;
+      const countEl = document.getElementById('browse-item-count');
+      if (countEl) countEl.textContent = total > 0 ? `${total} elemento${total !== 1 ? 's' : ''}` : '';
+
+      // Cache all items for queue resolution
+      result.files.forEach(f => _cacheItem(f));
+
+      // Prefetch folder cover art and apply to all song rows (fire-and-forget)
+      _prefetchAndApplyFolderCovers(folder.id, result.files);
+
+      // Add to recents
+      DB.addRecent({
+        id:   folder.id,
+        name: folder.name,
+        displayName: folder.name,
+        type: 'folder',
+      }).catch(() => {});
+
+    } catch (err) {
+      if (err.name === 'AuthError') {
+        UI.showToast(UI.t('toast_session_expired'), 'error');
+        UI.showTokenBanner();
+      } else {
+        UI.showToast(UI.t('toast_folder_error'), 'error');
+        console.error('[App] Folder load error:', err);
+      }
+    }
+  }
+
+  function onFolderClick(folder) {
+    // If navigating from outside Browse (e.g. Search), reset breadcrumb context
+    if (UI.getCurrentView() !== 'browse') _breadcrumb = [];
+    _openFolder(folder);
+  }
+
+  /**
+   * "Ir al álbum" — navigate Browse to the folder that contains a song,
+   * or to the folder itself if the item IS a folder.
+   * @param {DriveItem} item
+   */
+  async function onGoToFolder(item) {
+    if (item.isFolder || item.type === 'folder') {
+      // The item is already a folder — open it directly
+      _breadcrumb = [];
+      _openFolder({ id: item.id, name: item.name || item.displayName });
+    } else {
+      // Song — navigate to its containing folder.
+      // 1. Try fields already on the item
+      let folderId = item.parents?.[0] || item.folderId;
+
+      // 2. Fall back to DB meta (folderId is stored there on first play)
+      if (!folderId) {
+        const dbMeta = await DB.getMeta(item.id).catch(() => null);
+        folderId = dbMeta?.folderId;
+      }
+
+      // 3. Last resort: ask Drive for the file's parents
+      if (!folderId) {
+        try {
+          const fileInfo = await Drive.getFileInfo(item.id);
+          folderId = fileInfo.parents?.[0];
+        } catch (_) {}
+      }
+
+      if (!folderId) { UI.showToast(UI.t('toast_folder_unavailable'), 'error'); return; }
+
+      try {
+        const folder = await Drive.getFileInfo(folderId);
+        _breadcrumb = [];
+        _openFolder({ id: folder.id, name: folder.name });
+      } catch (err) {
+        UI.showToast(UI.t('toast_folder_open_error'), 'error');
+      }
+    }
+  }
+
+  function onBreadcrumbClick(crumb, index) {
+    _breadcrumb = _breadcrumb.slice(0, index + 1);
+    _openFolder(crumb, false);
+  }
+
+  /* ── Song click ──────────────────────────────────────────── */
+
+  /**
+   * User tapped a song row.
+   * Replaces the queue with all songs in the current folder view,
+   * starting from the clicked song.
+   */
+  function onSongClick(clickedSong) {
+    // Only in Browse do we load the whole folder as queue.
+    // In Search, Home, Library, etc. we play just the clicked song —
+    // so the queue never auto-fills with files from other folders.
+    if (UI.getCurrentView() === 'browse') {
+      // Scope strictly to the Browse item-list — never leak into other screens
+      const browseList = document.querySelector('#screen-browse .item-list');
+      const rows       = Array.from(browseList?.querySelectorAll('.song-row:not(.wma)') || []);
+      const ids        = rows.map(r => r.dataset.id);
+      const allSongs   = ids.map(id => _resolveItemById(id)).filter(Boolean);
+
+      if (allSongs.length > 0) {
+        const startIdx = allSongs.findIndex(s => s.id === clickedSong.id);
+        Player.setQueue(allSongs, startIdx >= 0 ? startIdx : 0);
+      } else {
+        Player.setQueue([clickedSong], 0);
+      }
+    } else {
+      // Search, Home, Library, etc.: play only the clicked song
+      Player.setQueue([clickedSong], 0);
+    }
+  }
+
+  /**
+   * Resolve a DriveItem from the DOM by fileId.
+   * Since we render rows from Drive results, we keep a local cache.
+   */
+  const _itemCache = new Map();
+
+  function _resolveItemById(id) {
+    return _itemCache.get(id) || null;
+  }
+
+  /**
+   * Register a DriveItem so it can be resolved by ID later.
+   * Called when rendering song rows.
+   * @param {DriveItem} item
+   */
+  function _cacheItem(item) {
+    _itemCache.set(item.id, item);
+    // Persist thumbnailUrl to DB so playlists/favorites can show covers across sessions
+    const thumb = item.thumbnailLink || item.thumbnailUrl;
+    if (thumb && !thumb.startsWith('blob:')) {
+      DB.setMeta(item.id, { thumbnailUrl: thumb }).catch(() => {});
+    }
+  }
+
+  /* ── Context menu actions ────────────────────────────────── */
+
+  async function onToggleStar(item) {
+    // Save display fields before toggling so getStarred() can show them later
+    if (item.id) await _saveItemMeta(item);
+    const isNowStarred = await DB.toggleStar(item.id);
+    UI.showToast(isNowStarred ? UI.t('toast_added_fav') : UI.t('toast_removed_fav'), 'default');
+    // Sync heart if this is the currently playing track
+    if (Player.getCurrentTrack()?.id === item.id) {
+      UI.setHeartActive(isNowStarred);
+    }
+    // Refresh Favoritos pane if it's selected
+    const favItem = document.getElementById('lib-fav-item');
+    if (favItem?.classList.contains('active')) _loadStarred();
+  }
+
+  async function onTogglePin(item) {
+    const isNowPinned = await DB.togglePin(item);
+    const label = item.type === 'folder' || item.isFolder ? 'Carpeta' : 'Canción';
+    UI.showToast(isNowPinned ? `${label} fijada en Inicio` : `${label} quitada de Inicio`, 'default');
+    _loadHomeData();
+  }
+
+  async function onRemoveFromHistory(item) {
+    await DB.removeRecent(item.id).catch(() => {});
+    UI.showToast(UI.t('toast_removed_history'));
+    _loadHomeData();
+  }
+
+  async function onFolderQueue(folder, mode) {
+    try {
+      const { files } = await Drive.listFolderAll(folder.id);
+      const playable  = files.filter(f => f.isPlayable);
+      if (playable.length === 0) { UI.showToast(UI.t('toast_no_playable'), 'error'); return; }
+      if (mode === 'next') Player.insertNext(playable);
+      else                 Player.appendToQueue(playable);
+      UI.showToast(mode === 'next'
+        ? `${playable.length} ${UI.t('songs').toLowerCase()} ${UI.t('play_next').toLowerCase()}`
+        : `${playable.length} ${UI.t('songs').toLowerCase()} ${UI.t('play_after').toLowerCase()}`,
+        'default');
+    } catch (err) {
+      UI.showToast(UI.t('toast_queue_error'), 'error');
+    }
+  }
+
+  /**
+   * Show the playlist picker panel for choosing where to add item.
+   * Called from context menu "Agregar a playlist" — loads playlists async then delegates to UI.
+   * @param {MouseEvent} e
+   * @param {DriveItem}  item
+   */
+  async function onShowPlaylistPicker(e, item) {
+    try {
+      const playlists = await DB.getPlaylists();
+      UI.showPlaylistPicker(e, item, playlists);
+    } catch (err) {
+      UI.showToast(UI.t('toast_pl_load_error'), 'error');
+    }
+  }
+
+  /**
+   * Add item to an existing playlist (called from playlist picker row click).
+   * @param {DriveItem} item
+   * @param {string}    playlistId
+   */
+  async function onAddToPlaylist(item, playlistId) {
+    try {
+      if (!playlistId) return;
+      const playlists = await DB.getPlaylists();
+      const pl = playlists.find(p => p.id === playlistId);
+      await DB.addToPlaylist(playlistId, item.id);
+      await _saveItemMeta(item);
+      UI.showToast(`${UI.t('toast_added_to_pl')} "${pl?.name || 'playlist'}"`);
+    } catch (err) {
+      UI.showToast(UI.t('toast_pl_add_error'), 'error');
+    }
+  }
+
+  /**
+   * Create a new playlist, add item, show toast.
+   * Called from playlist picker "Nueva playlist" confirm.
+   * @param {DriveItem} item
+   * @param {string}    name — playlist name from input
+   */
+  async function onCreateAndAddPlaylist(item, name) {
+    try {
+      const pl = await DB.createPlaylist(name);
+      await DB.addToPlaylist(pl.id, item.id);
+      await _saveItemMeta(item);
+      UI.showToast(`"${name}" — ${UI.t('toast_pl_created')}`);
+      _loadPlaylists(); // refresh Library if open
+    } catch (err) {
+      UI.showToast(UI.t('toast_pl_create_error'), 'error');
+    }
+  }
+
+  /** Save all displayable metadata for an item to DB (never saves blob: URLs). */
+  async function _saveItemMeta(item) {
+    const thumb = item.thumbnailLink || item.thumbnailUrl || null;
+    const safeThumb = (thumb && !thumb.startsWith('blob:')) ? thumb : null;
+    await DB.setMeta(item.id, {
+      name:         item.name        || undefined,
+      displayName:  item.displayName || item.name || undefined,
+      thumbnailUrl: safeThumb        || undefined,
+      artist:       item.artist      || undefined,
+      albumName:    item.albumName   || undefined,
+      size:         item.size        || undefined,
+      folderId:     item.parents?.[0] || item.folderId || undefined,
+    }).catch(() => {});
+  }
+
+  /* ── Search ──────────────────────────────────────────────── */
+
+  async function _doSearch(term) {
+    const container = document.getElementById('search-results');
+    if (!container) return;
+
+    const activeChip = document.querySelector('[data-filter].active');
+    const filter = activeChip?.dataset.filter || 'all';
+
+    container.innerHTML = '<div class="empty-state"><p>Buscando…</p></div>';
+    if (!Auth.isAuthenticated()) { UI.showTokenBanner(); return; }
+
+    try {
+      const result = await Drive.searchFiles(term, _rootFolderId); // restricted to configured root (recursive)
+      // Cache all items for queue resolution
+      [...(result.folders || []), ...(result.files || [])].forEach(item => _cacheItem(item));
+      // Delegate rendering to UI
+      UI.renderSearchResults(result, filter);
+    } catch (err) {
+      console.error('[App] Search error:', err);
+      if (err.name === 'AuthError') { UI.showTokenBanner(); return; }
+      container.innerHTML = '<div class="empty-state"><p>Error al buscar. Inténtalo de nuevo.</p></div>';
+    }
+  }
+
+  /* ── Library ─────────────────────────────────────────────── */
+
+  async function _loadPlaylists() {
+    try {
+      const playlists = await DB.getPlaylists();
+      const enriched = await Promise.all(playlists.map(async pl => {
+        const songIds = pl.songIds || [];
+        const coverUrls = [];
+        for (const sid of songIds) {
+          if (coverUrls.length >= 4) break;
+          const m = await DB.getMeta(sid).catch(() => null);
+          const url = await _resolveCoverUrl(sid, m?.thumbnailUrl);
+          if (url) coverUrls.push(url);
+        }
+        return { ...pl, songCount: songIds.length, coverUrls };
+      }));
+      UI.renderPlaylists(enriched);
+      // Background: resolve covers for playlists that still have none
+      // (happens when songs were never played — no coverBlob in DB yet)
+      _prefetchPlaylistCovers(enriched).catch(() => {});
+    } catch (err) {
+      console.error('[App] Load playlists error:', err);
+    }
+  }
+
+  /**
+   * Background cover fetch for the playlist sidebar.
+   * For each playlist without a cover:
+   *   Pass 1 — check DB for a persisted coverBlob (instant, no network)
+   *   Pass 2 — download the first 1MB of a song (range request) and parse ID3
+   * Updates the sidebar thumbnail in-place when a cover is found.
+   * @param {Object[]} playlists — enriched playlists from _loadPlaylists
+   */
+  async function _prefetchPlaylistCovers(playlists) {
+    if (typeof Meta === 'undefined') return;
+
+    for (const pl of playlists) {
+      // Already has a cover — skip
+      if ((pl.coverUrls || []).length > 0) continue;
+
+      const songIds = (pl.songIds || []).slice(0, 5); // try first 5 songs
+      let found = false;
+
+      for (const sid of songIds) {
+        if (found) break;
+        try {
+          // Pass 1: persisted coverBlob (no network, instant)
+          const dbMeta = await DB.getMeta(sid).catch(() => null);
+          if (dbMeta?.coverBlob) {
+            const url = Meta.injectCover(sid, dbMeta.coverBlob);
+            if (url) { _updatePlaylistSidebarCover(pl.id, url); found = true; break; }
+          }
+
+          // Pass 2: try cached audio blob first, then range request
+          let blob = await DB.getCachedBlob(sid).catch(() => null);
+          if (!blob && Auth.isAuthenticated()) {
+            blob = await Drive.downloadFileHead(sid).catch(() => null);
+          }
+          if (!blob) continue;
+
+          const meta = await Meta.parse(sid, blob);
+          if (meta?.coverUrl) {
+            // Persist coverBlob so next session is instant
+            if (meta.coverBlob) DB.setMeta(sid, { coverBlob: meta.coverBlob }).catch(() => {});
+            _updatePlaylistSidebarCover(pl.id, meta.coverUrl);
+            found = true;
+          }
+        } catch (_) { /* non-fatal */ }
+      }
+    }
+  }
+
+  /**
+   * Background cover resolver for the queue panel.
+   * Runs after renderQueuePanel — for each item without a cover it tries
+   * Meta cache → DB coverBlob, then patches the DOM in-place.
+   * No network requests: queue items will get their covers as they play.
+   * @param {DriveItem[]} queue
+   */
+  async function _prefetchQueueCovers(queue) {
+    if (typeof Meta === 'undefined') return;
+    for (const item of queue) {
+      try {
+        const inMem = Meta.getCached(item.id);
+        if (inMem?.coverUrl) { _updateQueueItemCover(item.id, inMem.coverUrl); continue; }
+        const meta = await DB.getMeta(item.id).catch(() => null);
+        if (meta?.coverBlob) {
+          const url = Meta.injectCover(item.id, meta.coverBlob);
+          if (url) _updateQueueItemCover(item.id, url);
+        }
+      } catch (_) { /* non-fatal */ }
+    }
+  }
+
+  /** Patch the cover thumbnail of all visible queue rows for a given song id. */
+  function _updateQueueItemCover(id, url) {
+    document.querySelectorAll(`.queue-item[data-id="${CSS.escape(id)}"]`).forEach(el => {
+      const thumb = el.querySelector('.queue-item-thumb');
+      if (!thumb) return;
+      const img = thumb.querySelector('img');
+      if (img) { img.src = url; }
+      else { thumb.innerHTML = `<img src="${url}" alt="">`; }
+    });
+  }
+
+  /**
+   * Background cover loader for pinned song cards.
+   * Folders are skipped (they show a static folder icon).
+   * @param {Object[]} pinned — items from DB.getPinnedFolders()
+   */
+  async function _prefetchPinnedCovers(pinned) {
+    if (typeof Meta === 'undefined') return;
+    const songs = pinned.filter(item => item.type !== 'folder' && !item.isFolder);
+    for (const item of songs) {
+      try {
+        const inMem = Meta.getCached(item.id);
+        if (inMem?.coverUrl) { _updatePinnedItemCover(item.id, inMem.coverUrl); continue; }
+        const meta = await DB.getMeta(item.id).catch(() => null);
+        if (meta?.coverBlob) {
+          const url = Meta.injectCover(item.id, meta.coverBlob);
+          if (url) _updatePinnedItemCover(item.id, url);
+        }
+      } catch (_) { /* non-fatal */ }
+    }
+  }
+
+  /** Patch the cover thumbnail of a pinned card for a given song id. */
+  function _updatePinnedItemCover(id, url) {
+    const cover = document.querySelector(`.pinned-card-cover[data-id="${CSS.escape(id)}"]`);
+    if (!cover) return;
+    const img = cover.querySelector('img');
+    if (img) { img.src = url; }
+    else { cover.innerHTML = `<img src="${url}" alt="">`; }
+  }
+
+  /** Swap the thumbnail of a playlist sidebar item to a resolved cover URL. */
+  function _updatePlaylistSidebarCover(plId, coverUrl) {
+    const item = document.querySelector(`.lib-sidebar-item[data-pl-id="${CSS.escape(plId)}"]`);
+    if (!item) return;
+    const thumb = item.querySelector('.lib-sidebar-thumb');
+    if (!thumb) return;
+    thumb.innerHTML = `<img src="${coverUrl}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:4px">`;
+  }
+
+  /**
+   * Resolve a valid cover URL for a song id.
+   * Skips stale blob: URLs, tries coverBlob, then itemCache thumbnailLink.
+   * @param {string} id
+   * @param {string|null} storedUrl - value from DB (may be stale blob:)
+   * @returns {Promise<string|null>}
+   */
+  async function _resolveCoverUrl(id, storedUrl) {
+    // 1. Stored web URL (non-blob, persisted from Drive thumbnailLink — rare for audio)
+    if (storedUrl && !storedUrl.startsWith('blob:')) return storedUrl;
+    // 2. In-memory Meta cache: song was parsed this session (fastest, no DB needed)
+    const inMem = (typeof Meta !== 'undefined') ? Meta.getCached(id) : null;
+    if (inMem?.coverUrl) return inMem.coverUrl;
+    // 3. Persisted coverBlob in DB (saved after browse or playback)
+    const meta = await DB.getMeta(id).catch(() => null);
+    if (meta?.coverBlob) {
+      const url = Meta.injectCover(id, meta.coverBlob);
+      if (url) return url;
+    }
+    // 4. Drive thumbnail from item cache (always null for audio files)
+    const cached = _itemCache.get(id);
+    return cached?.thumbnailLink || cached?.thumbnailUrl || null;
+  }
+
+  async function _loadStarred() {
+    try {
+      const starred = await DB.getStarred();
+      const enriched = await Promise.all(starred.map(async song => {
+        const url = await _resolveCoverUrl(song.id, song.thumbnailUrl);
+        return url ? { ...song, thumbnailUrl: url } : song;
+      }));
+      UI.renderStarredSongs(enriched);
+    } catch (err) {
+      console.error('[App] Load starred error:', err);
+    }
+  }
+
+  async function _loadArtists() {
+    // Artists are derived from starred songs' artist tags
+    try {
+      const starred  = await DB.getStarred();
+      const artistMap = new Map();
+      starred.forEach(song => {
+        if (song.artist) {
+          const key = song.artist.trim().toLowerCase();
+          if (!artistMap.has(key)) {
+            artistMap.set(key, { id: key, name: song.artist, songCount: 0 });
+          }
+          artistMap.get(key).songCount++;
+        }
+      });
+      const artists = Array.from(artistMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+      UI.renderArtists(artists);
+    } catch (err) {
+      console.error('[App] Load artists error:', err);
+    }
+  }
+
+  function onArtistClick(artist) {
+    UI.showToast(`Artista: ${artist.name}`); // TODO: open artist view
+  }
+
+  async function onPlaylistClick(pl) {
+    try {
+      // Load full playlist from DB to get fresh songIds
+      const fullPl = await DB.getPlaylist(pl.id).catch(() => pl);
+      const songIds = (fullPl || pl).songIds || [];
+      if (songIds.length === 0) {
+        UI.renderPlaylistDetail([], pl.name);
+        return;
+      }
+      // Fetch cached metadata and resolve cover URL for each song
+      const songs = (await Promise.all(
+        songIds.map(async id => {
+          const m = await DB.getMeta(id).catch(() => null);
+          if (!m) return null;
+          // Resolve cover via the same chain used by favorites: DB coverBlob → Meta cache
+          const thumbnailUrl = await _resolveCoverUrl(id, m.thumbnailUrl);
+          // _playlistId lets the context menu offer "Remove from playlist"
+          return { id, ...m, thumbnailUrl, _playlistId: (fullPl || pl).id };
+        })
+      )).filter(Boolean);
+      UI.renderPlaylistDetail(songs, pl.name);
+    } catch (err) {
+      console.error('[App] onPlaylistClick error:', err);
+      UI.showToast(UI.t('toast_playlist_error'), 'error');
+    }
+  }
+
+  /* ── Playlist actions (from sidebar context menu) ───────── */
+
+  async function _getPlaylistSongs(pl) {
+    const fullPl = await DB.getPlaylist(pl.id).catch(() => pl);
+    const songIds = (fullPl || pl).songIds || [];
+    return songIds.map(id => _itemCache.get(id) || { id }).filter(Boolean);
+  }
+
+  async function onPlaylistPlay(pl) {
+    try {
+      const songs = await _getPlaylistSongs(pl);
+      if (songs.length === 0) { UI.showToast(UI.t('toast_playlist_empty'), 'error'); return; }
+      Player.setQueue(songs, 0);
+    } catch (err) { UI.showToast(UI.t('toast_playlist_play_error'), 'error'); }
+  }
+
+  async function onPlaylistQueue(pl, mode) {
+    try {
+      const songs = await _getPlaylistSongs(pl);
+      if (songs.length === 0) { UI.showToast(UI.t('toast_playlist_empty'), 'error'); return; }
+      if (mode === 'next') Player.insertNext(songs);
+      else                 Player.appendToQueue(songs);
+      UI.showToast(mode === 'next' ? UI.t('play_next') : UI.t('play_after'));
+    } catch (err) { UI.showToast(UI.t('toast_folder_error'), 'error'); }
+  }
+
+  async function onRenamePlaylist(pl) {
+    const newName = prompt(UI.t('prompt_rename_playlist'), pl.name);
+    if (!newName || newName.trim() === pl.name) return;
+    await DB.updatePlaylist(pl.id, { name: newName.trim() });
+    UI.showToast(`"${newName.trim()}" — ${UI.t('ctx_rename').toLowerCase()}`);
+    _loadPlaylists();
+  }
+
+  async function onDeletePlaylist(pl) {
+    if (!confirm(`${UI.t('confirm_delete_playlist')} "${pl.name}"?`)) return;
+    await DB.deletePlaylist(pl.id);
+    UI.showToast(`"${pl.name}" — ${UI.t('ctx_delete').toLowerCase()}`);
+    _loadPlaylists();
+    // If this playlist was showing in detail pane, clear it
+    const container = document.getElementById('lib-detail-content');
+    if (container) container.innerHTML = '';
+  }
+
+  /**
+   * Remove a single song from a playlist (called from song context menu).
+   * @param {string} songId
+   * @param {string} playlistId
+   */
+  async function onRemoveFromPlaylist(songId, playlistId) {
+    try {
+      await DB.removeFromPlaylist(playlistId, songId);
+      UI.showToast(UI.t('toast_removed_pl'));
+      // Refresh detail pane with updated song list
+      const pl = await DB.getPlaylist(playlistId).catch(() => null);
+      if (pl) onPlaylistClick(pl);
+      // Refresh sidebar covers (song count may have changed)
+      _loadPlaylists();
+    } catch (err) {
+      UI.showToast(UI.t('toast_pl_remove_error'), 'error');
+    }
+  }
+
+  /* ── Queue panel actions ─────────────────────────────────── */
+
+  /**
+   * Jump to a specific queue position (called from queue panel item click).
+   * @param {number} queueIndex
+   */
+  function onQueueItemClick(queueIndex) {
+    Player.jumpTo(queueIndex);
+    // Stay on queue panel so user can see the new current track highlighted
+    const { queue, index } = Player.getQueue();
+    UI.renderQueuePanel(queue, index);
+    _prefetchQueueCovers(queue).catch(() => {});
+  }
+
+  /**
+   * Remove a track from the queue (called from queue panel × button).
+   * @param {number} queueIndex
+   */
+  function onQueueItemRemove(queueIndex) {
+    Player.removeFromQueue(queueIndex);
+    // renderQueuePanel will be called via _onQueueChange → already handles it
+  }
+
+  /* ── Mini-player events ──────────────────────────────────── */
+
+  function onMiniPlayerClick(e) {
+    // Prevent click-through when buttons are tapped
+    if (e.target.closest('button')) return;
+    const track = Player.getCurrentTrack();
+    if (!track) return;
+    // Open expanded player — enrich with cached ID3 metadata if available
+    UI.updateExpandedPlayer(_enrichTrack(track), Player.isPlaying());
+    const dur = Player.getDuration();
+    const cur = Player.getCurrentTime?.() || 0;
+    UI.updateExpandedPlayerProgress(cur, dur);
+    UI.setExpandedPlayerVisible(true);
+  }
+
+  function _closeExpandedPlayer() {
+    UI.setExpandedPlayerVisible(false);
+  }
+
+  /**
+   * Navigate Browse to the folder containing the currently playing track.
+   */
+  async function goToCurrentTrackFolder() {
+    const track = Player.getCurrentTrack();
+    if (!track) return;
+
+    try {
+      // Source 1: item cache (items browsed from Drive, have parents[])
+      const cached   = _resolveItemById(track.id);
+      let folderId   = cached?.parents?.[0]
+                    || track?.parents?.[0]
+                    || track?.folderId;
+
+      // Source 2: ask Drive directly for this file's parent (always works)
+      if (!folderId) {
+        const fileInfo = await Drive.getFileInfo(track.id);
+        folderId = fileInfo?.parents?.[0];
+      }
+
+      if (!folderId) { UI.showToast(UI.t('toast_no_folder')); return; }
+
+      const folder = await Drive.getFileInfo(folderId);
+      _breadcrumb  = [];
+      _openFolder({ id: folder.id, name: folder.name });
+
+      // On mobile the player is a full-screen overlay — close it so Browse is visible
+      UI.setExpandedPlayerVisible(false);
+    } catch (err) {
+      UI.showToast(UI.t('toast_folder_open_error'), 'error');
+    }
+  }
+
+  /* ── Folder play (from context menu "Reproducir") ────────── */
+
+  /**
+   * Play a folder immediately — fetches all playable songs and sets queue.
+   * Different from onFolderClick() which navigates into the folder.
+   */
+  async function onFolderPlay(folder) {
+    try {
+      const { files } = await Drive.listFolderAll(folder.id);
+      const playable  = files.filter(f => f.isPlayable);
+      if (playable.length === 0) {
+        UI.showToast(UI.t('toast_folder_no_songs'), 'error');
+        return;
+      }
+      playable.forEach(f => _cacheItem(f));
+      Player.setQueue(playable, 0);
+      UI.showToast(`▶ ${folder.name} · ${playable.length} ${UI.t('songs').toLowerCase()}`);
+    } catch (err) {
+      UI.showToast(UI.t('toast_folder_error'), 'error');
+      console.error('[App] onFolderPlay error:', err);
+    }
+  }
+
+  /* ── Browse sort ─────────────────────────────────────────── */
+
+  const SORT_LABELS = { name_asc: 'A–Z', name_desc: 'Z–A', size_desc: 'Tamaño' };
+  let _sortMode = 'name_asc';
+  let _sortDropdownOpen = false;
+
+  /** Sort folders and files arrays in-place according to _sortMode. */
+  function _sortItems(folders, files) {
+    const cmp = (a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' });
+    const cmpDesc = (a, b) => cmp(b, a);
+    const bySize = (a, b) => ((parseInt(b.size) || 0) - (parseInt(a.size) || 0));
+
+    if (_sortMode === 'name_asc') {
+      folders.sort(cmp);
+      files.sort(cmp);
+    } else if (_sortMode === 'name_desc') {
+      folders.sort(cmpDesc);
+      files.sort(cmpDesc);
+    } else if (_sortMode === 'size_desc') {
+      folders.sort(cmp); // folders always A-Z
+      files.sort(bySize);
+    }
+  }
+
+  /** Update the sort button label and active state in the dropdown. */
+  function _updateSortUI() {
+    const label = document.getElementById('sort-label');
+    if (label) label.textContent = SORT_LABELS[_sortMode] || _sortMode;
+    document.querySelectorAll('.sort-option').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.mode === _sortMode);
+    });
+  }
+
+  function _toggleSortDropdown(e) {
+    e.stopPropagation();
+    const dd = document.getElementById('sort-dropdown');
+    const chevron = document.getElementById('sort-chevron');
+    if (!dd) return;
+    _sortDropdownOpen = !_sortDropdownOpen;
+    dd.style.display = _sortDropdownOpen ? 'block' : 'none';
+    if (chevron) chevron.style.transform = _sortDropdownOpen ? 'rotate(180deg)' : '';
+    _updateSortUI();
+  }
+
+  function _closeSortDropdown() {
+    const dd = document.getElementById('sort-dropdown');
+    const chevron = document.getElementById('sort-chevron');
+    if (dd) dd.style.display = 'none';
+    if (chevron) chevron.style.transform = '';
+    _sortDropdownOpen = false;
+  }
+
+  function _selectSortMode(mode) {
+    _sortMode = mode;
+    _updateSortUI();
+    _closeSortDropdown();
+    // Re-render current folder with new sort
+    const currentFolder = _breadcrumb[_breadcrumb.length - 1];
+    if (currentFolder) _openFolder(currentFolder, false);
+  }
+
+  /* ── Nav tab click ───────────────────────────────────────── */
+
+  function onNavClick(viewId) {
+    // On mobile, close the expanded player so the mini-player is visible again
+    if (!window.matchMedia('(min-width: 768px)').matches) {
+      UI.setExpandedPlayerVisible(false);
+    }
+    UI.showView(viewId);
+    if (viewId === 'home')    _loadHomeData();
+    if (viewId === 'library') { _loadPlaylists(); _loadStarred(); }
+    if (viewId === 'settings') {
+      _buildEQSliders();
+      _applyEQPreset(_currentPreset || 'flat');
+      _loadCustomPresets();
+    }
+    if (viewId === 'browse') {
+      if (_breadcrumb.length === 0) {
+        _breadcrumb = [{ id: _rootFolderId, name: CONFIG.ROOT_FOLDER_NAME }];
+        _openFolder({ id: _rootFolderId, name: CONFIG.ROOT_FOLDER_NAME }, false);
+      }
+    }
+  }
+
+  /**
+   * Navigate Browse to the folder containing the currently playing track.
+   * Sets breadcrumb to [Mi Drive → folder].
+   * @returns {Promise<boolean>} true if navigated, false if no track/folder
+   */
+  async function _openCurrentTrackFolder() {
+    const track = Player.getCurrentTrack();
+    const folderId = track?.parents?.[0] || track?.folderId;
+    if (!folderId) return false;
+
+    try {
+      const folder = await Drive.getFileInfo(folderId);
+      _breadcrumb = [
+        { id: _rootFolderId, name: CONFIG.ROOT_FOLDER_NAME },
+        { id: folder.id, name: folder.name },
+      ];
+      await _openFolder(folder, false);
+      return true;
+    } catch (err) {
+      console.warn('[App] Could not navigate to track folder:', err);
+      return false;
+    }
+  }
+
+  /* ── Settings actions ────────────────────────────────────── */
+
+  function onLogout() {
+    if (confirm(UI.t('confirm_logout'))) {
+      Auth.logout();
+    }
+  }
+
+  function onLanguageChange(lang) {
+    UI.setLanguage(lang);
+    localStorage.setItem('savart_lang', lang);
+    // Sync both lang toggles (sidebar + settings)
+    document.querySelectorAll('.lang-btn, [data-lang]').forEach(el => {
+      el.classList.toggle('active', el.dataset.lang === lang);
+    });
+  }
+
+  async function onClearCache() {
+    await DB.clearCache();
+    UI.showToast(UI.t('toast_cache_cleared'), 'success');
+    _refreshCacheBar();
+  }
+
+  async function _refreshCacheBar() {
+    try {
+      const bytes      = await DB.getCacheSize();
+      const limitBytes = (await DB.getState('cacheLimit')) || CONFIG.CACHE_LIMIT_DEFAULT;
+      const pct        = Math.min(100, (bytes / limitBytes) * 100);
+      const label      = document.getElementById('cache-size-label');
+      const fill       = document.getElementById('cache-bar-fill');
+      if (label) label.textContent = `${formatBytes(bytes)} / ${formatBytes(limitBytes)}`;
+      if (fill)  fill.style.width  = `${pct}%`;
+      // Sync the select to the saved limit value
+      const sel = document.getElementById('select-cache-limit');
+      if (sel) {
+        // Find closest option
+        const closest = [...sel.options].reduce((prev, opt) =>
+          Math.abs(parseInt(opt.value) - limitBytes) < Math.abs(parseInt(prev.value) - limitBytes)
+          ? opt : prev
+        );
+        sel.value = closest.value;
+      }
+    } catch (_) {}
+  }
+
+  /* ── Sleep timer ─────────────────────────────────────────── */
+  let _sleepTimerId  = null;
+  let _lastSleepMins = null;   // remember last chosen duration for toggle-on restore
+
+  function _setTimerStatus(text) {
+    ['sleep-timer-status', 'overlay-timer-status'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = text;
+    });
+  }
+
+  function _setSleepTimerToggle(on) {
+    const toggle = document.getElementById('sleep-timer-toggle');
+    if (toggle) toggle.classList.toggle('on', on);
+  }
+
+  function _setSleepTimer(mins) {
+    if (_sleepTimerId) { clearTimeout(_sleepTimerId); _sleepTimerId = null; }
+
+    if (mins === 'off' || !mins) {
+      _setTimerStatus('');
+      _setSleepTimerToggle(false);
+      document.querySelectorAll('.sleep-pill').forEach(p => p.classList.remove('active'));
+      return;
+    }
+    if (mins === 'custom') {
+      const val = parseInt(prompt(UI.t('prompt_sleep_mins'), '45'), 10);
+      if (!isNaN(val) && val > 0) _setSleepTimer(val);
+      return;
+    }
+    const ms = parseInt(mins, 10) * 60 * 1000;
+    _lastSleepMins = mins;
+    _setSleepTimerToggle(true);
+    _sleepTimerId = setTimeout(() => {
+      Player.pause();
+      UI.showToast(UI.t('toast_sleep_stopped'), 'default');
+      _setTimerStatus('');
+      _setSleepTimerToggle(false);
+      document.querySelectorAll('.sleep-pill').forEach(p => p.classList.remove('active'));
+    }, ms);
+    _setTimerStatus(`${mins} min activo`);
+  }
+
+  /* ── EQ screen ───────────────────────────────────────────── */
+
+  // Factory EQ presets (gains for 12 bands: 32-63-125-250-500-1k-2k-4k-8k-12k-16k-20k)
+  const EQ_PRESETS = {
+    flat:      [ 0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0],
+    rock:      [+5, +4, +2,  0, -2, -3, -2,  0, +2, +4, +5, +3],
+    pop:       [-1,  0, +1, +3, +4, +4, +3, +1,  0, -1, -1, -1],
+    jazz:      [+4, +3, +1,  0,  0, -2, -2,  0, +1, +3, +4, +4],
+    classical: [+5, +4, +3, +2,  0,  0,  0, +2, +3, +4, +4, +5],
+    bass:      [+6, +5, +4, +2,  0,  0,  0,  0,  0,  0,  0,  0],
+    vocal:     [-3, -2,  0, +2, +4, +4, +4, +2,  0, -1, -2, -3],
+  };
+
+  let _currentPreset    = 'flat';
+  let _customPresets    = [];  // loaded from DB
+
+  function _buildEQSliders() {
+    const container = document.getElementById('eq-sliders');
+    if (!container) return;
+    container.innerHTML = '';
+
+    CONFIG.EQ_BANDS.forEach((freq, i) => {
+      const label = freq >= 1000 ? `${freq/1000}kHz` : `${freq}Hz`;
+      const band  = document.createElement('div');
+      band.className = 'eq-band';
+      band.innerHTML = `
+        <div class="eq-band-val" id="eq-val-${i}">0</div>
+        <input type="range" class="eq-band-slider" min="-12" max="12" value="0" step="1"
+               id="eq-slider-${i}" data-band="${i}">
+        <div class="eq-band-label">${label}</div>
+      `;
+      container.appendChild(band);
+
+      band.querySelector('input').addEventListener('input', (e) => {
+        const gain = parseInt(e.target.value, 10);
+        Player.setEQBand(i, gain);
+        document.getElementById(`eq-val-${i}`).textContent = gain > 0 ? `+${gain}` : `${gain}`;
+        _currentPreset = null;
+        document.querySelectorAll('.eq-preset-chip').forEach(c => c.classList.remove('active'));
+        _drawEQCurve();
+      });
+    });
+
+    // Sync disabled state with current toggle position
+    const eqOn = document.getElementById('eq-toggle')?.classList.contains('on');
+    container.classList.toggle('eq-off', !eqOn);
+    document.getElementById('screen-eq')?.classList.toggle('eq-controls-off', !eqOn);
+  }
+
+  function _applyEQPreset(preset) {
+    const gains = EQ_PRESETS[preset];
+    if (!gains) return;
+    _currentPreset = preset;
+    Player.setEQGains(gains);
+    gains.forEach((g, i) => {
+      const slider = document.getElementById(`eq-slider-${i}`);
+      const valEl  = document.getElementById(`eq-val-${i}`);
+      if (slider) slider.value = g;
+      if (valEl)  valEl.textContent = g > 0 ? `+${g}` : `${g}`;
+    });
+    document.querySelectorAll('.eq-preset-chip').forEach(c => {
+      c.classList.toggle('active', c.dataset.preset === preset);
+    });
+    _drawEQCurve();
+  }
+
+  function _drawEQCurve() {
+    const svg = document.getElementById('eq-curve-svg');
+    if (!svg) return;
+    const gains = Player.getEQGains();
+    const W = 900, H = 80, n = gains.length;
+
+    const pts = gains.map((g, i) => ({
+      x: (i / (n - 1)) * W,
+      y: H / 2 - (g / 12) * (H / 2 - 6),
+    }));
+
+    // Catmull-Rom → cubic Bezier (smooth curve through all points)
+    let line = `M${pts[0].x},${pts[0].y}`;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[i - 1] || pts[0];
+      const p1 = pts[i];
+      const p2 = pts[i + 1];
+      const p3 = pts[i + 2] || pts[pts.length - 1];
+      const cp1x = p1.x + (p2.x - p0.x) / 6;
+      const cp1y = p1.y + (p2.y - p0.y) / 6;
+      const cp2x = p2.x - (p3.x - p1.x) / 6;
+      const cp2y = p2.y - (p3.y - p1.y) / 6;
+      line += ` C${cp1x.toFixed(1)},${cp1y.toFixed(1)} ${cp2x.toFixed(1)},${cp2y.toFixed(1)} ${p2.x},${p2.y}`;
+    }
+
+    const fill = `${line} L${W},${H} L0,${H} Z`;
+
+    svg.innerHTML = `
+      <defs><linearGradient id="cg" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#4A88F5" stop-opacity="0.25"/>
+        <stop offset="100%" stop-color="#4A88F5" stop-opacity="0"/>
+      </linearGradient></defs>
+      <path d="${fill}" fill="url(#cg)" stroke="none"/>
+      <path d="${line}" fill="none" stroke="#4A88F5" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    `;
+  }
+
+  function _loadCustomPresets() {
+    try {
+      _customPresets = JSON.parse(localStorage.getItem('savart_eq_presets') || '[]');
+    } catch (_) { _customPresets = []; }
+    _renderCustomPresets();
+  }
+
+  function _saveCustomPreset(name) {
+    const gains = Player.getEQGains();
+    const preset = { id: Date.now(), name, gains, savedAt: new Date().toLocaleDateString() };
+    _customPresets.push(preset);
+    localStorage.setItem('savart_eq_presets', JSON.stringify(_customPresets));
+    _renderCustomPresets();
+  }
+
+  function _deleteCustomPreset(id) {
+    _customPresets = _customPresets.filter(p => p.id !== id);
+    localStorage.setItem('savart_eq_presets', JSON.stringify(_customPresets));
+    _renderCustomPresets();
+  }
+
+  function _renderCustomPresets() {
+    const list = document.getElementById('eq-custom-list');
+    if (!list) return;
+
+    // Keep the "new" card at end
+    list.innerHTML = '';
+
+    _customPresets.forEach(preset => {
+      const card = document.createElement('div');
+      card.className = 'eq-custom-card';
+      card.innerHTML = `
+        <svg class="eq-custom-sparkline" viewBox="0 0 120 24">
+          <path d="${_gainsToSparkline(preset.gains)}"
+            fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <div class="eq-custom-name">${UI.escHtml(preset.name)}</div>
+        <div class="eq-custom-date">${preset.savedAt}</div>
+        <div class="eq-custom-actions">
+          <button class="eq-custom-btn" data-action="load" data-id="${preset.id}">Cargar</button>
+          <button class="eq-custom-btn" data-action="del"  data-id="${preset.id}" style="max-width:28px;color:var(--error)">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+          </button>
+        </div>
+      `;
+      card.querySelector('[data-action="load"]').addEventListener('click', () => {
+        Player.setEQGains(preset.gains);
+        preset.gains.forEach((g, i) => {
+          const s = document.getElementById(`eq-slider-${i}`);
+          const v = document.getElementById(`eq-val-${i}`);
+          if (s) s.value = g;
+          if (v) v.textContent = g > 0 ? `+${g}` : `${g}`;
+        });
+        document.querySelectorAll('.eq-preset-chip').forEach(c => c.classList.remove('active'));
+        _drawEQCurve();
+        UI.showToast(`Preset "${preset.name}" cargado`);
+      });
+      card.querySelector('[data-action="del"]').addEventListener('click', (e) => {
+        e.stopPropagation();
+        _deleteCustomPreset(preset.id);
+      });
+      list.appendChild(card);
+    });
+
+  }
+
+  function _gainsToSparkline(gains) {
+    const W = 120, H = 24, n = gains.length;
+    const pts = gains.map((g, i) => ({
+      x: (i / (n - 1)) * W,
+      y: H / 2 - (g / 12) * (H / 2 - 2),
+    }));
+    let d = `M${pts[0].x},${pts[0].y}`;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[i - 1] || pts[0];
+      const p1 = pts[i];
+      const p2 = pts[i + 1];
+      const p3 = pts[i + 2] || pts[pts.length - 1];
+      const cp1x = p1.x + (p2.x - p0.x) / 6;
+      const cp1y = p1.y + (p2.y - p0.y) / 6;
+      const cp2x = p2.x - (p3.x - p1.x) / 6;
+      const cp2y = p2.y - (p3.y - p1.y) / 6;
+      d += ` C${cp1x.toFixed(1)},${cp1y.toFixed(1)} ${cp2x.toFixed(1)},${cp2y.toFixed(1)} ${p2.x},${p2.y}`;
+    }
+    return d;
+  }
+
+  /* ── Ctrl sheet helpers ──────────────────────────────────── */
+
+  /**
+   * Open a ctrl-sheet overlay and sync its controls from the settings values.
+   * @param {'overlay-speed'|'overlay-timer'} id
+   */
+  function _openCtrlSheet(id) {
+    if (id === 'overlay-speed') {
+      const tVal    = document.getElementById('tempo-slider')?.value ?? 100;
+      const tSlider = document.getElementById('overlay-tempo-slider');
+      const tValEl  = document.getElementById('overlay-tempo-val');
+      if (tSlider) tSlider.value = tVal;
+      if (tValEl)  tValEl.textContent = (parseFloat(tVal) / 100).toFixed(2) + '×';
+    }
+
+    // Timer: pills already synced via shared .sleep-pill querySelectorAll
+    document.getElementById(id)?.classList.add('visible');
+  }
+
+  function _closeCtrlSheet(id) {
+    document.getElementById(id)?.classList.remove('visible');
+  }
+
+  /* ── Event binding ───────────────────────────────────────── */
+
+  function _bindEvents() {
+    // Login button
+    document.getElementById('btn-login')?.addEventListener('click', () => {
+      Auth.requestToken();
+    });
+
+    // Token banner renewal button
+    document.getElementById('btn-renew-token')?.addEventListener('click', () => {
+      Auth.requestToken();
+    });
+
+    // Nav tabs (mobile bottom nav + desktop sidebar)
+    document.querySelectorAll('[data-nav]').forEach(el => {
+      el.addEventListener('click', () => onNavClick(el.dataset.nav));
+    });
+
+    // Mini-player mobile controls
+    document.querySelector('.btn-prev-mini')?.addEventListener('click', (e) => {
+      e.stopPropagation(); Player.prev();
+    });
+    document.querySelector('.btn-play-mini')?.addEventListener('click', (e) => {
+      e.stopPropagation(); Player.togglePlayPause();
+    });
+    document.querySelector('.btn-next-mini')?.addEventListener('click', (e) => {
+      e.stopPropagation(); Player.next();
+    });
+
+    // Mini-player desktop controls (5 buttons)
+    document.querySelector('.btn-prev-mini-desk')?.addEventListener('click', (e) => {
+      e.stopPropagation(); Player.prev();
+    });
+    document.querySelector('.btn-play-mini-desk')?.addEventListener('click', (e) => {
+      e.stopPropagation(); Player.togglePlayPause();
+    });
+    document.querySelector('.btn-next-mini-desk')?.addEventListener('click', (e) => {
+      e.stopPropagation(); Player.next();
+    });
+    document.querySelector('.mini-skip-prev')?.addEventListener('click', (e) => {
+      e.stopPropagation(); Player.seekTo(0);
+    });
+    document.querySelector('.mini-skip-next')?.addEventListener('click', (e) => {
+      e.stopPropagation(); Player.next();
+    });
+
+    // Mini-player volume
+    document.getElementById('mini-volume-slider')?.addEventListener('input', (e) => {
+      e.stopPropagation();
+      const vol = parseInt(e.target.value) / 100;
+      Player.setVolume?.(vol);
+    });
+
+    // Browse sort button → toggle dropdown
+    document.getElementById('btn-browse-sort')?.addEventListener('click', _toggleSortDropdown);
+
+    // Sort option clicks
+    document.getElementById('sort-dropdown')?.addEventListener('click', (e) => {
+      const btn = e.target.closest('.sort-option');
+      if (btn?.dataset.mode) _selectSortMode(btn.dataset.mode);
+    });
+
+    // Close dropdown on outside click
+    document.addEventListener('click', (e) => {
+      if (_sortDropdownOpen && !e.target.closest('#sort-wrap')) _closeSortDropdown();
+    });
+
+    // Mini-player expand
+    document.getElementById('mini-player')?.addEventListener('click', onMiniPlayerClick);
+
+    // Expanded player: close button (mobile)
+    document.getElementById('btn-pexp-close')?.addEventListener('click', _closeExpandedPlayer);
+
+    // Expanded player: "Mostrar álbum" → navigate Browse to current track's folder
+    document.getElementById('btn-pexp-show-album')?.addEventListener('click', goToCurrentTrackFolder);
+
+    // Expanded player: playback controls
+    document.getElementById('btn-pexp-prev')?.addEventListener('click', () => Player.prev());
+    document.getElementById('btn-pexp-next')?.addEventListener('click', () => Player.next());
+    document.getElementById('btn-pexp-play')?.addEventListener('click', () => Player.togglePlayPause());
+    document.getElementById('btn-pexp-shuffle')?.addEventListener('click', (e) => {
+      const isOn = Player.toggleShuffle();
+      e.currentTarget.classList.toggle('active', isOn);
+      UI.showToast(isOn ? 'Aleatorio activado' : 'Aleatorio desactivado');
+    });
+    document.getElementById('btn-pexp-repeat')?.addEventListener('click', (e) => {
+      const mode = Player.cycleRepeat();
+      const btn  = e.currentTarget;
+      btn.classList.toggle('active', mode !== 'off');
+      // Update aria-label and title to reflect current mode
+      const labels = { off: 'Sin repetición', all: 'Repetir todo', one: 'Repetir esta canción' };
+      btn.setAttribute('aria-label', labels[mode]);
+      btn.setAttribute('title', labels[mode]);
+      // Show '1' overlay for repeat-one mode
+      let badge = btn.querySelector('.repeat-one-badge');
+      if (mode === 'one') {
+        if (!badge) {
+          badge = document.createElement('span');
+          badge.className = 'repeat-one-badge';
+          badge.textContent = '1';
+          btn.appendChild(badge);
+        }
+      } else {
+        badge?.remove();
+      }
+    });
+
+    // Expanded player: progress seek
+    document.getElementById('pexp-progress-track')?.addEventListener('click', (e) => {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const pct  = (e.clientX - rect.left) / rect.width;
+      Player.seekTo(pct * Player.getDuration());
+    });
+
+    // Expanded player: show thumb on hover
+    document.getElementById('pexp-progress-track')?.addEventListener('mouseenter', () => {
+      document.querySelector('.pexp-thumb')?.style && (document.querySelector('.pexp-thumb').style.opacity = '1');
+    });
+    document.getElementById('pexp-progress-track')?.addEventListener('mouseleave', () => {
+      document.querySelector('.pexp-thumb')?.style && (document.querySelector('.pexp-thumb').style.opacity = '0');
+    });
+
+    // Expanded player: favorite
+    document.getElementById('btn-pexp-fav')?.addEventListener('click', async () => {
+      const track = Player.getCurrentTrack();
+      if (!track) return;
+      await onToggleStar(track); // onToggleStar calls UI.setHeartActive internally
+    });
+
+    // Expanded player: EQ button → navigate to settings (EQ always inline there)
+    document.getElementById('btn-pexp-eq-open')?.addEventListener('click', () => {
+      UI.setExpandedPlayerVisible(false);
+      onNavClick('settings');
+    });
+
+    // Expanded player: Speed (Tempo) → overlay on mobile, settings on desktop
+    document.getElementById('btn-pexp-speed')?.addEventListener('click', () => {
+      if (window.matchMedia('(min-width: 768px)').matches) {
+        _closeExpandedPlayer(); onNavClick('settings');
+      } else {
+        _openCtrlSheet('overlay-speed');
+      }
+    });
+
+    // Expanded player: Timer → overlay on mobile, settings on desktop
+    document.getElementById('btn-pexp-timer')?.addEventListener('click', () => {
+      if (window.matchMedia('(min-width: 768px)').matches) {
+        _closeExpandedPlayer(); onNavClick('settings');
+      } else {
+        _openCtrlSheet('overlay-timer');
+      }
+    });
+
+    // Ctrl sheet close buttons + backdrop
+    document.querySelectorAll('.ctrl-sheet').forEach(sheet => {
+      sheet.querySelector('.ctrl-sheet-backdrop')?.addEventListener('click', () => {
+        sheet.classList.remove('visible');
+      });
+      sheet.querySelector('.ctrl-sheet-close-btn')?.addEventListener('click', () => {
+        sheet.classList.remove('visible');
+      });
+    });
+
+    // Overlay tempo slider (inside overlay-speed)
+    document.getElementById('overlay-tempo-slider')?.addEventListener('input', (e) => {
+      const rate = parseFloat(e.target.value) / 100;
+      Player.setTempo(rate);
+      const display = rate.toFixed(2) + '×';
+      const valEl = document.getElementById('overlay-tempo-val');
+      if (valEl) valEl.textContent = display;
+      // Keep settings slider in sync
+      const s = document.getElementById('tempo-slider');
+      if (s) s.value = e.target.value;
+      const sv = document.getElementById('tempo-val');
+      if (sv) sv.textContent = display;
+    });
+
+    // Expanded player: ⋮ more options → context menu for current track
+    document.getElementById('btn-pexp-more')?.addEventListener('click', (e) => {
+      const track = Player.getCurrentTrack();
+      if (!track) return;
+      UI.showContextMenu(e, 'song', track);
+    });
+
+    // Expanded player: Cola button → open queue panel
+    document.getElementById('btn-pexp-queue')?.addEventListener('click', () => {
+      const { queue, index } = Player.getQueue();
+      UI.renderQueuePanel(queue, index);
+      UI.showQueuePanel(true);
+      _prefetchQueueCovers(queue).catch(() => {});
+    });
+
+    // Queue panel: back button → return to now playing
+    document.getElementById('btn-queue-back')?.addEventListener('click', () => {
+      UI.showQueuePanel(false);
+    });
+
+    // Mini-player desktop: Cola button → open queue panel
+    document.getElementById('btn-mini-queue')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const { queue, index } = Player.getQueue();
+      UI.renderQueuePanel(queue, index);
+      UI.showQueuePanel(true);
+      _prefetchQueueCovers(queue).catch(() => {});
+      // On mobile, also open expanded player if not already visible
+      if (!UI.isExpandedPlayerVisible()) UI.setExpandedPlayerVisible(true);
+    });
+
+    // Mini-player desktop progress seek
+    document.getElementById('mini-progress-track')?.addEventListener('click', (e) => {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const pct  = (e.clientX - rect.left) / rect.width;
+      Player.seekTo(pct * Player.getDuration());
+    });
+
+    // Mini-player desktop: star
+    document.getElementById('btn-mini-star')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const track = Player.getCurrentTrack();
+      if (track) onToggleStar(track);
+    });
+
+    // Settings logout
+    document.getElementById('btn-logout')?.addEventListener('click', onLogout);
+
+    // Settings language toggle (both lang-btn and data-lang)
+    document.querySelectorAll('.lang-btn, [data-lang]').forEach(el => {
+      el.addEventListener('click', () => onLanguageChange(el.dataset.lang));
+    });
+
+    // Settings clear cache
+    document.getElementById('btn-clear-cache')?.addEventListener('click', onClearCache);
+
+    // Cache limit selector
+    document.getElementById('select-cache-limit')?.addEventListener('change', async (e) => {
+      const bytes = parseInt(e.target.value, 10);
+      if (!bytes) return;
+      await DB.setState('cacheLimit', bytes);
+      _refreshCacheBar();
+      UI.showToast(`Límite de caché: ${formatBytes(bytes)}`, 'success');
+    });
+
+    // Tempo slider
+    document.getElementById('tempo-slider')?.addEventListener('input', (e) => {
+      const rate = parseFloat(e.target.value) / 100;
+      Player.setTempo(rate);
+      document.getElementById('tempo-val').textContent = rate.toFixed(2) + '×';
+    });
+
+    // Step buttons (±) next to sliders
+    document.querySelectorAll('.step-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const targetId = btn.dataset.target;
+        const dir      = parseInt(btn.dataset.dir, 10);
+        const slider   = document.getElementById(targetId);
+        if (!slider) return;
+        const step = parseFloat(slider.step) || 1;
+        const newVal = Math.min(
+          parseFloat(slider.max),
+          Math.max(parseFloat(slider.min), parseFloat(slider.value) + dir * step)
+        );
+        slider.value = newVal;
+        slider.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+    });
+
+    // Sleep timer pills
+    document.querySelectorAll('.sleep-pill').forEach(pill => {
+      pill.addEventListener('click', () => {
+        document.querySelectorAll('.sleep-pill').forEach(p => p.classList.remove('active'));
+        pill.classList.add('active');
+        _setSleepTimer(pill.dataset.mins);
+      });
+    });
+
+    // Sleep timer toggle (settings desktop)
+    document.getElementById('sleep-timer-toggle')?.addEventListener('click', (e) => {
+      const isNowOn = e.currentTarget.classList.toggle('on');
+      if (!isNowOn) {
+        // Turn off: cancel timer, clear pill selection
+        if (_sleepTimerId) { clearTimeout(_sleepTimerId); _sleepTimerId = null; }
+        _setTimerStatus('');
+        document.querySelectorAll('.sleep-pill').forEach(p => p.classList.remove('active'));
+      } else {
+        // Turn on: restore last chosen duration, or wait for user to pick a pill
+        if (_lastSleepMins) {
+          _setSleepTimer(_lastSleepMins);
+          document.querySelectorAll('.sleep-pill').forEach(p => {
+            p.classList.toggle('active', p.dataset.mins === String(_lastSleepMins));
+          });
+        } else {
+          // No duration chosen yet — revert toggle, user must pick a pill first
+          e.currentTarget.classList.remove('on');
+        }
+      }
+    });
+
+    // EQ close button (kept for any legacy reference — no-op now that EQ is always inline)
+    document.getElementById('btn-eq-close')?.addEventListener('click', () => {
+      onNavClick('settings'); // just stay in settings
+    });
+
+    // EQ toggle on/off — bypasses EQ nodes and disables controls
+    let _eqBypassedGains = null;
+
+    function _applyEQToggleState(isOn) {
+      document.getElementById('eq-sliders')?.classList.toggle('eq-off', !isOn);
+      document.getElementById('screen-eq')?.classList.toggle('eq-controls-off', !isOn);
+    }
+
+    document.getElementById('eq-toggle')?.addEventListener('click', (e) => {
+      const isOn = e.currentTarget.classList.toggle('on');
+      _applyEQToggleState(isOn);
+      if (!isOn) {
+        // Turning OFF: save gains, set all to 0 (flat bypass)
+        _eqBypassedGains = Player.getEQGains();
+        Player.setEQGains(new Array(12).fill(0));
+      } else {
+        // Turning ON: restore saved gains
+        if (_eqBypassedGains) {
+          Player.setEQGains(_eqBypassedGains);
+          _eqBypassedGains = null;
+        }
+      }
+    });
+
+    // EQ reset
+    document.getElementById('btn-eq-reset')?.addEventListener('click', () => {
+      Player.resetEQ();
+      _applyEQPreset('flat');
+    });
+
+    // EQ factory preset chips
+    document.querySelectorAll('.eq-preset-chip').forEach(chip => {
+      chip.addEventListener('click', () => _applyEQPreset(chip.dataset.preset));
+    });
+
+    // EQ save custom preset
+    document.getElementById('btn-eq-save')?.addEventListener('click', () => {
+      const name = prompt(UI.t('prompt_eq_preset_name'), UI.t('prompt_eq_preset_default'));
+      if (name) _saveCustomPreset(name.trim() || UI.t('prompt_eq_preset_default'));
+    });
+
+    // Settings: text size picker
+    document.querySelectorAll('.text-size-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.text-size-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const sizes = { small: '12px', normal: '13px', large: '15px' };
+        document.body.style.fontSize = sizes[btn.dataset.size] || '13px';
+        localStorage.setItem('savart_textsize', btn.dataset.size);
+      });
+    });
+
+    // Browse: back button — never navigates above MSK (CONFIG.ROOT_FOLDER_ID)
+    document.getElementById('btn-browse-back')?.addEventListener('click', async () => {
+      const currentFolder = _breadcrumb[_breadcrumb.length - 1];
+      if (!currentFolder) return;
+
+      // Already at root — nowhere to go up
+      if (currentFolder.id === _rootFolderId) return;
+
+      // If we navigated here manually, the previous breadcrumb entry is the real parent
+      if (_breadcrumb.length > 1) {
+        const parent = _breadcrumb[_breadcrumb.length - 2];
+        _breadcrumb = _breadcrumb.slice(0, -1);
+        _openFolder(parent, false);
+        return;
+      }
+
+      // Single entry in breadcrumb (opened directly from Recents/Home/Search):
+      // Ask Drive for the actual parent — but clamp to MSK root.
+      const btn = document.getElementById('btn-browse-back');
+      if (btn) btn.disabled = true;
+      try {
+        const info     = await Drive.getFileInfo(currentFolder.id);
+        const parentId = info.parents?.[0];
+
+        // If parent is MSK, above MSK, or unknown → land at MSK
+        if (!parentId || parentId === _rootFolderId || parentId === 'root') {
+          _breadcrumb = [{ id: _rootFolderId, name: CONFIG.ROOT_FOLDER_NAME }];
+          _openFolder({ id: _rootFolderId, name: CONFIG.ROOT_FOLDER_NAME }, false);
+        } else {
+          // Navigate to parent only if it's within the MSK subtree
+          // (we can't easily verify ancestry, so we trust Drive hierarchy)
+          const parentInfo = await Drive.getFileInfo(parentId);
+          _breadcrumb = [{ id: parentInfo.id, name: parentInfo.name }];
+          _openFolder(parentInfo, false);
+        }
+      } catch (err) {
+        UI.showToast(UI.t('toast_back_error'), 'error');
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    });
+
+    // Keyboard: Escape — close queue panel first, then expanded player
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        if (UI.isQueuePanelVisible()) {
+          UI.showQueuePanel(false);
+        } else if (UI.isExpandedPlayerVisible()) {
+          _closeExpandedPlayer();
+        }
+      }
+    });
+
+    // Library: new playlist
+    document.getElementById('btn-new-playlist')?.addEventListener('click', async () => {
+      const name = prompt(UI.t('prompt_playlist_name'), UI.t('prompt_playlist_default'));
+      if (name) {
+        await DB.createPlaylist(name.trim());
+        UI.showToast(`"${name}" — ${UI.t('toast_pl_created')}`);
+        // Refresh playlist list
+        _loadPlaylists();
+      }
+    });
+
+    // Refresh cache bar when settings is opened
+    document.querySelectorAll('[data-nav="settings"]').forEach(el => {
+      el.addEventListener('click', _refreshCacheBar);
+    });
+  }
+
+  /* ── Expose ─────────────────────────────────────────────── */
+  return {
+    boot,
+    // Called by UI event handlers
+    onHomeCardClick,
+    onFolderClick,
+    onGoToFolder,
+    onFolderPlay,
+    onBreadcrumbClick,
+    onSongClick,
+    // Context menu actions
+    onToggleStar,
+    onTogglePin,
+    onFolderQueue,
+    onShowPlaylistPicker,
+    onAddToPlaylist,
+    onCreateAndAddPlaylist,
+    onRemoveFromHistory,
+    // Nav
+    onNavClick,
+    // Settings
+    onLogout,
+    onLanguageChange,
+    onClearCache,
+    // Queue panel
+    onQueueItemClick,
+    onQueueItemRemove,
+    // Internal (exposed for UI / inline scripts)
+    _cacheItem,
+    _resolveItemById,
+    _doSearch,
+    _loadStarred,
+    _loadPlaylists,
+    _loadArtists,
+    onArtistClick,
+    onPlaylistClick,
+    onPlaylistPlay,
+    onPlaylistQueue,
+    onRenamePlaylist,
+    onDeletePlaylist,
+    onRemoveFromPlaylist,
+  };
+})();
+
+/* ── Auto-boot when DOM is ready ──────────────────────────── */
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', App.boot);
+} else {
+  App.boot();
+}
