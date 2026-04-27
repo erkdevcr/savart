@@ -16,10 +16,11 @@ const Auth = (() => {
   let _accessToken  = null;   // lives in memory only
   let _expiresAt    = 0;      // epoch ms
   let _warnTimer    = null;   // setTimeout id for expiry warning
-  let _onReady      = null;   // callback when a fresh token arrives
-  let _onExpiring   = null;   // callback when token is about to expire
-  let _onLogout     = null;   // callback when user logs out
-  let _initialized  = false;
+  let _onReady          = null;   // callback when a fresh token arrives
+  let _onExpiring       = null;   // callback when token is about to expire
+  let _onLogout         = null;   // callback when user logs out
+  let _onAutoLoginFail  = null;   // callback when silent re-auth fails
+  let _initialized      = false;
 
   /* ── LocalStorage keys ─────────────────────────────────── */
   const LS_EXPIRY  = 'savart_token_expiry';
@@ -69,9 +70,16 @@ const Auth = (() => {
   /**
    * Called by the GIS script's onload attribute.
    * Ensures the token client is created even if init() ran before GIS loaded.
+   * Also fires any pending silent re-auth that was queued before GIS was ready.
    */
   function onGISLoad() {
     _tryCreateClient();
+    // If tryAutoLogin() was called before GIS loaded, _onAutoLoginFail will be
+    // set but no requestAccessToken will have been sent yet. Fire it now.
+    if (_onAutoLoginFail && _tokenClient) {
+      console.log('[Auth] GIS now ready — firing deferred silent re-auth');
+      _tokenClient.requestAccessToken({ prompt: 'none' });
+    }
   }
 
   /* ── Token response handler ────────────────────────────── */
@@ -79,9 +87,19 @@ const Auth = (() => {
     console.log('[Auth] Token callback fired. Error?', response?.error || 'none');
     if (response.error) {
       console.error('[Auth] Token error:', response.error, response.error_description);
-      UI?.showToast('Error de autenticación: ' + response.error, 'error');
+      // If this was a silent re-auth attempt that failed, notify caller
+      if (_onAutoLoginFail) {
+        const cb = _onAutoLoginFail;
+        _onAutoLoginFail = null;
+        cb(response.error);
+      } else {
+        UI?.showToast('Error de autenticación: ' + response.error, 'error');
+      }
       return;
     }
+
+    // Silent re-auth succeeded — clear any pending fail callback
+    _onAutoLoginFail = null;
 
     const expiresInMs = (parseInt(response.expires_in, 10) || 3600) * 1000;
     _saveToken(response.access_token, expiresInMs);
@@ -96,6 +114,16 @@ const Auth = (() => {
 
   function _handleTokenError(error) {
     console.error('[Auth] GIS error:', error);
+
+    // If this was a silent re-auth attempt, route the failure to the caller
+    // (skip toasts — this is expected when the session has expired)
+    if (_onAutoLoginFail) {
+      const cb = _onAutoLoginFail;
+      _onAutoLoginFail = null;
+      cb(error.type || 'unknown');
+      return;
+    }
+
     // popup_closed_by_user is not a real error, user just closed the consent window
     if (error.type === 'popup_closed') return;
     if (error.type === 'popup_failed_to_open') {
@@ -143,10 +171,21 @@ const Auth = (() => {
    * and the caller should fall back to showing the login screen.
    * Safe to call on page load without a user gesture.
    */
-  function tryAutoLogin() {
+  /**
+   * Attempt a silent re-authentication without any UI.
+   * Uses prompt:'none' — succeeds if there is an active Google session
+   * and the user has previously granted the required scopes.
+   *
+   * @param {Function} [onFail] - called with an error type string if silent auth fails.
+   *   Use this to reveal the manual login button.
+   *   If omitted, failure is silent.
+   */
+  function tryAutoLogin(onFail) {
+    _onAutoLoginFail = typeof onFail === 'function' ? onFail : null;
     _tryCreateClient();
     if (!_tokenClient) {
-      // GIS not loaded yet — retry once it loads via onGISLoad()
+      // GIS not loaded yet — will be retried when onGISLoad() fires.
+      // Store onFail so it can still be called if GIS fails to load entirely.
       console.log('[Auth] GIS not ready for auto-login, will retry on load');
       return;
     }

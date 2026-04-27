@@ -101,12 +101,41 @@ const App = (() => {
     if (Auth.isAuthenticated()) {
       _onTokenReady();
     } else if (Auth.wasAuthenticated()) {
-      // Was logged in before — attempt silent re-auth, show login as fallback
+      // Was logged in before — attempt silent re-auth transparently.
+      // Show the login screen but hide the login button while we try.
+      // Only reveal the button if silent auth fails (or after a safety timeout).
       UI.showView('login');
-      Auth.tryAutoLogin();
+      _startSilentReconnect();
     } else {
       UI.showView('login');
     }
+  }
+
+  /**
+   * Attempt silent re-auth while showing a "Reconectando…" spinner
+   * instead of the login button. Reveals the button on failure.
+   */
+  function _startSilentReconnect() {
+    const btnLogin      = document.getElementById('btn-login');
+    const reconnecting  = document.getElementById('login-reconnecting');
+    const disclaimer    = document.querySelector('.login-disclaimer');
+
+    // Enter reconnecting state: hide button & disclaimer, show spinner
+    if (btnLogin)     btnLogin.style.display     = 'none';
+    if (disclaimer)   disclaimer.style.display   = 'none';
+    if (reconnecting) reconnecting.style.display = 'flex';
+
+    // Safety timeout — if GIS doesn't respond in 5s, give up silently
+    const safetyTimer = setTimeout(() => _exitSilentReconnect(), 5000);
+
+    function _exitSilentReconnect() {
+      clearTimeout(safetyTimer);
+      if (btnLogin)     btnLogin.style.display     = '';
+      if (disclaimer)   disclaimer.style.display   = '';
+      if (reconnecting) reconnecting.style.display = 'none';
+    }
+
+    Auth.tryAutoLogin(_exitSilentReconnect);
   }
 
   /**
@@ -127,17 +156,18 @@ const App = (() => {
   /* ── Auth events ─────────────────────────────────────────── */
 
   function _onTokenReady() {
+    // If silent re-auth completed, clean up reconnecting UI before transition
+    const reconnecting = document.getElementById('login-reconnecting');
+    if (reconnecting) reconnecting.style.display = 'none';
+
     UI.hideTokenBanner();
     UI.showView('home');
     _loadHomeData();
     // Fetch real user info and update Settings panel
     Auth.fetchUserInfo().then(info => {
       if (!info) return;
-      const emailEl  = document.getElementById('account-email');
-      const avatarEl = document.getElementById('account-avatar');
-      if (emailEl)  emailEl.textContent  = info.email || info.name || '—';
-      if (avatarEl) avatarEl.textContent = (info.name || info.email || '?')[0].toUpperCase();
-      // Persist so it survives without re-fetching
+      const emailEl = document.getElementById('account-email');
+      if (emailEl) emailEl.textContent = info.email || info.name || '—';
       try { localStorage.setItem('savart_user_email', info.email || '');
             localStorage.setItem('savart_user_name',  info.name  || ''); } catch (_) {}
     }).catch(() => {});
@@ -180,12 +210,9 @@ const App = (() => {
   function _restoreUserInfo() {
     try {
       const email  = localStorage.getItem('savart_user_email');
-      const name   = localStorage.getItem('savart_user_name');
-      if (!email && !name) return;
-      const emailEl  = document.getElementById('account-email');
-      const avatarEl = document.getElementById('account-avatar');
-      if (emailEl && email)  emailEl.textContent  = email;
-      if (avatarEl && (name || email)) avatarEl.textContent = (name || email)[0].toUpperCase();
+      if (!email) return;
+      const emailEl = document.getElementById('account-email');
+      if (emailEl) emailEl.textContent = email;
     } catch (_) {}
   }
 
@@ -283,10 +310,8 @@ const App = (() => {
       localStorage.removeItem('savart_user_email');
       localStorage.removeItem('savart_user_name');
     } catch (_) {}
-    const emailEl  = document.getElementById('account-email');
-    const avatarEl = document.getElementById('account-avatar');
-    if (emailEl)  emailEl.textContent  = '—';
-    if (avatarEl) avatarEl.textContent = '?';
+    const emailEl = document.getElementById('account-email');
+    if (emailEl) emailEl.textContent = '—';
   }
 
   /* ── Player events ───────────────────────────────────────── */
