@@ -136,6 +136,44 @@ const Auth = (() => {
   /* ── Public API ─────────────────────────────────────────── */
 
   /**
+   * Attempt a silent re-authentication without any UI.
+   * Uses prompt:'none' — succeeds if there is an active Google session
+   * and the user has previously granted the required scopes.
+   * If it fails, the error_callback fires (popup_failed / access_denied)
+   * and the caller should fall back to showing the login screen.
+   * Safe to call on page load without a user gesture.
+   */
+  function tryAutoLogin() {
+    _tryCreateClient();
+    if (!_tokenClient) {
+      // GIS not loaded yet — retry once it loads via onGISLoad()
+      console.log('[Auth] GIS not ready for auto-login, will retry on load');
+      return;
+    }
+    console.log('[Auth] Attempting silent re-auth (prompt:none)...');
+    _tokenClient.requestAccessToken({ prompt: 'none' });
+  }
+
+  /**
+   * Fetch the authenticated user's profile from Google.
+   * Returns { email, name, picture } or null on error.
+   * Call after a valid token is available.
+   */
+  async function fetchUserInfo() {
+    const token = getValidToken();
+    if (!token) return null;
+    try {
+      const res = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return null;
+      return res.json(); // { id, email, name, given_name, picture, ... }
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /**
    * Request a new access token.
    * MUST be called from a user-driven event (click/tap).
    * If the user already has an active Google session, the GIS popup
@@ -212,6 +250,8 @@ const Auth = (() => {
   return {
     init,
     onGISLoad,
+    tryAutoLogin,
+    fetchUserInfo,
     requestToken,
     getValidToken,
     isAuthenticated,

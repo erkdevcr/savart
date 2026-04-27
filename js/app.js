@@ -94,12 +94,34 @@ const App = (() => {
       _loadCustomPresets();
     }
 
-    // 7. Decide initial screen
+    // 7. Back gesture prevention
+    _initBackGuard();
+
+    // 8. Decide initial screen
     if (Auth.isAuthenticated()) {
       _onTokenReady();
+    } else if (Auth.wasAuthenticated()) {
+      // Was logged in before — attempt silent re-auth, show login as fallback
+      UI.showView('login');
+      Auth.tryAutoLogin();
     } else {
       UI.showView('login');
     }
+  }
+
+  /**
+   * Prevent browser back gesture from reloading the page (and dropping
+   * the in-memory auth token). Pushes a dummy history state and re-pushes
+   * on every popstate so the stack never empties.
+   * Skipped in standalone PWA mode — Android handles it natively there.
+   */
+  function _initBackGuard() {
+    if (window.matchMedia('(display-mode: standalone)').matches) return;
+    history.replaceState({ savart: true }, '', location.href);
+    history.pushState({ savart: true }, '', location.href);
+    window.addEventListener('popstate', () => {
+      history.pushState({ savart: true }, '', location.href);
+    });
   }
 
   /* ── Auth events ─────────────────────────────────────────── */
@@ -108,8 +130,33 @@ const App = (() => {
     UI.hideTokenBanner();
     UI.showView('home');
     _loadHomeData();
+    // Fetch real user info and update Settings panel
+    Auth.fetchUserInfo().then(info => {
+      if (!info) return;
+      const emailEl  = document.getElementById('account-email');
+      const avatarEl = document.getElementById('account-avatar');
+      if (emailEl)  emailEl.textContent  = info.email || info.name || '—';
+      if (avatarEl) avatarEl.textContent = (info.name || info.email || '?')[0].toUpperCase();
+      // Persist so it survives without re-fetching
+      try { localStorage.setItem('savart_user_email', info.email || '');
+            localStorage.setItem('savart_user_name',  info.name  || ''); } catch (_) {}
+    }).catch(() => {});
+    // Restore cached user info immediately (avoids flicker on re-load)
+    _restoreUserInfo();
     // Sync in background — non-blocking, non-fatal
     Sync.init().catch(() => {});
+  }
+
+  function _restoreUserInfo() {
+    try {
+      const email  = localStorage.getItem('savart_user_email');
+      const name   = localStorage.getItem('savart_user_name');
+      if (!email && !name) return;
+      const emailEl  = document.getElementById('account-email');
+      const avatarEl = document.getElementById('account-avatar');
+      if (emailEl && email)  emailEl.textContent  = email;
+      if (avatarEl && (name || email)) avatarEl.textContent = (name || email)[0].toUpperCase();
+    } catch (_) {}
   }
 
   function _onTokenExpiring() {
@@ -119,6 +166,15 @@ const App = (() => {
   function _onLogout() {
     UI.showView('login');
     UI.hideTokenBanner();
+    // Clear cached user info so it doesn't bleed into the next account
+    try {
+      localStorage.removeItem('savart_user_email');
+      localStorage.removeItem('savart_user_name');
+    } catch (_) {}
+    const emailEl  = document.getElementById('account-email');
+    const avatarEl = document.getElementById('account-avatar');
+    if (emailEl)  emailEl.textContent  = '—';
+    if (avatarEl) avatarEl.textContent = '?';
   }
 
   /* ── Player events ───────────────────────────────────────── */
