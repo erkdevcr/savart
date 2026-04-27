@@ -12,8 +12,10 @@
 const APP_VERSION  = '0.9.1';
 const CACHE_NAME   = `savart-shell-v${APP_VERSION}`;
 
-/* Base path — empty string for local dev, '/savart' for GitHub Pages */
-const BASE = '/savart';
+/* Base path — auto-detected from sw.js location.
+   localhost:8080  → ''
+   erkdevcr.github.io/savart → '/savart'            */
+const BASE = self.location.pathname.replace('/sw.js', '').replace(/\/$/, '');
 
 /* Files to precache on install */
 const SHELL_FILES = [
