@@ -143,8 +143,11 @@ const App = (() => {
     }).catch(() => {});
     // Restore cached user info immediately (avoids flicker on re-load)
     _restoreUserInfo();
-    // Sync in background — non-blocking, non-fatal
-    Sync.init().catch(() => {});
+    // Restore EQ + tempo from DB before first render
+    _restoreSettings();
+    // Sync in background — non-blocking; re-apply settings afterward in case
+    // remote had newer EQ/tempo data.
+    Sync.init().then(() => _restoreSettings()).catch(() => {});
   }
 
   function _restoreUserInfo() {
@@ -157,6 +160,87 @@ const App = (() => {
       if (emailEl && email)  emailEl.textContent  = email;
       if (avatarEl && (name || email)) avatarEl.textContent = (name || email)[0].toUpperCase();
     } catch (_) {}
+  }
+
+  /**
+   * Restore EQ and tempo from DB.setState('settings').
+   * Called on boot and again after Sync.init() in case remote had newer settings.
+   */
+  async function _restoreSettings() {
+    try {
+      const s = await DB.getState('settings');
+      if (!s) return;
+
+      // ── Restore tempo ──────────────────────────────────────
+      if (typeof s.tempo === 'number' && s.tempo !== 1.0) {
+        Player.setTempo(s.tempo);
+        const sliderVal = Math.round(s.tempo * 100);
+        const tempoSlider  = document.getElementById('tempo-slider');
+        const tempoVal     = document.getElementById('tempo-val');
+        const oSlider      = document.getElementById('overlay-tempo-slider');
+        const oVal         = document.getElementById('overlay-tempo-val');
+        if (tempoSlider) tempoSlider.value     = sliderVal;
+        if (tempoVal)    tempoVal.textContent  = s.tempo.toFixed(2) + '×';
+        if (oSlider)     oSlider.value         = sliderVal;
+        if (oVal)        oVal.textContent      = s.tempo.toFixed(2) + '×';
+      }
+
+      // ── Restore EQ enabled state ───────────────────────────
+      const eqToggle = document.getElementById('eq-toggle');
+      if (eqToggle) {
+        const isOn = s.eqEnabled !== false; // default on
+        eqToggle.classList.toggle('on', isOn);
+      }
+
+      // ── Restore EQ gains ───────────────────────────────────
+      if (Array.isArray(s.eqGains) && s.eqGains.length === CONFIG.EQ_BANDS.length) {
+        Player.setEQGains(s.eqGains);
+        _currentPreset = s.eqPreset || null;
+        // Update sliders if the EQ panel is already in the DOM
+        s.eqGains.forEach((g, i) => {
+          const slider = document.getElementById(`eq-slider-${i}`);
+          const valEl  = document.getElementById(`eq-val-${i}`);
+          if (slider) slider.value    = g;
+          if (valEl)  valEl.textContent = g > 0 ? `+${g}` : `${g}`;
+        });
+        document.querySelectorAll('.eq-preset-chip').forEach(c => {
+          c.classList.toggle('active', c.dataset.preset === _currentPreset);
+        });
+        _drawEQCurve();
+      }
+
+      // ── Restore custom presets ─────────────────────────────
+      if (Array.isArray(s.eqCustomPresets) && s.eqCustomPresets.length > 0) {
+        _customPresets = s.eqCustomPresets;
+        // Keep localStorage in sync for any legacy reads
+        try { localStorage.setItem('savart_eq_presets', JSON.stringify(_customPresets)); } catch (_) {}
+        _renderCustomPresets();
+      }
+
+      console.log('[App] Settings restored from DB');
+    } catch (err) {
+      console.warn('[App] Could not restore settings:', err);
+    }
+  }
+
+  /**
+   * Persist current EQ + tempo to DB and schedule a sync push.
+   * Call after any EQ or tempo change.
+   */
+  function _saveSettings() {
+    const gains      = Player.getEQGains();
+    const eqOn       = document.getElementById('eq-toggle')?.classList.contains('on') ?? true;
+    const tempoRaw   = parseFloat(document.getElementById('tempo-slider')?.value ?? 100);
+    const tempo      = tempoRaw / 100;
+    DB.setState('settings', {
+      eqGains:        gains,
+      eqEnabled:      eqOn,
+      eqPreset:       _currentPreset || null,
+      tempo,
+      eqCustomPresets: _customPresets,
+      savedAt:        Date.now(),
+    }).catch(() => {});
+    Sync.push('settings');
   }
 
   function _onTokenExpiring() {
@@ -212,7 +296,7 @@ const App = (() => {
         thumbnailLink: track.thumbnailLink || null,
         folderId:     track.parents?.[0]  || track.folderId || null,
       };
-      DB.addRecent(recentData).catch(() => {});
+      DB.addRecent(recentData).then(() => Sync.push('recents')).catch(() => {});
       // Also persist display fields to metadata store so topPlayed can show them
       DB.setMeta(track.id, {
         name:         recentData.name,
@@ -221,6 +305,8 @@ const App = (() => {
         artist:       recentData.artist,
         folderId:     recentData.folderId,
       }).catch(() => {});
+      // Schedule sync for play counts (incremented by player.js after audio starts)
+      setTimeout(() => Sync.push('playcounts'), 3000);
     }
   }
 
@@ -898,7 +984,7 @@ const App = (() => {
         name: folder.name,
         displayName: folder.name,
         type: 'folder',
-      }).catch(() => {});
+      }).then(() => Sync.push('recents')).catch(() => {});
 
     } catch (err) {
       if (err.name === 'AuthError') {
@@ -1789,6 +1875,7 @@ const App = (() => {
         _currentPreset = null;
         document.querySelectorAll('.eq-preset-chip').forEach(c => c.classList.remove('active'));
         _drawEQCurve();
+        _saveSettings();
       });
     });
 
@@ -1813,6 +1900,7 @@ const App = (() => {
       c.classList.toggle('active', c.dataset.preset === preset);
     });
     _drawEQCurve();
+    _saveSettings();
   }
 
   function _drawEQCurve() {
@@ -1865,12 +1953,14 @@ const App = (() => {
     _customPresets.push(preset);
     localStorage.setItem('savart_eq_presets', JSON.stringify(_customPresets));
     _renderCustomPresets();
+    _saveSettings();
   }
 
   function _deleteCustomPreset(id) {
     _customPresets = _customPresets.filter(p => p.id !== id);
     localStorage.setItem('savart_eq_presets', JSON.stringify(_customPresets));
     _renderCustomPresets();
+    _saveSettings();
   }
 
   function _renderCustomPresets() {
@@ -2137,6 +2227,7 @@ const App = (() => {
       if (s) s.value = e.target.value;
       const sv = document.getElementById('tempo-val');
       if (sv) sv.textContent = display;
+      _saveSettings();
     });
 
     // Expanded player: ⋮ more options → context menu for current track
@@ -2209,6 +2300,7 @@ const App = (() => {
       const rate = parseFloat(e.target.value) / 100;
       Player.setTempo(rate);
       document.getElementById('tempo-val').textContent = rate.toFixed(2) + '×';
+      _saveSettings();
     });
 
     // Step buttons (±) next to sliders
@@ -2276,22 +2368,21 @@ const App = (() => {
       const isOn = e.currentTarget.classList.toggle('on');
       _applyEQToggleState(isOn);
       if (!isOn) {
-        // Turning OFF: save gains, set all to 0 (flat bypass)
         _eqBypassedGains = Player.getEQGains();
         Player.setEQGains(new Array(12).fill(0));
       } else {
-        // Turning ON: restore saved gains
         if (_eqBypassedGains) {
           Player.setEQGains(_eqBypassedGains);
           _eqBypassedGains = null;
         }
       }
+      _saveSettings();
     });
 
     // EQ reset
     document.getElementById('btn-eq-reset')?.addEventListener('click', () => {
       Player.resetEQ();
-      _applyEQPreset('flat');
+      _applyEQPreset('flat'); // _applyEQPreset already calls _saveSettings
     });
 
     // EQ factory preset chips
