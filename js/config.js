@@ -12,8 +12,8 @@ const CONFIG = {
   // Get this from: console.cloud.google.com → APIs & Services → Credentials
   CLIENT_ID: '409671846168-u60nj8ib48se183sarosn0sicu8g4vvb.apps.googleusercontent.com',
 
-  // Scopes: drive.readonly = read music files | drive.appdata = sync favorites/playlists/pins
-  SCOPES: 'https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/drive.appdata',
+  // Scopes: email+profile = user info | drive.readonly = read music | drive.appdata = sync
+  SCOPES: 'email profile https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/drive.appdata',
 
   // ── Google Drive API ─────────────────────────────────────
   API_BASE: 'https://www.googleapis.com/drive/v3',
@@ -83,7 +83,7 @@ const CONFIG = {
 
   // ── App metadata ──────────────────────────────────────────
   APP_NAME: 'Savart',
-  VERSION:  '0.9.1',
+  VERSION:  '0.9.2',
 };
 
 /* ── Audio format detection helpers ───────────────────────── */

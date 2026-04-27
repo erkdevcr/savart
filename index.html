@@ -26,7 +26,7 @@
 <!-- ═══════════════════════════════════════════════════════
      LOGIN SCREEN
 ════════════════════════════════════════════════════════ -->
-<div id="screen-login" class="screen">
+<div id="screen-login" class="screen active">
   <div class="login-card">
     <!-- Wave/tilde logo mark -->
     <div class="login-mark">
@@ -98,7 +98,7 @@
   <div id="main">
 
     <!-- ── HOME ──────────────────────────────────────────── -->
-    <div id="screen-home" class="screen active">
+    <div id="screen-home" class="screen">
       <div class="home-header">
         <div class="home-header-brand">
           <svg width="22" height="14" viewBox="0 0 48 32" fill="none" aria-hidden="true">
@@ -778,6 +778,20 @@
 
   // ── PWA service worker registration ────────────────────
   if ('serviceWorker' in navigator) {
+    // Track the controller that was active when this page loaded.
+    // On first install there is no previous controller, so we skip
+    // the reload (nothing to refresh). On SW update the old controller
+    // exists, so we reload once to serve the freshly-cached shell.
+    const _prevController = navigator.serviceWorker.controller;
+    let _reloading = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (_prevController && !_reloading) {
+        _reloading = true;
+        console.log('[SW] New worker took control — reloading for fresh cache.');
+        window.location.reload();
+      }
+    });
+
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('sw.js')
         .then(reg => console.log('[SW] Registered:', reg.scope))
