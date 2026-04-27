@@ -24,6 +24,7 @@ const SHELL_FILES = [
   `${BASE}/js/auth.js`,
   `${BASE}/js/drive.js`,
   `${BASE}/js/db.js`,
+  `${BASE}/js/sync.js`,
   `${BASE}/js/player.js`,
   `${BASE}/js/pitch-processor.js`,
   `${BASE}/js/meta.js`,

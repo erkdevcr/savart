@@ -12,8 +12,8 @@ const CONFIG = {
   // Get this from: console.cloud.google.com → APIs & Services → Credentials
   CLIENT_ID: '409671846168-u60nj8ib48se183sarosn0sicu8g4vvb.apps.googleusercontent.com',
 
-  // Drive readonly scope — allows listing and downloading files
-  SCOPES: 'https://www.googleapis.com/auth/drive.readonly',
+  // Scopes: drive.readonly = read music files | drive.appdata = sync favorites/playlists/pins
+  SCOPES: 'https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/drive.appdata',
 
   // ── Google Drive API ─────────────────────────────────────
   API_BASE: 'https://www.googleapis.com/drive/v3',
@@ -76,6 +76,10 @@ const CONFIG = {
 
   // ── EQ bands (Hz) ─────────────────────────────────────────
   EQ_BANDS: [32, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 12000, 16000, 20000],
+
+  // ── IndexedDB ─────────────────────────────────────────────
+  DB_NAME:    'savart_db',
+  DB_VERSION: 1,
 
   // ── App metadata ──────────────────────────────────────────
   APP_NAME: 'Savart',

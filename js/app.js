@@ -108,6 +108,8 @@ const App = (() => {
     UI.hideTokenBanner();
     UI.showView('home');
     _loadHomeData();
+    // Sync in background — non-blocking, non-fatal
+    Sync.init().catch(() => {});
   }
 
   function _onTokenExpiring() {
@@ -973,6 +975,7 @@ const App = (() => {
     // Refresh Favoritos pane if it's selected
     const favItem = document.getElementById('lib-fav-item');
     if (favItem?.classList.contains('active')) _loadStarred();
+    Sync.push('favorites');
   }
 
   async function onTogglePin(item) {
@@ -980,6 +983,7 @@ const App = (() => {
     const label = item.type === 'folder' || item.isFolder ? 'Carpeta' : 'Canción';
     UI.showToast(isNowPinned ? `${label} fijada en Inicio` : `${label} quitada de Inicio`, 'default');
     _loadHomeData();
+    Sync.push('pinned');
   }
 
   async function onRemoveFromHistory(item) {
@@ -1032,6 +1036,7 @@ const App = (() => {
       await DB.addToPlaylist(playlistId, item.id);
       await _saveItemMeta(item);
       UI.showToast(`${UI.t('toast_added_to_pl')} "${pl?.name || 'playlist'}"`);
+      Sync.push('playlists');
     } catch (err) {
       UI.showToast(UI.t('toast_pl_add_error'), 'error');
     }
@@ -1050,6 +1055,7 @@ const App = (() => {
       await _saveItemMeta(item);
       UI.showToast(`"${name}" — ${UI.t('toast_pl_created')}`);
       _loadPlaylists(); // refresh Library if open
+      Sync.push('playlists');
     } catch (err) {
       UI.showToast(UI.t('toast_pl_create_error'), 'error');
     }
@@ -1360,6 +1366,7 @@ const App = (() => {
     await DB.updatePlaylist(pl.id, { name: newName.trim() });
     UI.showToast(`"${newName.trim()}" — ${UI.t('ctx_rename').toLowerCase()}`);
     _loadPlaylists();
+    Sync.push('playlists');
   }
 
   async function onDeletePlaylist(pl) {
@@ -1367,6 +1374,7 @@ const App = (() => {
     await DB.deletePlaylist(pl.id);
     UI.showToast(`"${pl.name}" — ${UI.t('ctx_delete').toLowerCase()}`);
     _loadPlaylists();
+    Sync.push('playlists');
     // If this playlist was showing in detail pane, clear it
     const container = document.getElementById('lib-detail-content');
     if (container) container.innerHTML = '';

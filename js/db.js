@@ -378,6 +378,16 @@ const DB = (() => {
   }
 
   /**
+   * Write a playlist directly (used by Sync to apply remote data).
+   * Unlike createPlaylist(), this preserves the existing id.
+   * @param {Object} pl — full playlist object with id
+   */
+  async function putPlaylist(pl) {
+    const store = _tx('playlists', 'readwrite');
+    return _promisify(store.put(pl));
+  }
+
+  /**
    * Get all playlists.
    * @returns {Promise<Object[]>}
    */
@@ -528,6 +538,7 @@ const DB = (() => {
     getRecents,
     // Playlists
     createPlaylist,
+    putPlaylist,
     getPlaylists,
     getPlaylist,
     updatePlaylist,
