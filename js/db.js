@@ -505,6 +505,22 @@ const DB = (() => {
   }
 
   /**
+   * Clear all recents (used by LWW sync to replace with remote data).
+   */
+  async function clearRecents() {
+    const store = _tx('recents', 'readwrite');
+    return _promisify(store.clear());
+  }
+
+  /**
+   * Clear all playlists (used by LWW sync to replace with remote data).
+   */
+  async function clearPlaylists() {
+    const store = _tx('playlists', 'readwrite');
+    return _promisify(store.clear());
+  }
+
+  /**
    * Get full pinned folder objects.
    * @returns {Promise<Object[]>}
    */
@@ -547,6 +563,8 @@ const DB = (() => {
     removeFromPlaylist,
     // Recents management
     removeRecent,
+    clearRecents,
+    clearPlaylists,
     // Pins
     getPinned,
     togglePin,

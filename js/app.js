@@ -145,9 +145,36 @@ const App = (() => {
     _restoreUserInfo();
     // Restore EQ + tempo from DB before first render
     _restoreSettings();
-    // Sync in background — non-blocking; re-apply settings afterward in case
-    // remote had newer EQ/tempo data.
-    Sync.init().then(() => _restoreSettings()).catch(() => {});
+    // Sync in background — when it finishes, refresh the UI so data from Drive
+    // appears immediately on the second device (local DB was empty before sync).
+    Sync.init().then(() => {
+      _restoreSettings();
+      _loadHomeData();
+      const view = UI.getCurrentView();
+      if (view === 'library') { _loadPlaylists(); _loadStarred(); }
+      // Start live 3-second polling (Last-Write-Wins)
+      Sync.startLiveSync(_onSyncDataChanged);
+    }).catch(() => {});
+  }
+
+  /**
+   * Called by Sync whenever live polling detects remote changes.
+   * Refreshes whichever parts of the UI are affected.
+   * @param {string[]} types — e.g. ['recents', 'pinned', 'settings']
+   */
+  function _onSyncDataChanged(types) {
+    console.log('[App] Live sync applied:', types);
+    const view = UI.getCurrentView();
+
+    const needsHome = types.some(t => ['recents', 'pinned', 'playcounts', 'favorites'].includes(t));
+    if (needsHome) _loadHomeData();
+
+    if (view === 'library' && types.some(t => ['playlists', 'favorites'].includes(t))) {
+      _loadPlaylists();
+      _loadStarred();
+    }
+
+    if (types.includes('settings')) _restoreSettings();
   }
 
   function _restoreUserInfo() {
@@ -248,6 +275,7 @@ const App = (() => {
   }
 
   function _onLogout() {
+    Sync.stopLiveSync();
     UI.showView('login');
     UI.hideTokenBanner();
     // Clear cached user info so it doesn't bleed into the next account
