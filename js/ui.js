@@ -29,6 +29,7 @@ const UI = (() => {
       browse:    'Examinar',
       search:    'Buscar',
       library:   'Biblioteca',
+      history:   'Historial',
       settings:  'Ajustes',
       // ── Login ──────────────────────────────────────────────
       login_tagline: 'Tu música de Google Drive,\ndonde quieras.',
@@ -45,6 +46,7 @@ const UI = (() => {
       empty_recents_folders: 'Las carpetas que abras aparecerán aquí.',
       empty_recents_songs:   'Las canciones que escuches aparecerán aquí.',
       empty_top_played:      'Tus canciones más reproducidas aparecerán aquí.',
+      empty_history:         'Las canciones que escuches aparecerán aquí.',
       home_cta_browse:       'Examinar tu Drive',
       // ── General labels ─────────────────────────────────────
       folders:   'Carpetas',
@@ -171,6 +173,7 @@ const UI = (() => {
       browse:    'Browse',
       search:    'Search',
       library:   'Library',
+      history:   'History',
       settings:  'Settings',
       // ── Login ──────────────────────────────────────────────
       login_tagline: 'Your Google Drive music,\nanywhere.',
@@ -187,6 +190,7 @@ const UI = (() => {
       empty_recents_folders: 'Folders you open will appear here.',
       empty_recents_songs:   'Songs you listen to will appear here.',
       empty_top_played:      'Your most played songs will appear here.',
+      empty_history:         'Songs you listen to will appear here.',
       home_cta_browse:       'Browse your Drive',
       // ── General labels ─────────────────────────────────────
       folders:   'Folders',
@@ -641,6 +645,8 @@ const UI = (() => {
       scroll.className = 'home-cards-scroll';
       items.forEach(item => scroll.appendChild(_buildHomeCard(item)));
       section.appendChild(scroll);
+      // Enable mouse-drag scrolling (desktop)
+      _bindDragScroll(scroll);
     }
 
     return section;
@@ -786,6 +792,123 @@ const UI = (() => {
     });
 
     return card;
+  }
+
+  /* ── History screen ──────────────────────────────────────── */
+
+  /**
+   * Render the Historial screen with a top-list style numbered list.
+   * @param {Object[]} items - history items from DB.getHistory()
+   */
+  function renderHistory(items) {
+    const container = document.getElementById('history-list');
+    if (!container) return;
+    container.innerHTML = '';
+
+    if (!items || items.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'home-section-empty';
+      empty.style.padding = '32px 16px';
+      empty.textContent = t('empty_history');
+      container.appendChild(empty);
+      return;
+    }
+
+    items.forEach((item, i) => {
+      const el = _buildHistoryItem(item, i + 1);
+      container.appendChild(el);
+    });
+  }
+
+  /** Build a single history list item (same appearance as top-played). */
+  function _buildHistoryItem(item, rank) {
+    const el = document.createElement('div');
+    el.className = 'top-list-item';
+    el.dataset.id = item.id;
+
+    const meta     = (typeof Meta !== 'undefined') ? Meta.getCached(item.id) : null;
+    const title    = meta?.title  || item.displayName || item.name || '—';
+    const artist   = meta?.artist || item.artist  || '';
+    const coverSrc = meta?.coverUrl || item.thumbnailUrl || '';
+
+    const thumbHtml = coverSrc
+      ? `<img src="${coverSrc}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover">`
+      : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--text-disabled)">${iconMusicNote(18)}</div>`;
+
+    el.innerHTML = `
+      <span class="top-list-rank">${rank}</span>
+      <div class="top-list-thumb">${thumbHtml}</div>
+      <div class="top-list-info">
+        <div class="top-list-title">${escHtml(title)}</div>
+        ${artist ? `<div class="top-list-meta">${escHtml(artist)}</div>` : ''}
+      </div>
+      <button class="btn-more" aria-label="Más opciones">${iconDots()}</button>
+    `;
+
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('.btn-more')) return;
+      if (typeof App !== 'undefined') App.onHomeCardClick(item);
+    });
+
+    el.querySelector('.btn-more')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      showContextMenu(e, 'history', item);
+    });
+
+    return el;
+  }
+
+  /* ── Drag-to-scroll for recent cards ────────────────────── */
+
+  /**
+   * Enable pointer-drag horizontal scrolling on a .home-cards-scroll element.
+   * Attached after the DOM node is created so we call this from renderHome.
+   * @param {HTMLElement} el
+   */
+  function _bindDragScroll(el) {
+    if (!el || el._dragBound) return;
+    el._dragBound = true;
+
+    let _isDragging  = false;
+    let _startX      = 0;
+    let _scrollLeft  = 0;
+
+    el.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;       // left button only
+      if (e.target.closest('.home-card-more')) return;  // don't hijack 3-dot clicks
+      _isDragging = true;
+      _startX     = e.clientX - el.getBoundingClientRect().left;
+      _scrollLeft = el.scrollLeft;
+      el.setPointerCapture(e.pointerId);
+      el.style.cursor = 'grabbing';
+      el.style.userSelect = 'none';
+    });
+
+    el.addEventListener('pointermove', (e) => {
+      if (!_isDragging) return;
+      const x    = e.clientX - el.getBoundingClientRect().left;
+      const walk = (x - _startX) * 1.2;
+      el.scrollLeft = _scrollLeft - walk;
+    });
+
+    const _stopDrag = () => {
+      if (!_isDragging) return;
+      _isDragging = false;
+      el.style.cursor = '';
+      el.style.userSelect = '';
+    };
+
+    el.addEventListener('pointerup',     _stopDrag);
+    el.addEventListener('pointercancel', _stopDrag);
+    el.addEventListener('pointerleave',  _stopDrag);
+
+    // Prevent click from firing on drag end (prevents accidental card opens)
+    el.addEventListener('click', (e) => {
+      if (Math.abs(el.scrollLeft - _scrollLeft) > 5) {
+        e.stopPropagation();
+        e.preventDefault();
+      }
+    }, { capture: true });
   }
 
   /* ── Browse (Examinar) ───────────────────────────────────── */
@@ -1138,6 +1261,22 @@ const UI = (() => {
       _addCtxItem(menu, iconTrash(14), t('ctx_remove_history'), () => { App.onRemoveFromHistory(item);   hideContextMenu(); });
     }
 
+    // ── History screen items ─────────────────────────────────────
+
+    if (type === 'history') {
+      _addCtxItem(menu, iconPlay(14),  t('ctx_play'),        () => { Player.setQueue([item], 0);  hideContextMenu(); });
+      _addCtxDivider(menu);
+      _addCtxItem(menu, _iconNext,     t('play_next'),       () => { Player.insertNext(item);      hideContextMenu(); });
+      _addCtxItem(menu, _iconQueue,    t('play_after'),      () => { Player.appendToQueue(item);   hideContextMenu(); });
+      _addCtxDivider(menu);
+      _addCtxItem(menu, _iconFolder,   t('ctx_go_to_album'), () => { App.onGoToFolder(item);       hideContextMenu(); });
+      _addCtxDivider(menu);
+      _addCtxItem(menu, iconStar(14),  t('add_fav'),         () => { App.onToggleStar(item);       hideContextMenu(); });
+      _addCtxItem(menu, iconPlus(14),  t('add_to_pl'),      (e) => { hideContextMenu(); App.onShowPlaylistPicker(e, item); });
+      _addCtxDivider(menu);
+      _addCtxItem(menu, iconTrash(14), t('ctx_remove_history'), () => { App.onRemoveFromHistoryItem(item); hideContextMenu(); });
+    }
+
     // Position menu near cursor
     const margin = 8;
     const mw = 200;
@@ -1147,6 +1286,7 @@ const UI = (() => {
              : type === 'top_played'? 300
              : type === 'playlist'  ? 230
              : type === 'pinned'    ? 175
+             : type === 'history'   ? 290
              : type === 'song'      ? 260
              : 200;
     let x = e.clientX || (e.touches?.[0]?.clientX || 0);
@@ -2040,6 +2180,8 @@ const UI = (() => {
     renderQueuePanel,
     // Home
     renderHome,
+    // History
+    renderHistory,
     // Browse
     renderBreadcrumb,
     renderFolderContents,

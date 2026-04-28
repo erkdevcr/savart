@@ -722,6 +722,17 @@ img { display: block; }
   flex-shrink: 0;
 }
 
+/* ── History screen ────────────────────────────────────────── */
+#screen-history .screen-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--bg-base);
+}
+#screen-history #history-list {
+  padding-bottom: 120px;
+}
+
 .home-section {
   padding: 20px 0 8px;
 }
@@ -745,7 +756,9 @@ img { display: block; }
   padding: 0 16px;
   overflow-x: auto;
   scrollbar-width: none;
+  cursor: grab;
 }
+.home-cards-scroll:active { cursor: grabbing; }
 
 .home-cards-scroll::-webkit-scrollbar { display: none; }
 

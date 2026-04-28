@@ -9,6 +9,7 @@
    - state      : { key, value }  — playback state, last folder, etc.
    - playlists  : { id, name, songIds[], createdAt, updatedAt }
    - recents    : { id (fileId), name, type ('song'|'folder'), folderId, accessedAt }
+   - history    : { id (fileId), name, displayName, artist, thumbnailUrl, folderId, playedAt }
    ============================================================ */
 
 const DB = (() => {
@@ -60,6 +61,12 @@ const DB = (() => {
         if (!db.objectStoreNames.contains('recents')) {
           const recentsStore = db.createObjectStore('recents', { keyPath: 'id' });
           recentsStore.createIndex('accessedAt', 'accessedAt', { unique: false });
+        }
+
+        // history store (v2+)
+        if (oldVersion < 2 && !db.objectStoreNames.contains('history')) {
+          const historyStore = db.createObjectStore('history', { keyPath: 'id' });
+          historyStore.createIndex('playedAt', 'playedAt', { unique: false });
         }
 
         console.log(`[DB] Upgraded from v${oldVersion} to v${CONFIG.DB_VERSION}`);
@@ -586,6 +593,105 @@ const DB = (() => {
     return Object.values(meta);
   }
 
+  /* ── History ────────────────────────────────────────────── */
+
+  /**
+   * Add (or update) a song in the playback history.
+   * Each song appears at most once; replaying bumps its playedAt to now.
+   * Trims to HISTORY_MAX items and drops entries older than HISTORY_MAX_DAYS.
+   * @param {{ id, name, displayName, artist, thumbnailUrl, folderId }} item
+   */
+  async function addToHistory(item) {
+    if (!item || !item.id) return;
+    const store = _tx('history', 'readwrite');
+    const safeThumb = (item.thumbnailUrl && !item.thumbnailUrl.startsWith('blob:'))
+      ? item.thumbnailUrl : (item.thumbnailLink || null);
+    await _promisify(store.put({
+      id:           item.id,
+      name:         item.name        || '',
+      displayName:  item.displayName || item.name || '',
+      artist:       item.artist      || '',
+      thumbnailUrl: safeThumb,
+      folderId:     item.parents?.[0] || item.folderId || null,
+      playedAt:     Date.now(),
+    }));
+    await _trimHistory();
+  }
+
+  /**
+   * Get history items, most recently played first.
+   * Automatically drops entries older than HISTORY_MAX_DAYS.
+   * @param {number} limit
+   * @returns {Promise<Object[]>}
+   */
+  async function getHistory(limit = CONFIG.HISTORY_MAX) {
+    const store   = _tx('history');
+    const entries = await _promisify(store.getAll());
+    const cutoff  = Date.now() - CONFIG.HISTORY_MAX_DAYS * 24 * 60 * 60 * 1000;
+    return entries
+      .filter(e => e.playedAt >= cutoff)
+      .sort((a, b) => b.playedAt - a.playedAt)
+      .slice(0, limit);
+  }
+
+  /**
+   * Bulk-write history rows in a single IndexedDB transaction.
+   * Used by Sync to apply remote history without per-item overhead.
+   * @param {Object[]} items
+   */
+  async function bulkPutHistory(items) {
+    if (!_db) return;
+    const valid = (items || []).filter(r => r && r.id).slice(0, CONFIG.HISTORY_MAX);
+    if (!valid.length) return;
+    await new Promise((resolve, reject) => {
+      const tx    = _db.transaction('history', 'readwrite');
+      const store = tx.objectStore('history');
+      tx.oncomplete = resolve;
+      tx.onerror    = () => reject(tx.error);
+      tx.onabort    = () => reject(tx.error);
+      for (const item of valid) {
+        store.put({ ...item, playedAt: item.playedAt ?? Date.now() });
+      }
+    });
+    await _trimHistory();
+  }
+
+  /**
+   * Remove a single item from the history.
+   * @param {string} id
+   */
+  async function removeFromHistory(id) {
+    const store = _tx('history', 'readwrite');
+    return _promisify(store.delete(id));
+  }
+
+  /**
+   * Clear all history (used by LWW sync to replace with remote data).
+   */
+  async function clearHistory() {
+    const store = _tx('history', 'readwrite');
+    return _promisify(store.clear());
+  }
+
+  /** Trim history: remove oldest entries beyond HISTORY_MAX and older than HISTORY_MAX_DAYS. */
+  async function _trimHistory() {
+    const store   = _tx('history', 'readwrite');
+    const entries = await _promisify(store.getAll());
+    const cutoff  = Date.now() - CONFIG.HISTORY_MAX_DAYS * 24 * 60 * 60 * 1000;
+
+    // Drop stale entries by age
+    for (const e of entries) {
+      if (e.playedAt < cutoff) await _promisify(store.delete(e.id));
+    }
+
+    // Trim to hard limit (keep most recent)
+    const remaining = entries.filter(e => e.playedAt >= cutoff);
+    if (remaining.length <= CONFIG.HISTORY_MAX) return;
+    remaining.sort((a, b) => a.playedAt - b.playedAt);
+    const toDelete = remaining.slice(0, remaining.length - CONFIG.HISTORY_MAX);
+    for (const e of toDelete) await _promisify(store.delete(e.id));
+  }
+
   /* ── Expose ─────────────────────────────────────────────── */
   return {
     open,
@@ -625,6 +731,12 @@ const DB = (() => {
     removeRecent,
     clearRecents,
     clearPlaylists,
+    // History
+    addToHistory,
+    getHistory,
+    bulkPutHistory,
+    removeFromHistory,
+    clearHistory,
     // Pins
     getPinned,
     togglePin,

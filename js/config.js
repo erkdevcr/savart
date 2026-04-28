@@ -77,13 +77,17 @@ const CONFIG = {
   // ── EQ bands (Hz) ─────────────────────────────────────────
   EQ_BANDS: [32, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 12000, 16000, 20000],
 
+  // ── History ───────────────────────────────────────────────
+  HISTORY_MAX:      100,
+  HISTORY_MAX_DAYS: 7,
+
   // ── IndexedDB ─────────────────────────────────────────────
   DB_NAME:    'savart_db',
-  DB_VERSION: 1,
+  DB_VERSION: 2,
 
   // ── App metadata ──────────────────────────────────────────
   APP_NAME: 'Savart',
-  VERSION:  '1.1.2',
+  VERSION:  '1.1.3',
 };
 
 /* ── Audio format detection helpers ───────────────────────── */

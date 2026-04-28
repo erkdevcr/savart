@@ -40,6 +40,7 @@ const Sync = (() => {
     recents:    'savart_recents.json',
     playcounts: 'savart_playcounts.json',
     settings:   'savart_settings.json',
+    history:    'savart_history.json',
   };
 
   /* ── Private state ─────────────────────────────────────── */
@@ -231,6 +232,22 @@ const Sync = (() => {
     return (remote.savedAt || 0) > (local.savedAt || 0) ? remote : local;
   }
 
+  function _mergeHistory(local, remote) {
+    const map = new Map();
+    for (const item of remote) map.set(item.id, item);
+    for (const item of local) {
+      const ex = map.get(item.id);
+      if (!ex || (item.playedAt || 0) >= (ex.playedAt || 0)) map.set(item.id, item);
+    }
+    const cutoff = Date.now() - CONFIG.HISTORY_MAX_DAYS * 24 * 60 * 60 * 1000;
+    const merged = Array.from(map.values())
+      .filter(e => (e.playedAt || 0) >= cutoff)
+      .sort((a, b) => b.playedAt - a.playedAt)
+      .slice(0, CONFIG.HISTORY_MAX);
+    const localIds = new Set(local.map(r => r.id));
+    return { merged, toAdd: merged.filter(r => !localIds.has(r.id)) };
+  }
+
   /* ── LWW apply (live polling) ────────────────────────────── */
   // Remote is newer → overwrite local entirely. No merge.
 
@@ -310,6 +327,13 @@ const Sync = (() => {
         if (data && typeof data === 'object') await DB.setState('settings', data);
         break;
       }
+
+      case 'history': {
+        const validHistory = (data || []).filter(r => r && r.id);
+        await DB.clearHistory();
+        if (validHistory.length) await DB.bulkPutHistory(validHistory);
+        break;
+      }
     }
   }
 
@@ -372,6 +396,20 @@ const Sync = (() => {
     console.log('[Sync] Pushed settings');
   }
 
+  async function _pushHistory() {
+    const history = await DB.getHistory(CONFIG.HISTORY_MAX);
+    await _writeFile(FILENAMES.history, history.map(h => ({
+      id:           h.id,
+      name:         h.name         || null,
+      displayName:  h.displayName  || h.name || null,
+      artist:       h.artist       || null,
+      folderId:     h.folderId     || null,
+      thumbnailUrl: (h.thumbnailUrl && !h.thumbnailUrl.startsWith('blob:')) ? h.thumbnailUrl : null,
+      playedAt:     h.playedAt     ?? Date.now(),
+    })));
+    console.log(`[Sync] Pushed history (${history.length})`);
+  }
+
   const _pushFns = {
     favorites:  _pushFavorites,
     playlists:  _pushPlaylists,
@@ -379,6 +417,7 @@ const Sync = (() => {
     recents:    _pushRecents,
     playcounts: _pushPlaycounts,
     settings:   _pushSettings,
+    history:    _pushHistory,
   };
 
   /* ── Live polling ────────────────────────────────────────── */
@@ -474,7 +513,7 @@ const Sync = (() => {
       const [
         manifest,
         remoteFavs, remotePlaylists, remotePinned,
-        remoteRecents, remotePlaycounts, remoteSettings,
+        remoteRecents, remotePlaycounts, remoteSettings, remoteHistory,
       ] = await Promise.all([
         _readManifest(),
         _readFile(FILENAMES.favorites).catch(() => null),
@@ -483,6 +522,7 @@ const Sync = (() => {
         _readFile(FILENAMES.recents).catch(() => null),
         _readFile(FILENAMES.playcounts).catch(() => null),
         _readFile(FILENAMES.settings).catch(() => null),
+        _readFile(FILENAMES.history).catch(() => null),
       ]);
 
       // Seed remote timestamps from manifest
@@ -564,6 +604,25 @@ const Sync = (() => {
         if (merged !== localSettings) {
           await DB.setState('settings', merged);
           console.log('[Sync] Merged remote settings');
+        }
+      });
+
+      // ── Merge history ─────────────────────────────────────
+      await _mergeStep('history', async () => {
+        if (!Array.isArray(remoteHistory) || remoteHistory.length === 0) return;
+        const validRemote = remoteHistory.filter(r => r && r.id);
+        if (!validRemote.length) return;
+        const local = await DB.getHistory(CONFIG.HISTORY_MAX);
+        const { merged } = _mergeHistory(local, validRemote);
+        if (!merged.length) return;
+        const localMap = new Map(local.map(r => [r.id, r]));
+        const toWrite  = merged.filter(m => {
+          const l = localMap.get(m.id);
+          return !l || m.playedAt > (l.playedAt || 0);
+        });
+        if (toWrite.length) {
+          await DB.bulkPutHistory(toWrite);
+          console.log(`[Sync] Merged history: ${toWrite.filter(m => !localMap.has(m.id)).length} added, ${toWrite.filter(m => localMap.has(m.id)).length} updated`);
         }
       });
 

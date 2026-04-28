@@ -204,6 +204,8 @@ const App = (() => {
       _loadStarred();
     }
 
+    if (view === 'history' && types.includes('history')) _loadHistory();
+
     if (types.includes('settings')) _restoreSettings();
   }
 
@@ -343,17 +345,27 @@ const App = (() => {
 
     // Save to recents (type: 'song') so Home shows it in "Canciones recientes"
     if (track) {
+      const safeThumb = (() => { const u = track.thumbnailUrl || track.thumbnailLink || null; return (u && u.startsWith('blob:')) ? (track.thumbnailLink || null) : u; })();
       const recentData = {
         id:           track.id,
         name:         track.name,
         displayName:  track.displayName || track.name || '',
         type:         'song',
         artist:       track.artist       || '',
-        thumbnailUrl:  (() => { const u = track.thumbnailUrl || track.thumbnailLink || null; return (u && u.startsWith('blob:')) ? (track.thumbnailLink || null) : u; })(),
+        thumbnailUrl:  safeThumb,
         thumbnailLink: track.thumbnailLink || null,
         folderId:     track.parents?.[0]  || track.folderId || null,
       };
       DB.addRecent(recentData).then(() => Sync.push('recents')).catch(() => {});
+      // Add to playback history (no-duplicates, most-recent-first, 7-day / 100-item store)
+      DB.addToHistory({
+        id:          track.id,
+        name:        track.name,
+        displayName: track.displayName || track.name || '',
+        artist:      track.artist      || '',
+        thumbnailUrl: safeThumb,
+        folderId:    track.parents?.[0] || track.folderId || null,
+      }).then(() => Sync.push('history')).catch(() => {});
       // Also persist display fields to metadata store so topPlayed can show them
       DB.setMeta(track.id, {
         name:         recentData.name,
@@ -1323,6 +1335,39 @@ const App = (() => {
     _loadHomeData();
   }
 
+  async function onRemoveFromHistoryItem(item) {
+    await DB.removeFromHistory(item.id).catch(() => {});
+    UI.showToast(UI.t('toast_removed_history'));
+    _loadHistory();
+    Sync.push('history');
+  }
+
+  /* ── History screen ──────────────────────────────────────── */
+
+  async function _loadHistory() {
+    const screen = document.getElementById('screen-history');
+    if (!screen) return;
+    try {
+      const raw = await DB.getHistory(CONFIG.HISTORY_MAX);
+      // Enrich with in-memory Meta cache (covers + artist from current session)
+      const items = raw.map(item => {
+        const meta = (typeof Meta !== 'undefined') ? Meta.getCached(item.id) : null;
+        if (!meta) return item;
+        return {
+          ...item,
+          displayName:  meta.title   || item.displayName,
+          artist:       meta.artist  || item.artist,
+          thumbnailUrl: meta.coverUrl || item.thumbnailUrl,
+        };
+      });
+      UI.renderHistory(items);
+      // Async: apply covers from DB coverBlobs (same two-pass pipeline as top-played)
+      _prefetchTopPlayedCovers(items).catch(() => {});
+    } catch (err) {
+      console.error('[App] Load history error:', err);
+    }
+  }
+
   async function onFolderQueue(folder, mode) {
     try {
       const { files } = await Drive.listFolderAll(folder.id);
@@ -2027,6 +2072,7 @@ const App = (() => {
     UI.showView(viewId);
     if (viewId === 'home')    _loadHomeData();
     if (viewId === 'library') { _loadPlaylists(); _loadStarred(); }
+    if (viewId === 'history') _loadHistory();
     if (viewId === 'settings') {
       _buildEQSliders();
       _applyEQPreset(_currentPreset || 'flat');
@@ -2812,6 +2858,7 @@ const App = (() => {
     onAddToPlaylist,
     onCreateAndAddPlaylist,
     onRemoveFromHistory,
+    onRemoveFromHistoryItem,
     // Nav
     onNavClick,
     // Settings
