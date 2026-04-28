@@ -163,13 +163,21 @@ const Drive = (() => {
 
   /**
    * Execute a single Drive files.list query for `name contains safeTerm`.
+   * @param {string} safeTerm  - already-escaped search term
+   * @param {'mixed'|'folders'} mode
+   *   'mixed'   → audio + folders combined (pageSize 100)
+   *   'folders' → folders only, dedicated page (pageSize 50)
+   *              Guarantees folder results even when 100+ songs crowd them out.
    * Returns { folders, files }.
    */
-  async function _driveSearchQuery(safeTerm) {
-    const q = `(mimeType contains 'audio/' or mimeType = 'application/vnd.google-apps.folder') and name contains '${safeTerm}' and trashed = false`;
+  async function _driveSearchQuery(safeTerm, mode = 'mixed') {
+    const mimeFilter = mode === 'folders'
+      ? `mimeType = 'application/vnd.google-apps.folder'`
+      : `(mimeType contains 'audio/' or mimeType = 'application/vnd.google-apps.folder')`;
+    const q = `${mimeFilter} and name contains '${safeTerm}' and trashed = false`;
     const params = new URLSearchParams({
       q,
-      pageSize: '100',
+      pageSize: mode === 'folders' ? '50' : '100',
       fields: `nextPageToken,files(${CONFIG.FILE_FIELDS})`,
       orderBy: 'name',
       supportsAllDrives: 'true',
@@ -189,17 +197,15 @@ const Drive = (() => {
   async function searchFiles(term, rootId = null) {
     const normalized = _normalizeTerm(term);
 
-    // Build deduplicated set of queries to fire in parallel:
-    //   1. Original term (Drive is case-insensitive but accent-sensitive)
-    //   2. Normalized term (strips accents → finds "música" when typing "musica")
-    //   3. Single-vowel accent variants of the normalized term (finds "reggaetón"
-    //      when typing "reggaeton" — Drive is accent-sensitive so we must be explicit)
-    //   4. Individual words ≥ 3 chars (catches partial matches)
+    // Build deduplicated set of terms to search.
+    // Each term fires TWO parallel queries: one mixed (audio+folders) and one
+    // folders-only. The folders-only query guarantees folder results even when
+    // 100+ songs occupy the first page of the mixed query.
     const querySet = new Set();
     const safe = s => s.replace(/'/g, "\\'");
     querySet.add(safe(term.trim()));
     querySet.add(safe(normalized));
-    // Add single-accent variants of each word (covers accent-in-filename, no-accent-in-query)
+    // Single-accent variants so "reggaeton" finds "reggaetón" folders/files
     for (const w of normalized.split(/\s+/)) {
       if (w.length >= 3) {
         querySet.add(safe(w));
@@ -207,8 +213,14 @@ const Drive = (() => {
       }
     }
 
-    // Fire all queries in parallel; ignore failures (partial results better than none)
-    const settled = await Promise.allSettled([...querySet].map(q => _driveSearchQuery(q)));
+    const terms = [...querySet];
+
+    // Fire mixed queries + dedicated folder queries in parallel
+    const allQueries = [
+      ...terms.map(q => _driveSearchQuery(q, 'mixed')),
+      ...terms.map(q => _driveSearchQuery(q, 'folders')),
+    ];
+    const settled = await Promise.allSettled(allQueries);
 
     // Merge + deduplicate by id
     const folderMap = new Map();
