@@ -724,6 +724,10 @@ const App = (() => {
       }
     }
     await Promise.allSettled([worker(), worker()]);
+
+    // Pass 3: Drive API fallback — for songs still without cover after local passes
+    // (e.g. synced from another device: no local blob, no stored coverBlob)
+    await _driveThumbFallback(songs, _homeCardHasCover, _updateHomeCardThumbnail);
   }
 
   /**
@@ -771,6 +775,9 @@ const App = (() => {
       }
     }
     await Promise.allSettled([worker(), worker()]);
+
+    // Pass 3: Drive API fallback — songs synced from another device with no local blob
+    await _driveThumbFallback(items, _topListHasCover, _updateTopListThumb);
   }
 
   function _topListHasCover(fileId) {
@@ -790,6 +797,79 @@ const App = (() => {
     } else {
       thumb.innerHTML = `<img src="${coverUrl}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover">`;
     }
+  }
+
+  /* ── DOM helpers for song rows (Favorites / Playlist detail) ── */
+
+  /** Returns true if the .song-row for this id already shows a cover <img>. */
+  function _songRowHasCover(fileId) {
+    const row = document.querySelector(`.song-row[data-id="${CSS.escape(fileId)}"]`);
+    return !!(row && row.querySelector('.song-thumb img'));
+  }
+
+  /** Inject (or replace) a cover image inside the .song-thumb of a .song-row. */
+  function _updateSongRowThumb(fileId, url) {
+    const row = document.querySelector(`.song-row[data-id="${CSS.escape(fileId)}"]`);
+    if (!row) return;
+    const thumb = row.querySelector('.song-thumb');
+    if (!thumb) return;
+    const img = thumb.querySelector('img');
+    if (img) {
+      img.src = url;
+    } else {
+      // Remove placeholder icon if present
+      const ph = thumb.querySelector('.thumb-placeholder');
+      if (ph) ph.remove();
+      const newImg = document.createElement('img');
+      newImg.src  = url;
+      newImg.alt  = '';
+      newImg.setAttribute('loading', 'lazy');
+      thumb.insertBefore(newImg, thumb.firstChild);
+    }
+  }
+
+  /** Returns true if the home-card for this id already shows a cover <img>. */
+  function _homeCardHasCover(fileId) {
+    const card = document.querySelector(`#screen-home .home-card[data-id="${CSS.escape(fileId)}"]`);
+    return !!(card && card.querySelector('.home-card-art img'));
+  }
+
+  /**
+   * Pass 3 — Drive API thumbnail fallback.
+   * For every item still without a rendered cover, calls Drive.getFileInfo to get
+   * the thumbnailLink that Google extracts from the file (e.g. embedded ID3 art).
+   * Runs at most 3 concurrent Drive calls. Persists found URLs to DB so future
+   * sessions skip the API call entirely.
+   *
+   * @param {Object[]} items      — items to check (must have .id)
+   * @param {function} hasCoverFn — (id) → bool: true if cover already rendered
+   * @param {function} updateFn   — (id, url) → void: injects cover into DOM
+   */
+  async function _driveThumbFallback(items, hasCoverFn, updateFn) {
+    if (!Auth.isAuthenticated() || !items.length) return;
+    if (typeof Drive === 'undefined') return;
+
+    const need = items.filter(item => !hasCoverFn(item.id));
+    if (!need.length) return;
+
+    const queue = [...need];
+    async function worker() {
+      while (queue.length > 0) {
+        const item = queue.shift();
+        try {
+          const info = await Drive.getFileInfo(item.id);
+          // Drive.getFileInfo normalizes thumbnailLink → thumbnailUrl
+          const url = info?.thumbnailUrl || null;
+          if (url) {
+            updateFn(item.id, url);
+            // Persist so future sessions skip this API call
+            DB.setMeta(item.id, { thumbnailUrl: url }).catch(() => {});
+          }
+        } catch (_) { /* non-fatal — file may be unavailable or unsynced yet */ }
+      }
+    }
+    // 3 parallel workers to keep Drive API latency low
+    await Promise.allSettled([worker(), worker(), worker()]);
   }
 
   /**
@@ -1487,6 +1567,12 @@ const App = (() => {
         return url ? { ...song, thumbnailUrl: url } : song;
       }));
       UI.renderStarredSongs(enriched);
+      // Drive fallback: fetch thumbnailLink for songs still without cover after local passes
+      _driveThumbFallback(
+        enriched.filter(s => !s.thumbnailUrl),
+        _songRowHasCover,
+        _updateSongRowThumb
+      ).catch(() => {});
     } catch (err) {
       console.error('[App] Load starred error:', err);
     }
@@ -1538,6 +1624,12 @@ const App = (() => {
         })
       )).filter(Boolean);
       UI.renderPlaylistDetail(songs, pl.name);
+      // Drive fallback: fetch thumbnailLink for songs still without cover after local passes
+      _driveThumbFallback(
+        songs.filter(s => !s.thumbnailUrl),
+        _songRowHasCover,
+        _updateSongRowThumb
+      ).catch(() => {});
     } catch (err) {
       console.error('[App] onPlaylistClick error:', err);
       UI.showToast(UI.t('toast_playlist_error'), 'error');
