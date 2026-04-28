@@ -770,7 +770,7 @@ const UI = (() => {
     card.innerHTML = `
       <div class="home-card-art">
         ${coverSrc
-          ? `<img src="${coverSrc}" alt="" loading="lazy">`
+          ? `<img src="${coverSrc}" alt="" loading="lazy" draggable="false">`
           : isFolder
             ? `<div class="folder-icon-placeholder">${iconFolder(32)}</div>`
             : `<div class="folder-icon-placeholder" style="color:var(--text-disabled)">${iconMusicNote(28)}</div>`

@@ -783,6 +783,9 @@ img { display: block; }
   width: 100%;
   height: 100%;
   object-fit: cover;
+  -webkit-user-drag: none;
+  user-drag: none;
+  pointer-events: none; /* prevents browser image-drag from stealing pointer events */
 }
 
 .home-card-art .folder-icon-placeholder {
