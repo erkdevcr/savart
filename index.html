@@ -292,166 +292,176 @@
            as a flat list with category subtitles on mobile (Option B) -->
       <div class="settings-grid">
 
-        <!-- REPRODUCCIÓN -->
-        <div class="settings-section">
-          <div class="settings-section-title" data-i18n="settings_playback">Reproducción</div>
+        <!-- ── Column 1: Reproducción · Biblioteca · Cuenta ── -->
+        <div class="settings-col">
 
-          <div class="settings-row" id="settings-eq-row">
-            <div>
-              <div class="settings-row-label" data-i18n="settings_eq">Ecualizador</div>
-              <div class="settings-row-cat" data-i18n="settings_playback">Reproducción</div>
-            </div>
-            <button id="btn-open-eq" class="btn-outline-accent" data-i18n-label="settings_open_eq">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/></svg>
-              Abrir EQ
-            </button>
-          </div>
+          <!-- REPRODUCCIÓN -->
+          <div class="settings-section">
+            <div class="settings-section-title" data-i18n="settings_playback">Reproducción</div>
 
-          <div class="settings-row settings-row-complex">
-            <div class="settings-row-top">
+            <div class="settings-row" id="settings-eq-row">
               <div>
-                <div class="settings-row-label" data-i18n="settings_tempo">Tempo</div>
+                <div class="settings-row-label" data-i18n="settings_eq">Ecualizador</div>
                 <div class="settings-row-cat" data-i18n="settings_playback">Reproducción</div>
               </div>
-              <span id="tempo-val" class="settings-value-label">1.0×</span>
+              <button id="btn-open-eq" class="btn-outline-accent" data-i18n-label="settings_open_eq">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/></svg>
+                Abrir EQ
+              </button>
             </div>
-            <div class="slider-with-steps">
-              <button class="step-btn" data-target="tempo-slider" data-dir="-1" aria-label="Bajar tempo">−</button>
-              <div class="settings-slider-wrap" style="flex:1;padding:0">
-                <span class="slider-bound">0.5×</span>
-                <input id="tempo-slider" type="range" min="50" max="200" value="100" step="1" class="settings-slider">
-                <span class="slider-bound">2.0×</span>
-              </div>
-              <button class="step-btn" data-target="tempo-slider" data-dir="1" aria-label="Subir tempo">+</button>
-            </div>
-          </div>
 
-          <div class="settings-row settings-row-complex">
-            <div class="settings-row-top">
+            <div class="settings-row settings-row-complex">
+              <div class="settings-row-top">
+                <div>
+                  <div class="settings-row-label" data-i18n="settings_tempo">Tempo</div>
+                  <div class="settings-row-cat" data-i18n="settings_playback">Reproducción</div>
+                </div>
+                <span id="tempo-val" class="settings-value-label">1.0×</span>
+              </div>
+              <div class="slider-with-steps">
+                <button class="step-btn" data-target="tempo-slider" data-dir="-1" aria-label="Bajar tempo">−</button>
+                <div class="settings-slider-wrap" style="flex:1;padding:0">
+                  <span class="slider-bound">0.5×</span>
+                  <input id="tempo-slider" type="range" min="50" max="200" value="100" step="1" class="settings-slider">
+                  <span class="slider-bound">2.0×</span>
+                </div>
+                <button class="step-btn" data-target="tempo-slider" data-dir="1" aria-label="Subir tempo">+</button>
+              </div>
+            </div>
+
+            <div class="settings-row settings-row-complex">
+              <div class="settings-row-top">
+                <div>
+                  <div class="settings-row-label" data-i18n="settings_sleep_timer">Sleep timer</div>
+                  <div class="settings-row-cat" data-i18n="settings_playback">Reproducción</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:10px">
+                  <span id="sleep-timer-status" class="settings-value-label"></span>
+                  <div class="toggle" id="sleep-timer-toggle"></div>
+                </div>
+              </div>
+              <div class="sleep-pills" id="sleep-timer-pills">
+                <button class="sleep-pill" data-mins="15">15 min</button>
+                <button class="sleep-pill" data-mins="30">30 min</button>
+                <button class="sleep-pill" data-mins="60">60 min</button>
+                <button class="sleep-pill" data-mins="custom">Custom</button>
+              </div>
+            </div>
+          </div><!-- /Reproducción -->
+
+          <!-- BIBLIOTECA -->
+          <div class="settings-section">
+            <div class="settings-section-title" data-i18n="settings_library">Biblioteca</div>
+
+            <div class="settings-row" id="settings-root-folder-row">
               <div>
-                <div class="settings-row-label" data-i18n="settings_sleep_timer">Sleep timer</div>
-                <div class="settings-row-cat" data-i18n="settings_playback">Reproducción</div>
+                <div class="settings-row-label" data-i18n="settings_root_folder">Carpeta raíz</div>
+                <div class="settings-row-cat" data-i18n="settings_library">Biblioteca</div>
               </div>
-              <div style="display:flex;align-items:center;gap:10px">
-                <span id="sleep-timer-status" class="settings-value-label"></span>
-                <div class="toggle" id="sleep-timer-toggle"></div>
+              <div style="display:flex;align-items:center;gap:4px">
+                <span class="settings-value-label" id="root-folder-name">MSK</span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="color:var(--text-muted)"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
               </div>
             </div>
-            <div class="sleep-pills" id="sleep-timer-pills">
-              <button class="sleep-pill" data-mins="15">15 min</button>
-              <button class="sleep-pill" data-mins="30">30 min</button>
-              <button class="sleep-pill" data-mins="60">60 min</button>
-              <button class="sleep-pill" data-mins="custom">Custom</button>
+          </div><!-- /Biblioteca -->
+
+          <!-- CUENTA -->
+          <div class="settings-section">
+            <div class="settings-section-title" data-i18n="settings_account">Cuenta</div>
+
+            <div class="settings-row">
+              <div style="display:flex;align-items:center;gap:12px">
+                <div class="account-avatar" id="account-avatar">
+                  <svg width="28" height="19" viewBox="0 0 48 32" fill="none" aria-hidden="true">
+                    <path d="M6 22 C10 10, 14 10, 18 16 C22 22, 26 22, 30 16 C34 10, 38 10, 42 22"
+                          stroke="#4A88F5" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+                  </svg>
+                </div>
+                <div>
+                  <div class="settings-row-label" id="account-email">—</div>
+                  <div class="settings-row-cat" data-i18n="settings_drive_linked">Google Drive vinculado</div>
+                </div>
+              </div>
             </div>
-          </div>
-        </div><!-- /Reproducción -->
 
-        <!-- BIBLIOTECA -->
-        <div class="settings-section">
-          <div class="settings-section-title" data-i18n="settings_library">Biblioteca</div>
-
-          <div class="settings-row" id="settings-root-folder-row">
-            <div>
-              <div class="settings-row-label" data-i18n="settings_root_folder">Carpeta raíz</div>
-              <div class="settings-row-cat" data-i18n="settings_library">Biblioteca</div>
+            <div class="settings-row">
+              <button id="btn-logout" data-i18n="logout" style="color:var(--error);font-size:14px;font-weight:500;background:none;border:none;cursor:pointer;padding:0">Cerrar sesión</button>
             </div>
-            <div style="display:flex;align-items:center;gap:4px">
-              <span class="settings-value-label" id="root-folder-name">MSK</span>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="color:var(--text-muted)"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+          </div><!-- /Cuenta -->
+
+        </div><!-- /.settings-col (col 1) -->
+
+        <!-- ── Column 2: Almacenamiento · Apariencia ── -->
+        <div class="settings-col">
+
+          <!-- ALMACENAMIENTO -->
+          <div class="settings-section">
+            <div class="settings-section-title" data-i18n="settings_storage">Almacenamiento</div>
+
+            <div class="settings-row settings-row-complex">
+              <div class="settings-row-top">
+                <div>
+                  <div class="settings-row-label" data-i18n="settings_cache">Caché</div>
+                  <div class="settings-row-cat" data-i18n="settings_storage">Almacenamiento</div>
+                </div>
+                <span id="cache-size-label" class="settings-value-label">—</span>
+              </div>
+              <div class="cache-bar-track">
+                <div class="cache-bar-fill" id="cache-bar-fill" style="width:0%"></div>
+              </div>
             </div>
-          </div>
-        </div><!-- /Biblioteca -->
 
-        <!-- ALMACENAMIENTO -->
-        <div class="settings-section">
-          <div class="settings-section-title" data-i18n="settings_storage">Almacenamiento</div>
-
-          <div class="settings-row settings-row-complex">
-            <div class="settings-row-top">
+            <div class="settings-row">
               <div>
-                <div class="settings-row-label" data-i18n="settings_cache">Caché</div>
+                <div class="settings-row-label" data-i18n="settings_cache_limit">Límite de caché</div>
                 <div class="settings-row-cat" data-i18n="settings_storage">Almacenamiento</div>
               </div>
-              <span id="cache-size-label" class="settings-value-label">—</span>
+              <select id="select-cache-limit" class="settings-select">
+                <option value="524288000">500 MB</option>
+                <option value="1073741824" selected>1 GB</option>
+                <option value="2147483648">2 GB</option>
+                <option value="5368709120">5 GB</option>
+                <option value="10737418240">10 GB</option>
+                <option value="21474836480">20 GB</option>
+              </select>
             </div>
-            <div class="cache-bar-track">
-              <div class="cache-bar-fill" id="cache-bar-fill" style="width:0%"></div>
-            </div>
-          </div>
 
-          <div class="settings-row">
-            <div>
-              <div class="settings-row-label" data-i18n="settings_cache_limit">Límite de caché</div>
-              <div class="settings-row-cat" data-i18n="settings_storage">Almacenamiento</div>
-            </div>
-            <select id="select-cache-limit" class="settings-select">
-              <option value="524288000">500 MB</option>
-              <option value="1073741824" selected>1 GB</option>
-              <option value="2147483648">2 GB</option>
-              <option value="5368709120">5 GB</option>
-              <option value="10737418240">10 GB</option>
-              <option value="21474836480">20 GB</option>
-            </select>
-          </div>
-
-          <div class="settings-row">
-            <div>
-              <button id="btn-clear-cache" data-i18n="settings_clear_cache" style="color:var(--error);font-size:14px;background:none;border:none;cursor:pointer;padding:0">Borrar caché</button>
-            </div>
-          </div>
-        </div><!-- /Almacenamiento -->
-
-        <!-- APARIENCIA -->
-        <div class="settings-section">
-          <div class="settings-section-title" data-i18n="settings_appearance">Apariencia</div>
-
-          <div class="settings-row">
-            <div>
-              <div class="settings-row-label" data-i18n="settings_language">Idioma</div>
-              <div class="settings-row-cat" data-i18n="settings_appearance">Apariencia</div>
-            </div>
-            <div class="lang-toggle">
-              <button class="lang-btn active" data-lang="es">ES</button>
-              <button class="lang-btn" data-lang="en">EN</button>
-            </div>
-          </div>
-
-          <div class="settings-row">
-            <div>
-              <div class="settings-row-label" data-i18n="settings_text_size">Tamaño de texto</div>
-              <div class="settings-row-cat" data-i18n="settings_appearance">Apariencia</div>
-            </div>
-            <div class="text-size-picker" id="text-size-picker">
-              <button class="text-size-btn" data-size="small" style="font-size:11px">A</button>
-              <button class="text-size-btn active" data-size="normal" style="font-size:14px">A</button>
-              <button class="text-size-btn" data-size="large" style="font-size:18px">A</button>
-            </div>
-          </div>
-        </div><!-- /Apariencia -->
-
-        <!-- CUENTA -->
-        <div class="settings-section">
-          <div class="settings-section-title" data-i18n="settings_account">Cuenta</div>
-
-          <div class="settings-row">
-            <div style="display:flex;align-items:center;gap:12px">
-              <div class="account-avatar" id="account-avatar">
-                <svg width="28" height="19" viewBox="0 0 48 32" fill="none" aria-hidden="true">
-                  <path d="M6 22 C10 10, 14 10, 18 16 C22 22, 26 22, 30 16 C34 10, 38 10, 42 22"
-                        stroke="#4A88F5" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-                </svg>
-              </div>
+            <div class="settings-row">
               <div>
-                <div class="settings-row-label" id="account-email">—</div>
-                <div class="settings-row-cat" data-i18n="settings_drive_linked">Google Drive vinculado</div>
+                <button id="btn-clear-cache" data-i18n="settings_clear_cache" style="color:var(--error);font-size:14px;background:none;border:none;cursor:pointer;padding:0">Borrar caché</button>
               </div>
             </div>
-          </div>
+          </div><!-- /Almacenamiento -->
 
-          <div class="settings-row">
-            <button id="btn-logout" data-i18n="logout" style="color:var(--error);font-size:14px;font-weight:500;background:none;border:none;cursor:pointer;padding:0">Cerrar sesión</button>
-          </div>
-        </div><!-- /Cuenta -->
+          <!-- APARIENCIA -->
+          <div class="settings-section">
+            <div class="settings-section-title" data-i18n="settings_appearance">Apariencia</div>
+
+            <div class="settings-row">
+              <div>
+                <div class="settings-row-label" data-i18n="settings_language">Idioma</div>
+                <div class="settings-row-cat" data-i18n="settings_appearance">Apariencia</div>
+              </div>
+              <div class="lang-toggle">
+                <button class="lang-btn active" data-lang="es">ES</button>
+                <button class="lang-btn" data-lang="en">EN</button>
+              </div>
+            </div>
+
+            <div class="settings-row">
+              <div>
+                <div class="settings-row-label" data-i18n="settings_text_size">Tamaño de texto</div>
+                <div class="settings-row-cat" data-i18n="settings_appearance">Apariencia</div>
+              </div>
+              <div class="text-size-picker" id="text-size-picker">
+                <button class="text-size-btn" data-size="small" style="font-size:11px">A</button>
+                <button class="text-size-btn active" data-size="normal" style="font-size:14px">A</button>
+                <button class="text-size-btn" data-size="large" style="font-size:18px">A</button>
+              </div>
+            </div>
+          </div><!-- /Apariencia -->
+
+        </div><!-- /.settings-col (col 2) -->
 
       </div><!-- /.settings-grid -->
 

@@ -746,9 +746,12 @@ const App = (() => {
     UI.updateMiniPlayer(enriched, Player.isPlaying());
     UI.updateExpandedPlayer(enriched, Player.isPlaying());
 
-    // Update the song row thumbnail in the browse list (if visible)
+    // Update the song row thumbnail in the browse/search list (if visible)
     if (meta.coverUrl) {
       _updateRowThumbnail(item.id, meta.coverUrl);
+      // Also update home card (recents / top-played) if currently visible
+      _updateHomeCardThumbnail(item.id, meta.coverUrl);
+      _updateTopListThumb(item.id, meta.coverUrl);
     }
   }
 
@@ -800,13 +803,19 @@ const App = (() => {
     const songs = items.filter(r => r.type === 'song');
     if (!songs.length || typeof Meta === 'undefined') return;
 
-    // Pass 0: persisted cover blobs from IndexedDB (instant)
+    // Pass 0: persisted covers from IndexedDB — blob first, then external URL (Last.fm / AudD.io)
     await Promise.allSettled(songs.map(async song => {
       try {
         const dbMeta = await DB.getMeta(song.id);
-        if (dbMeta?.coverBlob) {
+        if (!dbMeta) return;
+        if (dbMeta.coverBlob) {
           const url = Meta.injectCover(song.id, dbMeta.coverBlob);
-          if (url) _updateHomeCardThumbnail(song.id, url);
+          if (url) { _updateHomeCardThumbnail(song.id, url); return; }
+        }
+        // External URL persisted from Last.fm / AudD.io in a previous session
+        const persistedUrl = dbMeta.coverUrl || dbMeta.thumbnailUrl;
+        if (persistedUrl && !persistedUrl.startsWith('blob:')) {
+          _updateHomeCardThumbnail(song.id, persistedUrl);
         }
       } catch (_) {}
     }));
@@ -856,13 +865,19 @@ const App = (() => {
   async function _prefetchTopPlayedCovers(items) {
     if (!items || !items.length || typeof Meta === 'undefined') return;
 
-    // Pass 0: persisted cover blobs from IndexedDB (instant)
+    // Pass 0: persisted covers from IndexedDB — blob first, then external URL (Last.fm / AudD.io)
     await Promise.allSettled(items.map(async item => {
       try {
         const dbMeta = await DB.getMeta(item.id);
-        if (dbMeta?.coverBlob) {
+        if (!dbMeta) return;
+        if (dbMeta.coverBlob) {
           const url = Meta.injectCover(item.id, dbMeta.coverBlob);
-          if (url) _updateTopListThumb(item.id, url);
+          if (url) { _updateTopListThumb(item.id, url); return; }
+        }
+        // External URL persisted from Last.fm / AudD.io in a previous session
+        const persistedUrl = dbMeta.coverUrl || dbMeta.thumbnailUrl;
+        if (persistedUrl && !persistedUrl.startsWith('blob:')) {
+          _updateTopListThumb(item.id, persistedUrl);
         }
       } catch (_) {}
     }));
