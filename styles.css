@@ -2898,12 +2898,16 @@ img { display: block; }
     align-items: start;
   }
 
-  /* Explicit column placement by section order */
-  .settings-section:nth-child(1) { grid-column: 1; } /* Playback  */
-  .settings-section:nth-child(2) { grid-column: 1; } /* Library   */
-  .settings-section:nth-child(3) { grid-column: 2; } /* Storage   */
-  .settings-section:nth-child(4) { grid-column: 2; } /* Appearance */
-  .settings-section:nth-child(5) { grid-column: 2; } /* Account   */
+  /* Explicit column placement by section order.
+     Col 1: Playback + Library + Account
+     Col 2: Storage + Appearance
+     Account moves to col 1 to balance heights — right col (Storage+Appearance)
+     is much taller than left col (Playback+Library) without it. */
+  .settings-section:nth-child(1) { grid-column: 1; } /* Playback    */
+  .settings-section:nth-child(2) { grid-column: 1; } /* Library     */
+  .settings-section:nth-child(3) { grid-column: 2; } /* Storage     */
+  .settings-section:nth-child(4) { grid-column: 2; } /* Appearance  */
+  .settings-section:nth-child(5) { grid-column: 1; } /* Account     */
 
   .settings-section {
     padding: 0;
