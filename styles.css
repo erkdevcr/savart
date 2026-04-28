@@ -2483,13 +2483,16 @@ img { display: block; }
     padding: 8px 24px;
   }
 
-  /* Show btn-more only on hover desktop */
+  /* Show btn-more only on hover desktop — except pinned cards (always visible) */
   .btn-more {
     opacity: 0;
     transition: opacity 0.15s, color 0.15s, background 0.15s;
   }
 
   .song-row:hover .btn-more { opacity: 1; }
+
+  /* Pinned cards: 3-dots always visible on desktop (not hover-gated) */
+  .pinned-card-more { opacity: 1; }
 
   #toast-container {
     bottom: calc(var(--player-bar-h) + 16px);

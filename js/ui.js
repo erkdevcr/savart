@@ -617,10 +617,15 @@ const UI = (() => {
     }
 
     if (type === 'pinned') {
-      // 2-column wide-card grid
+      // 2-column wide-card grid — folders first, then songs
       const grid = document.createElement('div');
       grid.className = 'pinned-grid';
-      items.forEach(item => grid.appendChild(_buildPinnedCard(item)));
+      const sorted = [...items].sort((a, b) => {
+        const aFolder = (a.isFolder || a.type === 'folder') ? 0 : 1;
+        const bFolder = (b.isFolder || b.type === 'folder') ? 0 : 1;
+        return aFolder - bFolder;
+      });
+      sorted.forEach(item => grid.appendChild(_buildPinnedCard(item)));
       section.appendChild(grid);
 
     } else if (type === 'top_played') {
@@ -1057,6 +1062,11 @@ const UI = (() => {
         hideContextMenu();
       });
       _addCtxDivider(menu);
+      _addCtxItem(menu, _iconFolder,
+        isFolder ? t('ctx_go_to_folder') : t('ctx_go_to_album'),
+        () => { App.onGoToFolder(item); hideContextMenu(); }
+      );
+      _addCtxDivider(menu);
       _addCtxItem(menu, iconPin(14), t('ctx_unpin_from_home'), () => {
         App.onTogglePin(item);
         hideContextMenu();
@@ -1108,7 +1118,7 @@ const UI = (() => {
              : type === 'folder'    ? 220
              : type === 'home_song' ? 310
              : type === 'playlist'  ? 230
-             : type === 'pinned'    ? 100
+             : type === 'pinned'    ? 175
              : 200;
     let x = e.clientX || (e.touches?.[0]?.clientX || 0);
     let y = e.clientY || (e.touches?.[0]?.clientY || 0);
