@@ -344,13 +344,14 @@ const Drive = (() => {
    */
   function _normalizeItem(raw) {
     return {
-      id:           raw.id,
-      name:         raw.name,
-      mimeType:     raw.mimeType,
-      size:         parseInt(raw.size || '0', 10),
-      parents:      raw.parents || [],
-      thumbnailUrl: raw.thumbnailLink || null,
-      durationMs:   parseInt(raw.videoMediaMetadata?.durationMillis || '0', 10),
+      id:            raw.id,
+      name:          raw.name,
+      mimeType:      raw.mimeType,
+      size:          parseInt(raw.size || '0', 10),
+      parents:       raw.parents || [],
+      thumbnailUrl:  raw.thumbnailLink || null,
+      durationMs:    parseInt(raw.videoMediaMetadata?.durationMillis || '0', 10),
+      appProperties: raw.appProperties || null,  // cross-device metadata sync (s_cover, s_title, s_artist, s_album)
       // Derived
       isFolder:     isFolder(raw.mimeType),
       isAudio:      isAudio(raw.mimeType),
@@ -358,6 +359,37 @@ const Drive = (() => {
       isWma:        isUnplayable(raw.mimeType),
       displayName:  cleanTitle(raw.name),
     };
+  }
+
+  /* ── setAppProperties ──────────────────────────────────── */
+  /**
+   * Write private app metadata to a Drive file's appProperties.
+   * Used keys: s_cover (cover URL), s_title, s_artist, s_album.
+   * These sync automatically across all devices sharing the same Google account.
+   *
+   * Requires the drive.file scope. Fails silently if scope is not granted
+   * (e.g. user authenticated before this scope was added) — data is still
+   * saved to local IndexedDB as a fallback.
+   *
+   * @param {string} fileId
+   * @param {Object} props  — key/value pairs to merge into appProperties
+   * @returns {Promise<void>}
+   */
+  async function setAppProperties(fileId, props) {
+    if (!fileId || !props || Object.keys(props).length === 0) return;
+    try {
+      await _fetch(
+        `${CONFIG.API_BASE}/files/${encodeURIComponent(fileId)}?supportsAllDrives=true`,
+        {
+          method:  'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ appProperties: props }),
+        }
+      );
+    } catch (_) {
+      // Silently ignore: scope not granted yet, or network error.
+      // Metadata is still persisted in local IndexedDB.
+    }
   }
 
   /* ── Expose ─────────────────────────────────────────────── */
@@ -369,6 +401,7 @@ const Drive = (() => {
     downloadFileHead,
     getFileInfo,
     findCoverImage,
+    setAppProperties,
     AuthError,
     DriveError,
   };

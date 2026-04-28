@@ -13,7 +13,8 @@ const CONFIG = {
   CLIENT_ID: '409671846168-u60nj8ib48se183sarosn0sicu8g4vvb.apps.googleusercontent.com',
 
   // Scopes: email+profile = user info | drive.readonly = read music | drive.appdata = sync
-  SCOPES: 'email profile https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/drive.appdata',
+  // drive.file = write appProperties to files opened by the app (cross-device metadata sync)
+  SCOPES: 'email profile https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/drive.file',
 
   // ── Google Drive API ─────────────────────────────────────
   API_BASE: 'https://www.googleapis.com/drive/v3',
@@ -22,7 +23,8 @@ const CONFIG = {
   FOLDER_PAGE_SIZE: 1000,
 
   // Fields requested on every files.list call (minimize payload)
-  FILE_FIELDS: 'id,name,mimeType,size,parents,thumbnailLink,videoMediaMetadata',
+  // appProperties: private per-app metadata used for cross-device cover/tag sync
+  FILE_FIELDS: 'id,name,mimeType,size,parents,thumbnailLink,videoMediaMetadata,appProperties',
 
   // ── Auth token management ─────────────────────────────────
   // Show "renew session" banner this many ms before token expires
@@ -101,7 +103,7 @@ const CONFIG = {
 
   // ── App metadata ──────────────────────────────────────────
   APP_NAME: 'Savart',
-  VERSION:  '1.1.3',
+  VERSION:  '1.1.4',
 };
 
 /* ── Audio format detection helpers ───────────────────────── */

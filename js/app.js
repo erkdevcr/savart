@@ -480,13 +480,23 @@ const App = (() => {
         if (isExternalCover) meta.coverUrl = persistedUrl;
       }
 
+      // Still no cover → check Drive appProperties (available when playing from Browse)
+      // Contains data synced from another device via Last.fm / AudD.io
+      if (!meta.coverUrl && item.appProperties?.s_cover) {
+        meta.coverUrl = item.appProperties.s_cover;
+        if (!meta.title  && item.appProperties.s_title)  meta.title  = item.appProperties.s_title;
+        if (!meta.artist && item.appProperties.s_artist) meta.artist = item.appProperties.s_artist;
+        if (!meta.album  && item.appProperties.s_album)  meta.album  = item.appProperties.s_album;
+      }
+
       // Still no cover → try Last.fm with ID3 artist + album
       if (!meta.coverUrl && typeof Lastfm !== 'undefined' && meta.artist && meta.album) {
         const lfmUrl = await Lastfm.fetchCover(meta.artist, meta.album);
         if (lfmUrl) {
           meta.coverUrl = lfmUrl;
-          // Persist so next session skips Last.fm entirely
+          // Persist locally + sync to Drive for cross-device use
           DB.setMeta(item.id, { thumbnailUrl: lfmUrl }).catch(() => {});
+          Drive.setAppProperties(item.id, { s_cover: lfmUrl }).catch(() => {});
         }
       }
 
@@ -508,13 +518,20 @@ const App = (() => {
             if (!meta.title  && result.title)  meta.title  = result.title;
             if (!meta.artist && result.artist) meta.artist = result.artist;
             if (!meta.album  && result.album)  meta.album  = result.album;
-            // Persist cover URL so next session loads it instantly from DB
+            // Persist locally
             const update = { auddTried: true };
             if (result.title)    update.displayName = result.title;
             if (result.artist)   update.artist      = result.artist;
             if (result.album)    update.album       = result.album;
             if (result.coverUrl) update.thumbnailUrl = result.coverUrl;
             DB.setMeta(item.id, update).catch(() => {});
+            // Sync to Drive appProperties for cross-device use
+            const apUpdate = {};
+            if (result.coverUrl) apUpdate.s_cover  = result.coverUrl;
+            if (result.title)    apUpdate.s_title  = result.title;
+            if (result.artist)   apUpdate.s_artist = result.artist;
+            if (result.album)    apUpdate.s_album  = result.album;
+            if (Object.keys(apUpdate).length > 0) Drive.setAppProperties(item.id, apUpdate).catch(() => {});
             console.log(`[Audd] ✓ ${result.artist} — ${result.title}`);
           }
         } catch (_) {
@@ -588,27 +605,37 @@ const App = (() => {
   async function _prefetchAndApplyFolderCovers(folderId, files) {
     if (!files || files.length === 0) return;
 
-    // ── Pass 0: persisted covers from IndexedDB (instant, no network) ──────
-    // Checks three sources in priority order:
-    //   1. coverBlob  — embedded ID3 art saved as binary (highest quality, no expiry)
-    //   2. coverUrl   — URL saved from a previous session (e.g. Last.fm, AudD.io)
-    //   3. thumbnailUrl — Drive thumbnailLink or external URL (same as above, alt field)
+    // ── Pass 0: Drive appProperties + IndexedDB (instant, no network) ─────
+    // Priority order:
+    //   0a. appProperties.s_cover — synced from another device via Drive API
+    //   0b. coverBlob  — embedded ID3 art saved as binary (highest quality, no expiry)
+    //   0c. coverUrl / thumbnailUrl — external URL from a previous session
     await Promise.allSettled(files.map(async file => {
       try {
+        // 0a. Drive appProperties (populated by listFolder — cross-device sync)
+        const ap = file.appProperties;
+        if (ap?.s_cover) {
+          _updateRowThumbnail(file.id, ap.s_cover);
+          // Mirror to local DB so home/recents picks it up without Drive API
+          const save = { thumbnailUrl: ap.s_cover };
+          if (ap.s_title)  save.displayName = ap.s_title;
+          if (ap.s_artist) save.artist      = ap.s_artist;
+          if (ap.s_album)  save.album       = ap.s_album;
+          DB.setMeta(file.id, save).catch(() => {});
+          return;  // no need to check DB
+        }
+
+        // 0b/0c. IndexedDB
         const dbMeta = await DB.getMeta(file.id);
         if (!dbMeta) return;
 
-        // 1. Binary blob → create object URL and inject into Meta cache
         if (dbMeta.coverBlob && typeof Meta !== 'undefined') {
           const url = Meta.injectCover(file.id, dbMeta.coverBlob);
           if (url) { _updateRowThumbnail(file.id, url); return; }
         }
 
-        // 2. Persisted external URL (Last.fm / AudD.io / Drive thumbnail)
         const persistedUrl = dbMeta.coverUrl || dbMeta.thumbnailUrl;
-        if (persistedUrl) {
-          _updateRowThumbnail(file.id, persistedUrl);
-        }
+        if (persistedUrl) _updateRowThumbnail(file.id, persistedUrl);
       } catch (_) {}
     }));
 
@@ -678,8 +705,10 @@ const App = (() => {
         if (!url) return;
 
         _updateRowThumbnail(file.id, url);
-        // Persist so next session skips the Last.fm call
+        // Persist locally for next session
         DB.setMeta(file.id, { thumbnailUrl: url }).catch(() => {});
+        // Sync to Drive appProperties for cross-device use
+        Drive.setAppProperties(file.id, { s_cover: url }).catch(() => {});
       } catch (_) { /* non-fatal */ }
     }));
 
@@ -721,13 +750,21 @@ const App = (() => {
         // Apply cover to the visible row
         if (result.coverUrl) _updateRowThumbnail(file.id, result.coverUrl);
 
-        // Persist all identified fields for future sessions
+        // Persist all identified fields locally
         const update = { auddTried: true };
         if (result.title)    update.displayName = result.title;
         if (result.artist)   update.artist      = result.artist;
         if (result.album)    update.album       = result.album;
         if (result.coverUrl) update.thumbnailUrl = result.coverUrl;
         DB.setMeta(file.id, update).catch(() => {});
+
+        // Sync to Drive appProperties for cross-device use
+        const apUpdate = {};
+        if (result.coverUrl) apUpdate.s_cover  = result.coverUrl;
+        if (result.title)    apUpdate.s_title  = result.title;
+        if (result.artist)   apUpdate.s_artist = result.artist;
+        if (result.album)    apUpdate.s_album  = result.album;
+        if (Object.keys(apUpdate).length > 0) Drive.setAppProperties(file.id, apUpdate).catch(() => {});
 
         console.log(`[Audd] ✓ ${result.artist} — ${result.title}`);
       } catch (_) { /* non-fatal */ }
