@@ -3596,3 +3596,107 @@ img { display: block; }
 .settings-select:hover  { border-color: var(--accent); }
 .settings-select:focus  { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(74,136,245,0.25); }
 .settings-select option { background: var(--bg-elevated); color: var(--text-primary); }
+
+/* ── Home screen: 75% scale on mobile (max-width: 767px) ──── */
+@media (max-width: 767px) {
+  /* Pinned grid */
+  .pinned-grid {
+    gap: 8px;
+    padding: 0 12px;
+  }
+  .pinned-card-art {
+    width: 42px;
+    height: 42px;
+  }
+  .pinned-art-icon svg {
+    width: 20px;
+    height: 20px;
+  }
+  .pinned-art-play svg {
+    width: 14px;
+    height: 14px;
+  }
+  .pinned-card-info {
+    padding: 0 3px 0 8px;
+  }
+  .pinned-card-name {
+    font-size: 10px;
+  }
+  .pinned-card-artist {
+    font-size: 9px;
+  }
+  .pinned-card-more {
+    width: 24px;
+    height: 24px;
+    margin-right: 2px;
+  }
+
+  /* Home sections */
+  .home-section {
+    padding: 15px 0 6px;
+  }
+  .home-section-header {
+    padding: 0 12px 9px;
+  }
+  .home-section-title {
+    font-size: 11px;
+  }
+  .home-see-all {
+    font-size: 10px;
+  }
+
+  /* Home cards (Recientes, etc.) */
+  .home-cards-scroll {
+    gap: 8px;
+    padding: 0 12px;
+  }
+  .home-card {
+    width: 98px;
+  }
+  .home-card-art {
+    width: 98px;
+    height: 98px;
+    margin-bottom: 6px;
+  }
+  .home-card-name {
+    font-size: 10px;
+  }
+  .home-card-sub {
+    font-size: 9px;
+  }
+  .home-card-more {
+    width: 20px;
+    height: 20px;
+    top: 4px;
+    right: 4px;
+  }
+
+  /* Top Played list */
+  .top-list {
+    padding: 0 12px;
+  }
+  .top-list-item {
+    gap: 9px;
+    padding: 8px 0;
+  }
+  .top-list-rank {
+    font-size: 11px;
+    width: 14px;
+  }
+  .top-list-thumb {
+    width: 36px;
+    height: 36px;
+  }
+  .top-list-title {
+    font-size: 10px;
+  }
+  .top-list-artist {
+    font-size: 9px;
+  }
+  .top-list-meta {
+    font-size: 9px;
+  }
+  .top-list-count {
+    font-size: 9px;
+  }
+}
