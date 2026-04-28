@@ -466,6 +466,12 @@ const App = (() => {
         if (folderId) meta.coverUrl = await _getFolderCover(folderId);
       }
 
+      // Still no cover → try Last.fm with ID3 artist + album
+      if (!meta.coverUrl && typeof Lastfm !== 'undefined' && meta.artist && meta.album) {
+        const lfmUrl = await Lastfm.fetchCover(meta.artist, meta.album);
+        if (lfmUrl) meta.coverUrl = lfmUrl;
+      }
+
       _applyMeta(item, meta);
     } catch (err) {
       console.warn('[App] Meta parse error:', err);
@@ -590,6 +596,80 @@ const App = (() => {
       if (folderCover) {
         stillNeed.forEach(file => _updateRowThumbnail(file.id, folderCover));
       }
+    }
+
+    // ── Pass 4: Last.fm cover lookup for files still missing art ──────────────
+    // Uses artist + album from ID3 cache (populated in Pass 2) or DB metadata.
+    // Queries are deduped by Lastfm._cache, so same album is only fetched once.
+    if (typeof Lastfm === 'undefined') return;
+    const lfmNeed = files.filter(file => !_rowHasCover(file.id));
+    if (lfmNeed.length === 0) return;
+
+    await Promise.allSettled(lfmNeed.map(async file => {
+      try {
+        // Prefer in-memory Meta cache (populated by Pass 2 ID3 parse)
+        const inMem  = (typeof Meta !== 'undefined') ? Meta.getCached(file.id) : null;
+        const artist = inMem?.artist || (await DB.getMeta(file.id))?.artist || '';
+        const album  = inMem?.album  || (await DB.getMeta(file.id))?.album  || '';
+        if (!artist || !album) return;
+
+        const url = await Lastfm.fetchCover(artist, album);
+        if (!url) return;
+
+        _updateRowThumbnail(file.id, url);
+        // Persist so next session skips the Last.fm call
+        DB.setMeta(file.id, { thumbnailUrl: url }).catch(() => {});
+      } catch (_) { /* non-fatal */ }
+    }));
+
+    // ── Pass 5: AudD.io audio fingerprinting ──────────────────────────────────
+    // Last resort for files that have no cover AND no ID3 artist/album.
+    // Identifies song from audio content, fills title/artist/album/cover.
+    // Sequential (not parallel) to respect rate limits.
+    // Uses auddTried flag in DB to avoid burning quota re-trying unrecognized files.
+    if (typeof Audd === 'undefined') return;
+    const auddCandidates = files.filter(file => !_rowHasCover(file.id));
+    if (auddCandidates.length === 0) return;
+
+    const auddLimit = Math.min(auddCandidates.length, CONFIG.AUDD_MAX_PER_FOLDER || 5);
+    for (let i = 0; i < auddLimit; i++) {
+      const file = auddCandidates[i];
+      try {
+        // Skip if already tried (success or "not found" — not network errors)
+        const dbMeta = await DB.getMeta(file.id);
+        if (dbMeta?.auddTried) continue;
+
+        // Download first 1MB — enough for audio fingerprinting
+        const blob = await Drive.downloadFileHead(file.id, 1024 * 1024);
+        if (!blob) continue;
+
+        let result = null;
+        try {
+          result = await Audd.identify(blob);
+        } catch (_) {
+          // Network / API error — do NOT mark as tried, allow retry next time
+          continue;
+        }
+
+        // Mark tried regardless of whether a match was found
+        // (avoids re-querying songs AudD.io genuinely doesn't know)
+        await DB.setMeta(file.id, { auddTried: true });
+
+        if (!result) continue;  // not found
+
+        // Apply cover to the visible row
+        if (result.coverUrl) _updateRowThumbnail(file.id, result.coverUrl);
+
+        // Persist all identified fields for future sessions
+        const update = { auddTried: true };
+        if (result.title)    update.displayName = result.title;
+        if (result.artist)   update.artist      = result.artist;
+        if (result.album)    update.album       = result.album;
+        if (result.coverUrl) update.thumbnailUrl = result.coverUrl;
+        DB.setMeta(file.id, update).catch(() => {});
+
+        console.log(`[Audd] ✓ ${result.artist} — ${result.title}`);
+      } catch (_) { /* non-fatal */ }
     }
   }
 

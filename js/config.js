@@ -85,6 +85,20 @@ const CONFIG = {
   DB_NAME:    'savart_db',
   DB_VERSION: 2,
 
+  // ── Last.fm ───────────────────────────────────────────────
+  // Used by lastfm.js to fetch album cover art.
+  // Free API key — get one at: https://www.last.fm/api/account/create
+  LASTFM_API_KEY: 'a6a6ef739488b2b0c4a81980f17581e6',
+
+  // ── AudD.io ───────────────────────────────────────────────
+  // Used by audd.js to identify songs with no ID3 metadata.
+  // Free tier: 500 identifications/day — https://dashboard.audd.io
+  AUDD_API_KEY: '512d7b3a673ec6e6695e3d42e2be0a98',
+
+  // Max files to identify per folder open (conserves daily quota).
+  // With 500/day this allows ~100 folder opens before hitting the limit.
+  AUDD_MAX_PER_FOLDER: 5,
+
   // ── App metadata ──────────────────────────────────────────
   APP_NAME: 'Savart',
   VERSION:  '1.1.3',
