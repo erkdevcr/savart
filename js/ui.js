@@ -658,15 +658,20 @@ const UI = (() => {
     const storedUrl = !isFolder ? (item.thumbnailUrl || item.thumbnailLink || null) : null;
     const imgHtml   = storedUrl ? `<img class="pinned-art-img" src="${escHtml(storedUrl)}" alt="">` : '';
     const iconHtml  = isFolder
-      ? `<div class="pinned-art-icon">${iconFolder(16)}</div>`
-      : (storedUrl ? '' : `<div class="pinned-art-icon">${iconMusicNote(14)}</div>`);
+      ? `<div class="pinned-art-icon">${iconFolder(22)}</div>`
+      : (storedUrl ? '' : `<div class="pinned-art-icon">${iconMusicNote(16)}</div>`);
+
+    const artist = !isFolder ? (item.artist || '') : '';
 
     card.innerHTML = `
       <div class="pinned-card-art" data-id="${escHtml(item.id)}" style="background:${bg}">
         ${imgHtml}${iconHtml}
         <div class="pinned-art-play">${iconPlay(13)}</div>
       </div>
-      <span class="pinned-card-name">${escHtml(item.displayName || item.name)}</span>
+      <div class="pinned-card-info">
+        <span class="pinned-card-name">${escHtml(item.displayName || item.name)}</span>
+        ${artist ? `<span class="pinned-card-artist">${escHtml(artist)}</span>` : ''}
+      </div>
       <button class="btn-more pinned-card-more" aria-label="Más opciones">${iconDots(14)}</button>
     `;
 

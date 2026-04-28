@@ -597,16 +597,31 @@ img { display: block; }
 }
 
 /* ── Text & controls ── */
-.pinned-card-name {
+.pinned-card-info {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0 4px 0 10px;
+  gap: 2px;
+}
+
+.pinned-card-name {
   font-size: 13px;
   font-weight: 500;
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  padding: 0 4px 0 10px;
+}
+
+.pinned-card-artist {
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .pinned-card-more {
@@ -621,14 +636,7 @@ img { display: block; }
   color: var(--text-secondary);
   cursor: pointer;
   border-radius: var(--radius-sm);
-  opacity: 0;
-  transition: opacity 0.15s;
   margin-right: 4px;
-}
-
-.pinned-card:hover .pinned-card-more,
-.pinned-card .pinned-card-more:focus {
-  opacity: 1;
 }
 
 /* Always visible on touch/mobile */
