@@ -161,8 +161,13 @@ const Sync = (() => {
 
   function _mergeFavorites(local, remote) {
     const map = new Map();
+    // Start with remote, then let local win only when it has a newer (or equal) starredAt.
+    // This gives LWW per-item: if remote was starred more recently, it takes priority.
     for (const item of remote) map.set(item.id, item);
-    for (const item of local)  map.set(item.id, item);
+    for (const item of local) {
+      const ex = map.get(item.id);
+      if (!ex || (item.starredAt || 0) >= (ex.starredAt || 0)) map.set(item.id, item);
+    }
     const merged   = Array.from(map.values());
     const localIds = new Set(local.map(m => m.id));
     return { merged, toAdd: merged.filter(m => !localIds.has(m.id)) };
@@ -233,27 +238,50 @@ const Sync = (() => {
     switch (type) {
 
       case 'favorites': {
-        // Remote is the complete list: unstar anything not in it, star everything in it
-        const remoteIds = new Set((data || []).map(d => d.id));
+        // LWW per item: for additions, only apply if remote starredAt >= local starredAt.
+        // For removals (item in local but not in remote), remote wins — the manifest timestamp
+        // already guarantees the remote file is newer overall, so a missing item means un-starred.
+        const remote       = data || [];
+        const remoteIds    = new Set(remote.map(d => d.id));
         const localStarred = await DB.getStarred();
+        const localMap     = new Map(localStarred.map(m => [m.id, m]));
+
+        // Un-star items absent from remote (remote is newer per manifest LWW)
         for (const m of localStarred) {
-          if (!remoteIds.has(m.id)) await DB.setMeta(m.id, { starred: false });
+          if (!remoteIds.has(m.id)) await DB.setMeta(m.id, { starred: false, starredAt: undefined });
         }
-        for (const item of (data || [])) {
-          await DB.setMeta(item.id, { ...item, starred: true });
+        // Star/update remote items — only overwrite if remote is newer or item is new locally
+        for (const item of remote) {
+          const loc = localMap.get(item.id);
+          const remoteTs = item.starredAt || 0;
+          const localTs  = loc?.starredAt  || 0;
+          if (!loc || remoteTs >= localTs) {
+            await DB.setMeta(item.id, { ...item, starred: true });
+          }
         }
         break;
       }
 
       case 'playlists': {
-        // Replace local playlists: delete removed, upsert all remote
-        const remote   = data || [];
+        // LWW per playlist using updatedAt.
+        // Deletions: if remote doesn't have a playlist that exists locally, remote wins (it was deleted).
+        // Upserts: only overwrite local if remote version has a newer or equal updatedAt.
+        const remote    = data || [];
         const remoteIds = new Set(remote.map(p => p.id));
-        const local    = await DB.getPlaylists();
+        const local     = await DB.getPlaylists();
+        const localMap  = new Map(local.map(p => [p.id, p]));
+
+        // Delete playlists absent from remote (remote is authoritative per LWW manifest)
         for (const pl of local) {
           if (!remoteIds.has(pl.id)) await DB.deletePlaylist(pl.id);
         }
-        for (const pl of remote) await DB.putPlaylist(pl);
+        // Upsert remote playlists — skip if local version is newer (per-playlist LWW)
+        for (const pl of remote) {
+          const loc = localMap.get(pl.id);
+          if (!loc || (pl.updatedAt || 0) >= (loc.updatedAt || 0)) {
+            await DB.putPlaylist(pl);
+          }
+        }
         break;
       }
 
@@ -289,10 +317,12 @@ const Sync = (() => {
 
   async function _pushFavorites() {
     const starred = await DB.getStarred();
+    const now = Date.now();
     await _writeFile(FILENAMES.favorites, starred.map(m => ({
       id: m.id, name: m.name || null, displayName: m.displayName || m.name || null,
       artist: m.artist || null, albumName: m.albumName || null, folderId: m.folderId || null,
       thumbnailUrl: (m.thumbnailUrl && !m.thumbnailUrl.startsWith('blob:')) ? m.thumbnailUrl : null,
+      starredAt: m.starredAt || now, // LWW: carry timestamp; existing items without starredAt get push-time
     })));
     console.log(`[Sync] Pushed favorites (${starred.length})`);
   }

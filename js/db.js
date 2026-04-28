@@ -256,6 +256,8 @@ const DB = (() => {
   async function toggleStar(fileId) {
     const meta = await getMeta(fileId) || { id: fileId, playCount: 0, starred: false };
     meta.starred = !meta.starred;
+    if (meta.starred) meta.starredAt = Date.now(); // LWW: record exact moment of starring
+    else              delete meta.starredAt;
     await setMeta(fileId, meta);
     return meta.starred;
   }
