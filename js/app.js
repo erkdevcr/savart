@@ -1426,13 +1426,24 @@ const App = (() => {
     }
   }
 
-  /** Patch the cover thumbnail of a pinned card for a given song id. */
+  /** Patch the cover art of a pinned card for a given song id. */
   function _updatePinnedItemCover(id, url) {
-    const cover = document.querySelector(`.pinned-card-cover[data-id="${CSS.escape(id)}"]`);
-    if (!cover) return;
-    const img = cover.querySelector('img');
-    if (img) { img.src = url; }
-    else { cover.innerHTML = `<img src="${url}" alt="">`; }
+    const art = document.querySelector(`.pinned-card-art[data-id="${CSS.escape(id)}"]`);
+    if (!art) return;
+    // Inject or update the cover image
+    let img = art.querySelector('.pinned-art-img');
+    if (img) {
+      img.src = url;
+    } else {
+      img = document.createElement('img');
+      img.className = 'pinned-art-img';
+      img.alt = '';
+      img.src = url;
+      art.insertBefore(img, art.firstChild);
+    }
+    // Hide the music-note placeholder now that real art is loaded
+    const icon = art.querySelector('.pinned-art-icon');
+    if (icon) icon.style.display = 'none';
   }
 
   /** Swap the thumbnail of a playlist sidebar item to a resolved cover URL. */

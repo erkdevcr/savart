@@ -641,32 +641,37 @@ const UI = (() => {
     return section;
   }
 
-  /** Wide pinned card: colored play-icon square + folder name + 3-dot menu */
+  /** Pinned card: cover art (or colored square for folders) + play overlay + name + 3-dot */
   function _buildPinnedCard(item) {
     const card = document.createElement('div');
     card.className = 'pinned-card';
 
     const isFolder = item.isFolder || item.type === 'folder';
 
-    // Deterministic color from name
+    // Deterministic background color from name (visible for folders and while song cover loads)
     const COLORS = ['#2A3D6A','#2A4A2A','#4A2A2A','#3A2A4A','#1A3A4A','#4A3A1A','#3A1A4A','#1A4A3A'];
     const hash   = [...(item.name || '')].reduce((a, c) => a + c.charCodeAt(0), 0);
     const bg     = COLORS[Math.abs(hash) % COLORS.length];
 
-    // Cover: folder icon always; song → placeholder (async cover injected later by _prefetchPinnedCovers)
-    const coverHtml = isFolder
-      ? `<div class="pinned-cover-icon">${iconFolder(16)}</div>`
-      : `<div class="pinned-cover-icon">${iconMusicNote(14)}</div>`;
+    // For songs: show stored thumbnailUrl immediately; async cover injected later by _prefetchPinnedCovers.
+    // For folders: always show folder icon over colored square (no cover art).
+    const storedUrl = !isFolder ? (item.thumbnailUrl || item.thumbnailLink || null) : null;
+    const imgHtml   = storedUrl ? `<img class="pinned-art-img" src="${escHtml(storedUrl)}" alt="">` : '';
+    const iconHtml  = isFolder
+      ? `<div class="pinned-art-icon">${iconFolder(16)}</div>`
+      : (storedUrl ? '' : `<div class="pinned-art-icon">${iconMusicNote(14)}</div>`);
 
     card.innerHTML = `
-      <div class="pinned-card-thumb" style="background:${bg}" title="Reproducir">${iconPlay(14)}</div>
-      <div class="pinned-card-cover" data-id="${escHtml(item.id)}">${coverHtml}</div>
+      <div class="pinned-card-art" data-id="${escHtml(item.id)}" style="background:${bg}">
+        ${imgHtml}${iconHtml}
+        <div class="pinned-art-play">${iconPlay(13)}</div>
+      </div>
       <span class="pinned-card-name">${escHtml(item.displayName || item.name)}</span>
       <button class="btn-more pinned-card-more" aria-label="Más opciones">${iconDots(14)}</button>
     `;
 
-    // Play button (colored square) → immediate playback
-    card.querySelector('.pinned-card-thumb').addEventListener('click', (e) => {
+    // Art square → immediate playback
+    card.querySelector('.pinned-card-art').addEventListener('click', (e) => {
       e.stopPropagation();
       if (typeof App === 'undefined') return;
       if (isFolder) {
@@ -682,9 +687,9 @@ const UI = (() => {
       showContextMenu(e, 'pinned', item);
     });
 
-    // Name / card body → navigate (open folder in Browse, or play song)
+    // Name / card body → navigate (open folder or play song)
     card.addEventListener('click', (e) => {
-      if (e.target.closest('.pinned-card-more')) return;
+      if (e.target.closest('.pinned-card-more') || e.target.closest('.pinned-card-art')) return;
       if (typeof App !== 'undefined') App.onHomeCardClick(item);
     });
 
