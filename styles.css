@@ -2525,6 +2525,11 @@ img { display: block; }
     padding: 8px 24px;
   }
 
+  /* Pinned grid: 3 columns on desktop */
+  .pinned-grid {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+
   /* Show btn-more only on hover desktop — except pinned cards (always visible) */
   .btn-more {
     opacity: 0;
