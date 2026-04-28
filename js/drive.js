@@ -134,15 +134,20 @@ const Drive = (() => {
    * @param {string} [pageToken]
    * @returns {Promise<{ folders: DriveItem[], files: DriveItem[], nextPageToken: string|null }>}
    */
-  async function searchFiles(term, rootId = null, pageToken = null) {
-    // Escape single quotes in search term
-    const safeTerm = term.replace(/'/g, "\\'");
+  /**
+   * Strip diacritics and lowercase a string for accent-insensitive matching.
+   * "Música" → "musica", "niño" → "nino"
+   */
+  function _normalizeTerm(str) {
+    return str.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+  }
 
-    // Match both audio files and folders.
-    // NOTE: 'in ancestors' (recursive subtree) was removed — it causes Drive API 400
-    // for shared folders. We search the full drive and filter client-side if needed.
+  /**
+   * Execute a single Drive files.list query for `name contains safeTerm`.
+   * Returns { folders, files }.
+   */
+  async function _driveSearchQuery(safeTerm) {
     const q = `(mimeType contains 'audio/' or mimeType = 'application/vnd.google-apps.folder') and name contains '${safeTerm}' and trashed = false`;
-
     const params = new URLSearchParams({
       q,
       pageSize: '100',
@@ -151,26 +156,48 @@ const Drive = (() => {
       supportsAllDrives: 'true',
       includeItemsFromAllDrives: 'true',
     });
-
-    if (pageToken) params.set('pageToken', pageToken);
-
-    const url = `${CONFIG.API_BASE}/files?${params}`;
-    const res = await _fetch(url);
+    const res  = await _fetch(`${CONFIG.API_BASE}/files?${params}`);
     const data = await res.json();
-
-    const folders = [];
-    const files   = [];
-
+    const folders = [], files = [];
     for (const raw of (data.files || [])) {
       const item = _normalizeItem(raw);
       if (item.isFolder) folders.push(item);
       else               files.push(item);
     }
+    return { folders, files };
+  }
+
+  async function searchFiles(term, rootId = null) {
+    const normalized = _normalizeTerm(term);
+
+    // Build deduplicated set of queries to fire in parallel:
+    //   1. Original term (Drive is case-insensitive but accent-sensitive)
+    //   2. Normalized term (strips accents → finds "música" when typing "musica")
+    //   3. Individual words ≥ 3 chars (catches typos: at least one word will match)
+    const querySet = new Set();
+    const safe = s => s.replace(/'/g, "\\'");
+    querySet.add(safe(term.trim()));
+    querySet.add(safe(normalized));
+    for (const w of normalized.split(/\s+/)) {
+      if (w.length >= 3) querySet.add(safe(w));
+    }
+
+    // Fire all queries in parallel; ignore failures (partial results better than none)
+    const settled = await Promise.allSettled([...querySet].map(q => _driveSearchQuery(q)));
+
+    // Merge + deduplicate by id
+    const folderMap = new Map();
+    const fileMap   = new Map();
+    for (const r of settled) {
+      if (r.status !== 'fulfilled') continue;
+      for (const f of r.value.folders) if (!folderMap.has(f.id)) folderMap.set(f.id, f);
+      for (const f of r.value.files)   if (!fileMap.has(f.id))   fileMap.set(f.id, f);
+    }
 
     return {
-      folders,
-      files,
-      nextPageToken: data.nextPageToken || null,
+      folders: [...folderMap.values()],
+      files:   [...fileMap.values()],
+      nextPageToken: null,
     };
   }
 

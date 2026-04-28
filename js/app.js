@@ -1409,6 +1409,96 @@ const App = (() => {
 
   /* ── Search ──────────────────────────────────────────────── */
 
+  /* ── Fuzzy search helpers ──────────────────────────────────
+   * Used to rank Drive results by relevance after multi-query expansion.
+   * Handles: accents, case, typos, dyslexia, missing vowels, char transpositions.
+   */
+
+  /** Strip diacritics + lowercase. "Música" → "musica", "niño" → "nino" */
+  function _searchNorm(str) {
+    return (str || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  }
+
+  /** Levenshtein distance between two strings (2-row DP). */
+  function _levenshtein(a, b) {
+    if (a === b) return 0;
+    if (a.length === 0) return b.length;
+    if (b.length === 0) return a.length;
+    let row = Array.from({ length: b.length + 1 }, (_, i) => i);
+    for (let i = 1; i <= a.length; i++) {
+      let prev = i;
+      for (let j = 1; j <= b.length; j++) {
+        const val = Math.min(row[j] + 1, prev + 1, row[j - 1] + (a[i-1] !== b[j-1] ? 1 : 0));
+        row[j - 1] = prev;
+        prev = val;
+      }
+      row[b.length] = prev;
+    }
+    return row[b.length];
+  }
+
+  /**
+   * Similarity score [0..1] between two single (normalized) words.
+   * 1.0 = exact, 0.9 = prefix/substring, else Levenshtein-based.
+   */
+  function _wordSim(a, b) {
+    if (a === b) return 1;
+    if (b.startsWith(a) || a.startsWith(b)) return 0.9;
+    if (b.includes(a) || a.includes(b)) return 0.8;
+    const dist    = _levenshtein(a, b);
+    const maxLen  = Math.max(a.length, b.length);
+    // Tighten penalty: 1 edit in a 5-char word = 0.7, 2 edits = 0.4
+    return Math.max(0, 1 - (dist * 1.5) / maxLen);
+  }
+
+  /**
+   * Overall fuzzy score [0..1] of a search query against a filename.
+   * Splits both into words and scores best-matching pair per query word.
+   * "mi mrjor amigo" vs "Mi Mejor Amigo.mp3" → ~0.9
+   */
+  function _fuzzyScore(query, filename) {
+    const qNorm = _searchNorm(query);
+    const fNorm = _searchNorm(filename.replace(/\.[^.]+$/, '')); // strip extension
+
+    // Fast path: exact substring
+    if (fNorm.includes(qNorm)) return 1;
+
+    const qWords = qNorm.split(/\s+/).filter(Boolean);
+    const fWords = fNorm.split(/[\s\-_\.]+/).filter(Boolean);
+    if (!qWords.length || !fWords.length) return 0;
+
+    let total = 0;
+    for (const qw of qWords) {
+      let best = 0;
+      for (const fw of fWords) {
+        const s = _wordSim(qw, fw);
+        if (s > best) best = s;
+      }
+      total += best;
+    }
+    return total / qWords.length;
+  }
+
+  /**
+   * Fuzzy-rank a Drive results object.
+   * Items below MIN_SCORE are dropped; survivors sorted by score desc.
+   */
+  function _fuzzyRank(term, result) {
+    const MIN_SCORE = 0.45; // allow ~1 edit in 5-char word
+    const score = item => _fuzzyScore(term, item.name || item.displayName || '');
+
+    const rankList = arr => arr
+      .map(item => ({ item, score: score(item) }))
+      .filter(x => x.score >= MIN_SCORE)
+      .sort((a, b) => b.score - a.score)
+      .map(x => x.item);
+
+    return {
+      folders: rankList(result.folders || []),
+      files:   rankList(result.files   || []),
+    };
+  }
+
   async function _doSearch(term) {
     const container = document.getElementById('search-results');
     if (!container) return;
@@ -1420,12 +1510,14 @@ const App = (() => {
     if (!Auth.isAuthenticated()) { UI.showTokenBanner(); return; }
 
     try {
-      const result = await Drive.searchFiles(term, _rootFolderId); // restricted to configured root (recursive)
+      const raw = await Drive.searchFiles(term, _rootFolderId);
+      // Fuzzy-score + sort — drops unrelated results from word-expansion queries
+      const result = _fuzzyRank(term, raw);
       // Cache all items for queue resolution
       [...(result.folders || []), ...(result.files || [])].forEach(item => _cacheItem(item));
-      // Delegate rendering to UI
+      // Render sorted results
       UI.renderSearchResults(result, filter);
-      // Prefetch covers for song results (same pipeline as Browse, folderId=null skips folder-cover fallback)
+      // Prefetch covers (same pipeline as Browse)
       if (result.files?.length) {
         _prefetchAndApplyFolderCovers(null, result.files).catch(() => {});
       }
