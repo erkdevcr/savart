@@ -869,42 +869,53 @@ const UI = (() => {
     if (!el || el._dragBound) return;
     el._dragBound = true;
 
-    let _isDragging  = false;
-    let _startX      = 0;
-    let _scrollLeft  = 0;
+    // DRAG_THRESHOLD: pointer must travel this many px before it counts as a drag.
+    // Below this it's treated as a click — no scroll, no click suppression.
+    const DRAG_THRESHOLD = 6;
+
+    let _pressing   = false; // pointerdown is held
+    let _hasDragged = false; // pointer moved beyond threshold during this press
+    let _startClientX = 0;
+    let _scrollLeft   = 0;
 
     el.addEventListener('pointerdown', (e) => {
-      if (e.button !== 0) return;       // left button only
-      if (e.target.closest('.home-card-more')) return;  // don't hijack 3-dot clicks
-      _isDragging = true;
-      _startX     = e.clientX - el.getBoundingClientRect().left;
-      _scrollLeft = el.scrollLeft;
+      if (e.button !== 0) return;
+      if (e.target.closest('.home-card-more')) return;
+      _pressing     = true;
+      _hasDragged   = false;
+      _startClientX = e.clientX;
+      _scrollLeft   = el.scrollLeft;
       el.setPointerCapture(e.pointerId);
-      el.style.cursor = 'grabbing';
-      el.style.userSelect = 'none';
     });
 
     el.addEventListener('pointermove', (e) => {
-      if (!_isDragging) return;
-      const x    = e.clientX - el.getBoundingClientRect().left;
-      const walk = (x - _startX) * 1.2;
-      el.scrollLeft = _scrollLeft - walk;
+      if (!_pressing) return;
+      const dx = e.clientX - _startClientX;
+      if (!_hasDragged && Math.abs(dx) < DRAG_THRESHOLD) return; // still deciding
+      // Threshold crossed: enter drag mode
+      _hasDragged         = true;
+      el.style.cursor     = 'grabbing';
+      el.style.userSelect = 'none';
+      el.scrollLeft       = _scrollLeft - dx;
     });
 
     const _stopDrag = () => {
-      if (!_isDragging) return;
-      _isDragging = false;
-      el.style.cursor = '';
+      if (!_pressing) return;
+      _pressing           = false;
+      el.style.cursor     = '';
       el.style.userSelect = '';
+      // Keep _hasDragged until after the click event fires (it resets there)
     };
 
     el.addEventListener('pointerup',     _stopDrag);
     el.addEventListener('pointercancel', _stopDrag);
     el.addEventListener('pointerleave',  _stopDrag);
 
-    // Prevent click from firing on drag end (prevents accidental card opens)
+    // Intercept click: if we dragged, cancel the click so cards don't open.
+    // Use capture so we run before the card's own listener.
     el.addEventListener('click', (e) => {
-      if (Math.abs(el.scrollLeft - _scrollLeft) > 5) {
+      if (_hasDragged) {
+        _hasDragged = false; // reset for next interaction
         e.stopPropagation();
         e.preventDefault();
       }
