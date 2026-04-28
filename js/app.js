@@ -570,9 +570,10 @@ const App = (() => {
       );
     }
 
-    // ── Pass 3: folder cover.jpg fallback ─────────────────────
+    // ── Pass 3: folder cover.jpg fallback (only when a real folderId is given) ──
+    // Skipped for search results (folderId=null) since files come from different folders.
     const stillNeed = files.filter(file => !_rowHasCover(file.id));
-    if (stillNeed.length > 0) {
+    if (stillNeed.length > 0 && folderId) {
       const folderCover = await _getFolderCover(folderId);
       if (folderCover) {
         stillNeed.forEach(file => _updateRowThumbnail(file.id, folderCover));
@@ -1424,6 +1425,10 @@ const App = (() => {
       [...(result.folders || []), ...(result.files || [])].forEach(item => _cacheItem(item));
       // Delegate rendering to UI
       UI.renderSearchResults(result, filter);
+      // Prefetch covers for song results (same pipeline as Browse, folderId=null skips folder-cover fallback)
+      if (result.files?.length) {
+        _prefetchAndApplyFolderCovers(null, result.files).catch(() => {});
+      }
     } catch (err) {
       console.error('[App] Search error:', err);
       if (err.name === 'AuthError') { UI.showTokenBanner(); return; }

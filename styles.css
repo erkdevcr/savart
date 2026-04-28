@@ -2491,9 +2491,11 @@ img { display: block; }
 
   .song-row:hover .btn-more { opacity: 1; }
 
-  /* Pinned cards and top-played rows: 3-dots always visible on desktop */
+  /* Pinned cards, top-played rows, browse/search rows: 3-dots always visible on desktop */
   .pinned-card-more        { opacity: 1; }
   .top-list-item .btn-more { opacity: 1; }
+  .song-row .btn-more,
+  .folder-row .btn-more    { opacity: 1; }
 
   #toast-container {
     bottom: calc(var(--player-bar-h) + 16px);
