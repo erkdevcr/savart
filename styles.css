@@ -3700,3 +3700,36 @@ img { display: block; }
     font-size: 9px;
   }
 }
+
+/* ── Expanded player: always-square cover on mobile ────────── */
+/*
+  Root cause: .pexp-art-panel is flex:1 + min-height:0, so on short screens
+  it shrinks below the art's height (width-driven via aspect-ratio:1).
+  #player-expanded has overflow:hidden → art gets CLIPPED → looks non-square.
+
+  Fix: container-type:size on the art panel lets children use cqh (container
+  query height). We size the art as min(panel-width, 300px, panel-height − padding/badges).
+  This gives a square that shrinks gracefully on short screens.
+
+  cqh support: Chrome 105+, Safari 16+, Firefox 110+ (all modern mobile browsers).
+*/
+@media (max-width: 767px) {
+  .pexp-art-panel {
+    /* Establish size-query container so .pexp-art can reference panel height via cqh */
+    container-type: size;
+    overflow: hidden; /* clip art if somehow still too large (safety net) */
+  }
+
+  .pexp-art {
+    /*
+      min() picks the smallest of:
+        100%       — panel content width (never overflow sideways)
+        300px      — absolute max size cap
+        calc(100cqh - 76px) — panel height minus vertical padding (40px) + badges row (~36px)
+      Result: art is always a square that fits in the available space.
+    */
+    width: min(100%, 300px, calc(100cqh - 76px));
+    max-width: unset; /* replaced by the min() above */
+    aspect-ratio: 1;  /* height = width → always square */
+  }
+}
