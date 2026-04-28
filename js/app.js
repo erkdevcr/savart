@@ -487,35 +487,34 @@ const App = (() => {
       }
 
       // Still no cover → try AudD.io audio fingerprinting
-      // Runs when song has no ID3 tags at all (Last.fm needs artist+album).
-      // Uses the already-downloaded blob — no extra network request for the audio.
+      // Runs when song has no cover after all previous passes.
+      // No auddTried check here: if a cover was already found in a prior session
+      // it would be in meta.coverUrl from the DB check above, so !meta.coverUrl
+      // already prevents redundant calls. This allows retry for songs AudD
+      // previously couldn't identify (without burning quota unnecessarily for songs
+      // that DO have a stored cover).
       if (!meta.coverUrl && typeof Audd !== 'undefined') {
-        const dbMeta2 = await DB.getMeta(item.id).catch(() => null);
-        if (!dbMeta2?.auddTried) {
-          try {
-            // Slice to first 1MB — enough for fingerprinting, avoids uploading full file
-            const sample = blob.slice(0, 1024 * 1024);
-            const result = await Audd.identify(sample);
-            // Mark tried (success or not-found) to skip future calls; errors are NOT marked
-            await DB.setMeta(item.id, { auddTried: true });
-            if (result) {
-              if (result.coverUrl) meta.coverUrl = result.coverUrl;
-              // Fill in missing tag fields so the player UI shows them
-              if (!meta.title  && result.title)  meta.title  = result.title;
-              if (!meta.artist && result.artist) meta.artist = result.artist;
-              if (!meta.album  && result.album)  meta.album  = result.album;
-              // Persist everything so next session is instant
-              const update = { auddTried: true };
-              if (result.title)    update.displayName = result.title;
-              if (result.artist)   update.artist      = result.artist;
-              if (result.album)    update.album       = result.album;
-              if (result.coverUrl) update.thumbnailUrl = result.coverUrl;
-              DB.setMeta(item.id, update).catch(() => {});
-              console.log(`[Audd] ✓ ${result.artist} — ${result.title}`);
-            }
-          } catch (_) {
-            // Network / API error — do NOT mark auddTried so it can retry next time
+        try {
+          // Slice to first 1MB — enough for fingerprinting, avoids uploading full file
+          const sample = blob.slice(0, 1024 * 1024);
+          const result = await Audd.identify(sample);
+          if (result) {
+            if (result.coverUrl) meta.coverUrl = result.coverUrl;
+            // Fill in missing tag fields so the player UI shows them
+            if (!meta.title  && result.title)  meta.title  = result.title;
+            if (!meta.artist && result.artist) meta.artist = result.artist;
+            if (!meta.album  && result.album)  meta.album  = result.album;
+            // Persist cover URL so next session loads it instantly from DB
+            const update = { auddTried: true };
+            if (result.title)    update.displayName = result.title;
+            if (result.artist)   update.artist      = result.artist;
+            if (result.album)    update.album       = result.album;
+            if (result.coverUrl) update.thumbnailUrl = result.coverUrl;
+            DB.setMeta(item.id, update).catch(() => {});
+            console.log(`[Audd] ✓ ${result.artist} — ${result.title}`);
           }
+        } catch (_) {
+          // Network / API error — non-fatal, will retry next play
         }
       }
 
