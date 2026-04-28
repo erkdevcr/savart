@@ -319,7 +319,7 @@ const Sync = (() => {
       id: r.id, name: r.name || null, displayName: r.displayName || r.name || null,
       type: r.type || 'song', folderId: r.folderId || null, mimeType: r.mimeType || null,
       thumbnailUrl: (r.thumbnailUrl && !r.thumbnailUrl.startsWith('blob:')) ? r.thumbnailUrl : null,
-      accessedAt: r.accessedAt || Date.now(),
+      accessedAt: r.accessedAt ?? Date.now(),
     })));
     console.log(`[Sync] Pushed recents (${recents.length})`);
   }
@@ -492,14 +492,24 @@ const Sync = (() => {
       // ── Merge recents ─────────────────────────────────────
       await _mergeStep('recents', async () => {
         if (!Array.isArray(remoteRecents) || remoteRecents.length === 0) return;
-        // Filter out any malformed items (null, missing id) to prevent aborting the loop
         const validRemote = remoteRecents.filter(r => r && r.id);
         if (!validRemote.length) return;
         const local = await DB.getRecents(CONFIG.RECENTS_MAX);
-        const { toAdd } = _mergeRecents(local, validRemote);
-        if (toAdd.length) {
-          await DB.bulkPutRecents(toAdd);
-          console.log(`[Sync] Merged ${toAdd.length} remote recents`);
+        const { merged } = _mergeRecents(local, validRemote);
+        if (!merged.length) return;
+
+        // Write the FULL merged set, not just toAdd (new-id items).
+        // Bug without this: an item present on both devices keeps the LOCAL accessedAt
+        // even when remote is newer. The next push then writes stale timestamps to Drive,
+        // which LWW applies back to the other device — making old items look "fresh".
+        const localMap = new Map(local.map(r => [r.id, r]));
+        const toWrite  = merged.filter(m => {
+          const l = localMap.get(m.id);
+          return !l || m.accessedAt > (l.accessedAt || 0);
+        });
+        if (toWrite.length) {
+          await DB.bulkPutRecents(toWrite);
+          console.log(`[Sync] Merged recents: ${toWrite.filter(m => !localMap.has(m.id)).length} added, ${toWrite.filter(m => localMap.has(m.id)).length} updated`);
         }
       });
 

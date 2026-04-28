@@ -649,7 +649,7 @@ const UI = (() => {
     const isFolder = item.isFolder || item.type === 'folder';
 
     // Flat background: one color for all folders, one for songs without cover
-    const bg = isFolder ? '#1E3A5F' : '#252533';
+    const bg = isFolder ? '#1E3A5F' : '#1E4040';
 
     // For songs: show stored thumbnailUrl immediately; async cover injected later by _prefetchPinnedCovers.
     // For folders: always show folder icon over colored square (no cover art).
@@ -657,7 +657,7 @@ const UI = (() => {
     const imgHtml   = storedUrl ? `<img class="pinned-art-img" src="${escHtml(storedUrl)}" alt="">` : '';
     const iconHtml  = isFolder
       ? `<div class="pinned-art-icon">${iconFolder(26)}</div>`
-      : (storedUrl ? '' : `<div class="pinned-art-icon">${iconMusicNote(20)}</div>`);
+      : (storedUrl ? '' : `<div class="pinned-art-icon">${iconMusicNote(24)}</div>`);
 
     const artist = !isFolder ? (item.artist || '') : '';
 
