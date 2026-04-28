@@ -648,18 +648,16 @@ const UI = (() => {
 
     const isFolder = item.isFolder || item.type === 'folder';
 
-    // Deterministic background color from name (visible for folders and while song cover loads)
-    const COLORS = ['#2A3D6A','#2A4A2A','#4A2A2A','#3A2A4A','#1A3A4A','#4A3A1A','#3A1A4A','#1A4A3A'];
-    const hash   = [...(item.name || '')].reduce((a, c) => a + c.charCodeAt(0), 0);
-    const bg     = COLORS[Math.abs(hash) % COLORS.length];
+    // Flat background: one color for all folders, one for songs without cover
+    const bg = isFolder ? '#1E3A5F' : '#252533';
 
     // For songs: show stored thumbnailUrl immediately; async cover injected later by _prefetchPinnedCovers.
     // For folders: always show folder icon over colored square (no cover art).
     const storedUrl = !isFolder ? (item.thumbnailUrl || item.thumbnailLink || null) : null;
     const imgHtml   = storedUrl ? `<img class="pinned-art-img" src="${escHtml(storedUrl)}" alt="">` : '';
     const iconHtml  = isFolder
-      ? `<div class="pinned-art-icon">${iconFolder(22)}</div>`
-      : (storedUrl ? '' : `<div class="pinned-art-icon">${iconMusicNote(16)}</div>`);
+      ? `<div class="pinned-art-icon">${iconFolder(26)}</div>`
+      : (storedUrl ? '' : `<div class="pinned-art-icon">${iconMusicNote(20)}</div>`);
 
     const artist = !isFolder ? (item.artist || '') : '';
 
