@@ -1202,14 +1202,11 @@ img { display: block; }
 }
 
 .chip-count {
-  display: none;
+  display: none; /* shown/hidden via JS — avoids :not(:empty) Safari repaint bug */
   margin-left: 5px;
   font-size: 11px;
   opacity: 0.75;
   font-weight: 400;
-}
-.chip-count:not(:empty) {
-  display: inline;
 }
 
 /* ── Library screen ──────────────────────────────────────── */

@@ -2107,9 +2107,16 @@ const UI = (() => {
       if (!badge) return;
       if (counts === null) {
         badge.textContent = '';
+        badge.style.display = 'none';
       } else {
         const n = counts[chip.dataset.filter] ?? 0;
-        badge.textContent = n > 0 ? `${n}` : '';
+        if (n > 0) {
+          badge.textContent = `${n}`;
+          badge.style.display = 'inline';
+        } else {
+          badge.textContent = '';
+          badge.style.display = 'none';
+        }
       }
     });
   }
