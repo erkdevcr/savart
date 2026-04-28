@@ -1359,7 +1359,7 @@ img { display: block; }
 
 /* ── Settings screen ─────────────────────────────────────── */
 .settings-section {
-  padding: 20px 16px 0;
+  padding: 0;
 }
 
 .settings-section-title {
@@ -1368,18 +1368,18 @@ img { display: block; }
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--text-muted);
-  margin-bottom: 10px;
+  margin-bottom: 0;
 }
 
 .settings-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 0;
+  padding: 14px 16px;
   border-bottom: 1px solid var(--bg-hover);
 }
 
-.settings-row:last-child { border-bottom: none; }
+.settings-section:last-child .settings-row:last-child { border-bottom: none; }
 
 .settings-row-label {
   font-size: 14px;
@@ -1388,6 +1388,14 @@ img { display: block; }
 
 .settings-row-sub {
   font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+/* Category label: hidden by default, shown on mobile via media query */
+.settings-row-cat {
+  display: none;
+  font-size: 11px;
   color: var(--text-muted);
   margin-top: 2px;
 }
@@ -2868,16 +2876,17 @@ img { display: block; }
   }
 }
 
-/* ── Settings — 2 column desktop layout ──────────────────── */
+/* ── Settings — desktop: Option A (2-col card grid) ─────── */
 @media (min-width: 768px) {
   #screen-settings {
     padding: 0 24px 32px;
   }
 
-  .settings-columns {
+  /* Grid: 2 equal columns, sections auto-place as cards */
+  .settings-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 24px;
+    gap: 16px;
     align-items: start;
   }
 
@@ -2885,12 +2894,53 @@ img { display: block; }
     padding: 0;
     background: var(--bg-elevated);
     border-radius: var(--radius-md);
-    padding: 16px 20px;
+    overflow: hidden;
     margin-bottom: 0;
   }
 
+  /* Section title = card header with bottom separator */
   .settings-section-title {
-    margin-bottom: 8px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--bg-hover);
+    margin-bottom: 0;
+    font-size: 10px;
+  }
+
+  /* Rows get horizontal padding inside card */
+  .settings-section .settings-row {
+    padding: 12px 16px;
+  }
+
+  /* Category label redundant in card view — hide it */
+  .settings-row-cat { display: none; }
+}
+
+/* ── Settings — mobile: Option B (flat list with cat labels) */
+@media (max-width: 767px) {
+  /* Single card wrapping everything */
+  .settings-grid {
+    display: block;
+    background: var(--bg-elevated);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    margin: 0 0 16px;
+  }
+
+  /* Sections flow as flat blocks, no individual card borders */
+  .settings-section {
+    padding: 0;
+    background: transparent;
+  }
+
+  /* Section title hidden — category shown inline per row */
+  .settings-section-title { display: none; }
+
+  /* Category label visible */
+  .settings-row-cat {
+    display: block;
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 2px;
   }
 }
 
@@ -2936,6 +2986,20 @@ img { display: block; }
   justify-content: center;
   flex-shrink: 0;
   color: var(--text-secondary);
+}
+
+/* Complex rows: label+control on top, expanded content below */
+.settings-row-complex {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.settings-row-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
 }
 
 .settings-slider-row {
