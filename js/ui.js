@@ -2102,10 +2102,13 @@ const UI = (() => {
    * @param {{ all: number, songs: number, folders: number } | null} counts
    */
   function updateSearchChipCounts(counts) {
+    const isMobile = !window.matchMedia('(min-width: 768px)').matches;
+
+    // ── Desktop: counts inside chip buttons ──────────────────
     document.querySelectorAll('.filter-chip[data-filter]').forEach(chip => {
       const badge = chip.querySelector('.chip-count');
       if (!badge) return;
-      if (counts === null) {
+      if (counts === null || isMobile) {
         badge.textContent = '';
         badge.style.display = 'none';
       } else {
@@ -2119,6 +2122,27 @@ const UI = (() => {
         }
       }
     });
+
+    // ── Mobile: plain count bar below chips ──────────────────
+    const bar = document.getElementById('search-count-bar');
+    if (!bar) return;
+    if (counts === null || !isMobile) {
+      bar.textContent = '';
+      bar.style.display = 'none';
+    } else {
+      const nSongs   = counts.songs   ?? 0;
+      const nFolders = counts.folders ?? 0;
+      if (nSongs === 0 && nFolders === 0) {
+        bar.textContent = '';
+        bar.style.display = 'none';
+      } else {
+        const parts = [];
+        if (nSongs   > 0) parts.push(`${nSongs} ${nSongs   === 1 ? 'canción' : 'canciones'}`);
+        if (nFolders > 0) parts.push(`${nFolders} ${nFolders === 1 ? 'carpeta' : 'carpetas'}`);
+        bar.textContent = parts.join(' · ');
+        bar.style.display = 'block';
+      }
+    }
   }
 
   function renderSearchResults(results, filter = 'all') {

@@ -1202,10 +1202,19 @@ img { display: block; }
 }
 
 .chip-count {
-  display: none; /* shown/hidden via JS — avoids :not(:empty) Safari repaint bug */
+  display: none; /* shown/hidden via JS — desktop only; mobile uses #search-count-bar */
   margin-left: 5px;
   font-size: 11px;
   opacity: 0.75;
+  font-weight: 400;
+}
+
+/* Count summary line — shown on mobile below the chips */
+#search-count-bar {
+  display: none;
+  padding: 0 16px 8px;
+  font-size: 11px;
+  color: var(--text-muted);
   font-weight: 400;
 }
 

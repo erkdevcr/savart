@@ -466,10 +466,24 @@ const App = (() => {
         if (folderId) meta.coverUrl = await _getFolderCover(folderId);
       }
 
+      // Still no cover → check if a URL was persisted from a previous session
+      // (avoids re-calling Last.fm/AudD.io for songs we already identified)
+      if (!meta.coverUrl) {
+        const dbMeta = await DB.getMeta(item.id).catch(() => null);
+        const persistedUrl = dbMeta?.coverUrl || dbMeta?.thumbnailUrl;
+        if (persistedUrl && !persistedUrl.startsWith('blob:')) {
+          meta.coverUrl = persistedUrl;
+        }
+      }
+
       // Still no cover → try Last.fm with ID3 artist + album
       if (!meta.coverUrl && typeof Lastfm !== 'undefined' && meta.artist && meta.album) {
         const lfmUrl = await Lastfm.fetchCover(meta.artist, meta.album);
-        if (lfmUrl) meta.coverUrl = lfmUrl;
+        if (lfmUrl) {
+          meta.coverUrl = lfmUrl;
+          // Persist so next session skips Last.fm entirely
+          DB.setMeta(item.id, { thumbnailUrl: lfmUrl }).catch(() => {});
+        }
       }
 
       _applyMeta(item, meta);
@@ -538,18 +552,29 @@ const App = (() => {
   async function _prefetchAndApplyFolderCovers(folderId, files) {
     if (!files || files.length === 0) return;
 
-    // ── Pass 0: persisted cover blobs from IndexedDB (instant, no re-parse) ─
-    if (typeof Meta !== 'undefined') {
-      await Promise.allSettled(files.map(async file => {
-        try {
-          const dbMeta = await DB.getMeta(file.id);
-          if (dbMeta?.coverBlob) {
-            const url = Meta.injectCover(file.id, dbMeta.coverBlob);
-            if (url) _updateRowThumbnail(file.id, url);
-          }
-        } catch (_) {}
-      }));
-    }
+    // ── Pass 0: persisted covers from IndexedDB (instant, no network) ──────
+    // Checks three sources in priority order:
+    //   1. coverBlob  — embedded ID3 art saved as binary (highest quality, no expiry)
+    //   2. coverUrl   — URL saved from a previous session (e.g. Last.fm, AudD.io)
+    //   3. thumbnailUrl — Drive thumbnailLink or external URL (same as above, alt field)
+    await Promise.allSettled(files.map(async file => {
+      try {
+        const dbMeta = await DB.getMeta(file.id);
+        if (!dbMeta) return;
+
+        // 1. Binary blob → create object URL and inject into Meta cache
+        if (dbMeta.coverBlob && typeof Meta !== 'undefined') {
+          const url = Meta.injectCover(file.id, dbMeta.coverBlob);
+          if (url) { _updateRowThumbnail(file.id, url); return; }
+        }
+
+        // 2. Persisted external URL (Last.fm / AudD.io / Drive thumbnail)
+        const persistedUrl = dbMeta.coverUrl || dbMeta.thumbnailUrl;
+        if (persistedUrl) {
+          _updateRowThumbnail(file.id, persistedUrl);
+        }
+      } catch (_) {}
+    }));
 
     // ── Pass 1: instant — use in-memory Meta cache ────────────
     files.forEach(file => {
