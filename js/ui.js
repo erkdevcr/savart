@@ -632,7 +632,7 @@ const UI = (() => {
       // Numbered ranked list
       const list = document.createElement('div');
       list.className = 'top-list';
-      items.slice(0, 10).forEach((item, i) => list.appendChild(_buildTopPlayedItem(item, i + 1)));
+      items.slice(0, 12).forEach((item, i) => list.appendChild(_buildTopPlayedItem(item, i + 1)));
       section.appendChild(list);
 
     } else {
