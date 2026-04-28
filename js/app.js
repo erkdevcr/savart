@@ -466,14 +466,18 @@ const App = (() => {
         if (folderId) meta.coverUrl = await _getFolderCover(folderId);
       }
 
-      // Still no cover → check if a URL was persisted from a previous session
-      // (avoids re-calling Last.fm/AudD.io for songs we already identified)
+      // Still no cover → check if an external cover URL was persisted from a previous session
+      // (Last.fm or AudD.io URL saved in a prior run — avoids repeat API calls).
+      // Drive thumbnailLinks (googleusercontent.com) are NOT treated as covers here —
+      // they are generic Drive thumbnails that block Last.fm/AudD.io unnecessarily.
       if (!meta.coverUrl) {
         const dbMeta = await DB.getMeta(item.id).catch(() => null);
         const persistedUrl = dbMeta?.coverUrl || dbMeta?.thumbnailUrl;
-        if (persistedUrl && !persistedUrl.startsWith('blob:')) {
-          meta.coverUrl = persistedUrl;
-        }
+        const isExternalCover = persistedUrl
+          && !persistedUrl.startsWith('blob:')
+          && !persistedUrl.includes('googleusercontent.com')
+          && !persistedUrl.includes('googleapis.com');
+        if (isExternalCover) meta.coverUrl = persistedUrl;
       }
 
       // Still no cover → try Last.fm with ID3 artist + album
