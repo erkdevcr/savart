@@ -972,8 +972,28 @@ const App = (() => {
         if (metaRecords[i]) metaMap.set(r.id, metaRecords[i]);
       });
 
-      // Helper: pick first non-empty value
+      // Enrich pinned songs with artist, displayName, thumbnailUrl from metadata store
+      // (togglePin only saves id/name/displayName/type/thumbnailUrl — no artist)
+      const pinnedSongs = pinned.filter(p => p.type !== 'folder' && !p.isFolder);
+      const pinnedMetaRecords = await Promise.all(
+        pinnedSongs.map(p => DB.getMeta(p.id).catch(() => null))
+      );
+      const pinnedMetaMap = new Map();
+      pinnedSongs.forEach((p, i) => { if (pinnedMetaRecords[i]) pinnedMetaMap.set(p.id, pinnedMetaRecords[i]); });
+
       const _pick = (...vals) => vals.find(v => v && String(v).trim() !== '') || '';
+
+      const enrichedPinned = pinned.map(p => {
+        if (p.type === 'folder' || p.isFolder) return p;
+        const dbMeta = pinnedMetaMap.get(p.id);
+        const inMem  = (typeof Meta !== 'undefined') ? Meta.getCached(p.id) : null;
+        return {
+          ...p,
+          displayName:  _pick(inMem?.title,   p.displayName,  dbMeta?.displayName, p.name, dbMeta?.name),
+          artist:       _pick(inMem?.artist,  p.artist,       dbMeta?.artist),
+          thumbnailUrl: _pick(inMem?.coverUrl, p.thumbnailUrl, dbMeta?.thumbnailUrl, dbMeta?.coverUrl),
+        };
+      });
 
       // Enrich recents songs with metadata store data (fixes bare/empty-name records)
       const enrichedRecents = recents.map(r => {
@@ -1006,12 +1026,12 @@ const App = (() => {
         };
       });
 
-      UI.renderHome({ pinned, recents: enrichedRecents, topPlayed });
+      UI.renderHome({ pinned: enrichedPinned, recents: enrichedRecents, topPlayed });
 
       // Async: load cover art for song cards and top-played in the background
       _prefetchHomeCovers(enrichedRecents).catch(() => {});
       _prefetchTopPlayedCovers(topPlayed).catch(() => {});
-      _prefetchPinnedCovers(pinned).catch(() => {});
+      _prefetchPinnedCovers(enrichedPinned).catch(() => {});
 
       // Async: fix any items still with no name by fetching from Drive API
       _fixMissingNames(enrichedRecents, topPlayed).catch(() => {});
@@ -1504,6 +1524,15 @@ const App = (() => {
         }
       } catch (_) { /* non-fatal */ }
     }
+    // Drive fallback: songs synced from another device with no local blob
+    await _driveThumbFallback(
+      songs,
+      id => {
+        const art = document.querySelector(`.pinned-card-art[data-id="${CSS.escape(id)}"]`);
+        return !!(art && art.querySelector('.pinned-art-img'));
+      },
+      _updatePinnedItemCover
+    );
   }
 
   /** Patch the cover art of a pinned card for a given song id. */
