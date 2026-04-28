@@ -873,56 +873,46 @@ const UI = (() => {
     const DRAG_THRESHOLD = 6;
 
     let _pressing     = false;
-    let _captured     = false; // whether setPointerCapture has been called
     let _hasDragged   = false;
-    let _pointerId    = null;
     let _startClientX = 0;
     let _scrollLeft   = 0;
+
+    // Listeners attached to document so the drag keeps working even when
+    // the pointer leaves the scroll container — without setPointerCapture,
+    // which would redirect click events away from the actual card target.
+    const _onDocMove = (e) => {
+      if (!_pressing) return;
+      const dx = e.clientX - _startClientX;
+      if (Math.abs(dx) < DRAG_THRESHOLD) return; // still within click tolerance
+      _hasDragged         = true;
+      el.style.cursor     = 'grabbing';
+      el.style.userSelect = 'none';
+      el.scrollLeft       = _scrollLeft - dx;
+    };
+
+    const _onDocUp = () => {
+      if (!_pressing) return;
+      _pressing           = false;
+      el.style.cursor     = '';
+      el.style.userSelect = '';
+      document.removeEventListener('pointermove', _onDocMove);
+      document.removeEventListener('pointerup',   _onDocUp);
+      document.removeEventListener('pointercancel', _onDocUp);
+      // _hasDragged stays true until the click event fires and clears it
+    };
 
     el.addEventListener('pointerdown', (e) => {
       if (e.button !== 0) return;
       if (e.target.closest('.home-card-more')) return;
-      // Do NOT setPointerCapture here — that would redirect the click event
-      // away from the actual card target, breaking card selection.
       _pressing     = true;
-      _captured     = false;
       _hasDragged   = false;
-      _pointerId    = e.pointerId;
       _startClientX = e.clientX;
       _scrollLeft   = el.scrollLeft;
+      // Track pointer globally so drag continues even outside el
+      document.addEventListener('pointermove',  _onDocMove);
+      document.addEventListener('pointerup',    _onDocUp);
+      document.addEventListener('pointercancel', _onDocUp);
     });
-
-    el.addEventListener('pointermove', (e) => {
-      if (!_pressing) return;
-      const dx = e.clientX - _startClientX;
-      if (Math.abs(dx) < DRAG_THRESHOLD) return; // still within click tolerance
-
-      // Threshold crossed: now it's definitely a drag.
-      _hasDragged = true;
-      el.style.cursor     = 'grabbing';
-      el.style.userSelect = 'none';
-      el.scrollLeft       = _scrollLeft - dx;
-
-      // Capture pointer only after confirming drag so the scroll keeps working
-      // even if the pointer leaves the element — but this no longer affects click.
-      if (!_captured && _pointerId !== null) {
-        try { el.setPointerCapture(_pointerId); } catch (_) {}
-        _captured = true;
-      }
-    });
-
-    const _stopDrag = () => {
-      if (!_pressing) return;
-      _pressing           = false;
-      _captured           = false;
-      el.style.cursor     = '';
-      el.style.userSelect = '';
-      // _hasDragged stays true until the click event fires and clears it
-    };
-
-    el.addEventListener('pointerup',     _stopDrag);
-    el.addEventListener('pointercancel', _stopDrag);
-    el.addEventListener('pointerleave',  _stopDrag);
 
     // Suppress click only when a drag actually happened.
     // Capture phase so we run before the card's own listener.
@@ -2106,10 +2096,32 @@ const UI = (() => {
    * @param {{ folders: Object[], files: Object[] }} results
    * @param {string} filter - 'all' | 'songs' | 'folders'
    */
+  /**
+   * Update the count badge on each search filter chip.
+   * Pass null to clear all counts (e.g. while searching or on nav away).
+   * @param {{ all: number, songs: number, folders: number } | null} counts
+   */
+  function updateSearchChipCounts(counts) {
+    document.querySelectorAll('.filter-chip[data-filter]').forEach(chip => {
+      const badge = chip.querySelector('.chip-count');
+      if (!badge) return;
+      if (counts === null) {
+        badge.textContent = '';
+      } else {
+        const n = counts[chip.dataset.filter] ?? 0;
+        badge.textContent = n > 0 ? `${n}` : '';
+      }
+    });
+  }
+
   function renderSearchResults(results, filter = 'all') {
     const container = document.getElementById('search-results');
     if (!container) return;
     container.innerHTML = '';
+
+    const nFolders = (results.folders || []).length;
+    const nFiles   = (results.files   || []).length;
+    updateSearchChipCounts({ all: nFolders + nFiles, songs: nFiles, folders: nFolders });
 
     const folders = (filter === 'songs') ? [] : (results.folders || []);
     const files   = (filter === 'folders') ? [] : (results.files || []);
@@ -2218,6 +2230,7 @@ const UI = (() => {
     renderPlaylists,
     // Search
     renderSearchResults,
+    updateSearchChipCounts,
     // Context menu
     showContextMenu,
     hideContextMenu,

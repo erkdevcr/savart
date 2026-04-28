@@ -1552,6 +1552,7 @@ const App = (() => {
     const filter = activeChip?.dataset.filter || 'all';
 
     container.innerHTML = '<div class="empty-state"><p>Buscando…</p></div>';
+    UI.updateSearchChipCounts(null); // clear counts while loading
     if (!Auth.isAuthenticated()) { UI.showTokenBanner(); return; }
 
     try {
@@ -2070,6 +2071,7 @@ const App = (() => {
       UI.setExpandedPlayerVisible(false);
     }
     UI.showView(viewId);
+    if (viewId !== 'search') UI.updateSearchChipCounts(null); // clear chip counts when leaving search
     if (viewId === 'home')    _loadHomeData();
     if (viewId === 'library') { _loadPlaylists(); _loadStarred(); }
     if (viewId === 'history') _loadHistory();

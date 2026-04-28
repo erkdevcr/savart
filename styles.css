@@ -1198,6 +1198,17 @@ img { display: block; }
   background: var(--accent-soft);
 }
 
+.chip-count {
+  display: none;
+  margin-left: 5px;
+  font-size: 11px;
+  opacity: 0.75;
+  font-weight: 400;
+}
+.chip-count:not(:empty) {
+  display: inline;
+}
+
 /* ── Library screen ──────────────────────────────────────── */
 /* ── Library 2-column layout ─────────────────────────────── */
 .lib-layout {
