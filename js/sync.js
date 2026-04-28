@@ -267,14 +267,14 @@ const Sync = (() => {
       case 'recents': {
         const validRecents = (data || []).filter(r => r && r.id);
         await DB.clearRecents();
-        for (const item of validRecents) await DB.addRecent(item);
+        if (validRecents.length) await DB.bulkPutRecents(validRecents);
         break;
       }
 
       case 'playcounts': {
-        // Apply remote counts; songs only on this device keep their local counts
+        // Apply remote counts using a single transaction (avoids IDB async-deadlock)
         const validCounts = (data || []).filter(r => r && r.id);
-        for (const item of validCounts) await DB.setMeta(item.id, item);
+        if (validCounts.length) await DB.bulkPutMeta(validCounts);
         break;
       }
 
@@ -335,8 +335,9 @@ const Sync = (() => {
   }
 
   async function _pushSettings() {
-    const s = await DB.getState('settings');
-    if (!s) return;
+    // Always write something so other devices can pick up settings on first sync.
+    // Fall back to an empty-but-valid object if the user hasn't changed anything yet.
+    const s = (await DB.getState('settings')) || {};
     await _writeFile(FILENAMES.settings, s);
     console.log('[Sync] Pushed settings');
   }
@@ -421,11 +422,17 @@ const Sync = (() => {
   async function init() {
     _ready = false;
 
+    // Track which merge steps failed so we can skip their push (prevents data-poisoning:
+    // a failed merge leaves local DB empty for that type — pushing that empty state to Drive
+    // would wipe the source device's data via LWW on its next poll).
+    const _failedTypes = new Set();
+
     // Helper: run a merge step, logging errors without aborting other steps
     async function _mergeStep(name, fn) {
       try {
         await fn();
       } catch (err) {
+        _failedTypes.add(name);
         console.warn(`[Sync] Merge step "${name}" failed (skipped):`, err.message || err);
       }
     }
@@ -490,8 +497,10 @@ const Sync = (() => {
         if (!validRemote.length) return;
         const local = await DB.getRecents(CONFIG.RECENTS_MAX);
         const { toAdd } = _mergeRecents(local, validRemote);
-        for (const item of toAdd) await DB.addRecent(item);
-        if (toAdd.length) console.log(`[Sync] Merged ${toAdd.length} remote recents`);
+        if (toAdd.length) {
+          await DB.bulkPutRecents(toAdd);
+          console.log(`[Sync] Merged ${toAdd.length} remote recents`);
+        }
       });
 
       // ── Merge play counts ─────────────────────────────────
@@ -501,8 +510,10 @@ const Sync = (() => {
         if (!validRemote.length) return;
         const local = await DB.getTopPlayed(10000);
         const { toUpsert } = _mergePlaycounts(local, validRemote);
-        for (const item of toUpsert) await DB.setMeta(item.id, item);
-        if (toUpsert.length) console.log(`[Sync] Merged ${toUpsert.length} remote playcounts`);
+        if (toUpsert.length) {
+          await DB.bulkPutMeta(toUpsert);
+          console.log(`[Sync] Merged ${toUpsert.length} remote playcounts`);
+        }
       });
 
       // ── Merge settings ────────────────────────────────────
@@ -516,13 +527,15 @@ const Sync = (() => {
         }
       });
 
-      // Push merged state back + update manifest
+      // Push merged state back + update manifest.
+      // Skip any type whose merge step failed — pushing empty data would overwrite
+      // the source device's records via LWW on its next poll (data-poisoning).
       const now = Date.now();
-      await Promise.allSettled(Object.values(_pushFns).map(fn => fn()));
-      // Stamp all types in manifest with now
-      const allTypes = Object.keys(FILENAMES);
-      for (const t of allTypes) _localTs[t] = now;
-      await _bumpManifest(allTypes);
+      const safeToPush = Object.keys(FILENAMES).filter(t => !_failedTypes.has(t));
+      await Promise.allSettled(safeToPush.map(t => _pushFns[t]()));
+      for (const t of safeToPush) _localTs[t] = now;
+      if (safeToPush.length) await _bumpManifest(safeToPush);
+      if (_failedTypes.size) console.warn('[Sync] Skipped push for failed types:', [..._failedTypes]);
 
       console.log('[Sync] Init complete ✓');
     } catch (err) {

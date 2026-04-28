@@ -332,6 +332,59 @@ const DB = (() => {
   }
 
   /**
+   * Bulk-write recents in a SINGLE IndexedDB transaction.
+   * All puts are queued synchronously before any await, so the transaction
+   * never auto-commits mid-batch (avoids the IDB async-deadlock issue).
+   * Used by Sync to apply remote data without per-item overhead.
+   * @param {Object[]} items
+   */
+  async function bulkPutRecents(items) {
+    if (!_db) return;
+    const valid = (items || []).filter(r => r && r.id).slice(0, CONFIG.RECENTS_MAX);
+    if (!valid.length) return;
+    await new Promise((resolve, reject) => {
+      const tx    = _db.transaction('recents', 'readwrite');
+      const store = tx.objectStore('recents');
+      tx.oncomplete = resolve;
+      tx.onerror    = () => reject(tx.error);
+      tx.onabort    = () => reject(tx.error);
+      // Fire ALL puts synchronously — no await between them → transaction stays open
+      for (const item of valid) {
+        store.put({ ...item, accessedAt: item.accessedAt ?? Date.now() });
+      }
+    });
+    await _trimRecents();
+  }
+
+  /**
+   * Bulk-write metadata rows in a SINGLE IndexedDB transaction.
+   * Used by Sync to apply remote playcounts without per-item overhead.
+   * Unlike setMeta, this does a direct put (no get+merge) so it's safe
+   * inside a single readwrite transaction opened without any prior await.
+   * @param {Object[]} items  — each must have an `id` field
+   */
+  async function bulkPutMeta(items) {
+    if (!_db) return;
+    const valid = (items || []).filter(r => r && r.id);
+    if (!valid.length) return;
+    await new Promise((resolve, reject) => {
+      const tx    = _db.transaction('metadata', 'readwrite');
+      const store = tx.objectStore('metadata');
+      tx.oncomplete = resolve;
+      tx.onerror    = () => reject(tx.error);
+      tx.onabort    = () => reject(tx.error);
+      for (const item of valid) {
+        // Strip null/undefined to avoid clobbering existing valid fields
+        const clean = Object.fromEntries(
+          Object.entries(item).filter(([, v]) => v !== undefined && v !== null)
+        );
+        // Provide defaults for required fields so the record is always complete
+        store.put({ playCount: 0, starred: false, ...clean, id: item.id });
+      }
+    });
+  }
+
+  /**
    * Get recent items, most recent first.
    * @param {number} limit
    * @returns {Promise<Object[]>}
@@ -563,6 +616,9 @@ const DB = (() => {
     deletePlaylist,
     addToPlaylist,
     removeFromPlaylist,
+    // Bulk writes (sync)
+    bulkPutRecents,
+    bulkPutMeta,
     // Recents management
     removeRecent,
     clearRecents,
