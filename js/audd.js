@@ -25,7 +25,7 @@ const Audd = (() => {
 
     const form = new FormData();
     form.append('api_token', CONFIG.AUDD_API_KEY);
-    form.append('audio',     blob, 'audio.mp3');
+    form.append('file',      blob, 'audio.mp3');
     form.append('return',    'apple_music');   // get artwork URL in response
 
     const res = await fetch(API_URL, { method: 'POST', body: form });
