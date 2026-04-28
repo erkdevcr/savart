@@ -2882,13 +2882,22 @@ img { display: block; }
     padding: 0 24px 32px;
   }
 
-  /* Grid: 2 equal columns, sections auto-place as cards */
+  /* Explicit 2-column grid with controlled placement.
+     Col 1: Playback + Library   Col 2: Storage + Appearance + Account */
   .settings-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 16px;
+    grid-template-rows: auto;
+    gap: 14px;
     align-items: start;
   }
+
+  /* Explicit column placement by section order */
+  .settings-section:nth-child(1) { grid-column: 1; } /* Playback  */
+  .settings-section:nth-child(2) { grid-column: 1; } /* Library   */
+  .settings-section:nth-child(3) { grid-column: 2; } /* Storage   */
+  .settings-section:nth-child(4) { grid-column: 2; } /* Appearance */
+  .settings-section:nth-child(5) { grid-column: 2; } /* Account   */
 
   .settings-section {
     padding: 0;
@@ -2898,9 +2907,9 @@ img { display: block; }
     margin-bottom: 0;
   }
 
-  /* Section title = card header with bottom separator */
+  /* Section title = card header */
   .settings-section-title {
-    padding: 10px 16px;
+    padding: 11px 18px;
     border-bottom: 1px solid var(--bg-hover);
     margin-bottom: 0;
     font-size: 10px;
@@ -2908,10 +2917,15 @@ img { display: block; }
 
   /* Rows get horizontal padding inside card */
   .settings-section .settings-row {
-    padding: 12px 16px;
+    padding: 13px 18px;
   }
 
-  /* Category label redundant in card view — hide it */
+  /* Complex rows: inner slider/pills don't need extra horizontal indent */
+  .settings-section .settings-row-complex {
+    gap: 8px;
+  }
+
+  /* Category label redundant in card view — hidden */
   .settings-row-cat { display: none; }
 }
 
