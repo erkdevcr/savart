@@ -746,7 +746,7 @@ const UI = (() => {
 
     el.querySelector('.btn-more')?.addEventListener('click', (e) => {
       e.stopPropagation();
-      showContextMenu(e, isFolder ? 'folder' : 'song', item);
+      showContextMenu(e, 'top_played', item);
     });
 
     return el;
@@ -1073,6 +1073,29 @@ const UI = (() => {
       });
     }
 
+    if (type === 'top_played') {
+      const isFolder = item.isFolder || item.type === 'folder';
+      _addCtxItem(menu, iconPlay(14), t('ctx_play'), () => {
+        if (isFolder) { App.onFolderPlay(item); }
+        else { if (typeof Player !== 'undefined') Player.setQueue([item], 0); }
+        hideContextMenu();
+      });
+      _addCtxDivider(menu);
+      _addCtxItem(menu, _iconNext,  t('play_next'),  () => { isFolder ? App.onFolderQueue(item,'next') : Player.insertNext(item);     hideContextMenu(); });
+      _addCtxItem(menu, _iconQueue, t('play_after'), () => { isFolder ? App.onFolderQueue(item,'end')  : Player.appendToQueue(item);  hideContextMenu(); });
+      _addCtxDivider(menu);
+      _addCtxItem(menu, _iconFolder,
+        isFolder ? t('ctx_go_to_folder') : t('ctx_go_to_album'),
+        () => { App.onGoToFolder(item); hideContextMenu(); }
+      );
+      _addCtxDivider(menu);
+      _addCtxItem(menu, iconStar(14), isFolder ? t('ctx_add_fav_folder') : t('add_fav'),
+        () => { App.onToggleStar(item); hideContextMenu(); }
+      );
+      _addCtxItem(menu, iconPlus(14), t('add_to_pl'), (e) => { hideContextMenu(); App.onShowPlaylistPicker(e, item); });
+      _addCtxItem(menu, iconPin(14),  t('ctx_pin_to_home'), () => { App.onTogglePin(item); hideContextMenu(); });
+    }
+
     if (type === 'playlist') {
       _addCtxItem(menu, iconPlay(14),  t('ctx_play'),     () => { App.onPlaylistPlay?.(item);        hideContextMenu(); });
       _addCtxDivider(menu);
@@ -1117,6 +1140,7 @@ const UI = (() => {
     const mh = type === 'home_folder' ? 260
              : type === 'folder'    ? 220
              : type === 'home_song' ? 310
+             : type === 'top_played'? 300
              : type === 'playlist'  ? 230
              : type === 'pinned'    ? 175
              : 200;
