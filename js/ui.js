@@ -1035,6 +1035,8 @@ const UI = (() => {
       _addCtxItem(menu, _iconNext,     t('play_next'),   () => { Player.insertNext(item);        hideContextMenu(); });
       _addCtxItem(menu, _iconQueue,    t('play_after'),  () => { Player.appendToQueue(item);     hideContextMenu(); });
       _addCtxDivider(menu);
+      _addCtxItem(menu, _iconFolder,   t('ctx_go_to_album'), () => { App.onGoToFolder(item);    hideContextMenu(); });
+      _addCtxDivider(menu);
       _addCtxItem(menu, iconStar(14),  t('add_fav'),     () => { App.onToggleStar(item);         hideContextMenu(); });
       _addCtxItem(menu, iconPlus(14),  t('add_to_pl'),  (e) => { hideContextMenu(); App.onShowPlaylistPicker(e, item); });
       if (item._playlistId) {
@@ -1048,6 +1050,8 @@ const UI = (() => {
       _addCtxDivider(menu);
       _addCtxItem(menu, _iconNext,      t('play_next'),          () => { App.onFolderQueue(item, 'next');      hideContextMenu(); });
       _addCtxItem(menu, _iconQueue,     t('play_after'),         () => { App.onFolderQueue(item, 'end');       hideContextMenu(); });
+      _addCtxDivider(menu);
+      _addCtxItem(menu, _iconFolder,    t('ctx_go_to_folder'),   () => { App.onGoToFolder(item);              hideContextMenu(); });
       _addCtxDivider(menu);
       _addCtxItem(menu, iconStar(14),   t('ctx_add_fav_folder'), () => { App.onToggleStar(item);              hideContextMenu(); });
       _addCtxItem(menu, iconPin(14),    t('ctx_pin_to_home'),    () => { App.onTogglePin(item);               hideContextMenu(); });
@@ -1138,11 +1142,12 @@ const UI = (() => {
     const margin = 8;
     const mw = 200;
     const mh = type === 'home_folder' ? 260
-             : type === 'folder'    ? 220
+             : type === 'folder'    ? 270
              : type === 'home_song' ? 310
              : type === 'top_played'? 300
              : type === 'playlist'  ? 230
              : type === 'pinned'    ? 175
+             : type === 'song'      ? 260
              : 200;
     let x = e.clientX || (e.touches?.[0]?.clientX || 0);
     let y = e.clientY || (e.touches?.[0]?.clientY || 0);
