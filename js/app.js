@@ -845,6 +845,23 @@ const App = (() => {
    * @param {function} hasCoverFn — (id) → bool: true if cover already rendered
    * @param {function} updateFn   — (id, url) → void: injects cover into DOM
    */
+  /**
+   * Drive cover fallback — for items without a locally-resolved cover art.
+   * Used by recents, top-played, pinned, favorites and playlist detail.
+   *
+   * Pipeline per item (same as what Browse / playlist sidebar do):
+   *   1. Download first 1 MB of the audio file (Drive.downloadFileHead) →
+   *      parse ID3 tags (Meta.parse) → extract embedded album art.
+   *      Result is persisted as coverBlob so future sessions are instant.
+   *   2. If the ID3 parse yields nothing, fall back to Drive file metadata
+   *      thumbnailLink (rarely set for audio, but free to check).
+   *
+   * Runs 2 workers in parallel (partial downloads are heavier than API calls).
+   *
+   * @param {Object[]} items      — items to check (must have .id)
+   * @param {function} hasCoverFn — (id) → bool: true if cover already rendered
+   * @param {function} updateFn   — (id, url) → void: injects cover into DOM
+   */
   async function _driveThumbFallback(items, hasCoverFn, updateFn) {
     if (!Auth.isAuthenticated() || !items.length) return;
     if (typeof Drive === 'undefined') return;
@@ -857,19 +874,33 @@ const App = (() => {
       while (queue.length > 0) {
         const item = queue.shift();
         try {
-          const info = await Drive.getFileInfo(item.id);
-          // Drive.getFileInfo normalizes thumbnailLink → thumbnailUrl
-          const url = info?.thumbnailUrl || null;
+          // ── Pass A: download ID3 header → parse embedded cover art ──────
+          if (typeof Meta !== 'undefined') {
+            const headBlob = await Drive.downloadFileHead(item.id).catch(() => null);
+            if (headBlob) {
+              const meta = await Meta.parse(item.id, headBlob).catch(() => null);
+              if (meta?.coverUrl) {
+                updateFn(item.id, meta.coverUrl);
+                // Persist coverBlob so future sessions skip this download
+                if (meta.coverBlob) {
+                  DB.setMeta(item.id, { coverBlob: meta.coverBlob }).catch(() => {});
+                }
+                continue; // got cover — skip Pass B
+              }
+            }
+          }
+          // ── Pass B: Drive file metadata thumbnailLink (rarely set for audio) ──
+          const info = await Drive.getFileInfo(item.id).catch(() => null);
+          const url  = info?.thumbnailUrl || null;
           if (url) {
             updateFn(item.id, url);
-            // Persist so future sessions skip this API call
             DB.setMeta(item.id, { thumbnailUrl: url }).catch(() => {});
           }
-        } catch (_) { /* non-fatal — file may be unavailable or unsynced yet */ }
+        } catch (_) { /* non-fatal */ }
       }
     }
-    // 3 parallel workers to keep Drive API latency low
-    await Promise.allSettled([worker(), worker(), worker()]);
+    // 2 parallel workers — partial downloads are heavier than metadata calls
+    await Promise.allSettled([worker(), worker()]);
   }
 
   /**
