@@ -143,6 +143,25 @@ const Drive = (() => {
   }
 
   /**
+   * Given a normalized (accent-free) string, return all single-vowel-accented variants.
+   * e.g. "reggaeton" → ["réggaeton", "reggáeton", "reggaéton", "reggaetón"]
+   * This lets us find "reggaetón" files when the user types "reggaeton", since
+   * Drive's `name contains` is accent-sensitive.
+   * We limit to single-substitution variants to keep the query count manageable.
+   */
+  function _accentVariants(str) {
+    const accentMap = { a: 'á', e: 'é', i: 'í', o: 'ó', u: 'ú', n: 'ñ' };
+    const variants = new Set();
+    for (let i = 0; i < str.length; i++) {
+      const accented = accentMap[str[i]];
+      if (accented) {
+        variants.add(str.slice(0, i) + accented + str.slice(i + 1));
+      }
+    }
+    return variants;
+  }
+
+  /**
    * Execute a single Drive files.list query for `name contains safeTerm`.
    * Returns { folders, files }.
    */
@@ -173,13 +192,19 @@ const Drive = (() => {
     // Build deduplicated set of queries to fire in parallel:
     //   1. Original term (Drive is case-insensitive but accent-sensitive)
     //   2. Normalized term (strips accents → finds "música" when typing "musica")
-    //   3. Individual words ≥ 3 chars (catches typos: at least one word will match)
+    //   3. Single-vowel accent variants of the normalized term (finds "reggaetón"
+    //      when typing "reggaeton" — Drive is accent-sensitive so we must be explicit)
+    //   4. Individual words ≥ 3 chars (catches partial matches)
     const querySet = new Set();
     const safe = s => s.replace(/'/g, "\\'");
     querySet.add(safe(term.trim()));
     querySet.add(safe(normalized));
+    // Add single-accent variants of each word (covers accent-in-filename, no-accent-in-query)
     for (const w of normalized.split(/\s+/)) {
-      if (w.length >= 3) querySet.add(safe(w));
+      if (w.length >= 3) {
+        querySet.add(safe(w));
+        for (const v of _accentVariants(w)) querySet.add(safe(v));
+      }
     }
 
     // Fire all queries in parallel; ignore failures (partial results better than none)
