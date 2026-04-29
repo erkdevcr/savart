@@ -42,6 +42,7 @@ const App = (() => {
   let _radioArtist     = null;   // artist name being radiated
   let _radioInFlight   = false;  // prevents concurrent Drive searches
   let _radioQueuedIds  = new Set(); // IDs ever added via radio (cross-refill dedup)
+  let _radioTriggered  = false;  // true after the initial Drive search fires once
 
   /** Reset all radio state. Call whenever the user starts a new multi-song queue. */
   function _resetRadio() {
@@ -49,6 +50,7 @@ const App = (() => {
     _radioArtist     = null;
     _radioInFlight   = false;
     _radioQueuedIds  = new Set();
+    _radioTriggered  = false;
   }
 
   function _startLoadingSpinner() {
@@ -709,11 +711,12 @@ const App = (() => {
         }
       }
 
-      // Radio mode: now that we have the most reliable artist (post-AudD),
-      // search Drive in background and expand the queue with more songs.
-      if (_radioModeActive && meta.artist) {
-        // Set _radioArtist eagerly so the _onQueueChange refill can fire
-        // even if _triggerRadio is skipped below (e.g. current track changed).
+      // Radio mode: trigger the initial Drive search once, after the first song's
+      // recognition completes (ID3 → DB → AudD). Subsequent songs in the queue
+      // must NOT re-trigger a search — the _onQueueChange refill (remaining ≤ 2)
+      // is the correct mechanism for keeping the queue topped up.
+      if (_radioModeActive && !_radioTriggered && meta.artist) {
+        _radioTriggered = true;
         if (!_radioArtist) _radioArtist = meta.artist;
         _triggerRadio(meta.artist, item.id).catch(() => {});
       }
