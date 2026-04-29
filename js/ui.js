@@ -49,6 +49,7 @@ const UI = (() => {
       empty_top_played:      'Tus canciones más reproducidas aparecerán aquí.',
       empty_history:         'Las canciones que escuches aparecerán aquí.',
       home_cta_browse:       'Examinar tu Drive',
+      show_all:              'Ver todo',
       // ── General labels ─────────────────────────────────────
       folders:   'Carpetas',
       songs:     'Canciones',
@@ -198,6 +199,7 @@ const UI = (() => {
       empty_top_played:      'Your most played songs will appear here.',
       empty_history:         'Songs you listen to will appear here.',
       home_cta_browse:       'Browse your Drive',
+      show_all:              'Show all',
       // ── General labels ─────────────────────────────────────
       folders:   'Folders',
       songs:     'Songs',
@@ -615,7 +617,16 @@ const UI = (() => {
 
     const headerEl = document.createElement('div');
     headerEl.className = 'home-section-header';
-    headerEl.innerHTML = `<span class="home-section-title">${title}</span>`;
+    const showAllTarget = type === 'recents' ? 'history' : type === 'playlists' ? 'library' : null;
+    headerEl.innerHTML = `
+      <span class="home-section-title">${title}</span>
+      ${showAllTarget ? `<button class="home-section-showall" data-target="${showAllTarget}">${t('show_all')}</button>` : ''}
+    `.trim();
+    if (showAllTarget) {
+      headerEl.querySelector('.home-section-showall').addEventListener('click', () => {
+        if (typeof App !== 'undefined') App.onNavClick?.(showAllTarget);
+      });
+    }
     section.appendChild(headerEl);
 
     // Empty state per section
