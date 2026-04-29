@@ -593,62 +593,89 @@ const App = (() => {
     try {
       const meta = await Meta.parse(item.id, blob);
 
-      // Cache blob.size so _enrichTrack can always provide it (even after _onPlayPause re-renders)
+      // Cache blob.size so _enrichTrack can always provide it
       if (blob.size > 0) {
         _blobSizeCache.set(item.id, blob.size);
         item = { ...item, size: blob.size };
       }
 
-      // Persist coverBlob to DB immediately so playlists / favorites can show it
-      // across sessions without needing to re-parse the file.
+      // Persist embedded cover blob immediately — playlists/favorites can use it
+      // across sessions without re-parsing the file.
       if (meta?.coverBlob) {
         DB.setMeta(item.id, { coverBlob: meta.coverBlob }).catch(() => {});
       }
 
-      // Check DB for any data persisted from a prior session.
-      // Runs even when meta.coverUrl is already set (from ID3) because the DB may
-      // also have artist/title/album from a previous AudD recognition — needed for
-      // radio mode and lyrics regardless of cover status.
-      // Drive thumbnailLinks (googleusercontent.com) are NOT used as covers here —
-      // they are generic Drive thumbnails that would block Last.fm/AudD unnecessarily.
-      if (!meta.coverUrl || !meta.artist || !meta.title) {
-        const dbMeta = await DB.getMeta(item.id).catch(() => null);
-        if (dbMeta) {
-          if (!meta.coverUrl) {
-            const persistedUrl = dbMeta.coverUrl || dbMeta.thumbnailUrl;
-            const isExternalCover = persistedUrl
-              && !persistedUrl.startsWith('blob:')
-              && !persistedUrl.includes('googleusercontent.com')
-              && !persistedUrl.includes('googleapis.com');
-            if (isExternalCover) meta.coverUrl = persistedUrl;
-          }
-          if (!meta.artist && dbMeta.artist)      meta.artist = dbMeta.artist;
-          if (!meta.title  && dbMeta.displayName) meta.title  = dbMeta.displayName;
-          if (!meta.album  && dbMeta.album)       meta.album  = dbMeta.album;
+      /* ── PASS 1 — IDENTIFICATION ──────────────────────────────
+         Goal: assemble the best possible artist / title / album
+         from every local source. AudD runs here if anything is
+         still missing — its output feeds Pass 2 (Last.fm / Lyrics).
+         Cover is NOT the goal here; only identity metadata.
+      ─────────────────────────────────────────────────────────── */
+
+      // 1a. DB — data persisted from a previous session
+      // (AudD artist/title/album stored earlier, or cached thumbnailUrl)
+      const dbMeta = await DB.getMeta(item.id).catch(() => null);
+      if (dbMeta) {
+        if (!meta.artist && dbMeta.artist)      meta.artist = dbMeta.artist;
+        if (!meta.title  && dbMeta.displayName) meta.title  = dbMeta.displayName;
+        if (!meta.album  && dbMeta.album)       meta.album  = dbMeta.album;
+        // Restore a previously-found external cover URL (not a Drive thumbnail)
+        if (!meta.coverUrl) {
+          const stored = dbMeta.coverUrl || dbMeta.thumbnailUrl;
+          const isExternal = stored
+            && !stored.startsWith('blob:')
+            && !stored.includes('googleusercontent.com')
+            && !stored.includes('googleapis.com');
+          if (isExternal) meta.coverUrl = stored;
         }
       }
 
-      // Check Drive appProperties (synced from another device via Last.fm / AudD.io).
-      // Artist/title/album are read unconditionally — a song can have an embedded cover
-      // from ID3 but still lack text tags, and appProperties may have them.
+      // 1b. Drive appProperties — synced from another device
       if (item.appProperties) {
-        if (!meta.coverUrl && item.appProperties.s_cover) meta.coverUrl = item.appProperties.s_cover;
-        if (!meta.artist   && item.appProperties.s_artist) meta.artist  = item.appProperties.s_artist;
-        if (!meta.title    && item.appProperties.s_title)  meta.title   = item.appProperties.s_title;
-        if (!meta.album    && item.appProperties.s_album)  meta.album   = item.appProperties.s_album;
+        if (!meta.coverUrl && item.appProperties.s_cover)  meta.coverUrl = item.appProperties.s_cover;
+        if (!meta.artist   && item.appProperties.s_artist) meta.artist   = item.appProperties.s_artist;
+        if (!meta.title    && item.appProperties.s_title)  meta.title    = item.appProperties.s_title;
+        if (!meta.album    && item.appProperties.s_album)  meta.album    = item.appProperties.s_album;
       }
 
-      // No song-specific cover found yet → try the folder's cover image as a fallback.
-      // This is intentionally placed AFTER DB/appProperties so that a previously
-      // recognized cover (AudD / Last.fm, stored per-song) always takes priority
-      // over a generic folder image that is shared by all songs in the folder.
-      if (!meta.coverUrl) {
-        const folderId = item.parents?.[0];
-        if (folderId) meta.coverUrl = await _getFolderCover(folderId);
+      // 1c. AudD fingerprinting — runs when any key identity field is missing
+      //     (artist, title, or cover). Being here means its results are available
+      //     to Last.fm and Lyrics in Pass 2 below.
+      const _needsAudd = !meta.coverUrl || !meta.artist || !meta.title;
+      if (_needsAudd && typeof Audd !== 'undefined') {
+        try {
+          const sample = blob.slice(0, 1024 * 1024); // first 1MB is enough for fingerprinting
+          const result = await Audd.identify(sample);
+          if (result) {
+            if (!meta.coverUrl && result.coverUrl) meta.coverUrl = result.coverUrl;
+            if (!meta.title    && result.title)    meta.title    = result.title;
+            if (!meta.artist   && result.artist)   meta.artist   = result.artist;
+            if (!meta.album    && result.album)    meta.album    = result.album;
+            // Persist everything AudD found
+            const update = { auddTried: true };
+            if (result.title)    update.displayName  = result.title;
+            if (result.artist)   update.artist       = result.artist;
+            if (result.album)    update.album        = result.album;
+            if (result.coverUrl) update.thumbnailUrl = result.coverUrl;
+            DB.setMeta(item.id, update).catch(() => {});
+            const apUpdate = {};
+            if (result.coverUrl) apUpdate.s_cover  = result.coverUrl;
+            if (result.title)    apUpdate.s_title  = result.title;
+            if (result.artist)   apUpdate.s_artist = result.artist;
+            if (result.album)    apUpdate.s_album  = result.album;
+            if (Object.keys(apUpdate).length > 0) Drive.setAppProperties(item.id, apUpdate).catch(() => {});
+          }
+        } catch (_) { /* network / API error — non-fatal */ }
       }
 
-      // Still no cover → try Last.fm
-      // Pass A: artist + album (album.getInfo — highest quality, most reliable)
+      /* ── PASS 2 — ENRICHMENT ──────────────────────────────────
+         Goal: find cover art using the best metadata now available
+         (which may include artist/album/title found by AudD above).
+         Last.fm runs with artist+album or artist+title.
+         Folder image is the last resort.
+      ─────────────────────────────────────────────────────────── */
+
+      // 2a. Last.fm by album (album.getInfo — most reliable when album is known)
       if (!meta.coverUrl && typeof Lastfm !== 'undefined' && meta.artist && meta.album) {
         const lfmUrl = await Lastfm.fetchCover(meta.artist, meta.album);
         if (lfmUrl) {
@@ -657,7 +684,8 @@ const App = (() => {
           Drive.setAppProperties(item.id, { s_cover: lfmUrl }).catch(() => {});
         }
       }
-      // Pass B: artist + title only (track.getInfo — fallback when no album tag)
+
+      // 2b. Last.fm by track (track.getInfo — works with artist+title alone)
       if (!meta.coverUrl && typeof Lastfm !== 'undefined' && meta.artist && (meta.title || item.displayName)) {
         const trackTitle = meta.title || item.displayName;
         const lfmUrl = await Lastfm.fetchCoverByTrack(meta.artist, trackTitle);
@@ -668,71 +696,30 @@ const App = (() => {
         }
       }
 
-      // AudD.io audio fingerprinting — runs in two cases:
-      //  1. No cover found yet (primary path — identifies song + fills art).
-      //  2. Radio mode is active, hasn't triggered yet, and artist is still unknown —
-      //     even if a cover exists we need the artist to drive the radio search.
-      //     Without this, songs with embedded ID3 covers but no artist tag would
-      //     silently skip AudD and leave radio mode permanently stuck.
-      const _needsAudd = !meta.coverUrl ||
-        (_radioModeActive && !_radioTriggered && !meta.artist);
-      if (_needsAudd && typeof Audd !== 'undefined') {
-        if (_radioModeActive && !_radioTriggered && !meta.artist) {
-          console.log('[App] Radio: no artist found — calling AudD to identify song for radio search.');
-        }
-        try {
-          // Slice to first 1MB — enough for fingerprinting, avoids uploading full file
-          const sample = blob.slice(0, 1024 * 1024);
-          const result = await Audd.identify(sample);
-          if (result) {
-            if (result.coverUrl) meta.coverUrl = result.coverUrl;
-            // Fill in missing tag fields so the player UI shows them
-            if (!meta.title  && result.title)  meta.title  = result.title;
-            if (!meta.artist && result.artist) meta.artist = result.artist;
-            if (!meta.album  && result.album)  meta.album  = result.album;
-            // Persist locally
-            const update = { auddTried: true };
-            if (result.title)    update.displayName = result.title;
-            if (result.artist)   update.artist      = result.artist;
-            if (result.album)    update.album       = result.album;
-            if (result.coverUrl) update.thumbnailUrl = result.coverUrl;
-            DB.setMeta(item.id, update).catch(() => {});
-            // Sync to Drive appProperties for cross-device use
-            const apUpdate = {};
-            if (result.coverUrl) apUpdate.s_cover  = result.coverUrl;
-            if (result.title)    apUpdate.s_title  = result.title;
-            if (result.artist)   apUpdate.s_artist = result.artist;
-            if (result.album)    apUpdate.s_album  = result.album;
-            if (Object.keys(apUpdate).length > 0) Drive.setAppProperties(item.id, apUpdate).catch(() => {});
-            console.log(`[Audd] ✓ ${result.artist} — ${result.title}`);
-          }
-        } catch (_) {
-          // Network / API error — non-fatal, will retry next play
-        }
+      // 2c. Folder cover — generic fallback shared by all songs in the folder
+      if (!meta.coverUrl) {
+        const folderId = item.parents?.[0];
+        if (folderId) meta.coverUrl = await _getFolderCover(folderId);
       }
 
-      // Write all enriched fields back into the Meta in-memory cache.
-      // Meta.parse() only stores ID3 data; AudD/Last.fm/DB enrichment is added
-      // to the local `meta` object afterwards but never reaches the cache.
-      // patchCached() fills in any truthy fields not already present.
-      if (typeof Meta !== 'undefined') {
-        Meta.patchCached(item.id, {
-          coverUrl: meta.coverUrl  || undefined,
-          artist:   meta.artist    || undefined,
-          title:    meta.title     || undefined,
-          album:    meta.album     || undefined,
-        });
-      }
+      /* ── FINALIZE ─────────────────────────────────────────────
+         Write enriched metadata to the in-memory Meta cache,
+         apply to UI, prefetch lyrics, and trigger radio if needed.
+      ─────────────────────────────────────────────────────────── */
+
+      Meta.patchCached(item.id, {
+        coverUrl: meta.coverUrl || undefined,
+        artist:   meta.artist   || undefined,
+        title:    meta.title    || undefined,
+        album:    meta.album    || undefined,
+      });
 
       _applyMeta(item, meta);
 
-      // All recognition passes done — prefetch lyrics in background.
-      // artist + title are now finalized (ID3 → Last.fm → AudD).
-      // Result goes to Lyrics cache so the "Letra" button opens instantly.
+      // Prefetch lyrics now that artist + title are fully resolved
       if (typeof Lyrics !== 'undefined' && meta.artist && (meta.title || item.displayName)) {
         const lyricsTitle = meta.title || item.displayName;
         Lyrics.fetch(meta.artist, lyricsTitle).catch(() => {});
-        // If lyrics view is currently open for this track, render immediately
         const expanded = document.getElementById('player-expanded');
         if (expanded?.classList.contains('showing-lyrics') &&
             Player.getCurrentTrack()?.id === item.id) {
@@ -740,10 +727,7 @@ const App = (() => {
         }
       }
 
-      // Radio mode: trigger the initial Drive search once, after the first song's
-      // recognition completes (ID3 → DB → AudD). Subsequent songs in the queue
-      // must NOT re-trigger a search — the _onQueueChange refill (remaining ≤ 2)
-      // is the correct mechanism for keeping the queue topped up.
+      // Radio mode: trigger initial Drive search once, after full identification
       if (_radioModeActive && !_radioTriggered && meta.artist) {
         _radioTriggered = true;
         if (!_radioArtist) _radioArtist = meta.artist;
