@@ -2089,13 +2089,17 @@ const App = (() => {
 
   /**
    * Background cover resolver for the queue panel.
-   * Runs after renderQueuePanel — for each item without a cover it tries
-   * Meta cache → DB coverBlob, then patches the DOM in-place.
-   * No network requests: queue items will get their covers as they play.
+   * Pass 1 (fast, no network): Meta cache → DB coverBlob → external URL → Drive thumb.
+   * Pass 2 (network, limited): ID3 head-download via _driveThumbFallback for songs
+   *   still without art after Pass 1 (e.g. new radio-added songs never played before).
+   *   Limited to 10 items so we don't hammer Drive on long queues.
    * @param {DriveItem[]} queue
    */
   async function _prefetchQueueCovers(queue) {
     if (typeof Meta === 'undefined') return;
+
+    const needsNetwork = [];
+
     for (const item of queue) {
       try {
         // 1. In-memory Meta cache — songs played this session (instant)
@@ -2123,8 +2127,24 @@ const App = (() => {
         const driveThumb = item.thumbnailUrl || item.thumbnailLink;
         if (driveThumb && !driveThumb.startsWith('blob:')) {
           _updateQueueItemCover(item.id, driveThumb);
+          continue;
         }
+
+        // Still no cover — mark for network resolution
+        needsNetwork.push(item);
       } catch (_) { /* non-fatal */ }
+    }
+
+    // Pass 2: ID3 head-download for songs still without cover (new radio songs, etc.)
+    if (needsNetwork.length > 0) {
+      await _driveThumbFallback(
+        needsNetwork.slice(0, 10),
+        id => {
+          const el = document.querySelector(`.queue-item[data-id="${CSS.escape(id)}"] .queue-item-thumb`);
+          return !!(el && el.querySelector('img'));
+        },
+        _updateQueueItemCover
+      ).catch(() => {});
     }
   }
 
