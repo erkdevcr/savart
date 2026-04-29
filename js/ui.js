@@ -126,9 +126,13 @@ const UI = (() => {
       settings_account:     'Cuenta',
       settings_drive_linked:'Google Drive vinculado',
       // ── Player actions ─────────────────────────────────────
-      player_queue:  'Cola',
-      player_speed:  'Velocidad',
-      player_timer:  'Temporizador',
+      player_queue:       'Cola',
+      player_speed:       'Velocidad',
+      player_timer:       'Temporizador',
+      player_lyrics:      'LETRA',
+      player_show_album:  'MOSTRAR ÁLBUM',
+      lyrics_loading:     'Buscando letra…',
+      lyrics_not_found:   'Letra no encontrada',
       // ── Playlist picker ────────────────────────────────────
       pl_picker_search: 'Busca una playlist',
       pl_picker_name:   'Nombre de la playlist',
@@ -270,9 +274,13 @@ const UI = (() => {
       settings_account:     'Account',
       settings_drive_linked:'Google Drive linked',
       // ── Player actions ─────────────────────────────────────
-      player_queue:  'Queue',
-      player_speed:  'Speed',
-      player_timer:  'Timer',
+      player_queue:       'Queue',
+      player_speed:       'Speed',
+      player_timer:       'Timer',
+      player_lyrics:      'LYRIC',
+      player_show_album:  'SHOW ALBUM',
+      lyrics_loading:     'Fetching lyrics…',
+      lyrics_not_found:   'Lyrics not found',
       // ── Playlist picker ────────────────────────────────────
       pl_picker_search: 'Search a playlist',
       pl_picker_name:   'Playlist name',
@@ -1571,6 +1579,10 @@ const UI = (() => {
     if (pexpSpeedSpan) pexpSpeedSpan.textContent = t('player_speed');
     const pexpTimerSpan = document.querySelector('#btn-pexp-timer span');
     if (pexpTimerSpan) pexpTimerSpan.textContent = t('player_timer');
+    const pexpLyricsSpan = document.querySelector('#btn-pexp-lyrics span');
+    if (pexpLyricsSpan) pexpLyricsSpan.textContent = t('player_lyrics');
+    const pexpShowAlbumSpan = document.querySelector('#btn-pexp-show-album span');
+    if (pexpShowAlbumSpan) pexpShowAlbumSpan.textContent = t('player_show_album');
 
     // Mini-player queue button (desktop label)
     const miniQueueLabel = document.querySelector('#btn-mini-queue span');
@@ -1655,7 +1667,10 @@ const UI = (() => {
    * @param {boolean} open
    */
   function showQueuePanel(open) {
-    document.getElementById('player-expanded')?.classList.toggle('showing-queue', open);
+    const el = document.getElementById('player-expanded');
+    if (!el) return;
+    el.classList.toggle('showing-queue', open);
+    if (open) el.classList.remove('showing-lyrics');  // mutual exclusion
   }
 
   function isQueuePanelVisible() {

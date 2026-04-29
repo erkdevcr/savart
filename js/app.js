@@ -540,6 +540,20 @@ const App = (() => {
       }
 
       _applyMeta(item, meta);
+
+      // All recognition passes done — prefetch lyrics in background.
+      // artist + title are now finalized (ID3 → Last.fm → AudD).
+      // Result goes to Lyrics cache so the "Letra" button opens instantly.
+      if (typeof Lyrics !== 'undefined' && meta.artist && (meta.title || item.displayName)) {
+        const lyricsTitle = meta.title || item.displayName;
+        Lyrics.fetch(meta.artist, lyricsTitle).catch(() => {});
+        // If lyrics view is currently open for this track, render immediately
+        const expanded = document.getElementById('player-expanded');
+        if (expanded?.classList.contains('showing-lyrics') &&
+            Player.getCurrentTrack()?.id === item.id) {
+          _loadLyricsForCurrentTrack();
+        }
+      }
     } catch (err) {
       console.warn('[App] Meta parse error:', err);
     }
@@ -2139,6 +2153,77 @@ const App = (() => {
     UI.setExpandedPlayerVisible(false);
   }
 
+  /* ── Lyrics helpers ─────────────────────────────────────────
+   * Opens the lyrics panel, fetches/shows lyrics for the current
+   * track. Lyrics are prefetched after all recognition passes, so
+   * most of the time the result is already in cache.
+   */
+  function _openLyricsView() {
+    const expanded = document.getElementById('player-expanded');
+    if (!expanded) return;
+    expanded.classList.remove('showing-queue');
+    expanded.classList.add('showing-lyrics');
+    _loadLyricsForCurrentTrack();
+  }
+
+  function _closeLyricsView() {
+    const expanded = document.getElementById('player-expanded');
+    if (expanded) expanded.classList.remove('showing-lyrics');
+  }
+
+  async function _loadLyricsForCurrentTrack() {
+    const lyricsContent = document.getElementById('lyrics-content');
+    if (!lyricsContent) return;
+
+    const track = Player.getCurrentTrack();
+    if (!track) {
+      lyricsContent.innerHTML = `<div class="lyrics-status">${UI.t('lyrics_not_found')}</div>`;
+      return;
+    }
+
+    // Resolve artist + title from in-memory meta cache, then DB
+    const inMem  = (typeof Meta !== 'undefined') ? Meta.getCached(track.id) : null;
+    const dbMeta = await DB.getMeta(track.id).catch(() => null);
+    const artist = inMem?.artist || dbMeta?.artist || '';
+    const title  = inMem?.title  || dbMeta?.displayName || track.displayName || track.name || '';
+
+    if (!artist || !title) {
+      lyricsContent.innerHTML = `<div class="lyrics-status">${UI.t('lyrics_not_found')}</div>`;
+      return;
+    }
+
+    if (typeof Lyrics === 'undefined') {
+      lyricsContent.innerHTML = `<div class="lyrics-status">${UI.t('lyrics_not_found')}</div>`;
+      return;
+    }
+
+    // Check if already cached (prefetch may have completed)
+    const cached = Lyrics.getCached(artist, title);
+    if (cached !== undefined) {
+      _renderLyricsContent(lyricsContent, cached, track.id);
+      return;
+    }
+
+    // Show loading state, then fetch
+    lyricsContent.innerHTML = `<div class="lyrics-status">${UI.t('lyrics_loading')}</div>`;
+    const lyrics = await Lyrics.fetch(artist, title).catch(() => null);
+
+    // Guard: track may have changed while fetching
+    if (Player.getCurrentTrack()?.id !== track.id) return;
+    _renderLyricsContent(lyricsContent, lyrics, track.id);
+  }
+
+  function _renderLyricsContent(container, lyrics) {
+    if (!lyrics) {
+      container.innerHTML = `<div class="lyrics-status">${UI.t('lyrics_not_found')}</div>`;
+      return;
+    }
+    container.innerHTML = '';
+    const div = document.createElement('div');
+    div.textContent = lyrics;
+    container.appendChild(div);
+  }
+
   /**
    * Navigate Browse to the folder containing the currently playing track.
    */
@@ -2807,6 +2892,10 @@ const App = (() => {
     document.getElementById('btn-queue-back')?.addEventListener('click', () => {
       UI.showQueuePanel(false);
     });
+
+    // Lyrics panel: open/close
+    document.getElementById('btn-pexp-lyrics')?.addEventListener('click', _openLyricsView);
+    document.getElementById('btn-lyrics-back')?.addEventListener('click', _closeLyricsView);
 
     // Mini-player desktop: Cola button → open queue panel
     document.getElementById('btn-mini-queue')?.addEventListener('click', (e) => {

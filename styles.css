@@ -1902,6 +1902,48 @@ img { display: block; }
   overflow: hidden;
 }
 
+/* ── Lyrics view ─────────────────────────────────────────── */
+.pexp-lyrics-view {
+  display: none;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+#player-expanded.showing-lyrics .pexp-now-playing-view { display: none; }
+#player-expanded.showing-lyrics .pexp-lyrics-view       { display: flex; }
+
+.lyrics-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--bg-hover);
+  flex-shrink: 0;
+}
+
+.lyrics-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 22px 48px;
+  font-size: 14px;
+  line-height: 1.9;
+  color: var(--text-primary);
+  white-space: pre-line;
+  overscroll-behavior: contain;
+}
+
+.lyrics-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+/* ── Queue view ─────────────────────────────────────────── */
 .pexp-queue-view {
   display: none;
   flex-direction: column;
