@@ -1413,7 +1413,7 @@ img { display: block; }
 /* Song count — second line, plain text */
 .lib-sidebar-count {
   font-size: 10px;
-  color: var(--text-disabled);
+  color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
