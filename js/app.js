@@ -44,6 +44,47 @@ const App = (() => {
   let _radioQueuedIds  = new Set(); // IDs ever added via radio (cross-refill dedup)
   let _radioTriggered  = false;  // true after the initial Drive search fires once
 
+  /**
+   * Best-effort artist extraction for radio mode when ID3 tags are absent.
+   * Priority:
+   *  1. item.artist (already set from DB / previous ID3 parse)
+   *  2. Filename pattern "Artist - Title.mp3" (split on first " - ")
+   *  3. Parent folder name (if cached) — covers "Artist/Album/song.mp3" structures
+   * Returns null if nothing useful is found.
+   * @param {DriveItem} item
+   * @returns {string|null}
+   */
+  function _guessArtistFromItem(item) {
+    if (item.artist) return item.artist;
+
+    // Try filename: "Christian Nodal - Botella.mp3" → "Christian Nodal"
+    const base = (item.name || '').replace(/\.[^.]+$/, '').trim();
+    const dashIdx = base.indexOf(' - ');
+    if (dashIdx > 0) {
+      const candidate = base.slice(0, dashIdx)
+        .replace(/^\d+\.?\s*/, '')   // strip leading track number "01. "
+        .replace(/^track\s+\d+\s*/i, '') // strip "Track 01 "
+        .trim();
+      if (candidate.length >= 2) return candidate;
+    }
+
+    // Try parent folder name (cached from previous browse)
+    const parentId = item.parents?.[0];
+    if (parentId) {
+      const folder = _itemCache.get(parentId);
+      if (folder?.name) {
+        // Strip common suffixes: "- Discography", "(2020)", etc.
+        const folderName = folder.name
+          .replace(/[-–]\s*(discography|discografia|music|musica|collection|compilacion).*$/i, '')
+          .replace(/\s*\(\d{4}\)\s*$/, '')
+          .trim();
+        if (folderName.length >= 2) return folderName;
+      }
+    }
+
+    return null;
+  }
+
   /** Reset all radio state. Call whenever the user starts a new multi-song queue. */
   function _resetRadio() {
     _radioModeActive = false;
@@ -740,12 +781,15 @@ const App = (() => {
       }
 
       // Radio mode: trigger initial Drive search once, after full identification.
-      // Use _radioArtist if pre-seeded from the selected item (explicit user choice),
-      // otherwise fall back to meta.artist resolved by ID3/AudD.
-      if (_radioModeActive && !_radioTriggered && (_radioArtist || meta.artist)) {
-        _radioTriggered = true;
-        if (!_radioArtist) _radioArtist = meta.artist;
-        _triggerRadio(_radioArtist, item.id).catch(() => {});
+      // Priority: pre-seeded _radioArtist (from item selection) → meta.artist
+      // (ID3/AudD) → filename/folder extraction as last resort.
+      if (_radioModeActive && !_radioTriggered) {
+        const radioArtist = _radioArtist || meta.artist || _guessArtistFromItem(item);
+        if (radioArtist) {
+          _radioTriggered = true;
+          _radioArtist    = radioArtist;
+          _triggerRadio(radioArtist, item.id).catch(() => {});
+        }
       }
 
     } catch (err) {
@@ -1522,9 +1566,7 @@ const App = (() => {
       _resetRadio();
       _radioModeActive = true;
       _radioQueuedIds  = new Set([item.id]);
-      // Pre-seed artist from the item so radio search uses the exact selected artist
-      // even before AudD/ID3 pipeline completes (e.g. previously identified songs)
-      if (item.artist) _radioArtist = item.artist;
+      _radioArtist = _guessArtistFromItem(item) || null;
       Player.setQueue([item], 0);
     }
   }
@@ -1734,9 +1776,8 @@ const App = (() => {
       _resetRadio();
       _radioModeActive = true;
       _radioQueuedIds  = new Set([clickedSong.id]);
-      // Pre-seed artist from the selected item — this is the artist the user
-      // explicitly chose, so use it directly instead of waiting for AudD.
-      if (clickedSong.artist) _radioArtist = clickedSong.artist;
+      // Pre-seed artist from item metadata or filename — avoids waiting for AudD
+      _radioArtist = _guessArtistFromItem(clickedSong) || null;
       Player.setQueue([clickedSong], 0);
     }
   }
