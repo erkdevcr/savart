@@ -2082,12 +2082,31 @@ const App = (() => {
     if (typeof Meta === 'undefined') return;
     for (const item of queue) {
       try {
+        // 1. In-memory Meta cache — songs played this session (instant)
         const inMem = Meta.getCached(item.id);
         if (inMem?.coverUrl) { _updateQueueItemCover(item.id, inMem.coverUrl); continue; }
-        const meta = await DB.getMeta(item.id).catch(() => null);
-        if (meta?.coverBlob) {
-          const url = Meta.injectCover(item.id, meta.coverBlob);
-          if (url) _updateQueueItemCover(item.id, url);
+
+        // 2. DB: embedded art saved as binary blob (highest fidelity)
+        const dbMeta = await DB.getMeta(item.id).catch(() => null);
+        if (dbMeta?.coverBlob) {
+          const url = Meta.injectCover(item.id, dbMeta.coverBlob);
+          if (url) { _updateQueueItemCover(item.id, url); continue; }
+        }
+
+        // 3. DB: external cover URL persisted from AudD / Last.fm
+        if (dbMeta) {
+          const extUrl = dbMeta.coverUrl || dbMeta.thumbnailUrl;
+          const isExternal = extUrl
+            && !extUrl.startsWith('blob:')
+            && !extUrl.includes('googleusercontent.com')
+            && !extUrl.includes('googleapis.com');
+          if (isExternal) { _updateQueueItemCover(item.id, extUrl); continue; }
+        }
+
+        // 4. Drive thumbnailLink on the item itself (rare for audio, common for video)
+        const driveThumb = item.thumbnailUrl || item.thumbnailLink;
+        if (driveThumb && !driveThumb.startsWith('blob:')) {
+          _updateQueueItemCover(item.id, driveThumb);
         }
       } catch (_) { /* non-fatal */ }
     }
