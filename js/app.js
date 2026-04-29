@@ -1208,10 +1208,11 @@ const App = (() => {
 
   async function _loadHomeData() {
     try {
-      const [pinned, recents, topPlayedRaw] = await Promise.all([
+      const [pinned, recents, topPlayedRaw, rawPlaylists] = await Promise.all([
         DB.getPinnedFolders(),
         DB.getRecents(20),
         DB.getTopPlayed(20),
+        DB.getPlaylists(),
       ]);
 
       // Load metadata store records for all song recents (for name/cover backfill)
@@ -1277,7 +1278,33 @@ const App = (() => {
         };
       });
 
-      UI.renderHome({ pinned: enrichedPinned, recents: enrichedRecents, topPlayed });
+      // Resolve covers for recent playlists (first 4 unique non-Google cover URLs per playlist)
+      const enrichedPlaylists = await Promise.all(
+        rawPlaylists.slice(0, 12).map(async pl => {
+          const covers = [];
+          const songIds = pl.songIds || [];
+          for (const sid of songIds.slice(0, 16)) {
+            if (covers.length >= 4) break;
+            // Check in-memory Meta cache first (fastest, includes blob URLs)
+            const inMem = (typeof Meta !== 'undefined') ? Meta.getCached(sid) : null;
+            let url = inMem?.coverUrl || null;
+            // Fall back to DB metadata for external URLs
+            if (!url) {
+              try {
+                const dbM = await DB.getMeta(sid);
+                url = dbM?.thumbnailUrl || dbM?.coverUrl || null;
+              } catch (_) {}
+            }
+            // Skip Google Drive thumbnail URLs (require auth header, won't load in <img>)
+            if (url && !url.includes('googleusercontent.com') && !url.includes('googleapis.com')) {
+              covers.push(url);
+            }
+          }
+          return { ...pl, resolvedCovers: covers };
+        })
+      );
+
+      UI.renderHome({ pinned: enrichedPinned, recents: enrichedRecents, topPlayed, playlists: enrichedPlaylists });
 
       // Async: load cover art for song cards and top-played in the background
       _prefetchHomeCovers(enrichedRecents).catch(() => {});
@@ -1299,6 +1326,15 @@ const App = (() => {
       // Single song — play it directly
       Player.setQueue([item], 0);
     }
+  }
+
+  /** Open Library view and navigate directly to the tapped playlist. */
+  function onPlaylistHomeCardClick(pl) {
+    UI.showView('library');
+    _loadPlaylists();
+    _loadStarred();
+    // Small delay so Library renders before we open the detail
+    setTimeout(() => onPlaylistClick(pl), 80);
   }
 
   /* ── Browse ──────────────────────────────────────────────── */
@@ -3129,6 +3165,7 @@ const App = (() => {
     boot,
     // Called by UI event handlers
     onHomeCardClick,
+    onPlaylistHomeCardClick,
     onFolderClick,
     onGoToFolder,
     onFolderPlay,

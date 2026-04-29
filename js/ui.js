@@ -37,10 +37,11 @@ const UI = (() => {
       // ── Home sections ──────────────────────────────────────
       now_playing: 'REPRODUCIENDO AHORA',
       pinned:    'Fijadas',
-      recents:         'Recientes',
-      recents_folders: 'Carpetas recientes',
-      recents_songs:   'Canciones recientes',
-      top_played:      'Más reproducidas',
+      recents:          'Recientes',
+      recents_folders:  'Carpetas recientes',
+      recents_songs:    'Canciones recientes',
+      recent_playlists: 'Playlists',
+      top_played:       'Más reproducidas',
       // ── Home empty states ──────────────────────────────────
       empty_pinned:          'Fija carpetas desde el menú ··· para verlas aquí.',
       empty_recents_folders: 'Las carpetas que abras aparecerán aquí.',
@@ -185,10 +186,11 @@ const UI = (() => {
       // ── Home sections ──────────────────────────────────────
       now_playing: 'NOW PLAYING',
       pinned:    'Pinned',
-      recents:         'Recents',
-      recents_folders: 'Recent folders',
-      recents_songs:   'Recent songs',
-      top_played:      'Most played',
+      recents:          'Recents',
+      recents_folders:  'Recent folders',
+      recents_songs:    'Recent songs',
+      recent_playlists: 'Playlists',
+      top_played:       'Most played',
       // ── Home empty states ──────────────────────────────────
       empty_pinned:          'Pin folders from the ··· menu to see them here.',
       empty_recents_folders: 'Folders you open will appear here.',
@@ -560,7 +562,7 @@ const UI = (() => {
    * Render the Home screen with pinned, recents, and top played.
    * @param {{ pinned: Object[], recents: Object[], topPlayed: Object[] }} data
    */
-  function renderHome({ pinned = [], recents = [], topPlayed = [] }) {
+  function renderHome({ pinned = [], recents = [], topPlayed = [], playlists = [] }) {
     const screen = document.getElementById('screen-home');
     if (!screen) return;
 
@@ -589,13 +591,14 @@ const UI = (() => {
       content.appendChild(ctaBtn);
     }
 
-    // Split recents into folders and songs for two separate rows
-    const recentFolders = recents.filter(r => r.type === 'folder');
-    const recentSongs   = recents.filter(r => r.type === 'song');
+    // Only songs in recents row (folders row removed; replaced by playlists)
+    const recentSongs = recents.filter(r => r.type === 'song');
 
-    // Always show all sections (with placeholders when empty)
     content.appendChild(_buildHomeSection(t('pinned'), pinned, 'pinned'));
-    content.appendChild(_buildHomeSection(t('recents_folders'), recentFolders, 'recents'));
+    // Playlists row: only rendered if user has playlists
+    if (playlists.length > 0) {
+      content.appendChild(_buildHomeSection(t('recent_playlists'), playlists, 'playlists'));
+    }
     content.appendChild(_buildHomeSection(t('recents_songs'), recentSongs, 'recents'));
     content.appendChild(_buildHomeSection(t('top_played'), topPlayed, 'top_played'));
   }
@@ -646,6 +649,14 @@ const UI = (() => {
       list.className = 'top-list';
       items.slice(0, 12).forEach((item, i) => list.appendChild(_buildTopPlayedItem(item, i + 1)));
       section.appendChild(list);
+
+    } else if (type === 'playlists') {
+      // Playlists: horizontal scroll with mosaic-cover cards
+      const scroll = document.createElement('div');
+      scroll.className = 'home-cards-scroll';
+      items.forEach(pl => scroll.appendChild(_buildPlaylistHomeCard(pl)));
+      section.appendChild(scroll);
+      _bindDragScroll(scroll);
 
     } else {
       // recents: horizontal square-card scroll
@@ -797,6 +808,30 @@ const UI = (() => {
     card.addEventListener('click', (e) => {
       if (e.target.closest('.home-card-more')) return;
       if (typeof App !== 'undefined') App.onHomeCardClick(item);
+    });
+
+    return card;
+  }
+
+  /** Playlist home card: 2×2 mosaic cover + name + song count */
+  function _buildPlaylistHomeCard(pl) {
+    const card = document.createElement('div');
+    card.className = 'home-card';
+    card.dataset.plid = pl.id;
+
+    const covers = pl.resolvedCovers || [];
+    const count  = pl.songIds ? pl.songIds.length : 0;
+
+    card.innerHTML = `
+      <div class="home-card-art home-card-art--mosaic">
+        ${_buildPlaylistMosaic(covers, pl.name)}
+      </div>
+      <div class="home-card-name">${escHtml(pl.name || '—')}</div>
+      <div class="home-card-sub">${count} ${count === 1 ? 'canción' : 'canciones'}</div>
+    `;
+
+    card.addEventListener('click', () => {
+      if (typeof App !== 'undefined') App.onPlaylistHomeCardClick(pl);
     });
 
     return card;

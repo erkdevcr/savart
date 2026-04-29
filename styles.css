@@ -788,6 +788,27 @@ img { display: block; }
   pointer-events: none; /* prevents browser image-drag from stealing pointer events */
 }
 
+/* Mosaic variant: 2×2 grid fills the card art area */
+.home-card-art--mosaic {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  overflow: hidden;
+  background: var(--bg-card);
+}
+
+.home-card-art--mosaic .mosaic-cell {
+  width: 100%;
+  height: 100%;
+}
+
+.home-card-art--mosaic .mosaic-cell img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
 .home-card-art .folder-icon-placeholder {
   width: 100%;
   height: 100%;
