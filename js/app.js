@@ -599,18 +599,12 @@ const App = (() => {
         DB.setMeta(item.id, { coverBlob: meta.coverBlob }).catch(() => {});
       }
 
-      // No embedded cover art → try folder cover image as fallback
-      if (!meta.coverUrl) {
-        const folderId = item.parents?.[0];
-        if (folderId) meta.coverUrl = await _getFolderCover(folderId);
-      }
-
       // Check DB for any data persisted from a prior session.
-      // We do this even when meta.coverUrl is already set (from ID3) because the
-      // DB may also have artist/title/album from a previous AudD recognition — and
-      // those are needed for radio mode and lyrics regardless of cover status.
-      // Drive thumbnailLinks (googleusercontent.com) are NOT treated as covers here —
-      // they are generic Drive thumbnails that block Last.fm/AudD.io unnecessarily.
+      // Runs even when meta.coverUrl is already set (from ID3) because the DB may
+      // also have artist/title/album from a previous AudD recognition — needed for
+      // radio mode and lyrics regardless of cover status.
+      // Drive thumbnailLinks (googleusercontent.com) are NOT used as covers here —
+      // they are generic Drive thumbnails that would block Last.fm/AudD unnecessarily.
       if (!meta.coverUrl || !meta.artist || !meta.title) {
         const dbMeta = await DB.getMeta(item.id).catch(() => null);
         if (dbMeta) {
@@ -636,6 +630,15 @@ const App = (() => {
         if (!meta.artist   && item.appProperties.s_artist) meta.artist  = item.appProperties.s_artist;
         if (!meta.title    && item.appProperties.s_title)  meta.title   = item.appProperties.s_title;
         if (!meta.album    && item.appProperties.s_album)  meta.album   = item.appProperties.s_album;
+      }
+
+      // No song-specific cover found yet → try the folder's cover image as a fallback.
+      // This is intentionally placed AFTER DB/appProperties so that a previously
+      // recognized cover (AudD / Last.fm, stored per-song) always takes priority
+      // over a generic folder image that is shared by all songs in the folder.
+      if (!meta.coverUrl) {
+        const folderId = item.parents?.[0];
+        if (folderId) meta.coverUrl = await _getFolderCover(folderId);
       }
 
       // Still no cover → try Last.fm with ID3 artist + album
@@ -1009,14 +1012,11 @@ const App = (() => {
     if (!row) return;
     const thumb = row.querySelector('.song-thumb');
     if (!thumb) return;
-    const img   = thumb.querySelector('img');
-    if (img) {
-      // Already has an img — just update src
-      img.src = coverUrl;
-    } else {
-      // Only placeholder icon exists — replace with img
-      thumb.innerHTML = `<img src="${coverUrl}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover" onerror="this.parentNode.innerHTML='<div class=\\'thumb-placeholder\\'></div>'">`;
-    }
+    // If the row already shows a cover image, keep it — never replace an existing
+    // cover with a different one. The onerror handler already swaps broken imgs
+    // back to a placeholder div, so this guard is safe against revoked blob URLs.
+    if (thumb.querySelector('img')) return;
+    thumb.innerHTML = `<img src="${coverUrl}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover" onerror="this.parentNode.innerHTML='<div class=\\'thumb-placeholder\\'></div>'">`;
   }
 
   /**
