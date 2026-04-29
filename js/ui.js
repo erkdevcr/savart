@@ -1345,27 +1345,30 @@ const UI = (() => {
       _addCtxItem(menu, iconTrash(14), t('ctx_remove_history'), () => { App.onRemoveFromHistoryItem(item); hideContextMenu(); });
     }
 
-    // Position menu near cursor
+    // Position menu near cursor — measure actual rendered size to avoid overflow
     const margin = 8;
-    const mw = 200;
-    const mh = type === 'home_folder' ? 260
-             : type === 'folder'    ? 270
-             : type === 'home_song' ? 310
-             : type === 'top_played'? 300
-             : type === 'playlist'  ? 230
-             : type === 'pinned'    ? 175
-             : type === 'history'   ? 290
-             : type === 'song'      ? 260
-             : 200;
     let x = e.clientX || (e.touches?.[0]?.clientX || 0);
     let y = e.clientY || (e.touches?.[0]?.clientY || 0);
 
-    x = Math.min(x, window.innerWidth - mw - margin);
+    // Render off-screen first so we can measure real dimensions
+    menu.style.left       = '-9999px';
+    menu.style.top        = '-9999px';
+    menu.style.visibility = 'hidden';
+    menu.classList.add('visible');
+
+    const mw = menu.offsetWidth  || 200;
+    const mh = menu.offsetHeight || 200;
+
+    menu.style.visibility = '';
+
+    // Clamp so the menu never overflows the viewport
+    x = Math.min(x, window.innerWidth  - mw - margin);
+    x = Math.max(margin, x);
     y = Math.min(y, window.innerHeight - mh - margin);
+    y = Math.max(margin, y);
 
     menu.style.left = `${x}px`;
     menu.style.top  = `${y}px`;
-    menu.classList.add('visible');
 
     // Click outside to dismiss
     requestAnimationFrame(() => {
