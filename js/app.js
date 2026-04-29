@@ -128,6 +128,10 @@ const App = (() => {
   async function boot() {
     console.log('[App] Booting Savart', CONFIG.VERSION);
 
+    // Stamp the version label in Settings so it always matches CONFIG.VERSION
+    const verLabel = document.getElementById('app-version-label');
+    if (verLabel) verLabel.textContent = `Savart — versión ${CONFIG.VERSION}`;
+
     // 1. Open IndexedDB
     try {
       await DB.open();
