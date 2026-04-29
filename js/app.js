@@ -526,17 +526,16 @@ const App = (() => {
         : new Set(queue.map(q => q.id));
 
       // ── Artist name matcher ────────────────────────────────────
-      // Requires ALL significant words of the artist name (≥3 chars) to appear
-      // in the file/folder name. Prevents "Cristian Nodal" from matching
-      // "Cristian Castro" or "Cristian Gomez" (which only share "Cristian").
+      // Normalizes both strings (lowercase, no accents, no punctuation) then
+      // checks that the full artist name appears as a substring in the item name.
+      // "Christian Nodal" → folder "Christian Nodal - Discography" ✓
+      //                   → folder "Christian Castro"              ✗ (no "nodal")
+      // "Korn"            → folder "Korn"                          ✓
       const _normStr = s => s.toLowerCase()
         .normalize('NFD').replace(/[̀-ͯ]/g, '')  // strip accents
         .replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
-      const _artistWords = _normStr(artist).split(' ').filter(w => w.length >= 3);
-      const _matchesArtist = name => {
-        const n = _normStr(name);
-        return _artistWords.length > 0 && _artistWords.every(w => n.includes(w));
-      };
+      const _normArtist = _normStr(artist);
+      const _matchesArtist = name => _normStr(name).includes(_normArtist);
 
       const candidates = [];
       const seen       = new Set();
@@ -740,11 +739,13 @@ const App = (() => {
         }
       }
 
-      // Radio mode: trigger initial Drive search once, after full identification
-      if (_radioModeActive && !_radioTriggered && meta.artist) {
+      // Radio mode: trigger initial Drive search once, after full identification.
+      // Use _radioArtist if pre-seeded from the selected item (explicit user choice),
+      // otherwise fall back to meta.artist resolved by ID3/AudD.
+      if (_radioModeActive && !_radioTriggered && (_radioArtist || meta.artist)) {
         _radioTriggered = true;
         if (!_radioArtist) _radioArtist = meta.artist;
-        _triggerRadio(meta.artist, item.id).catch(() => {});
+        _triggerRadio(_radioArtist, item.id).catch(() => {});
       }
 
     } catch (err) {
@@ -1521,6 +1522,9 @@ const App = (() => {
       _resetRadio();
       _radioModeActive = true;
       _radioQueuedIds  = new Set([item.id]);
+      // Pre-seed artist from the item so radio search uses the exact selected artist
+      // even before AudD/ID3 pipeline completes (e.g. previously identified songs)
+      if (item.artist) _radioArtist = item.artist;
       Player.setQueue([item], 0);
     }
   }
@@ -1730,6 +1734,9 @@ const App = (() => {
       _resetRadio();
       _radioModeActive = true;
       _radioQueuedIds  = new Set([clickedSong.id]);
+      // Pre-seed artist from the selected item — this is the artist the user
+      // explicitly chose, so use it directly instead of waiting for AudD.
+      if (clickedSong.artist) _radioArtist = clickedSong.artist;
       Player.setQueue([clickedSong], 0);
     }
   }
