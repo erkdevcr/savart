@@ -1282,12 +1282,19 @@ img { display: block; }
 .lib-sidebar-item:hover  { background: var(--bg-hover); color: var(--text-primary); }
 .lib-sidebar-item.active { color: var(--accent); background: rgba(74,136,245,0.09); }
 
+/* Stacked name + count column */
+.lib-sidebar-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
 .lib-sidebar-name {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  flex: 1;
-  min-width: 0;
 }
 
 .lib-sidebar-thumb {
@@ -1336,9 +1343,9 @@ img { display: block; }
 .pl-sort-btn:hover  { color: var(--text-secondary); background: var(--bg-hover); }
 .pl-sort-btn.active { color: var(--accent); background: rgba(74,136,245,0.1); }
 
-/* Playlist item 3-dot button */
+/* Playlist item 3-dot button — always visible */
 .pl-item-more {
-  display: none;
+  display: flex;
   flex-shrink: 0;
   padding: 2px;
   color: var(--text-disabled);
@@ -1349,7 +1356,6 @@ img { display: block; }
   transition: color 0.15s;
   line-height: 0;
 }
-.lib-sidebar-item:hover .pl-item-more { display: flex; }
 .pl-item-more:hover { color: var(--text-primary); }
 
 /* Right detail pane */
@@ -1404,15 +1410,13 @@ img { display: block; }
 }
 .pl-detail-play-btn:hover { opacity: 0.85; }
 
-/* Song count badge in left sidebar playlist list */
+/* Song count — second line, plain text */
 .lib-sidebar-count {
   font-size: 10px;
   color: var(--text-disabled);
-  background: var(--bg-hover);
-  border-radius: 8px;
-  padding: 1px 6px;
-  flex-shrink: 0;
-  line-height: 1.6;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ── Settings screen ─────────────────────────────────────── */
@@ -3822,6 +3826,25 @@ img { display: block; }
 .settings-select:hover  { border-color: var(--accent); }
 .settings-select:focus  { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(74,136,245,0.25); }
 .settings-select option { background: var(--bg-elevated); color: var(--text-primary); }
+
+/* ── Library sidebar playlist cards: larger on mobile ───────── */
+@media (max-width: 767px) {
+  .lib-sidebar-item {
+    padding: 10px 12px;
+    gap: 11px;
+  }
+  .lib-sidebar-thumb {
+    width: 46px;
+    height: 46px;
+    border-radius: var(--radius-md);
+  }
+  .lib-sidebar-name {
+    font-size: 13px;
+  }
+  .lib-sidebar-count {
+    font-size: 11px;
+  }
+}
 
 /* ── Home screen: 75% scale on mobile (max-width: 767px) ──── */
 @media (max-width: 767px) {

@@ -2094,10 +2094,15 @@ const UI = (() => {
         : _buildMosaicThumb(pl.coverUrls || [], pl.name);
 
       const songCount = pl.songIds?.length || 0;
+      const songNoun  = songCount === 1
+        ? (_currentLang === 'es' ? 'canción' : 'song')
+        : (_currentLang === 'es' ? 'canciones' : 'songs');
       item.innerHTML = `
         <div class="lib-sidebar-thumb">${thumbHtml}</div>
-        <span class="lib-sidebar-name" title="${escHtml(pl.name)}">${escHtml(pl.name)}</span>
-        <span class="lib-sidebar-count">${songCount}</span>
+        <div class="lib-sidebar-info">
+          <span class="lib-sidebar-name" title="${escHtml(pl.name)}">${escHtml(pl.name)}</span>
+          <span class="lib-sidebar-count">${songCount} ${songNoun}</span>
+        </div>
         <button class="pl-item-more" aria-label="Más opciones">${iconDots()}</button>
       `;
 
