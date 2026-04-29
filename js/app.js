@@ -605,27 +605,37 @@ const App = (() => {
         if (folderId) meta.coverUrl = await _getFolderCover(folderId);
       }
 
-      // Still no cover → check if an external cover URL was persisted from a previous session
-      // (Last.fm or AudD.io URL saved in a prior run — avoids repeat API calls).
+      // Check DB for any data persisted from a prior session.
+      // We do this even when meta.coverUrl is already set (from ID3) because the
+      // DB may also have artist/title/album from a previous AudD recognition — and
+      // those are needed for radio mode and lyrics regardless of cover status.
       // Drive thumbnailLinks (googleusercontent.com) are NOT treated as covers here —
       // they are generic Drive thumbnails that block Last.fm/AudD.io unnecessarily.
-      if (!meta.coverUrl) {
+      if (!meta.coverUrl || !meta.artist || !meta.title) {
         const dbMeta = await DB.getMeta(item.id).catch(() => null);
-        const persistedUrl = dbMeta?.coverUrl || dbMeta?.thumbnailUrl;
-        const isExternalCover = persistedUrl
-          && !persistedUrl.startsWith('blob:')
-          && !persistedUrl.includes('googleusercontent.com')
-          && !persistedUrl.includes('googleapis.com');
-        if (isExternalCover) meta.coverUrl = persistedUrl;
+        if (dbMeta) {
+          if (!meta.coverUrl) {
+            const persistedUrl = dbMeta.coverUrl || dbMeta.thumbnailUrl;
+            const isExternalCover = persistedUrl
+              && !persistedUrl.startsWith('blob:')
+              && !persistedUrl.includes('googleusercontent.com')
+              && !persistedUrl.includes('googleapis.com');
+            if (isExternalCover) meta.coverUrl = persistedUrl;
+          }
+          if (!meta.artist && dbMeta.artist)      meta.artist = dbMeta.artist;
+          if (!meta.title  && dbMeta.displayName) meta.title  = dbMeta.displayName;
+          if (!meta.album  && dbMeta.album)       meta.album  = dbMeta.album;
+        }
       }
 
-      // Still no cover → check Drive appProperties (available when playing from Browse)
-      // Contains data synced from another device via Last.fm / AudD.io
-      if (!meta.coverUrl && item.appProperties?.s_cover) {
-        meta.coverUrl = item.appProperties.s_cover;
-        if (!meta.title  && item.appProperties.s_title)  meta.title  = item.appProperties.s_title;
-        if (!meta.artist && item.appProperties.s_artist) meta.artist = item.appProperties.s_artist;
-        if (!meta.album  && item.appProperties.s_album)  meta.album  = item.appProperties.s_album;
+      // Check Drive appProperties (synced from another device via Last.fm / AudD.io).
+      // Artist/title/album are read unconditionally — a song can have an embedded cover
+      // from ID3 but still lack text tags, and appProperties may have them.
+      if (item.appProperties) {
+        if (!meta.coverUrl && item.appProperties.s_cover) meta.coverUrl = item.appProperties.s_cover;
+        if (!meta.artist   && item.appProperties.s_artist) meta.artist  = item.appProperties.s_artist;
+        if (!meta.title    && item.appProperties.s_title)  meta.title   = item.appProperties.s_title;
+        if (!meta.album    && item.appProperties.s_album)  meta.album   = item.appProperties.s_album;
       }
 
       // Still no cover → try Last.fm with ID3 artist + album
@@ -640,12 +650,10 @@ const App = (() => {
       }
 
       // Still no cover → try AudD.io audio fingerprinting
-      // Runs when song has no cover after all previous passes.
-      // No auddTried check here: if a cover was already found in a prior session
-      // it would be in meta.coverUrl from the DB check above, so !meta.coverUrl
-      // already prevents redundant calls. This allows retry for songs AudD
-      // previously couldn't identify (without burning quota unnecessarily for songs
-      // that DO have a stored cover).
+      // Only runs when no cover was found after all previous passes.
+      // Songs with embedded covers (ID3/FLAC) or persisted cover URLs skip AudD.
+      // Artist/title/album from AudD are filled in even if they're the only missing piece,
+      // but AudD itself is not triggered solely for missing artist (to preserve quota).
       if (!meta.coverUrl && typeof Audd !== 'undefined') {
         try {
           // Slice to first 1MB — enough for fingerprinting, avoids uploading full file
