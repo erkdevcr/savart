@@ -647,12 +647,22 @@ const App = (() => {
         if (folderId) meta.coverUrl = await _getFolderCover(folderId);
       }
 
-      // Still no cover → try Last.fm with ID3 artist + album
+      // Still no cover → try Last.fm
+      // Pass A: artist + album (album.getInfo — highest quality, most reliable)
       if (!meta.coverUrl && typeof Lastfm !== 'undefined' && meta.artist && meta.album) {
         const lfmUrl = await Lastfm.fetchCover(meta.artist, meta.album);
         if (lfmUrl) {
           meta.coverUrl = lfmUrl;
-          // Persist locally + sync to Drive for cross-device use
+          DB.setMeta(item.id, { thumbnailUrl: lfmUrl }).catch(() => {});
+          Drive.setAppProperties(item.id, { s_cover: lfmUrl }).catch(() => {});
+        }
+      }
+      // Pass B: artist + title only (track.getInfo — fallback when no album tag)
+      if (!meta.coverUrl && typeof Lastfm !== 'undefined' && meta.artist && (meta.title || item.displayName)) {
+        const trackTitle = meta.title || item.displayName;
+        const lfmUrl = await Lastfm.fetchCoverByTrack(meta.artist, trackTitle);
+        if (lfmUrl) {
+          meta.coverUrl = lfmUrl;
           DB.setMeta(item.id, { thumbnailUrl: lfmUrl }).catch(() => {});
           Drive.setAppProperties(item.id, { s_cover: lfmUrl }).catch(() => {});
         }

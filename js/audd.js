@@ -55,7 +55,11 @@ const Audd = (() => {
       album:    r.album  || null,
       coverUrl,
     };
-    console.log(`[AudD] ✓ Match: ${result.artist} — ${result.title}${result.coverUrl ? ' (cover ✓)' : ' (no cover)'}`);
+    if (result.artist || result.title) {
+      console.log(`[AudD] ✓ ${result.artist} — ${result.title}${result.coverUrl ? ' (cover ✓)' : ''}`);
+    } else {
+      console.log('[AudD] Match found but no artist/title in response — skipping.');
+    }
     return result;
   }
 

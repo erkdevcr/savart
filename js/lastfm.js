@@ -75,12 +75,67 @@ const Lastfm = (() => {
     }
   }
 
+  /* ── fetchCoverByTrack ──────────────────────────────────────
+   * Fetch album cover using artist + track title (track.getInfo).
+   * Used when no album tag is available in the file metadata.
+   * Last.fm returns the album the track belongs to, including artwork.
+   *
+   * @param {string} artist
+   * @param {string} title
+   * @returns {Promise<string|null>}
+   */
+  async function fetchCoverByTrack(artist, title) {
+    if (!artist?.trim() || !title?.trim()) return null;
+
+    const key = `track::${artist.trim().toLowerCase()}::${title.trim().toLowerCase()}`;
+    if (_cache.has(key)) return _cache.get(key);
+
+    try {
+      const params = new URLSearchParams({
+        method:      'track.getInfo',
+        api_key:     CONFIG.LASTFM_API_KEY,
+        artist:      artist.trim(),
+        track:       title.trim(),
+        format:      'json',
+        autocorrect: '1',
+      });
+
+      const res = await fetch(`${API_BASE}?${params}`);
+      if (!res.ok) { _cache.set(key, null); return null; }
+
+      const data = await res.json();
+      const images = data.track?.album?.image;
+      if (!Array.isArray(images) || images.length === 0) {
+        _cache.set(key, null);
+        return null;
+      }
+
+      const SIZES = ['mega', 'extralarge', 'large', 'medium'];
+      let url = null;
+      for (const size of SIZES) {
+        const img = images.find(i => i.size === size);
+        const src = img?.['#text']?.trim();
+        if (src && !src.includes(PLACEHOLDER_HASH)) {
+          url = src;
+          break;
+        }
+      }
+
+      _cache.set(key, url);
+      return url;
+
+    } catch (_) {
+      _cache.set(key, null);
+      return null;
+    }
+  }
+
   /* ── clearCache ─────────────────────────────────────────────
    * Clear the in-memory cache (e.g. on logout or session end).
    */
   function clearCache() { _cache.clear(); }
 
   /* ── Expose ─────────────────────────────────────────────── */
-  return { fetchCover, clearCache };
+  return { fetchCover, fetchCoverByTrack, clearCache };
 
 })();
