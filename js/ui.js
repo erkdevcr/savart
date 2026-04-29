@@ -1922,7 +1922,7 @@ const UI = (() => {
       playBtn.className = 'pl-detail-play-btn';
       playBtn.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> <span>${t('ctx_play')}</span>`;
       playBtn.addEventListener('click', () => {
-        if (typeof App !== 'undefined') App.onPlaylistPlay(songs);
+        if (typeof App !== 'undefined') App.onPlaylistDetailPlay(songs);
       });
       header.appendChild(playBtn);
     }

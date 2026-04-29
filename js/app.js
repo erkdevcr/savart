@@ -34,6 +34,23 @@ const App = (() => {
   // cached (instantly loaded) tracks.
   let _loadingTimer = null;
 
+  /* ── Radio mode ──────────────────────────────────────────── */
+  // Activated when the user plays a single song from Home, Search, or Library.
+  // Automatically finds more songs by the same artist in Drive and appends
+  // them to the queue after all recognition passes complete (ID3→Last.fm→AudD).
+  let _radioModeActive = false;  // true = radio is running
+  let _radioArtist     = null;   // artist name being radiated
+  let _radioInFlight   = false;  // prevents concurrent Drive searches
+  let _radioQueuedIds  = new Set(); // IDs ever added via radio (cross-refill dedup)
+
+  /** Reset all radio state. Call whenever the user starts a new multi-song queue. */
+  function _resetRadio() {
+    _radioModeActive = false;
+    _radioArtist     = null;
+    _radioInFlight   = false;
+    _radioQueuedIds  = new Set();
+  }
+
   function _startLoadingSpinner() {
     _cancelLoadingSpinner();
     _loadingTimer = setTimeout(() => {
@@ -401,6 +418,14 @@ const App = (() => {
       UI.renderQueuePanel(queue, index);
       _prefetchQueueCovers(queue).catch(() => {});
     }
+
+    // Radio refill: if the queue is running low, fetch another batch for the artist
+    if (_radioModeActive && _radioArtist && !_radioInFlight) {
+      const remaining = queue.length - index - 1;
+      if (remaining <= 2) {
+        _triggerRadio(_radioArtist, null).catch(() => {});
+      }
+    }
   }
 
   function _onPlayerError({ type, message, item }) {
@@ -443,6 +468,101 @@ const App = (() => {
    * @param {DriveItem} item
    * @param {Blob}      blob
    */
+  /**
+   * Radio mode: search Drive for more songs by the given artist and
+   * append them to the queue in shuffle order.
+   *
+   * Search strategy (2-level expansion):
+   *   searchFiles(artist) → artist-named folders → album subfolders → songs
+   *   Also takes any audio files whose filenames contain the artist name.
+   *
+   * @param {string}      artist        - artist name from AudD / ID3 / Last.fm
+   * @param {string|null} triggerItemId - if non-null, abort if no longer current track
+   */
+  async function _triggerRadio(artist, triggerItemId) {
+    if (!_radioModeActive || !artist || _radioInFlight) return;
+
+    // For the initial trigger (from _onBlobReady): verify we're still on that track.
+    // For refill triggers (from _onQueueChange): triggerItemId is null → skip check.
+    if (triggerItemId !== null) {
+      const current = Player.getCurrentTrack();
+      if (!current || current.id !== triggerItemId) return;
+    }
+
+    _radioInFlight = true;
+    try {
+      console.log(`[Radio] Searching Drive for artist: "${artist}"`);
+
+      // ── Step 1: Drive full-text search by artist name ─────────
+      const results = await Drive.searchFiles(artist);
+
+      // Build the set of IDs we must never add (current queue + prior radio adds)
+      const { queue } = Player.getQueue();
+      const blocked   = new Set([...queue.map(q => q.id), ..._radioQueuedIds]);
+
+      const candidates = [];
+      const seen       = new Set();
+
+      const _collect = (f) => {
+        if (!seen.has(f.id) && !blocked.has(f.id) && isPlayable(f.mimeType)) {
+          seen.add(f.id);
+          candidates.push(f);
+        }
+      };
+
+      // Direct audio files whose filenames contain the artist name
+      results.files.forEach(_collect);
+
+      // ── Step 2: expand artist-named folders (max 3) ───────────
+      // Each artist folder is listed for its direct children:
+      // album subfolders + any loose songs at the artist root.
+      const artistFolders = results.folders.slice(0, 3);
+      const level1 = await Promise.allSettled(
+        artistFolders.map(f => Drive.listFolderAll(f.id))
+      );
+
+      const albumFolders = [];
+      for (const r of level1) {
+        if (r.status !== 'fulfilled') continue;
+        r.value.files.forEach(_collect);           // loose songs in artist folder
+        albumFolders.push(...r.value.folders);     // album subfolders
+      }
+
+      // ── Step 3: expand album subfolders (max 8) ───────────────
+      const level2 = await Promise.allSettled(
+        albumFolders.slice(0, 8).map(f => Drive.listFolderAll(f.id))
+      );
+      for (const r of level2) {
+        if (r.status !== 'fulfilled') continue;
+        r.value.files.forEach(_collect);
+      }
+
+      if (candidates.length === 0) {
+        console.log(`[Radio] No new songs found for: "${artist}"`);
+        return;
+      }
+
+      // ── Step 4: shuffle and append (max 25 per batch) ─────────
+      for (let i = candidates.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+      }
+      const toAdd = candidates.slice(0, 25);
+      toAdd.forEach(f => { _cacheItem(f); _radioQueuedIds.add(f.id); });
+
+      Player.appendToQueue(toAdd);
+      _radioArtist = artist; // confirm for future refill cycles
+
+      UI.showToast(`Radio · ${artist} · +${toAdd.length}`, 'default');
+      console.log(`[Radio] ✓ ${toAdd.length} songs queued for: "${artist}"`);
+
+    } catch (err) {
+      console.warn('[Radio] Search error:', err);
+    } finally {
+      _radioInFlight = false;
+    }
+  }
+
   async function _onBlobReady(item, blob) {
     if (typeof Meta === 'undefined') return;
     try {
@@ -554,6 +674,13 @@ const App = (() => {
           _loadLyricsForCurrentTrack();
         }
       }
+
+      // Radio mode: now that we have the most reliable artist (post-AudD),
+      // search Drive in background and expand the queue with more songs.
+      if (_radioModeActive && meta.artist) {
+        _triggerRadio(meta.artist, item.id).catch(() => {});
+      }
+
     } catch (err) {
       console.warn('[App] Meta parse error:', err);
     }
@@ -1321,17 +1448,22 @@ const App = (() => {
   function onHomeCardClick(item) {
     if (item.isFolder || item.type === 'folder') {
       _breadcrumb = []; // fresh context — don't inherit stale browse history
+      _resetRadio();
       _openFolder({ id: item.id, name: item.name });
     } else {
-      // Single song — play it directly
+      // Single song from Home → enable radio mode
+      _resetRadio();
+      _radioModeActive = true;
+      _radioQueuedIds  = new Set([item.id]);
       Player.setQueue([item], 0);
     }
   }
 
-  /** Play all songs in a playlist immediately (from detail header button). */
-  function onPlaylistPlay(songs) {
+  /** Play all songs in a playlist immediately (called from playlist detail header button). */
+  function onPlaylistDetailPlay(songs) {
     if (!songs || songs.length === 0) return;
-    if (typeof Player !== 'undefined') Player.setQueue(songs, 0);
+    _resetRadio();
+    Player.setQueue(songs, 0);
   }
 
   /** Open Library view and navigate directly to the tapped playlist. */
@@ -1517,14 +1649,21 @@ const App = (() => {
       const ids        = rows.map(r => r.dataset.id);
       const allSongs   = ids.map(id => _resolveItemById(id)).filter(Boolean);
 
+      _resetRadio(); // Browse always queues the folder — no radio needed
       if (allSongs.length > 0) {
         const startIdx = allSongs.findIndex(s => s.id === clickedSong.id);
         Player.setQueue(allSongs, startIdx >= 0 ? startIdx : 0);
       } else {
+        // Only one song visible — treat as single-song play → enable radio
+        _radioModeActive = true;
+        _radioQueuedIds  = new Set([clickedSong.id]);
         Player.setQueue([clickedSong], 0);
       }
     } else {
-      // Search, Home, Library, etc.: play only the clicked song
+      // Search, Library, History, Top Played: single song → enable radio mode
+      _resetRadio();
+      _radioModeActive = true;
+      _radioQueuedIds  = new Set([clickedSong.id]);
       Player.setQueue([clickedSong], 0);
     }
   }
@@ -2100,6 +2239,7 @@ const App = (() => {
     try {
       const songs = await _getPlaylistSongs(pl);
       if (songs.length === 0) { UI.showToast(UI.t('toast_playlist_empty'), 'error'); return; }
+      _resetRadio(); // playlist = curated queue, no radio expansion
       Player.setQueue(songs, 0);
     } catch (err) { UI.showToast(UI.t('toast_playlist_play_error'), 'error'); }
   }
@@ -2313,6 +2453,7 @@ const App = (() => {
         UI.showToast(UI.t('toast_folder_no_songs'), 'error');
         return;
       }
+      _resetRadio(); // folder play = full queue, no radio
       playable.forEach(f => _cacheItem(f));
       Player.setQueue(playable, 0);
       UI.showToast(`▶ ${folder.name} · ${playable.length} ${UI.t('songs').toLowerCase()}`);
@@ -3172,7 +3313,7 @@ const App = (() => {
     // Called by UI event handlers
     onHomeCardClick,
     onPlaylistHomeCardClick,
-    onPlaylistPlay,
+    onPlaylistDetailPlay,
     onFolderClick,
     onGoToFolder,
     onFolderPlay,
