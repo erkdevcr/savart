@@ -23,6 +23,8 @@ const Audd = (() => {
   async function identify(blob) {
     if (!CONFIG.AUDD_API_KEY || !blob) return null;
 
+    console.log(`[AudD] Sending ${(blob.size / 1024).toFixed(0)} KB for fingerprinting…`);
+
     const form = new FormData();
     form.append('api_token', CONFIG.AUDD_API_KEY);
     form.append('file',      blob, 'audio.mp3');
@@ -35,7 +37,10 @@ const Audd = (() => {
 
     // status: 'success' with null result → song not found (not an error)
     if (data.status !== 'success') throw new Error(`AudD error: ${data.error?.error_message}`);
-    if (!data.result) return null;   // genuinely not found
+    if (!data.result) {
+      console.log('[AudD] No match found.');
+      return null;   // genuinely not found
+    }
 
     const r = data.result;
 
@@ -44,12 +49,14 @@ const Audd = (() => {
     const tpl = r.apple_music?.artwork?.url;
     if (tpl) coverUrl = tpl.replace('{w}', '500').replace('{h}', '500');
 
-    return {
+    const result = {
       title:    r.title  || null,
       artist:   r.artist || null,
       album:    r.album  || null,
       coverUrl,
     };
+    console.log(`[AudD] ✓ Match: ${result.artist} — ${result.title}${result.coverUrl ? ' (cover ✓)' : ' (no cover)'}`);
+    return result;
   }
 
   /* ── Expose ─────────────────────────────────────────────── */

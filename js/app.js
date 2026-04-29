@@ -667,6 +667,9 @@ const App = (() => {
       const _needsAudd = !meta.coverUrl ||
         (_radioModeActive && !_radioTriggered && !meta.artist);
       if (_needsAudd && typeof Audd !== 'undefined') {
+        if (_radioModeActive && !_radioTriggered && !meta.artist) {
+          console.log('[App] Radio: no artist found — calling AudD to identify song for radio search.');
+        }
         try {
           // Slice to first 1MB — enough for fingerprinting, avoids uploading full file
           const sample = blob.slice(0, 1024 * 1024);
