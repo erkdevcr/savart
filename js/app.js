@@ -695,6 +695,19 @@ const App = (() => {
         }
       }
 
+      // Write all enriched fields back into the Meta in-memory cache.
+      // Meta.parse() only stores ID3 data; AudD/Last.fm/DB enrichment is added
+      // to the local `meta` object afterwards but never reaches the cache.
+      // patchCached() fills in any truthy fields not already present.
+      if (typeof Meta !== 'undefined') {
+        Meta.patchCached(item.id, {
+          coverUrl: meta.coverUrl  || undefined,
+          artist:   meta.artist    || undefined,
+          title:    meta.title     || undefined,
+          album:    meta.album     || undefined,
+        });
+      }
+
       _applyMeta(item, meta);
 
       // All recognition passes done — prefetch lyrics in background.
@@ -1000,12 +1013,15 @@ const App = (() => {
     UI.updateMiniPlayer(enriched, Player.isPlaying());
     UI.updateExpandedPlayer(enriched, Player.isPlaying());
 
-    // Update the song row thumbnail in the browse/search list (if visible)
+    // Update all visible thumbnail surfaces with the resolved cover
     if (meta.coverUrl) {
       _updateRowThumbnail(item.id, meta.coverUrl);
-      // Also update home card (recents / top-played) if currently visible
       _updateHomeCardThumbnail(item.id, meta.coverUrl);
       _updateTopListThumb(item.id, meta.coverUrl);
+      // Queue panel: patch the row for this song (needed when AudD resolves
+      // after the panel was already open, since _prefetchQueueCovers ran before
+      // the cover was available)
+      _updateQueueItemCover(item.id, meta.coverUrl);
     }
   }
 

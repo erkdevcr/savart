@@ -394,6 +394,23 @@ const Meta = (() => {
     return url;
   }
 
+  /**
+   * Patch the in-memory cache with additional fields resolved after parse()
+   * (e.g. AudD artist/title/coverUrl that aren't in the ID3 tags).
+   * Only writes fields that are truthy and not already set.
+   * @param {string} fileId
+   * @param {Object} fields — partial meta object
+   */
+  function patchCached(fileId, fields) {
+    const existing = _cache.get(fileId) || {};
+    const patch = Object.fromEntries(
+      Object.entries(fields).filter(([k, v]) => v && !existing[k])
+    );
+    if (Object.keys(patch).length === 0) return;
+    if (patch.coverUrl) _objectUrls.add(patch.coverUrl);
+    _cache.set(fileId, { ...existing, ...patch });
+  }
+
   /* ── Expose ─────────────────────────────────────────────── */
-  return { parse, getCached, revoke, injectCover };
+  return { parse, getCached, patchCached, revoke, injectCover };
 })();
