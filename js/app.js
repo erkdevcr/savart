@@ -49,7 +49,12 @@ const App = (() => {
    * Priority:
    *  1. item.artist (already set from DB / previous ID3 parse)
    *  2. Filename pattern "Artist - Title.mp3" (split on first " - ")
-   *  3. Parent folder name (if cached) — covers "Artist/Album/song.mp3" structures
+   *  3. Parent folder hierarchy (up to 4 levels) — handles:
+   *       song.mp3 → Album → Artist        (returns Artist)
+   *       song.mp3 → Artist → ...          (returns Artist)
+   *       song.mp3 → Artist – Discography  (strips suffix, returns Artist)
+   *     Skips folders that look like albums (start with year "2019 - ...")
+   *     and skips known root/drive folders.
    * Returns null if nothing useful is found.
    * @param {DriveItem} item
    * @returns {string|null}
@@ -62,24 +67,35 @@ const App = (() => {
     const dashIdx = base.indexOf(' - ');
     if (dashIdx > 0) {
       const candidate = base.slice(0, dashIdx)
-        .replace(/^\d+\.?\s*/, '')   // strip leading track number "01. "
-        .replace(/^track\s+\d+\s*/i, '') // strip "Track 01 "
+        .replace(/^\d+\.?\s*/, '')        // strip leading track number "01. "
+        .replace(/^track\s+\d+\s*/i, '')  // strip "Track 01 "
         .trim();
       if (candidate.length >= 2) return candidate;
     }
 
-    // Try parent folder name (cached from previous browse)
-    const parentId = item.parents?.[0];
-    if (parentId) {
-      const folder = _itemCache.get(parentId);
-      if (folder?.name) {
-        // Strip common suffixes: "- Discography", "(2020)", etc.
-        const folderName = folder.name
-          .replace(/[-–]\s*(discography|discografia|music|musica|collection|compilacion).*$/i, '')
-          .replace(/\s*\(\d{4}\)\s*$/, '')
-          .trim();
-        if (folderName.length >= 2) return folderName;
+    // Walk up the cached folder hierarchy (up to 4 levels)
+    const _cleanFolderName = name => name
+      .replace(/[-–]\s*(discography|discografia|music|musica|collection|compilacion|complete|obras).*$/i, '')
+      .replace(/\s*\(\d{4}\)\s*$/, '')   // trailing year "(2020)"
+      .replace(/\s*\[\d{4}\]\s*$/, '')   // trailing year "[2020]"
+      .trim();
+
+    const _looksLikeAlbum = name =>
+      /^\d{4}\s*[-–]/.test(name) ||          // starts with year "1998 - Americana"
+      /^(vol|volume|disc|cd)\s*\d/i.test(name); // "Vol 2", "Disc 1"
+
+    let currentId = item.parents?.[0];
+    for (let depth = 0; depth < 4; depth++) {
+      if (!currentId || currentId === CONFIG.ROOT_FOLDER_ID) break;
+      const folder = _itemCache.get(currentId);
+      if (!folder) break;
+
+      const cleaned = _cleanFolderName(folder.name || '');
+      if (cleaned.length >= 2 && !_looksLikeAlbum(folder.name)) {
+        return cleaned;
       }
+
+      currentId = folder.parents?.[0];
     }
 
     return null;
