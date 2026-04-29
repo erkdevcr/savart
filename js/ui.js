@@ -2086,12 +2086,11 @@ const UI = (() => {
       const item = document.createElement('div');
       item.className = 'lib-sidebar-item';
       item.dataset.plId = pl.id;
+      item.dataset.coverUrls = JSON.stringify(pl.coverUrls || []);
+      item.dataset.plName    = pl.name;
 
-      // Thumbnail: first cover or mosaic placeholder
-      const firstCover = (pl.coverUrls || [])[0];
-      const thumbHtml = firstCover
-        ? `<img src="${firstCover}" alt="">`
-        : _buildMosaicThumb(pl.coverUrls || [], pl.name);
+      // Thumbnail: always 2×2 mosaic (real covers when available, colored placeholders otherwise)
+      const thumbHtml = _buildMosaicThumb(pl.coverUrls || [], pl.name);
 
       const songCount = pl.songIds?.length || 0;
       const songNoun  = songCount === 1
@@ -2138,6 +2137,28 @@ const UI = (() => {
       return `<div style="flex:1;background:${bg}">${img}</div>`;
     });
     return `<div style="display:grid;grid-template-columns:1fr 1fr;width:100%;height:100%">${cells.join('')}</div>`;
+  }
+
+  /**
+   * Update a sidebar playlist card's mosaic when a background cover is resolved.
+   * Reads the stored coverUrls from the DOM element, prepends the new URL,
+   * and re-renders the 2×2 mosaic thumb in-place.
+   * @param {string} plId  — playlist id
+   * @param {string} coverUrl — newly resolved cover URL
+   */
+  function updatePlaylistSidebarCover(plId, coverUrl) {
+    const item = document.querySelector(`.lib-sidebar-item[data-pl-id="${CSS.escape(plId)}"]`);
+    if (!item) return;
+    const thumb = item.querySelector('.lib-sidebar-thumb');
+    if (!thumb) return;
+    let covers = [];
+    try { covers = JSON.parse(item.dataset.coverUrls || '[]'); } catch (_) {}
+    if (!covers.includes(coverUrl)) {
+      covers = [coverUrl, ...covers].slice(0, 4);
+      item.dataset.coverUrls = JSON.stringify(covers);
+    }
+    const name = item.dataset.plName || '';
+    thumb.innerHTML = _buildMosaicThumb(covers, name);
   }
 
   /**
@@ -2328,6 +2349,7 @@ const UI = (() => {
     renderPlaylistDetail,
     renderArtists,
     renderPlaylists,
+    updatePlaylistSidebarCover,
     // Search
     renderSearchResults,
     updateSearchChipCounts,

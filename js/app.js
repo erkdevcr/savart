@@ -224,6 +224,18 @@ const App = (() => {
     if (view === 'history' && types.includes('history')) _loadHistory();
 
     if (types.includes('settings')) _restoreSettings();
+
+    // When favorites sync in, refresh the heart button for the currently playing track
+    if (types.includes('favorites')) {
+      const track = Player.getCurrentTrack();
+      if (track?.id) {
+        DB.getMeta(track.id).then(m => {
+          if (Player.getCurrentTrack()?.id === track.id) {
+            UI.setHeartActive(!!m?.starred);
+          }
+        }).catch(() => {});
+      }
+    }
   }
 
   function _restoreUserInfo() {
@@ -2012,7 +2024,7 @@ const App = (() => {
           const dbMeta = await DB.getMeta(sid).catch(() => null);
           if (dbMeta?.coverBlob) {
             const url = Meta.injectCover(sid, dbMeta.coverBlob);
-            if (url) { _updatePlaylistSidebarCover(pl.id, url); found = true; break; }
+            if (url) { UI.updatePlaylistSidebarCover(pl.id, url); found = true; break; }
           }
 
           // Pass 2: try cached audio blob first, then range request
@@ -2118,14 +2130,6 @@ const App = (() => {
   }
 
   /** Swap the thumbnail of a playlist sidebar item to a resolved cover URL. */
-  function _updatePlaylistSidebarCover(plId, coverUrl) {
-    const item = document.querySelector(`.lib-sidebar-item[data-pl-id="${CSS.escape(plId)}"]`);
-    if (!item) return;
-    const thumb = item.querySelector('.lib-sidebar-thumb');
-    if (!thumb) return;
-    thumb.innerHTML = `<img src="${coverUrl}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:4px">`;
-  }
-
   /**
    * Resolve a valid cover URL for a song id.
    * Skips stale blob: URLs, tries coverBlob, then itemCache thumbnailLink.

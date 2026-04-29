@@ -529,13 +529,38 @@ const Sync = (() => {
       _remoteTs = { ...manifest };
 
       // ── Merge favorites ───────────────────────────────────
+      // Full LWW merge using starredAt timestamps:
+      //   - Remote items not in local   → add locally (starred on another device while offline)
+      //   - Local items not in remote   → remove IF starredAt ≤ remoteManifestTs
+      //     (meaning the remote had a chance to include them but didn't → un-starred elsewhere)
+      //     If starredAt > remoteManifestTs the song was starred offline → keep & push it back.
       await _mergeStep('favorites', async () => {
-        if (!Array.isArray(remoteFavs) || remoteFavs.length === 0) return;
-        const local = await DB.getStarred();
-        const localData = local.map(m => ({ id: m.id, name: m.name, displayName: m.displayName, artist: m.artist, albumName: m.albumName, thumbnailUrl: m.thumbnailUrl, folderId: m.folderId }));
-        const { toAdd } = _mergeFavorites(localData, remoteFavs);
-        for (const item of toAdd) await DB.setMeta(item.id, { ...item, starred: true });
-        if (toAdd.length) console.log(`[Sync] Merged ${toAdd.length} remote favorites`);
+        const local      = await DB.getStarred();
+        const remoteList = Array.isArray(remoteFavs) ? remoteFavs : [];
+        const remoteIds  = new Set(remoteList.map(r => r.id));
+        const localIds   = new Set(local.map(m => m.id));
+        // Timestamp of last known remote snapshot — used as the un-star cutoff.
+        const remoteManifestTs = _remoteTs.favorites || 0;
+
+        let added = 0, removed = 0;
+
+        // Add remote items missing locally
+        for (const item of remoteList) {
+          if (!localIds.has(item.id)) {
+            await DB.setMeta(item.id, { ...item, starred: true });
+            added++;
+          }
+        }
+
+        // Remove local items absent from remote that predate the remote snapshot
+        for (const m of local) {
+          if (!remoteIds.has(m.id) && remoteManifestTs > 0 && (m.starredAt || 0) <= remoteManifestTs) {
+            await DB.setMeta(m.id, { starred: false });
+            removed++;
+          }
+        }
+
+        if (added || removed) console.log(`[Sync] Favorites merged: +${added} added, −${removed} removed`);
       });
 
       // ── Merge playlists ───────────────────────────────────
