@@ -413,7 +413,7 @@ const UI = (() => {
     const artistEl = mp.querySelector('.mini-artist');
     const thumbImg = mp.querySelector('.mini-thumb img');
 
-    if (titleEl)  titleEl.textContent  = track.displayName || track.name;
+    _applyMarquee(titleEl, track.displayName || track.name || '');
     if (artistEl) artistEl.textContent = track.artist || '';
 
     if (thumbImg) {
@@ -467,7 +467,7 @@ const UI = (() => {
     const albumEl  = document.getElementById('pexp-album');
     const fileEl   = document.getElementById('pexp-file');
 
-    if (titleEl)  titleEl.textContent  = track ? (track.displayName || track.name) : '—';
+    _applyMarquee(titleEl, track ? (track.displayName || track.name || '') : '—');
     if (artistEl) artistEl.textContent = track?.artist || '';
     if (albumEl)  albumEl.textContent  = track?.albumName ? `${track.albumName}${track.year ? ' · ' + track.year : ''}` : '';
 
@@ -2298,6 +2298,46 @@ const UI = (() => {
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;');
+  }
+
+  /**
+   * Set text on a player title element.
+   * If the text overflows the container, injects a <span class="marquee-inner">
+   * that pans left/right like an LED sign.  Clears any previous marquee state.
+   *
+   * CSS vars set on el:
+   *   --mo      negative translateX offset (e.g. "-134px")
+   *   --mo-dur  animation cycle duration (proportional to overflow, 6–20s)
+   *
+   * @param {HTMLElement} el   — the overflow:hidden title container
+   * @param {string}      text — display text
+   */
+  function _applyMarquee(el, text) {
+    if (!el) return;
+
+    // Clear previous marquee: remove span, CSS vars, animation
+    el.innerHTML = '';
+    el.style.removeProperty('--mo');
+    el.style.removeProperty('--mo-dur');
+
+    const span = document.createElement('span');
+    span.textContent = text;
+    el.appendChild(span);
+
+    // Measure after two animation frames (ensures layout is complete)
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const overflow = span.scrollWidth - el.clientWidth;
+      if (overflow > 4) {
+        // Speed: ~55 px/s — comfortable for reading while scrolling
+        const scrollSecs = Math.ceil(overflow / 55);
+        // Total cycle: 18% pause-start + 54% scroll + 18% pause-end + 10% snap
+        // scrollSecs covers the 54% portion → total = scrollSecs / 0.54
+        const total = Math.min(Math.max(Math.round(scrollSecs / 0.54), 6), 20);
+        span.className = 'marquee-inner';
+        el.style.setProperty('--mo',     `-${overflow}px`);
+        el.style.setProperty('--mo-dur', `${total}s`);
+      }
+    }));
   }
 
   /* ── Loading wave overlay ───────────────────────────────── */

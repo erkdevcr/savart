@@ -289,7 +289,7 @@ img { display: block; }
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
+  text-overflow: ellipsis; /* fallback before marquee activates */
 }
 
 #mini-player .mini-artist {
@@ -1659,7 +1659,7 @@ img { display: block; }
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
+  text-overflow: ellipsis; /* fallback before marquee activates */
   line-height: 1.2;
 }
 
@@ -2207,6 +2207,30 @@ img { display: block; }
   gap: 20px;
   box-shadow: 0 -8px 40px rgba(0,0,0,0.5);
   animation: sheetUp 0.22s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* ── Marquee / LED-pan for long player titles ────────────────
+   Container keeps overflow:hidden.  The inner span slides left
+   (to show the clipped end), pauses, then snaps back to start.
+   --mo  : negative px offset  (set by _applyMarquee in ui.js)
+   --mo-dur: total cycle time  (set proportional to overflow)   */
+@keyframes marquee-pan {
+  0%,  18% { transform: translateX(0); }          /* pause at start */
+  72%, 90% { transform: translateX(var(--mo, 0px)); } /* pause at end   */
+  100%     { transform: translateX(0); }          /* snap back      */
+}
+
+.marquee-inner {
+  display: inline-block;
+  white-space: nowrap;
+  will-change: transform;
+  animation: marquee-pan var(--mo-dur, 10s) ease-in-out infinite;
+  animation-delay: var(--mo-delay, 0.8s);  /* small initial hold */
+}
+
+/* Disable marquee when the user prefers reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .marquee-inner { animation: none; }
 }
 
 @keyframes sheetUp {
