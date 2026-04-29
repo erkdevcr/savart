@@ -508,9 +508,16 @@ const App = (() => {
       // ── Step 1: Drive full-text search by artist name ─────────
       const results = await Drive.searchFiles(artist);
 
-      // Build the set of IDs we must never add (current queue + prior radio adds)
+      // Build the blocked set.
+      // Initial trigger (triggerItemId != null): block current queue + prior radio adds
+      //   → prevents immediate re-queuing of songs added this session.
+      // Refill trigger (triggerItemId === null): block ONLY the current queue
+      //   → songs that have already played (left the queue) are recyclable,
+      //     so radio keeps working even when the artist has ≤ 25 songs in Drive.
       const { queue } = Player.getQueue();
-      const blocked   = new Set([...queue.map(q => q.id), ..._radioQueuedIds]);
+      const blocked   = triggerItemId !== null
+        ? new Set([...queue.map(q => q.id), ..._radioQueuedIds])
+        : new Set(queue.map(q => q.id));
 
       const candidates = [];
       const seen       = new Set();
@@ -690,6 +697,9 @@ const App = (() => {
       // Radio mode: now that we have the most reliable artist (post-AudD),
       // search Drive in background and expand the queue with more songs.
       if (_radioModeActive && meta.artist) {
+        // Set _radioArtist eagerly so the _onQueueChange refill can fire
+        // even if _triggerRadio is skipped below (e.g. current track changed).
+        if (!_radioArtist) _radioArtist = meta.artist;
         _triggerRadio(meta.artist, item.id).catch(() => {});
       }
 
