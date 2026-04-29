@@ -525,6 +525,19 @@ const App = (() => {
         ? new Set([...queue.map(q => q.id), ..._radioQueuedIds])
         : new Set(queue.map(q => q.id));
 
+      // ── Artist name matcher ────────────────────────────────────
+      // Requires ALL significant words of the artist name (≥3 chars) to appear
+      // in the file/folder name. Prevents "Cristian Nodal" from matching
+      // "Cristian Castro" or "Cristian Gomez" (which only share "Cristian").
+      const _normStr = s => s.toLowerCase()
+        .normalize('NFD').replace(/[̀-ͯ]/g, '')  // strip accents
+        .replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+      const _artistWords = _normStr(artist).split(' ').filter(w => w.length >= 3);
+      const _matchesArtist = name => {
+        const n = _normStr(name);
+        return _artistWords.length > 0 && _artistWords.every(w => n.includes(w));
+      };
+
       const candidates = [];
       const seen       = new Set();
 
@@ -535,13 +548,13 @@ const App = (() => {
         }
       };
 
-      // Direct audio files whose filenames contain the artist name
-      results.files.forEach(_collect);
+      // Direct audio files: only collect those whose name matches the full artist
+      results.files.filter(f => _matchesArtist(f.name)).forEach(_collect);
 
       // ── Step 2: expand artist-named folders (max 3) ───────────
-      // Each artist folder is listed for its direct children:
-      // album subfolders + any loose songs at the artist root.
-      const artistFolders = results.folders.slice(0, 3);
+      // Filter folders to those whose name actually matches the artist.
+      // This prevents expanding "Cristian Castro" when searching "Cristian Nodal".
+      const artistFolders = results.folders.filter(f => _matchesArtist(f.name)).slice(0, 3);
       const level1 = await Promise.allSettled(
         artistFolders.map(f => Drive.listFolderAll(f.id))
       );
