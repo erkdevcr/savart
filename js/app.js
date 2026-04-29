@@ -796,6 +796,14 @@ const App = (() => {
 
       _applyMeta(item, meta);
 
+      // If home is currently visible and we enriched the artist/title, refresh it
+      // so recents cards show the updated text immediately in this session.
+      // (_patchMetaText already handled DOM-level patches; this keeps the data
+      //  model consistent for subsequent re-renders like live sync.)
+      if ((meta.artist || meta.title) && UI.getCurrentView() === 'home') {
+        _loadHomeData().catch(() => {});
+      }
+
       // Prefetch lyrics now that artist + title are fully resolved
       if (typeof Lyrics !== 'undefined' && meta.artist && (meta.title || item.displayName)) {
         const lyricsTitle = meta.title || item.displayName;
@@ -1108,6 +1116,15 @@ const App = (() => {
       // the cover was available)
       _updateQueueItemCover(item.id, meta.coverUrl);
     }
+
+    // Patch title/artist text in all visible surfaces (queue, home, top-played, browse).
+    // Runs regardless of whether a cover was found — enriched text matters too.
+    _patchMetaText(item.id, {
+      title:  meta.title  || null,
+      artist: meta.artist || null,
+      album:  meta.album  || null,
+      year:   meta.year   || null,
+    });
   }
 
   /**
@@ -2254,6 +2271,90 @@ const App = (() => {
       if (img) { img.src = url; }
       else { thumb.innerHTML = `<img src="${url}" alt="">`; }
     });
+  }
+
+  /**
+   * Patch title / artist text in all currently visible elements that reference
+   * this song — queue panel, home recents cards, top-played list, history list,
+   * and browse rows.  Called from _applyMeta after _onBlobReady enriches metadata.
+   *
+   * Elements are created on the fly when they were omitted because the value was
+   * empty at render time (e.g. artist row in queue, .home-card-sub).
+   *
+   * @param {string} id — Drive file id
+   * @param {{title:string|null, artist:string|null, album:string|null, year:string|null}} fields
+   */
+  function _patchMetaText(id, { title, artist, album, year }) {
+    const eid = CSS.escape(id);
+
+    if (title) {
+      // Browse rows (title only — no artist line in browse)
+      document.querySelectorAll(`.song-row[data-id="${eid}"] .song-row-title`).forEach(el => {
+        el.textContent = title;
+      });
+      // Queue items
+      document.querySelectorAll(`.queue-item[data-id="${eid}"] .queue-item-title`).forEach(el => {
+        el.textContent = title;
+      });
+      // Home recents cards
+      document.querySelectorAll(`#screen-home .home-card[data-id="${eid}"] .home-card-name`).forEach(el => {
+        el.textContent = title;
+      });
+      // Top-played & history list
+      document.querySelectorAll(`.top-list-item[data-id="${eid}"] .top-list-title`).forEach(el => {
+        el.textContent = title;
+      });
+    }
+
+    if (artist) {
+      // ── Queue item artist ──────────────────────────────────────
+      document.querySelectorAll(`.queue-item[data-id="${eid}"]`).forEach(el => {
+        let artistEl = el.querySelector('.queue-item-artist');
+        if (artistEl) {
+          artistEl.textContent = artist;
+        } else {
+          // Row was built without an artist line — inject it now
+          const info = el.querySelector('.queue-item-info');
+          if (info) {
+            artistEl = document.createElement('div');
+            artistEl.className = 'queue-item-artist';
+            artistEl.textContent = artist;
+            info.appendChild(artistEl);
+          }
+        }
+      });
+
+      // ── Home recents card artist ───────────────────────────────
+      document.querySelectorAll(`#screen-home .home-card[data-id="${eid}"]`).forEach(el => {
+        let subEl = el.querySelector('.home-card-sub');
+        if (subEl) {
+          subEl.textContent = artist;
+        } else {
+          subEl = document.createElement('div');
+          subEl.className = 'home-card-sub';
+          subEl.textContent = artist;
+          el.appendChild(subEl);
+        }
+      });
+
+      // ── Top-played / history meta line ─────────────────────────
+      // Reconstruct the same "artist — album · year" format used by _buildTopPlayedItem
+      const metaLine = [artist, [album, year].filter(Boolean).join(' · ')].filter(Boolean).join(' — ');
+      document.querySelectorAll(`.top-list-item[data-id="${eid}"]`).forEach(el => {
+        let metaEl = el.querySelector('.top-list-meta');
+        if (metaEl) {
+          metaEl.textContent = metaLine;
+        } else {
+          const info = el.querySelector('.top-list-info');
+          if (info) {
+            metaEl = document.createElement('div');
+            metaEl.className = 'top-list-meta';
+            metaEl.textContent = metaLine;
+            info.appendChild(metaEl);
+          }
+        }
+      });
+    }
   }
 
   /**
