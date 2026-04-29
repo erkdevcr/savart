@@ -1915,6 +1915,18 @@ const UI = (() => {
     header.className = 'lib-detail-header';
     const plIcon = `<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zm13-4v8l5-4-5-4z"/></svg>`;
     header.innerHTML = `${plIcon} ${escHtml(name)} <span class="lib-detail-count">${songs.length}</span>`;
+
+    // "Reproducir" play-all button — only shown when playlist is non-empty
+    if (songs.length > 0) {
+      const playBtn = document.createElement('button');
+      playBtn.className = 'pl-detail-play-btn';
+      playBtn.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> <span>${t('ctx_play')}</span>`;
+      playBtn.addEventListener('click', () => {
+        if (typeof App !== 'undefined') App.onPlaylistPlay(songs);
+      });
+      header.appendChild(playBtn);
+    }
+
     container.appendChild(header);
 
     if (songs.length === 0) {
@@ -2081,9 +2093,11 @@ const UI = (() => {
         ? `<img src="${firstCover}" alt="">`
         : _buildMosaicThumb(pl.coverUrls || [], pl.name);
 
+      const songCount = pl.songIds?.length || 0;
       item.innerHTML = `
         <div class="lib-sidebar-thumb">${thumbHtml}</div>
         <span class="lib-sidebar-name" title="${escHtml(pl.name)}">${escHtml(pl.name)}</span>
+        <span class="lib-sidebar-count">${songCount}</span>
         <button class="pl-item-more" aria-label="Más opciones">${iconDots()}</button>
       `;
 

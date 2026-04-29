@@ -1328,6 +1328,12 @@ const App = (() => {
     }
   }
 
+  /** Play all songs in a playlist immediately (from detail header button). */
+  function onPlaylistPlay(songs) {
+    if (!songs || songs.length === 0) return;
+    if (typeof Player !== 'undefined') Player.setQueue(songs, 0);
+  }
+
   /** Open Library view and navigate directly to the tapped playlist. */
   function onPlaylistHomeCardClick(pl) {
     UI.showView('library');
@@ -3166,6 +3172,7 @@ const App = (() => {
     // Called by UI event handlers
     onHomeCardClick,
     onPlaylistHomeCardClick,
+    onPlaylistPlay,
     onFolderClick,
     onGoToFolder,
     onFolderPlay,

@@ -1384,6 +1384,37 @@ img { display: block; }
   padding: 1px 8px;
 }
 
+/* "Reproducir" play-all button inside playlist detail header */
+.pl-detail-play-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--accent);
+  border: none;
+  border-radius: 20px;
+  color: #fff;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 4px 10px 4px 8px;
+  margin-left: 8px;
+  flex-shrink: 0;
+  transition: opacity 0.15s;
+}
+.pl-detail-play-btn:hover { opacity: 0.85; }
+
+/* Song count badge in left sidebar playlist list */
+.lib-sidebar-count {
+  font-size: 10px;
+  color: var(--text-disabled);
+  background: var(--bg-hover);
+  border-radius: 8px;
+  padding: 1px 6px;
+  flex-shrink: 0;
+  line-height: 1.6;
+}
+
 /* ── Settings screen ─────────────────────────────────────── */
 .settings-section {
   padding: 0;
@@ -1574,6 +1605,9 @@ img { display: block; }
   padding: 0 0 10px;   /* sits at top of info panel, 10px bottom separates from track name */
   flex-shrink: 0;
 }
+
+/* Push "Mostrar Álbum" to the far right of the header row */
+#btn-pexp-show-album { margin-left: auto; }
 
 /* MOSTRAR ÁLBUM button — mobile + desktop */
 .pexp-show-album-btn {
