@@ -658,12 +658,15 @@ const App = (() => {
         }
       }
 
-      // Still no cover → try AudD.io audio fingerprinting
-      // Only runs when no cover was found after all previous passes.
-      // Songs with embedded covers (ID3/FLAC) or persisted cover URLs skip AudD.
-      // Artist/title/album from AudD are filled in even if they're the only missing piece,
-      // but AudD itself is not triggered solely for missing artist (to preserve quota).
-      if (!meta.coverUrl && typeof Audd !== 'undefined') {
+      // AudD.io audio fingerprinting — runs in two cases:
+      //  1. No cover found yet (primary path — identifies song + fills art).
+      //  2. Radio mode is active, hasn't triggered yet, and artist is still unknown —
+      //     even if a cover exists we need the artist to drive the radio search.
+      //     Without this, songs with embedded ID3 covers but no artist tag would
+      //     silently skip AudD and leave radio mode permanently stuck.
+      const _needsAudd = !meta.coverUrl ||
+        (_radioModeActive && !_radioTriggered && !meta.artist);
+      if (_needsAudd && typeof Audd !== 'undefined') {
         try {
           // Slice to first 1MB — enough for fingerprinting, avoids uploading full file
           const sample = blob.slice(0, 1024 * 1024);
