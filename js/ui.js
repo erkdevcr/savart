@@ -1346,7 +1346,14 @@ const UI = (() => {
     }
 
     // Position menu near cursor — measure actual rendered size to avoid overflow
+    // Use visualViewport when available: on Android it excludes the system navigation
+    // bar, whereas window.innerHeight includes the area behind it.
+    const vw = window.visualViewport?.width  || window.innerWidth;
+    const vh = window.visualViewport?.height || window.innerHeight;
     const margin = 8;
+    // Extra bottom clearance for Android gesture bar / iOS home indicator
+    const safeBottom = margin + 16;
+
     let x = e.clientX || (e.touches?.[0]?.clientX || 0);
     let y = e.clientY || (e.touches?.[0]?.clientY || 0);
 
@@ -1361,10 +1368,10 @@ const UI = (() => {
 
     menu.style.visibility = '';
 
-    // Clamp so the menu never overflows the viewport
-    x = Math.min(x, window.innerWidth  - mw - margin);
+    // Clamp so the menu never overflows the visible viewport
+    x = Math.min(x, vw - mw - margin);
     x = Math.max(margin, x);
-    y = Math.min(y, window.innerHeight - mh - margin);
+    y = Math.min(y, vh - mh - safeBottom);
     y = Math.max(margin, y);
 
     menu.style.left = `${x}px`;
