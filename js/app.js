@@ -458,14 +458,14 @@ const App = (() => {
         thumbnailUrl: safeThumb,
         folderId:    track.parents?.[0] || track.folderId || null,
       }).then(() => Sync.push('history')).catch(() => {});
-      // Also persist display fields to metadata store so topPlayed can show them
-      DB.setMeta(track.id, {
-        name:         recentData.name,
-        displayName:  recentData.displayName,
-        thumbnailUrl: recentData.thumbnailUrl,
-        artist:       recentData.artist,
-        folderId:     recentData.folderId,
-      }).catch(() => {});
+      // Also persist display fields to metadata store so topPlayed can show them.
+      // IMPORTANT: only write non-empty artist/displayName so we never overwrite
+      // enriched values (from a previous AudD/Last.fm pass) with empty strings.
+      const _metaUpdate = { name: recentData.name, folderId: recentData.folderId };
+      if (recentData.displayName)  _metaUpdate.displayName  = recentData.displayName;
+      if (recentData.thumbnailUrl) _metaUpdate.thumbnailUrl = recentData.thumbnailUrl;
+      if (recentData.artist)       _metaUpdate.artist       = recentData.artist;
+      DB.setMeta(track.id, _metaUpdate).catch(() => {});
       // Schedule sync for play counts (incremented by player.js after audio starts)
       setTimeout(() => Sync.push('playcounts'), 3000);
     }
@@ -782,6 +782,17 @@ const App = (() => {
         title:    meta.title    || undefined,
         album:    meta.album    || undefined,
       });
+
+      // Persist the final enriched identity back to DB so home / top-played
+      // can show it in future sessions without replaying the song.
+      // (ID3 artist / Last.fm artist are NOT otherwise saved to DB.)
+      {
+        const _persist = {};
+        if (meta.artist) _persist.artist      = meta.artist;
+        if (meta.title)  _persist.displayName = meta.title;
+        if (meta.album)  _persist.album       = meta.album;
+        if (Object.keys(_persist).length > 0) DB.setMeta(item.id, _persist).catch(() => {});
+      }
 
       _applyMeta(item, meta);
 
