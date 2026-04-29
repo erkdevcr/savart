@@ -737,6 +737,17 @@ const App = (() => {
         } catch (_) { /* network / API error — non-fatal */ }
       }
 
+      // 1d. Filename / folder-hierarchy fallback — runs when artist is still unknown
+      //     after ID3, DB, appProperties, and AudD.  _guessArtistFromItem walks:
+      //       1. filename pattern "Artist - Title.mp3"
+      //       2. parent folder chain (up to 4 levels, skips album-like names)
+      //     This gives Last.fm a real artist to query in Pass 2, and the result is
+      //     persisted to DB so the name shows everywhere (queue, home, top-played…).
+      if (!meta.artist) {
+        const guessed = _guessArtistFromItem(item);
+        if (guessed) meta.artist = guessed;
+      }
+
       /* ── PASS 2 — ENRICHMENT ──────────────────────────────────
          Goal: find cover art using the best metadata now available
          (which may include artist/album/title found by AudD above).
