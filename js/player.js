@@ -272,6 +272,7 @@ const Player = (() => {
   function jumpTo(index) {
     if (index < 0 || index >= _queue.length) return;
     _queueIndex = index;
+    _onQueueChange([..._queue], _queueIndex);
     _playCurrentTrack();
   }
 
