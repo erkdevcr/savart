@@ -385,7 +385,11 @@ const App = (() => {
         thumbnailLink: track.thumbnailLink || null,
         folderId:     track.parents?.[0]  || track.folderId || null,
       };
-      DB.addRecent(recentData).then(() => Sync.push('recents')).catch(() => {});
+      DB.addRecent(recentData).then(() => {
+        Sync.push('recents');
+        // Refresh Home in real-time if it's the active view
+        if (UI.getCurrentView() === 'home') _loadHomeData();
+      }).catch(() => {});
       // Add to playback history (no-duplicates, most-recent-first, 7-day / 100-item store)
       DB.addToHistory({
         id:          track.id,
