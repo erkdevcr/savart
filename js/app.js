@@ -2130,6 +2130,15 @@ const App = (() => {
           continue;
         }
 
+        // 5. Folder cover — already cached in memory if the user browsed this folder.
+        //    Free lookup: _folderCoverCache is a Map; _getFolderCover returns instantly
+        //    for folders already visited this session.
+        const folderId = item.parents?.[0];
+        if (folderId) {
+          const folderCover = await _getFolderCover(folderId);
+          if (folderCover) { _updateQueueItemCover(item.id, folderCover); continue; }
+        }
+
         // Still no cover — mark for network resolution
         needsNetwork.push(item);
       } catch (_) { /* non-fatal */ }
