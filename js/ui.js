@@ -2209,7 +2209,8 @@ const UI = (() => {
         }
       </div>
       <div>
-        <div class="lib-detail-entity-name">${escHtml(album.label || album.name)}</div>
+        ${album.year ? `<div class="lib-detail-entity-year">(${escHtml(album.year)})</div>` : ''}
+        <div class="lib-detail-entity-name">${escHtml(album.name)}</div>
         <div class="lib-detail-entity-sub">${[album.artist, songs.length + ' canciones'].filter(Boolean).map(escHtml).join(' · ')}</div>
       </div>`;
     container.appendChild(entity);

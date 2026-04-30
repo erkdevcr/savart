@@ -1242,10 +1242,23 @@ const App = (() => {
 
     if (!topAlbum) return; // nothing to patch
 
-    // Update title: "[year] - [album]" or just "[album]" — skip prefix if already present
-    nameEl.textContent = (topYear && !topAlbum.startsWith(`${topYear}`)) ? `${topYear} - ${topAlbum}` : topAlbum;
+    // Update or create the year element (above the title)
+    let yearEl = container.querySelector('.lib-detail-entity-year');
+    if (topYear) {
+      if (!yearEl) {
+        yearEl = document.createElement('div');
+        yearEl.className = 'lib-detail-entity-year';
+        nameEl.parentNode.insertBefore(yearEl, nameEl);
+      }
+      yearEl.textContent = `(${topYear})`;
+    } else if (yearEl) {
+      yearEl.remove();
+    }
 
-    // Update subtitle: artist · N canciones (year already in title, don't duplicate)
+    // Album name — clean, no year prefix
+    nameEl.textContent = topAlbum;
+
+    // Subtitle: artist · N canciones
     if (subEl) {
       subEl.textContent = [artist, songs.length + ' canciones'].filter(Boolean).join(' · ');
     }
@@ -3223,15 +3236,13 @@ const App = (() => {
 
       const albums = Array.from(folderMap.values())
         .map(f => {
-          const name     = _top(f.albumCounts);
-          const artist   = _top(f.artistCounts) || '';
-          const year     = _top(f.yearCounts);
-          // Use total folder count (includes untagged tracks in the same folder)
+          const name      = _top(f.albumCounts);
+          const artist    = _top(f.artistCounts) || '';
+          const year      = _top(f.yearCounts);
           const songCount = Math.max(f.taggedCount, folderSongCount.get(f.folderId) || 0);
-          const label    = (year && !name.startsWith(`${year}`)) ? `${year} - ${name}` : name;
-          return { name, label, artist, songCount, coverUrl: f.coverUrl, year, folderId: f.folderId };
+          return { name, artist, songCount, coverUrl: f.coverUrl, year, folderId: f.folderId };
         })
-        .sort((a, b) => a.label.localeCompare(b.label));
+        .sort((a, b) => a.name.localeCompare(b.name));
 
       UI.renderLibraryAlbums(albums);
       // Re-apply any active search filter (persisted from before a drill-down)
@@ -3292,10 +3303,9 @@ const App = (() => {
           const name      = _top(f.albumCounts);
           const year      = _top(f.yearCounts);
           const songCount = Math.max(f.taggedCount, folderSongCount.get(f.folderId) || 0);
-          const label     = (year && !name.startsWith(`${year}`)) ? `${year} - ${name}` : name;
-          return { name, label, artist: artist.name, songCount, coverUrl: f.coverUrl, year, folderId: f.folderId };
+          return { name, artist: artist.name, songCount, coverUrl: f.coverUrl, year, folderId: f.folderId };
         })
-        .sort((a, b) => a.label.localeCompare(b.label));
+        .sort((a, b) => a.name.localeCompare(b.name));
 
       _libInDetail = true;
       UI.renderLibraryArtistDetail(artist, albums);
