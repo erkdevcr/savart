@@ -338,9 +338,14 @@ const Sync = (() => {
 
       case 'metadata': {
         // Field-level fill: only write fields the local device doesn't have yet.
-        // mbTried / auddTried are flags — if remote is true, adopt it to skip re-enrichment.
-        const PATCH_FIELDS = ['artist', 'album', 'year', 'mbTried', 'auddTried',
-                              'mbReleaseMbid', 'thumbnailUrl', 'coverUrl'];
+        // This lets both devices converge without overwriting locally-enriched values.
+        // mbTried / auddTried: if remote is true, adopt it to skip redundant lookups.
+        const PATCH_FIELDS = [
+          'name', 'displayName', 'folderId',         // album membership + display title
+          'artist', 'album', 'year',                  // enriched text
+          'mbTried', 'auddTried', 'mbReleaseMbid',    // enrichment flags / IDs
+          'thumbnailUrl', 'coverUrl',                 // cover art URLs
+        ];
         for (const item of (data || [])) {
           if (!item?.id) continue;
           const ex = await DB.getMeta(item.id);
@@ -432,13 +437,22 @@ const Sync = (() => {
   }
 
   async function _pushMetadata() {
-    const SYNC_FIELDS = ['artist', 'album', 'year', 'mbTried', 'auddTried', 'mbReleaseMbid'];
+    // Fields that identify the song and its album membership —
+    // synced so that other devices can rebuild the Library without re-scanning.
+    const SYNC_FIELDS = [
+      'name', 'displayName', 'folderId',           // album membership + display title
+      'artist', 'album', 'year',                    // enriched text
+      'mbTried', 'auddTried', 'mbReleaseMbid',      // enrichment flags / IDs
+    ];
     const isExternalUrl = u => u && !u.startsWith('blob:')
       && !u.includes('googleusercontent.com') && !u.includes('googleapis.com');
 
     const all = await DB.getAllMeta();
-    const enriched = all
-      .filter(m => m.mbTried || m.auddTried || m.artist || m.album || m.year)
+    const toSync = all
+      // Include every song that has been scanned into any folder OR has any enrichment.
+      // Songs with only a folderId carry name/displayName/folderId so other devices can
+      // build the Library; enrichment flags prevent redundant lookups on the remote device.
+      .filter(m => m.folderId || m.mbTried || m.auddTried || m.artist || m.album || m.year)
       .map(m => {
         const rec = { id: m.id };
         for (const f of SYNC_FIELDS) {
@@ -448,8 +462,8 @@ const Sync = (() => {
         if (isExternalUrl(m.coverUrl))     rec.coverUrl     = m.coverUrl;
         return rec;
       });
-    await _writeFile(FILENAMES.metadata, enriched);
-    console.log(`[Sync] Pushed metadata (${enriched.length} enriched)`);
+    await _writeFile(FILENAMES.metadata, toSync);
+    console.log(`[Sync] Pushed metadata (${toSync.length} songs)`);
   }
 
   const _pushFns = {
@@ -696,11 +710,17 @@ const Sync = (() => {
         }
       });
 
-      // ── Merge enriched metadata (MB / ID3 / AudD) ────────────────────────────
+      // ── Merge song metadata (name, album membership, enrichment) ─────────────
+      // Covers: Library reconstruction (name/displayName/folderId), enriched text
+      // (artist/album/year), MB/AudD flags to skip redundant lookups, cover URLs.
       await _mergeStep('metadata', async () => {
         if (!Array.isArray(remoteMetadata) || remoteMetadata.length === 0) return;
-        const PATCH_FIELDS = ['artist', 'album', 'year', 'mbTried', 'auddTried',
-                              'mbReleaseMbid', 'thumbnailUrl', 'coverUrl'];
+        const PATCH_FIELDS = [
+          'name', 'displayName', 'folderId',
+          'artist', 'album', 'year',
+          'mbTried', 'auddTried', 'mbReleaseMbid',
+          'thumbnailUrl', 'coverUrl',
+        ];
         let applied = 0;
         for (const item of remoteMetadata) {
           if (!item?.id) continue;
@@ -708,10 +728,10 @@ const Sync = (() => {
           const patch = {};
           for (const f of PATCH_FIELDS) {
             if (item[f] === null || item[f] === undefined || item[f] === '') continue;
-            // mbTried / auddTried: if remote is true, mark as tried (skip re-enrichment)
-            if (f === 'mbTried'  && item[f]) { patch[f] = true; continue; }
-            if (f === 'auddTried'&& item[f]) { patch[f] = true; continue; }
-            // All other fields: only fill local gaps
+            // Enrichment flags: if remote is true, adopt to skip re-enrichment
+            if (f === 'mbTried'   && item[f]) { patch[f] = true; continue; }
+            if (f === 'auddTried' && item[f]) { patch[f] = true; continue; }
+            // All other fields: only fill local gaps (never overwrite)
             if (!ex?.[f]) patch[f] = item[f];
           }
           if (Object.keys(patch).length > 0) {
@@ -719,7 +739,7 @@ const Sync = (() => {
             applied++;
           }
         }
-        if (applied) console.log(`[Sync] Merged metadata: ${applied} songs enriched from remote`);
+        if (applied) console.log(`[Sync] Merged metadata: ${applied} songs updated from remote`);
       });
 
       // Push merged state back + update manifest.

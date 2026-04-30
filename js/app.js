@@ -3062,6 +3062,9 @@ const App = (() => {
         thumbnailUrl:(existing?.thumbnailUrl || patch.thumbnailUrl || null),
       });
     }
+
+    // Push any new/updated song entries to Drive so other devices see the album
+    if (count > 0 && typeof Sync !== 'undefined') Sync.push('metadata');
     return count;
   }
 
@@ -3108,6 +3111,9 @@ const App = (() => {
         if (_currentLibTab === 'albums')  _loadAlbums();
         if (_currentLibTab === 'artists') _loadArtists();
       }
+
+      // Propagation writes artist/album/year to siblings — sync to Drive for cross-device
+      if (updated > 0 && typeof Sync !== 'undefined') Sync.push('metadata');
     } catch (err) {
       console.warn('[App] _propagateAlbumMeta error:', err);
     }
