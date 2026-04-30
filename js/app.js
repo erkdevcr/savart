@@ -1157,27 +1157,41 @@ const App = (() => {
   }
 
   /**
-   * After a rescan, update the album detail header to show "[year] - [album]".
-   * Reads fresh meta from DB, finds the majority year + album name, patches DOM.
+   * After a rescan, update the album detail header: title, subtitle, and cover art.
+   * Reads fresh meta from DB, finds majority year + album name, picks best cover.
    */
   async function _patchAlbumDetailHeader(songs) {
     const container = document.getElementById('lib-detail-content');
     if (!container) return;
     const nameEl = container.querySelector('.lib-detail-entity-name');
     const subEl  = container.querySelector('.lib-detail-entity-sub');
+    const artEl  = container.querySelector('.lib-detail-entity-art');
     if (!nameEl) return;
 
     // Re-read meta for all songs and tally year + album
     const metas = await Promise.all(songs.map(s => DB.getMeta(s.id).catch(() => null)));
     const yearCounts  = new Map();
     const albumCounts = new Map();
-    let artist = null;
+    let artist   = null;
+    let coverUrl = null;  // best cover found: ID3 blob > thumbnailUrl
 
     for (const m of metas) {
       if (!m) continue;
-      if (m.year)   yearCounts.set(m.year,   (yearCounts.get(m.year)   || 0) + 1);
-      if (m.album)  albumCounts.set(m.album,  (albumCounts.get(m.album)  || 0) + 1);
+      if (m.year)  yearCounts.set(m.year,  (yearCounts.get(m.year)  || 0) + 1);
+      if (m.album) albumCounts.set(m.album, (albumCounts.get(m.album) || 0) + 1);
       if (!artist && m.artist) artist = m.artist;
+
+      // Prefer ID3-embedded blob cover (already resolved to an object URL by Meta)
+      if (!coverUrl && typeof Meta !== 'undefined') {
+        const cached = Meta.getCached(m.id);
+        if (cached?.coverUrl) { coverUrl = cached.coverUrl; continue; }
+        if (m.coverBlob) {
+          const url = Meta.injectCover(m.id, m.coverBlob);
+          if (url) { coverUrl = url; continue; }
+        }
+      }
+      // Fall back to external thumbnail
+      if (!coverUrl && m.thumbnailUrl) coverUrl = m.thumbnailUrl;
     }
 
     const topYear  = [...yearCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || null;
@@ -1185,13 +1199,21 @@ const App = (() => {
 
     if (!topAlbum) return; // nothing to patch
 
-    // Update name: "[year] - [album]" or just "[album]" — matches album.label format
+    // Update title: "[year] - [album]" or just "[album]"
     nameEl.textContent = topYear ? `${topYear} - ${topAlbum}` : topAlbum;
 
     // Update subtitle: artist · N canciones (year already in title, don't duplicate)
     if (subEl) {
-      const parts = [artist, songs.length + ' canciones'].filter(Boolean);
-      subEl.textContent = parts.join(' · ');
+      subEl.textContent = [artist, songs.length + ' canciones'].filter(Boolean).join(' · ');
+    }
+
+    // Update cover art in the entity header
+    if (artEl && coverUrl) {
+      // Only replace if there's no img yet, or the existing one is from a different source
+      const existing = artEl.querySelector('img');
+      if (!existing || existing.src !== coverUrl) {
+        artEl.innerHTML = `<img src="${coverUrl}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)">`;
+      }
     }
   }
 
