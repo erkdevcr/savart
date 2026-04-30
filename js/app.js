@@ -3113,89 +3113,63 @@ const App = (() => {
     if (_libInDetail) return; // don't replace a drill-down view
     try {
       const all = await DB.getAllMeta();
-      // Count all songs per folder (regardless of album tag) for accurate totals
+
+      // Total songs per folder (includes untagged — used for accurate song count)
       const folderSongCount = new Map();
       all.forEach(m => { if (m.folderId) folderSongCount.set(m.folderId, (folderSongCount.get(m.folderId) || 0) + 1); });
 
-      const albumMap = new Map();
+      // ── Group by folderId first: one folder = one album ───────────────────────
+      // Songs with different album tags but the same folder are merged (majority name wins).
+      // Songs in different folders are always separate entries even if they share a name.
+      const folderMap = new Map(); // folderId → accumulator
+
       all.forEach(m => {
-        const album  = (m.album || '').trim();
+        const album  = (m.album  || '').trim();
         const artist = (m.artist || '').trim();
-        if (!album) return;
-        const key = `${album.toLowerCase()}|${artist.toLowerCase()}`;
-        if (!albumMap.has(key)) {
-          albumMap.set(key, { name: album, artist, songCount: 0, coverUrl: null, hasBlobCover: false, yearCounts: new Map(), folderIds: new Set() });
+        if (!album || !m.folderId) return; // skip untagged or folder-less songs
+        if (!folderMap.has(m.folderId)) {
+          folderMap.set(m.folderId, {
+            folderId:     m.folderId,
+            albumCounts:  new Map(),
+            artistCounts: new Map(),
+            yearCounts:   new Map(),
+            coverUrl:     null,
+            hasBlobCover: false,
+            taggedCount:  0,  // songs with an album tag
+          });
         }
-        const a = albumMap.get(key);
-        a.songCount++;
-        if (m.folderId) a.folderIds.add(m.folderId);
-        // Prefer ID3 embedded cover (coverBlob) over external thumbnailUrl
-        if (!a.hasBlobCover) {
+        const f = folderMap.get(m.folderId);
+        f.taggedCount++;
+        f.albumCounts.set(album,  (f.albumCounts.get(album)  || 0) + 1);
+        if (artist) f.artistCounts.set(artist, (f.artistCounts.get(artist) || 0) + 1);
+        if (m.year) f.yearCounts.set(m.year,   (f.yearCounts.get(m.year)   || 0) + 1);
+        // Cover: ID3 blob > thumbnailUrl (most recent thumbnailUrl wins so CAA updates land)
+        if (!f.hasBlobCover) {
           if (m.coverBlob && typeof Meta !== 'undefined') {
             const url = Meta.injectCover(m.id, m.coverBlob);
-            if (url) { a.coverUrl = url; a.hasBlobCover = true; }
+            if (url) { f.coverUrl = url; f.hasBlobCover = true; }
           } else if (m.thumbnailUrl) {
-            // Always update with thumbnailUrl so the most recent CAA/MB cover wins
-            a.coverUrl = m.thumbnailUrl;
+            f.coverUrl = m.thumbnailUrl;
           }
         }
-        if (m.year) a.yearCounts.set(m.year, (a.yearCounts.get(m.year) || 0) + 1);
       });
 
-      // ── Deduplicate: merge album entries that share the same single folder ────
-      // Happens when songs in the same folder have inconsistent album tags
-      // (e.g. "Mugre" vs "1999 - Mugre" after a partial rescan).
-      const folderToKeys = new Map(); // folderId → [key, ...]
-      for (const [key, a] of albumMap) {
-        if (a.folderIds.size === 1) {
-          const fid = [...a.folderIds][0];
-          if (!folderToKeys.has(fid)) folderToKeys.set(fid, []);
-          folderToKeys.get(fid).push(key);
-        }
-      }
-      for (const keys of folderToKeys.values()) {
-        if (keys.length <= 1) continue;
-        // Primary = the entry with the most songs (most complete metadata)
-        keys.sort((ka, kb) => albumMap.get(kb).songCount - albumMap.get(ka).songCount);
-        const primary = albumMap.get(keys[0]);
-        for (let i = 1; i < keys.length; i++) {
-          const secondary = albumMap.get(keys[i]);
-          primary.songCount += secondary.songCount;
-          // Absorb cover: blob beats thumbnailUrl
-          if (!primary.hasBlobCover) {
-            if (secondary.hasBlobCover) {
-              primary.coverUrl = secondary.coverUrl;
-              primary.hasBlobCover = true;
-            } else if (!primary.coverUrl && secondary.coverUrl) {
-              primary.coverUrl = secondary.coverUrl;
-            }
-          }
-          // Absorb year counts
-          secondary.yearCounts.forEach((count, year) => {
-            primary.yearCounts.set(year, (primary.yearCounts.get(year) || 0) + count);
-          });
-          albumMap.delete(keys[i]);
-        }
-      }
+      const _top = map => map.size > 0
+        ? [...map.entries()].sort((a, b) => b[1] - a[1])[0][0]
+        : null;
 
-      const albums = Array.from(albumMap.values())
-        .map(a => {
-          // Pick most frequent year among songs in this album
-          let year = null;
-          if (a.yearCounts.size > 0) {
-            year = [...a.yearCounts.entries()].sort((x, y) => y[1] - x[1])[0][0];
-          }
-          // For single-folder albums, folder song count is more accurate
-          // (includes songs not yet ID3-tagged but residing in the same folder)
-          let songCount = a.songCount;
-          if (a.folderIds.size === 1) {
-            const fid = [...a.folderIds][0];
-            songCount = Math.max(songCount, folderSongCount.get(fid) || 0);
-          }
-          const label = (year && !a.name.startsWith(`${year}`)) ? `${year} - ${a.name}` : a.name;
-          return { name: a.name, label, artist: a.artist, songCount, coverUrl: a.coverUrl, year };
+      const albums = Array.from(folderMap.values())
+        .map(f => {
+          const name     = _top(f.albumCounts);
+          const artist   = _top(f.artistCounts) || '';
+          const year     = _top(f.yearCounts);
+          // Use total folder count (includes untagged tracks in the same folder)
+          const songCount = Math.max(f.taggedCount, folderSongCount.get(f.folderId) || 0);
+          const label    = (year && !name.startsWith(`${year}`)) ? `${year} - ${name}` : name;
+          return { name, label, artist, songCount, coverUrl: f.coverUrl, year, folderId: f.folderId };
         })
         .sort((a, b) => a.label.localeCompare(b.label));
+
       UI.renderLibraryAlbums(albums);
       // Re-apply any active search filter (persisted from before a drill-down)
       const q = document.getElementById('lib-search-input')?.value || '';
@@ -3211,50 +3185,58 @@ const App = (() => {
   async function onArtistClick(artist) {
     try {
       const all = await DB.getAllMeta();
-      const key = artist.name.toLowerCase();
+      const artistKey = artist.name.toLowerCase();
+
       const folderSongCount = new Map();
       all.forEach(m => { if (m.folderId) folderSongCount.set(m.folderId, (folderSongCount.get(m.folderId) || 0) + 1); });
-      const albumMap = new Map();
+
+      // Group by folderId — same rule as _loadAlbums, but scoped to this artist
+      const folderMap = new Map();
       all.forEach(m => {
-        if ((m.artist || '').trim().toLowerCase() !== key) return;
-        const album = (m.album || '').trim() || '(sin álbum)';
-        const aKey  = album.toLowerCase();
-        if (!albumMap.has(aKey)) {
-          albumMap.set(aKey, { name: album, artist: artist.name, songCount: 0, coverUrl: null, hasBlobCover: false, yearCounts: new Map(), folderIds: new Set() });
+        if ((m.artist || '').trim().toLowerCase() !== artistKey) return;
+        const album = (m.album || '').trim();
+        if (!album || !m.folderId) return;
+        if (!folderMap.has(m.folderId)) {
+          folderMap.set(m.folderId, {
+            folderId:     m.folderId,
+            albumCounts:  new Map(),
+            yearCounts:   new Map(),
+            coverUrl:     null,
+            hasBlobCover: false,
+            taggedCount:  0,
+          });
         }
-        const a = albumMap.get(aKey);
-        a.songCount++;
-        if (m.folderId) a.folderIds.add(m.folderId);
-        // Prefer ID3 embedded cover (coverBlob) over external thumbnailUrl
-        if (!a.hasBlobCover) {
+        const f = folderMap.get(m.folderId);
+        f.taggedCount++;
+        f.albumCounts.set(album, (f.albumCounts.get(album) || 0) + 1);
+        if (m.year) f.yearCounts.set(m.year, (f.yearCounts.get(m.year) || 0) + 1);
+        if (!f.hasBlobCover) {
           if (m.coverBlob && typeof Meta !== 'undefined') {
             const url = Meta.injectCover(m.id, m.coverBlob);
-            if (url) { a.coverUrl = url; a.hasBlobCover = true; }
-          } else if (!a.coverUrl && m.thumbnailUrl) {
-            a.coverUrl = m.thumbnailUrl;
+            if (url) { f.coverUrl = url; f.hasBlobCover = true; }
+          } else if (m.thumbnailUrl) {
+            f.coverUrl = m.thumbnailUrl;
           }
         }
-        if (m.year) a.yearCounts.set(m.year, (a.yearCounts.get(m.year) || 0) + 1);
       });
-      const albums = Array.from(albumMap.values())
-        .map(a => {
-          let year = null;
-          if (a.yearCounts.size > 0) {
-            year = [...a.yearCounts.entries()].sort((x, y) => y[1] - x[1])[0][0];
-          }
-          let songCount = a.songCount;
-          if (a.folderIds.size === 1) {
-            const fid = [...a.folderIds][0];
-            songCount = Math.max(songCount, folderSongCount.get(fid) || 0);
-          }
-          const label = (year && !a.name.startsWith(`${year}`)) ? `${year} - ${a.name}` : a.name;
-          return { name: a.name, label, artist: a.artist, songCount, coverUrl: a.coverUrl, year };
+
+      const _top = map => map.size > 0
+        ? [...map.entries()].sort((a, b) => b[1] - a[1])[0][0]
+        : null;
+
+      const albums = Array.from(folderMap.values())
+        .map(f => {
+          const name      = _top(f.albumCounts);
+          const year      = _top(f.yearCounts);
+          const songCount = Math.max(f.taggedCount, folderSongCount.get(f.folderId) || 0);
+          const label     = (year && !name.startsWith(`${year}`)) ? `${year} - ${name}` : name;
+          return { name, label, artist: artist.name, songCount, coverUrl: f.coverUrl, year, folderId: f.folderId };
         })
         .sort((a, b) => a.label.localeCompare(b.label));
+
       _libInDetail = true;
       UI.renderLibraryArtistDetail(artist, albums);
       UI.setLibSearchPlaceholder(`Buscar álbum de ${artist.name}…`);
-      // Re-apply any active search filter
       const q = document.getElementById('lib-search-input')?.value || '';
       if (q) _onLibSearch(q);
     } catch (err) {
@@ -3268,25 +3250,32 @@ const App = (() => {
   async function onAlbumClick(album, fromArtist) {
     try {
       const all = await DB.getAllMeta();
-      const albumKey  = album.name.toLowerCase();
-      const artistKey = (album.artist || '').toLowerCase();
 
-      // Primary pass: match by album tag (+ optional artist filter)
-      const tagged = all.filter(m => {
-        const mAlbum  = (m.album  || '').trim().toLowerCase();
-        const mArtist = (m.artist || '').trim().toLowerCase();
-        const matchAlbum  = mAlbum === albumKey || (albumKey === '(sin álbum)' && !mAlbum);
-        const matchArtist = !artistKey || mArtist === artistKey;
-        return matchAlbum && matchArtist;
-      });
-
-      // Broaden: songs in the same folder(s) are almost certainly on the same album
-      // even if they haven't been ID3-tagged yet. Include them so the full disc shows.
-      const folderIds = new Set(tagged.map(m => m.folderId).filter(Boolean));
-      const taggedIds = new Set(tagged.map(m => m.id));
-      const extra = folderIds.size > 0
-        ? all.filter(m => m.folderId && folderIds.has(m.folderId) && !taggedIds.has(m.id))
-        : [];
+      // When the album object carries a folderId (always the case after the new
+      // folder-first grouping), use the folder as the canonical source of truth.
+      // This guarantees that two albums with the same name in different folders
+      // are always kept separate and show exactly the right tracks.
+      let songs;
+      if (album.folderId) {
+        songs = all.filter(m => m.folderId === album.folderId);
+      } else {
+        // Fallback for album objects without folderId (e.g. from old cached data)
+        const albumKey  = album.name.toLowerCase();
+        const artistKey = (album.artist || '').toLowerCase();
+        const tagged = all.filter(m => {
+          const mAlbum  = (m.album  || '').trim().toLowerCase();
+          const mArtist = (m.artist || '').trim().toLowerCase();
+          const matchAlbum  = mAlbum === albumKey || (albumKey === '(sin álbum)' && !mAlbum);
+          const matchArtist = !artistKey || mArtist === artistKey;
+          return matchAlbum && matchArtist;
+        });
+        const folderIds = new Set(tagged.map(m => m.folderId).filter(Boolean));
+        const taggedIds = new Set(tagged.map(m => m.id));
+        const extra = folderIds.size > 0
+          ? all.filter(m => m.folderId && folderIds.has(m.folderId) && !taggedIds.has(m.id))
+          : [];
+        songs = [...tagged, ...extra];
+      }
 
       const toMap = m => ({
         id:           m.id,
@@ -3300,8 +3289,8 @@ const App = (() => {
         folderId:     m.folderId     || null,
       });
 
-      // Merge and sort: by track number (ID3, e.g. "3" or "3/12"), then by name
-      const songs = [...tagged, ...extra].map(toMap).sort((a, b) => {
+      // Sort: by track number (ID3, e.g. "3" or "3/12"), then by name
+      const sorted = songs.map(toMap).sort((a, b) => {
         const ta = parseInt(a.track, 10);
         const tb = parseInt(b.track, 10);
         if (!isNaN(ta) && !isNaN(tb)) return ta - tb;
@@ -3311,7 +3300,7 @@ const App = (() => {
       });
 
       // Resolve covers
-      const enriched = await Promise.all(songs.map(async s => {
+      const enriched = await Promise.all(sorted.map(async s => {
         const url = await _resolveCoverUrl(s.id, s.thumbnailUrl);
         return url ? { ...s, thumbnailUrl: url } : s;
       }));
@@ -3684,7 +3673,7 @@ const App = (() => {
     UI.showView(viewId);
     if (viewId !== 'search') UI.updateSearchChipCounts(null); // clear chip counts when leaving search
     if (viewId === 'home')    _loadHomeData();
-    if (viewId === 'library') _setLibTab('favorites');
+    if (viewId === 'library') _setLibTab(_currentLibTab || 'albums');
     if (viewId === 'history') _loadHistory();
     if (viewId === 'settings') {
       _buildEQSliders();
