@@ -1942,6 +1942,19 @@ const UI = (() => {
     if (!container) return;
     container.innerHTML = '';
 
+    // Back button (visible on mobile where list and detail are separate panes)
+    const backRow = document.createElement('div');
+    backRow.className = 'lib-back-header';
+    backRow.innerHTML = `
+      <button class="lib-back-btn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+        Playlists
+      </button>`;
+    backRow.querySelector('.lib-back-btn').addEventListener('click', () => {
+      if (typeof App !== 'undefined') App._libGoBack?.('playlists');
+    });
+    container.appendChild(backRow);
+
     // Header
     const header = document.createElement('div');
     header.className = 'lib-detail-header';
