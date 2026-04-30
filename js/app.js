@@ -3134,12 +3134,50 @@ const App = (() => {
           if (m.coverBlob && typeof Meta !== 'undefined') {
             const url = Meta.injectCover(m.id, m.coverBlob);
             if (url) { a.coverUrl = url; a.hasBlobCover = true; }
-          } else if (!a.coverUrl && m.thumbnailUrl) {
+          } else if (m.thumbnailUrl) {
+            // Always update with thumbnailUrl so the most recent CAA/MB cover wins
             a.coverUrl = m.thumbnailUrl;
           }
         }
         if (m.year) a.yearCounts.set(m.year, (a.yearCounts.get(m.year) || 0) + 1);
       });
+
+      // ── Deduplicate: merge album entries that share the same single folder ────
+      // Happens when songs in the same folder have inconsistent album tags
+      // (e.g. "Mugre" vs "1999 - Mugre" after a partial rescan).
+      const folderToKeys = new Map(); // folderId → [key, ...]
+      for (const [key, a] of albumMap) {
+        if (a.folderIds.size === 1) {
+          const fid = [...a.folderIds][0];
+          if (!folderToKeys.has(fid)) folderToKeys.set(fid, []);
+          folderToKeys.get(fid).push(key);
+        }
+      }
+      for (const keys of folderToKeys.values()) {
+        if (keys.length <= 1) continue;
+        // Primary = the entry with the most songs (most complete metadata)
+        keys.sort((ka, kb) => albumMap.get(kb).songCount - albumMap.get(ka).songCount);
+        const primary = albumMap.get(keys[0]);
+        for (let i = 1; i < keys.length; i++) {
+          const secondary = albumMap.get(keys[i]);
+          primary.songCount += secondary.songCount;
+          // Absorb cover: blob beats thumbnailUrl
+          if (!primary.hasBlobCover) {
+            if (secondary.hasBlobCover) {
+              primary.coverUrl = secondary.coverUrl;
+              primary.hasBlobCover = true;
+            } else if (!primary.coverUrl && secondary.coverUrl) {
+              primary.coverUrl = secondary.coverUrl;
+            }
+          }
+          // Absorb year counts
+          secondary.yearCounts.forEach((count, year) => {
+            primary.yearCounts.set(year, (primary.yearCounts.get(year) || 0) + count);
+          });
+          albumMap.delete(keys[i]);
+        }
+      }
+
       const albums = Array.from(albumMap.values())
         .map(a => {
           // Pick most frequent year among songs in this album
