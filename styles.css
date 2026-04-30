@@ -3080,6 +3080,17 @@ img { display: block; }
 
 /* ── Settings — mobile: Option B (flat list with cat labels) */
 @media (max-width: 767px) {
+  /* #screen-settings is a flex column with overflow-y:auto.
+     By default flex-shrink:1 lets the browser compress children to fit
+     the viewport, preventing any overflow → no scroll.
+     flex-shrink:0 forces children to keep their natural height so the
+     container overflows and becomes scrollable. */
+  #screen-settings > #screen-eq,
+  #screen-settings > .settings-grid,
+  #screen-settings > div:last-child {
+    flex-shrink: 0;
+  }
+
   /* Single card wrapping everything */
   .settings-grid {
     display: block;
