@@ -372,6 +372,13 @@ const Sync = (() => {
             if (remoteIsEnriched || !ex?.[f]) patch[f] = item[f];
           }
 
+          // If remote has mbReleaseMbid and no cover yet, derive the CAA URL directly.
+          // This is a stable, permanent URL — no extra network request needed.
+          const mbid = patch.mbReleaseMbid || ex?.mbReleaseMbid;
+          if (mbid && !patch.thumbnailUrl && !ex?.thumbnailUrl) {
+            patch.thumbnailUrl = `https://coverartarchive.org/release/${mbid}/front-250`;
+          }
+
           if (Object.keys(patch).length > 0) await DB.setMeta(item.id, patch);
         }
         break;
@@ -752,6 +759,12 @@ const Sync = (() => {
           for (const f of ENRICH_FIELDS) {
             if (item[f] === null || item[f] === undefined || item[f] === '') continue;
             if (remoteIsEnriched || !ex?.[f]) patch[f] = item[f];
+          }
+
+          // Derive stable CAA cover URL from mbReleaseMbid if no cover yet
+          const mbid = patch.mbReleaseMbid || ex?.mbReleaseMbid;
+          if (mbid && !patch.thumbnailUrl && !ex?.thumbnailUrl) {
+            patch.thumbnailUrl = `https://coverartarchive.org/release/${mbid}/front-250`;
           }
 
           if (Object.keys(patch).length > 0) {

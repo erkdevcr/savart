@@ -1025,12 +1025,19 @@ const App = (() => {
           if (result.releaseMbid)          patch.mbReleaseMbid = result.releaseMbid;
 
           if (Object.keys(patch).filter(k => k !== 'mbReleaseMbid').length > 0 || patch.mbReleaseMbid) {
+            // Derive a stable CAA cover URL from the MBID and store locally
+            if (patch.mbReleaseMbid && !m.thumbnailUrl) {
+              patch.thumbnailUrl = `https://coverartarchive.org/release/${patch.mbReleaseMbid}/front-250`;
+              _updateRowThumbnail(file.id, patch.thumbnailUrl);
+            }
             await DB.setMeta(file.id, patch);
-            // Mirror MB text fields to Drive appProperties for immediate cross-device access
+            // Mirror to Drive appProperties — any device browsing this folder gets the cover
+            // instantly from Pass 0 without waiting for a metadata sync poll.
             const apMB = {};
-            if (patch.artist) apMB.s_artist = patch.artist;
-            if (patch.album)  apMB.s_album  = patch.album;
-            if (patch.year)   apMB.s_year   = patch.year;
+            if (patch.artist)      apMB.s_artist = patch.artist;
+            if (patch.album)       apMB.s_album  = patch.album;
+            if (patch.year)        apMB.s_year   = patch.year;
+            if (patch.thumbnailUrl) apMB.s_cover = patch.thumbnailUrl;
             if (Object.keys(apMB).length) Drive.setAppProperties(file.id, apMB).catch(() => {});
             if (patch.artist || patch.album || patch.year) {
               _patchMetaText(file.id, {
