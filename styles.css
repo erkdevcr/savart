@@ -3018,6 +3018,27 @@ img { display: block; }
 }
 .btn-sort-toggle:hover { background: var(--bg-hover); color: var(--text-primary); }
 
+/* Rescan button — album detail header + browse action bar */
+.lib-rescan-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  padding: 6px 11px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+.lib-rescan-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+.lib-rescan-btn:disabled { opacity: 0.45; cursor: default; }
+.lib-rescan-btn svg { width: 14px; height: 14px; flex-shrink: 0; }
+
 /* Item count badge in browse action bar */
 .browse-item-count {
   font-size: 11px;

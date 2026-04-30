@@ -16,8 +16,10 @@
 const App = (() => {
 
   /* ── Browse state ────────────────────────────────────────── */
-  let _breadcrumb    = [];    // [{ id, name }] from root to current
-  let _rootFolderId  = 'root';
+  let _breadcrumb      = [];    // [{ id, name }] from root to current
+  let _rootFolderId    = 'root';
+  let _browseFolderId  = null;  // current open folder id (for rescan)
+  let _browseFiles     = [];    // current open folder audio files (for rescan)
 
   /* ── Folder cover art cache ──────────────────────────────── */
   // folderId → object URL string | null (null = no image found)
@@ -1155,6 +1157,46 @@ const App = (() => {
   }
 
   /**
+   * Force a full re-enrichment of an album's songs, ignoring the mbTried flag.
+   * Called from the Rescan button in the album detail view.
+   * @param {Object[]} songs   — song objects currently rendered
+   * @param {string}   folderId
+   */
+  async function onAlbumRescan(songs, folderId) {
+    if (!songs || songs.length === 0) return;
+    UI.showToast('Rescaneando álbum…');
+    // Reset mbTried so MB lookup runs again for every song
+    await Promise.all(songs.map(s =>
+      DB.setMeta(s.id, { mbTried: false }).catch(() => {})
+    ));
+    await _prefetchAndApplyFolderCovers(folderId, songs);
+    UI.showToast('Rescan completado');
+  }
+
+  /**
+   * Force a full re-enrichment of the currently open browse folder.
+   * Called from the Rescan button in the browse action bar.
+   */
+  async function onBrowseRescan() {
+    if (!_browseFiles.length) return;
+    const btn  = document.getElementById('btn-browse-rescan');
+    const icon = document.getElementById('browse-rescan-icon');
+    if (btn)  btn.disabled = true;
+    if (icon) icon.style.animation = 'spin 1s linear infinite';
+    try {
+      UI.showToast('Rescaneando carpeta…');
+      await Promise.all(_browseFiles.map(f =>
+        DB.setMeta(f.id, { mbTried: false }).catch(() => {})
+      ));
+      await _prefetchAndApplyFolderCovers(_browseFolderId, _browseFiles);
+      UI.showToast('Rescan completado');
+    } finally {
+      if (btn)  btn.disabled = false;
+      if (icon) icon.style.animation = '';
+    }
+  }
+
+  /**
    * After MusicBrainz fills in track numbers, re-sort the currently rendered
    * album detail list without wiping covers or text already in the DOM.
    * Simply rebuilds the <ul> order in place.
@@ -1870,6 +1912,10 @@ const App = (() => {
       const total = result.folders.length + result.files.length;
       const countEl = document.getElementById('browse-item-count');
       if (countEl) countEl.textContent = total > 0 ? `${total} elemento${total !== 1 ? 's' : ''}` : '';
+
+      // Track current browse folder for rescan
+      _browseFolderId = folder.id;
+      _browseFiles    = result.files;
 
       // Cache all items for queue resolution
       result.files.forEach(f => _cacheItem(f));
@@ -2763,6 +2809,82 @@ const App = (() => {
       const tab = _currentLibTab;
       if (tab === 'artists') _loadArtists();
       if (tab === 'albums')  _loadAlbums();
+    }
+
+    // ── MusicBrainz background enrichment for the whole library ───────────────
+    // Runs after the structural scan. Processes every song that hasn't been tried
+    // yet (no mbTried flag). Sequential at 1 req/sec — silently enriches in background.
+    // Each session only processes songs not yet tried; subsequent sessions are no-ops
+    // for already-enriched files.
+    _mbEnrichLibrary().catch(() => {});
+  }
+
+  /**
+   * Iterates all songs in the DB and runs MusicBrainz lookup for those missing
+   * text metadata (artist, album, year, track). Runs sequentially at 1 req/sec.
+   * Designed to run once per session in the background after _scanLibraryBackground.
+   */
+  async function _mbEnrichLibrary() {
+    if (typeof MusicBrainz === 'undefined') return;
+
+    const all = await DB.getAllMeta().catch(() => []);
+    const candidates = all.filter(m => {
+      if (!m.id) return false;
+      if (m.mbTried) return false;
+      const title = m.displayName || m.name || '';
+      if (!title) return false;
+      return !m.artist || !m.album || !m.year || !m.track;
+    });
+
+    if (candidates.length === 0) return;
+    console.log(`[MusicBrainz] Library enrichment: ${candidates.length} songs to process…`);
+
+    let enriched = 0;
+    for (const m of candidates) {
+      // Abort if user navigated away from library or lost auth
+      if (!Auth.getValidToken()) break;
+
+      try {
+        const title  = m.displayName || m.name || '';
+        const artist = m.artist || '';
+        const album  = m.album  || '';
+
+        const result = await MusicBrainz.lookup(m.id, title, artist, album);
+        DB.setMeta(m.id, { mbTried: true }).catch(() => {});
+        if (!result) continue;
+
+        const patch = {};
+        if (result.track       && !m.track)  patch.track        = result.track;
+        if (result.artist      && !m.artist) patch.artist        = result.artist;
+        if (result.album       && !m.album)  patch.album         = result.album;
+        if (result.year        && !m.year)   patch.year          = result.year;
+        if (result.releaseMbid)              patch.mbReleaseMbid = result.releaseMbid;
+
+        const textFields = Object.keys(patch).filter(k => k !== 'mbReleaseMbid');
+        if (textFields.length === 0 && !patch.mbReleaseMbid) continue;
+
+        await DB.setMeta(m.id, patch);
+        enriched++;
+
+        // Patch visible DOM text if the song is currently displayed
+        if (textFields.some(k => ['artist','album','year'].includes(k))) {
+          _patchMetaText(m.id, {
+            title:  null,
+            artist: patch.artist || m.artist || null,
+            album:  patch.album  || m.album  || null,
+            year:   patch.year   || m.year   || null,
+          });
+        }
+      } catch (_) { /* non-fatal — continue to next song */ }
+    }
+
+    if (enriched > 0) {
+      console.log(`[MusicBrainz] Library enrichment complete: ${enriched} songs enriched.`);
+      // Refresh album/artist grid if not inside a drill-down
+      if (!_libInDetail) {
+        if (_currentLibTab === 'albums')  _loadAlbums();
+        if (_currentLibTab === 'artists') _loadArtists();
+      }
     }
   }
 
@@ -3860,6 +3982,9 @@ const App = (() => {
     // Browse sort button → toggle dropdown
     document.getElementById('btn-browse-sort')?.addEventListener('click', _toggleSortDropdown);
 
+    // Browse rescan button → force re-enrichment of current folder
+    document.getElementById('btn-browse-rescan')?.addEventListener('click', onBrowseRescan);
+
     // Sort option clicks
     document.getElementById('sort-dropdown')?.addEventListener('click', (e) => {
       const btn = e.target.closest('.sort-option');
@@ -4276,6 +4401,8 @@ const App = (() => {
     _scanLibraryBackground,
     onArtistClick,
     onAlbumClick,
+    onAlbumRescan,
+    onBrowseRescan,
     onPlaylistClick,
     onPlaylistPlay,
     onPlaylistQueue,

@@ -1056,6 +1056,10 @@ const UI = (() => {
     const screen = document.getElementById('screen-browse');
     if (!screen) return;
 
+    // Show rescan button only when folder has audio files
+    const rescanBtn = document.getElementById('btn-browse-rescan');
+    if (rescanBtn) rescanBtn.style.display = files.length > 0 ? '' : 'none';
+
     let list = screen.querySelector('.item-list');
     if (!list) {
       list = document.createElement('div');
@@ -2152,12 +2156,28 @@ const UI = (() => {
       <button class="lib-back-btn">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
         ${backLabel}
+      </button>
+      <button class="lib-rescan-btn" title="Rescan con MusicBrainz" aria-label="Rescan con MusicBrainz">
+        <svg class="lib-rescan-icon" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+        Rescan
       </button>`;
     backRow.querySelector('.lib-back-btn').addEventListener('click', () => {
       if (typeof App !== 'undefined') {
         if (backTarget === 'artist') App.onArtistClick?.(backArtist);
         else App._libGoBack('albums');
       }
+    });
+    const rescanBtn = backRow.querySelector('.lib-rescan-btn');
+    const folderId  = songs.find(s => s.folderId)?.folderId || null;
+    rescanBtn.addEventListener('click', () => {
+      if (typeof App === 'undefined') return;
+      const icon = rescanBtn.querySelector('.lib-rescan-icon');
+      rescanBtn.disabled = true;
+      icon.style.animation = 'spin 1s linear infinite';
+      App.onAlbumRescan(songs, folderId).finally(() => {
+        rescanBtn.disabled = false;
+        icon.style.animation = '';
+      });
     });
     container.appendChild(backRow);
 
