@@ -1910,19 +1910,29 @@ const App = (() => {
     if (!screen) return;
     try {
       const raw = await DB.getHistory(CONFIG.HISTORY_MAX);
-      // Enrich with in-memory Meta cache (covers + artist from current session)
-      const items = raw.map(item => {
-        const meta = (typeof Meta !== 'undefined') ? Meta.getCached(item.id) : null;
-        if (!meta) return item;
+
+      // Load persisted metadata from DB for all items (artist, album, title
+      // saved by _onBlobReady — not available in the history store itself).
+      const metaRecords = await Promise.all(
+        raw.map(r => DB.getMeta(r.id).catch(() => null))
+      );
+
+      const _pick = (...vals) => vals.find(v => v && String(v).trim() !== '') || '';
+
+      const items = raw.map((item, i) => {
+        const dbMeta  = metaRecords[i];
+        const inMem   = (typeof Meta !== 'undefined') ? Meta.getCached(item.id) : null;
         return {
           ...item,
-          displayName:  meta.title   || item.displayName,
-          artist:       meta.artist  || item.artist,
-          thumbnailUrl: meta.coverUrl || item.thumbnailUrl,
+          displayName:  _pick(inMem?.title,    item.displayName,  dbMeta?.displayName, item.name, dbMeta?.name),
+          artist:       _pick(inMem?.artist,   item.artist,       dbMeta?.artist),
+          albumName:    _pick(inMem?.album,    item.albumName,    dbMeta?.album),
+          thumbnailUrl: _pick(inMem?.coverUrl, item.thumbnailUrl, dbMeta?.thumbnailUrl, dbMeta?.coverUrl),
         };
       });
+
       UI.renderHistory(items);
-      // Async: apply covers from DB coverBlobs (same two-pass pipeline as top-played)
+      // Async: apply covers from DB coverBlobs
       _prefetchTopPlayedCovers(items).catch(() => {});
     } catch (err) {
       console.error('[App] Load history error:', err);

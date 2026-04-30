@@ -880,21 +880,30 @@ const UI = (() => {
     el.className = 'top-list-item';
     el.dataset.id = item.id;
 
-    const meta     = (typeof Meta !== 'undefined') ? Meta.getCached(item.id) : null;
-    const title    = meta?.title  || item.displayName || item.name || '—';
-    const artist   = meta?.artist || item.artist  || '';
-    const coverSrc = meta?.coverUrl || item.thumbnailUrl || '';
+    // Prefer in-memory Meta cache (current session), then use the pre-enriched
+    // item fields (artist/albumName/displayName already merged with DB metadata
+    // by _loadHistory before this function is called).
+    const inMem    = (typeof Meta !== 'undefined') ? Meta.getCached(item.id) : null;
+    const title    = inMem?.title  || item.displayName || item.name || '—';
+    const artist   = inMem?.artist || item.artist   || '';
+    const album    = inMem?.album  || item.albumName || '';
+    const year     = inMem?.year   || item.year      || '';
+    const coverSrc = inMem?.coverUrl || item.thumbnailUrl || '';
 
     const thumbHtml = coverSrc
       ? `<img src="${coverSrc}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover">`
       : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--text-disabled)">${iconMusicNote(18)}</div>`;
+
+    // Secondary line: "artist — album · year" (same format as top-played)
+    const metaParts = [artist, [album, year].filter(Boolean).join(' · ')].filter(Boolean);
+    const metaLine  = metaParts.join(' — ');
 
     el.innerHTML = `
       <span class="top-list-rank">${rank}</span>
       <div class="top-list-thumb">${thumbHtml}</div>
       <div class="top-list-info">
         <div class="top-list-title">${escHtml(title)}</div>
-        ${artist ? `<div class="top-list-meta">${escHtml(artist)}</div>` : ''}
+        ${metaLine ? `<div class="top-list-meta">${escHtml(metaLine)}</div>` : ''}
       </div>
       <button class="btn-more" aria-label="Más opciones">${iconDots()}</button>
     `;
