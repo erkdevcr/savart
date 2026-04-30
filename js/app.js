@@ -1157,6 +1157,45 @@ const App = (() => {
   }
 
   /**
+   * After a rescan, update the album detail header to show "[year] - [album]".
+   * Reads fresh meta from DB, finds the majority year + album name, patches DOM.
+   */
+  async function _patchAlbumDetailHeader(songs) {
+    const container = document.getElementById('lib-detail-content');
+    if (!container) return;
+    const nameEl = container.querySelector('.lib-detail-entity-name');
+    const subEl  = container.querySelector('.lib-detail-entity-sub');
+    if (!nameEl) return;
+
+    // Re-read meta for all songs and tally year + album
+    const metas = await Promise.all(songs.map(s => DB.getMeta(s.id).catch(() => null)));
+    const yearCounts  = new Map();
+    const albumCounts = new Map();
+    let artist = null;
+
+    for (const m of metas) {
+      if (!m) continue;
+      if (m.year)   yearCounts.set(m.year,   (yearCounts.get(m.year)   || 0) + 1);
+      if (m.album)  albumCounts.set(m.album,  (albumCounts.get(m.album)  || 0) + 1);
+      if (!artist && m.artist) artist = m.artist;
+    }
+
+    const topYear  = [...yearCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+    const topAlbum = [...albumCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+
+    if (!topAlbum) return; // nothing to patch
+
+    // Update name: "[year] - [album]" or just "[album]"
+    nameEl.textContent = topYear ? `${topYear} - ${topAlbum}` : topAlbum;
+
+    // Update subtitle with artist info if available
+    if (subEl && artist) {
+      const parts = [artist, songs.length + ' canciones'].filter(Boolean);
+      subEl.textContent = parts.join(' · ');
+    }
+  }
+
+  /**
    * Force a full re-enrichment of an album's songs, ignoring the mbTried flag.
    * Called from the Rescan button in the album detail view.
    * @param {Object[]} songs   — song objects currently rendered
@@ -1170,6 +1209,7 @@ const App = (() => {
       DB.setMeta(s.id, { mbTried: false }).catch(() => {})
     ));
     await _prefetchAndApplyFolderCovers(folderId, songs);
+    await _patchAlbumDetailHeader(songs);
     UI.showToast('Rescan completado');
   }
 
