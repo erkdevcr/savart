@@ -1199,8 +1199,8 @@ const App = (() => {
 
     if (!topAlbum) return; // nothing to patch
 
-    // Update title: "[year] - [album]" or just "[album]"
-    nameEl.textContent = topYear ? `${topYear} - ${topAlbum}` : topAlbum;
+    // Update title: "[year] - [album]" or just "[album]" — skip prefix if already present
+    nameEl.textContent = (topYear && !topAlbum.startsWith(`${topYear}`)) ? `${topYear} - ${topAlbum}` : topAlbum;
 
     // Update subtitle: artist · N canciones (year already in title, don't duplicate)
     if (subEl) {
@@ -3154,7 +3154,7 @@ const App = (() => {
             const fid = [...a.folderIds][0];
             songCount = Math.max(songCount, folderSongCount.get(fid) || 0);
           }
-          const label = year ? `${year} - ${a.name}` : a.name;
+          const label = (year && !a.name.startsWith(`${year}`)) ? `${year} - ${a.name}` : a.name;
           return { name: a.name, label, artist: a.artist, songCount, coverUrl: a.coverUrl, year };
         })
         .sort((a, b) => a.label.localeCompare(b.label));
@@ -3209,7 +3209,7 @@ const App = (() => {
             const fid = [...a.folderIds][0];
             songCount = Math.max(songCount, folderSongCount.get(fid) || 0);
           }
-          const label = year ? `${year} - ${a.name}` : a.name;
+          const label = (year && !a.name.startsWith(`${year}`)) ? `${year} - ${a.name}` : a.name;
           return { name: a.name, label, artist: a.artist, songCount, coverUrl: a.coverUrl, year };
         })
         .sort((a, b) => a.label.localeCompare(b.label));
