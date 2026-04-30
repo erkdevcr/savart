@@ -805,8 +805,12 @@ const App = (() => {
         if (meta.artist) _persist.artist      = meta.artist;
         if (meta.title)  _persist.displayName = meta.title;
         if (meta.album)  _persist.album       = meta.album;
+        if (meta.year)   _persist.year        = meta.year;
         if (Object.keys(_persist).length > 0) DB.setMeta(item.id, _persist).catch(() => {});
       }
+
+      // Propagate enriched album/artist/year/cover to sibling songs in the same folder
+      _propagateAlbumMeta(item, meta).catch(() => {});
 
       _applyMeta(item, meta);
 
@@ -1074,12 +1078,20 @@ const App = (() => {
 
   /**
    * Returns true if the song row already has a cover image set.
+   * Checks both browse rows (.song-row) and library detail rows (.top-list-item).
    * @param {string} fileId
    */
   function _rowHasCover(fileId) {
-    const row = document.querySelector(`.song-row[data-id="${CSS.escape(fileId)}"]`);
-    const img = row?.querySelector('.song-thumb img');
-    return !!(img && img.src && !img.src.endsWith(window.location.href));
+    const eid = CSS.escape(fileId);
+    // Browse view
+    const browseRow = document.querySelector(`.song-row[data-id="${eid}"]`);
+    const browseImg = browseRow?.querySelector('.song-thumb img');
+    if (browseImg && browseImg.src && !browseImg.src.endsWith(window.location.href)) return true;
+    // Library detail (top-list)
+    const listRow = document.querySelector(`.top-list-item[data-id="${eid}"]`);
+    const listImg = listRow?.querySelector('.top-list-thumb img');
+    if (listImg && listImg.src && !listImg.src.endsWith(window.location.href)) return true;
+    return false;
   }
 
   /**
@@ -1143,19 +1155,28 @@ const App = (() => {
 
   /**
    * Swap the thumbnail in a visible song row with the cover art URL.
+   * Handles both browse rows (.song-row / .song-thumb) and library
+   * detail rows (.top-list-item / .top-list-thumb).
    * @param {string} fileId
    * @param {string} coverUrl — object URL from Meta.parse
    */
   function _updateRowThumbnail(fileId, coverUrl) {
-    const row   = document.querySelector(`.song-row[data-id="${CSS.escape(fileId)}"]`);
-    if (!row) return;
-    const thumb = row.querySelector('.song-thumb');
-    if (!thumb) return;
-    // If the row already shows a cover image, keep it — never replace an existing
-    // cover with a different one. The onerror handler already swaps broken imgs
-    // back to a placeholder div, so this guard is safe against revoked blob URLs.
-    if (thumb.querySelector('img')) return;
-    thumb.innerHTML = `<img src="${coverUrl}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover" onerror="this.parentNode.innerHTML='<div class=\\'thumb-placeholder\\'></div>'">`;
+    const eid = CSS.escape(fileId);
+    const IMG = `<img src="${coverUrl}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;border-radius:inherit" onerror="this.parentNode.innerHTML='<div class=\\'thumb-placeholder\\'></div>'">`;
+
+    // Browse view (.song-row → .song-thumb)
+    const browseRow = document.querySelector(`.song-row[data-id="${eid}"]`);
+    if (browseRow) {
+      const thumb = browseRow.querySelector('.song-thumb');
+      if (thumb && !thumb.querySelector('img')) thumb.innerHTML = IMG;
+    }
+
+    // Library detail view (.top-list-item → .top-list-thumb)
+    const listRow = document.querySelector(`.top-list-item[data-id="${eid}"]`);
+    if (listRow) {
+      const thumb = listRow.querySelector('.top-list-thumb');
+      if (thumb && !thumb.querySelector('img')) thumb.innerHTML = IMG;
+    }
   }
 
   /**
@@ -2657,6 +2678,53 @@ const App = (() => {
   }
 
   /**
+   * Propagate enriched album metadata to sibling songs in the same folder.
+   * Called after _onBlobReady FINALIZE when a song is identified by ID3/Last.fm/AudD.
+   * Only patches DB entries that are missing the field — never overwrites enriched values.
+   *
+   * @param {DriveItem} item  - the identified song (has .parents[0] = folderId)
+   * @param {Object}    meta  - enriched metadata object (album, artist, year, coverUrl)
+   */
+  async function _propagateAlbumMeta(item, meta) {
+    const folderId = item.parents?.[0];
+    if (!folderId) return;
+
+    const album    = meta.album    || null;
+    const artist   = meta.artist   || null;
+    const year     = meta.year     || null;
+    const coverUrl = meta.coverUrl || null;
+    if (!album && !artist && !year && !coverUrl) return;
+
+    try {
+      const all = await DB.getAllMeta();
+      let updated = 0;
+
+      for (const m of all) {
+        if (!m.id || m.id === item.id) continue;
+        if (m.folderId !== folderId)   continue;    // only siblings in same folder
+
+        const patch = {};
+        if (album    && !m.album)        patch.album        = album;
+        if (artist   && !m.artist)       patch.artist       = artist;
+        if (year     && !m.year)         patch.year         = year;
+        if (coverUrl && !m.thumbnailUrl) patch.thumbnailUrl = coverUrl;
+        if (Object.keys(patch).length === 0) continue;
+
+        await DB.setMeta(m.id, patch);
+        updated++;
+      }
+
+      // Refresh the active library tab so updated album data shows immediately
+      if (updated > 0) {
+        if (_currentLibTab === 'albums')  _loadAlbums();
+        if (_currentLibTab === 'artists') _loadArtists();
+      }
+    } catch (err) {
+      console.warn('[App] _propagateAlbumMeta error:', err);
+    }
+  }
+
+  /**
    * Aggregate all metadata into artists map.
    * Groups by artist name, counts albums and songs.
    */
@@ -2699,13 +2767,22 @@ const App = (() => {
         if (!album) return;
         const key = `${album.toLowerCase()}|${artist.toLowerCase()}`;
         if (!albumMap.has(key)) {
-          albumMap.set(key, { name: album, artist, songCount: 0, coverUrl: null });
+          albumMap.set(key, { name: album, artist, songCount: 0, coverUrl: null, yearCounts: new Map() });
         }
         const a = albumMap.get(key);
         a.songCount++;
         if (!a.coverUrl && m.thumbnailUrl) a.coverUrl = m.thumbnailUrl;
+        if (m.year) a.yearCounts.set(m.year, (a.yearCounts.get(m.year) || 0) + 1);
       });
       const albums = Array.from(albumMap.values())
+        .map(a => {
+          // Pick most frequent year among songs in this album
+          let year = null;
+          if (a.yearCounts.size > 0) {
+            year = [...a.yearCounts.entries()].sort((x, y) => y[1] - x[1])[0][0];
+          }
+          return { name: a.name, artist: a.artist, songCount: a.songCount, coverUrl: a.coverUrl, year };
+        })
         .sort((a, b) => a.name.localeCompare(b.name));
       UI.renderLibraryAlbums(albums);
     } catch (err) {
@@ -2726,13 +2803,22 @@ const App = (() => {
         const album = (m.album || '').trim() || '(sin álbum)';
         const aKey  = album.toLowerCase();
         if (!albumMap.has(aKey)) {
-          albumMap.set(aKey, { name: album, artist: artist.name, songCount: 0, coverUrl: null });
+          albumMap.set(aKey, { name: album, artist: artist.name, songCount: 0, coverUrl: null, yearCounts: new Map() });
         }
         const a = albumMap.get(aKey);
         a.songCount++;
         if (!a.coverUrl && m.thumbnailUrl) a.coverUrl = m.thumbnailUrl;
+        if (m.year) a.yearCounts.set(m.year, (a.yearCounts.get(m.year) || 0) + 1);
       });
-      const albums = Array.from(albumMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+      const albums = Array.from(albumMap.values())
+        .map(a => {
+          let year = null;
+          if (a.yearCounts.size > 0) {
+            year = [...a.yearCounts.entries()].sort((x, y) => y[1] - x[1])[0][0];
+          }
+          return { name: a.name, artist: a.artist, songCount: a.songCount, coverUrl: a.coverUrl, year };
+        })
+        .sort((a, b) => a.name.localeCompare(b.name));
       UI.renderLibraryArtistDetail(artist, albums);
       UI.setLibSearchPlaceholder(`Buscar álbum de ${artist.name}…`);
     } catch (err) {
@@ -2760,6 +2846,7 @@ const App = (() => {
         displayName:  m.displayName  || m.name || m.id,
         artist:       m.artist       || '',
         album:        m.album        || '',
+        year:         m.year         || '',
         thumbnailUrl: m.thumbnailUrl || m.coverUrl || null,
         folderId:     m.folderId     || null,
       }));
@@ -2773,6 +2860,15 @@ const App = (() => {
       const backTarget = fromArtist ? 'artist' : 'albums';
       UI.renderLibraryAlbumDetail(album, enriched, backTarget, fromArtist || null);
       UI.setLibSearchPlaceholder(`Buscar en ${album.name}…`);
+
+      // Background cover + metadata enrichment for songs in this album.
+      // Uses the same multi-pass pipeline as the browse folder view:
+      // DB → ID3 blob parse → Last.fm → folder cover.jpg
+      // _updateRowThumbnail now targets both .song-row and .top-list-item rows.
+      if (enriched.length > 0 && Auth.getValidToken()) {
+        const folderId = enriched.find(s => s.folderId)?.folderId || null;
+        _prefetchAndApplyFolderCovers(folderId, enriched).catch(() => {});
+      }
     } catch (err) {
       console.error('[App] onAlbumClick error:', err);
     }

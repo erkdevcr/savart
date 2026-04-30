@@ -2177,7 +2177,7 @@ const UI = (() => {
       </div>
       <div>
         <div class="lib-detail-entity-name">${escHtml(album.name)}</div>
-        <div class="lib-detail-entity-sub">${escHtml(album.artist || '')} · ${songs.length} canciones</div>
+        <div class="lib-detail-entity-sub">${[album.artist, album.year, songs.length + ' canciones'].filter(Boolean).map(escHtml).join(' · ')}</div>
       </div>`;
     container.appendChild(entity);
 
@@ -2280,7 +2280,7 @@ const UI = (() => {
         }
       </div>
       <div class="home-card-name">${escHtml(album.name)}</div>
-      <div class="home-card-sub">${escHtml(album.artist || '')}${album.artist && album.songCount ? ' · ' : ''}${album.songCount ? album.songCount + ' canciones' : ''}</div>
+      <div class="home-card-sub">${[album.artist, album.year, album.songCount ? album.songCount + ' canciones' : ''].filter(Boolean).map(escHtml).join(' · ')}</div>
     `;
 
     card.addEventListener('click', () => {
