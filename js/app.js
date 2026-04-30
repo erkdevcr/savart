@@ -918,6 +918,23 @@ const App = (() => {
   async function _prefetchAndApplyFolderCovers(folderId, files) {
     if (!files || files.length === 0) return;
 
+    // ── Pass -1: Ensure every file has folderId + basic info in DB ───────────
+    // _inferAlbumMeta (background scan) sets this, but files opened directly
+    // via Browse may have never passed through it. Without folderId, _loadAlbums
+    // skips the song entirely and the album never appears in the Library.
+    if (folderId) {
+      await Promise.allSettled(files.map(async file => {
+        try {
+          const existing = await DB.getMeta(file.id).catch(() => null);
+          const patch = {};
+          if (!existing?.folderId)    patch.folderId    = folderId;
+          if (!existing?.name)        patch.name        = file.name;
+          if (!existing?.displayName) patch.displayName = file.displayName || cleanTitle(file.name);
+          if (Object.keys(patch).length > 0) DB.setMeta(file.id, { id: file.id, ...patch }).catch(() => {});
+        } catch (_) {}
+      }));
+    }
+
     // ── Pass 0: Drive appProperties + IndexedDB (instant, no network) ─────────
     // 0a. appProperties.s_cover — synced cover from another device via Drive API
     // 0b. coverBlob             — ID3 embedded art saved locally (highest quality)
@@ -1252,6 +1269,11 @@ const App = (() => {
       ));
       await _prefetchAndApplyFolderCovers(_browseFolderId, _browseFiles);
       UI.showToast('Rescan completado');
+      // Refresh Albums/Artists grid so the newly enriched folder appears there
+      if (!_libInDetail) {
+        if (_currentLibTab === 'albums')  _loadAlbums();
+        if (_currentLibTab === 'artists') _loadArtists();
+      }
     } finally {
       if (btn)  btn.disabled = false;
       if (icon) icon.style.animation = '';
