@@ -899,11 +899,16 @@ const App = (() => {
   }
 
   /**
-   * Background cover art loader for a folder view.
+   * Background metadata + cover enrichment for a folder / album view.
    *
-   * Pass 1 — in-memory Meta cache (instant, songs played this session).
-   * Pass 2 — IndexedDB cached blobs (parallel parse, 3 workers).
-   * Pass 3 — folder cover.jpg fallback for anything still missing.
+   * Pass 0 — DB cache + appProperties  (instant, no network)
+   * Pass 1 — In-memory Meta cache       (instant, session)
+   * Pass 2 — MusicBrainz               (text: artist, album, year, track — no file download)
+   * Pass 3 — ID3 blob parse            (text overrides MB; embedded cover = top priority)
+   * Pass 4 — Cover Art Archive (CAA)   (MusicBrainz cover for songs without embedded art)
+   * Pass 5 — Folder cover.jpg          (generic fallback)
+   * Pass 6 — Last.fm                   (external cover by artist+album)
+   * Pass 7 — AudD.io fingerprinting    (last resort: identifies song from audio)
    *
    * @param {string}      folderId
    * @param {DriveItem[]} files
@@ -911,76 +916,121 @@ const App = (() => {
   async function _prefetchAndApplyFolderCovers(folderId, files) {
     if (!files || files.length === 0) return;
 
-    // ── Pass 0: Drive appProperties + IndexedDB (instant, no network) ─────
-    // Priority order:
-    //   0a. appProperties.s_cover — synced from another device via Drive API
-    //   0b. coverBlob  — embedded ID3 art saved as binary (highest quality, no expiry)
-    //   0c. coverUrl / thumbnailUrl — external URL from a previous session
+    // ── Pass 0: Drive appProperties + IndexedDB (instant, no network) ─────────
+    // 0a. appProperties.s_cover — synced cover from another device via Drive API
+    // 0b. coverBlob             — ID3 embedded art saved locally (highest quality)
+    // 0c. coverUrl / thumbnailUrl — external URL persisted from a prior session
     await Promise.allSettled(files.map(async file => {
       try {
-        // 0a. Drive appProperties (populated by listFolder — cross-device sync)
         const ap = file.appProperties;
         if (ap?.s_cover) {
           _updateRowThumbnail(file.id, ap.s_cover);
-          // Mirror to local DB so home/recents picks it up without Drive API
           const save = { thumbnailUrl: ap.s_cover };
           if (ap.s_title)  save.displayName = ap.s_title;
           if (ap.s_artist) save.artist      = ap.s_artist;
           if (ap.s_album)  save.album       = ap.s_album;
           DB.setMeta(file.id, save).catch(() => {});
-          return;  // no need to check DB
+          return;
         }
-
-        // 0b/0c. IndexedDB
         const dbMeta = await DB.getMeta(file.id);
         if (!dbMeta) return;
-
         if (dbMeta.coverBlob && typeof Meta !== 'undefined') {
           const url = Meta.injectCover(file.id, dbMeta.coverBlob);
-          if (url) { _updateRowThumbnail(file.id, url, true); return; }  // ID3 embedded
+          if (url) { _updateRowThumbnail(file.id, url, true); return; }
         }
-
         const persistedUrl = dbMeta.coverUrl || dbMeta.thumbnailUrl;
         if (persistedUrl) _updateRowThumbnail(file.id, persistedUrl);
       } catch (_) {}
     }));
 
-    // ── Pass 1: instant — use in-memory Meta cache (always ID3) ────────────
+    // ── Pass 1: in-memory Meta cache (always ID3, session) ────────────────────
     files.forEach(file => {
       const meta = (typeof Meta !== 'undefined') ? Meta.getCached(file.id) : null;
       if (meta?.coverUrl) _updateRowThumbnail(file.id, meta.coverUrl, true);
     });
 
-    // ── Pass 2: read cached blobs from IndexedDB, parse ID3 ───
-    // Includes files that:
-    //   (a) have no cover rendered yet, OR
-    //   (b) are in a library-detail row (.top-list-artist) that is still empty.
-    // Case (b) catches songs that got a thumbnailUrl from the folder scan but never
-    // had their artist/album/year fetched — they would otherwise be skipped here.
+    // ── Pass 2: MusicBrainz — text metadata ───────────────────────────────────
+    // Queries by song title (+ artist if known) to fill missing artist/album/year/track.
+    // Runs BEFORE ID3 so the UI shows something immediately; ID3 (Pass 3) will
+    // overwrite with file-specific values when it finds them.
+    // Also persists releaseMbid so Pass 4 can fetch the cover from Cover Art Archive.
+    // Sequential: 1 req/sec rate limit.
+    if (typeof MusicBrainz !== 'undefined') {
+      const mbQueue = [];
+      for (const file of files) {
+        try {
+          const m = await DB.getMeta(file.id);
+          if (m?.mbTried) continue;
+          const title = m?.displayName || m?.name || file.name || '';
+          if (!title) continue;
+          const needsText = !m?.artist || !m?.album || !m?.year || !m?.track;
+          if (!needsText) { DB.setMeta(file.id, { mbTried: true }).catch(() => {}); continue; }
+          mbQueue.push({ file, title, artist: m?.artist || '', album: m?.album || '', m: m || {} });
+        } catch (_) {}
+      }
+
+      let anyTrackFoundMB = false;
+      for (const { file, title, artist, album, m } of mbQueue) {
+        try {
+          const result = await MusicBrainz.lookup(file.id, title, artist, album);
+          DB.setMeta(file.id, { mbTried: true }).catch(() => {});
+          if (!result) continue;
+
+          const patch = {};
+          if (result.track        && !m.track)  patch.track         = result.track;
+          if (result.artist       && !m.artist) patch.artist         = result.artist;
+          if (result.album        && !m.album)  patch.album          = result.album;
+          if (result.year         && !m.year)   patch.year           = result.year;
+          if (result.releaseMbid)               patch.mbReleaseMbid  = result.releaseMbid;
+
+          if (Object.keys(patch).filter(k => k !== 'mbReleaseMbid').length > 0 || patch.mbReleaseMbid) {
+            await DB.setMeta(file.id, patch);
+            if (patch.artist || patch.album || patch.year) {
+              _patchMetaText(file.id, {
+                title:  null,
+                artist: patch.artist || m.artist || null,
+                album:  patch.album  || m.album  || null,
+                year:   patch.year   || m.year   || null,
+              });
+            }
+            if (patch.track) anyTrackFoundMB = true;
+            const logParts = Object.entries(patch).filter(([k]) => k !== 'mbReleaseMbid').map(([k,v]) => `${k}:${v}`);
+            if (logParts.length) console.log(`[MusicBrainz] ✓ ${result.artist || artist} — ${title}`, logParts.join(' '));
+          }
+        } catch (_) { /* non-fatal */ }
+      }
+      if (anyTrackFoundMB && _libInDetail) _resortAlbumDetail(files).catch(() => {});
+    }
+
+    // ── Pass 3: ID3 blob parse — text + embedded cover ────────────────────────
+    // Text from ID3 overwrites MB (file-specific tags are more accurate).
+    // Embedded cover art = highest cover priority (isId3=true, protected from overwrite).
+    // Runs on: files without any cover, OR with a cover that isn't yet ID3-sourced,
+    // OR in album-detail rows where artist text is still empty.
     const needEnrichment = files.filter(file => {
-      if (!_rowHasCover(file.id)) return true;
-      const artistEl = document.querySelector(
-        `.top-list-item[data-id="${CSS.escape(file.id)}"] .top-list-artist`
-      );
+      const eid = CSS.escape(file.id);
+      const img = document.querySelector(`.top-list-item[data-id="${eid}"] .top-list-thumb img`)
+               || document.querySelector(`.song-row[data-id="${eid}"] .song-thumb img`);
+      // Parse if: no cover at all, or cover isn't yet from ID3 (so we can find embedded art)
+      if (!img || img.dataset.coverSrc !== 'id3') return true;
+      // Already has ID3 cover — only parse if artist text still empty
+      const artistEl = document.querySelector(`.top-list-item[data-id="${eid}"] .top-list-artist`);
       return !!(artistEl && !artistEl.textContent.trim());
     });
     if (needEnrichment.length > 0 && typeof Meta !== 'undefined') {
       const CONCURRENCY = 3;
       const queue = [...needEnrichment];
-
-      async function worker() {
+      async function id3Worker() {
         while (queue.length > 0) {
           const file = queue.shift();
           try {
-            // Try cached blob first (free), then fall back to 1MB range request
             let blob = await DB.getCachedBlob(file.id);
             if (!blob) blob = await Drive.downloadFileHead(file.id);
             if (!blob) continue;
             const meta = await Meta.parse(file.id, blob);
             if (!meta) continue;
 
-            // ── Text metadata: persist + patch visible rows regardless of cover ──
-            // This is what enriches artist/title/year in the library album-detail view.
+            // Text — always overwrite MB values when ID3 has something more specific
             const textPatch = {};
             if (meta.artist) textPatch.artist      = meta.artist;
             if (meta.title)  textPatch.displayName = meta.title;
@@ -990,123 +1040,147 @@ const App = (() => {
             if (Object.keys(textPatch).length > 0) {
               DB.setMeta(file.id, textPatch).catch(() => {});
               _patchMetaText(file.id, {
-                title:  meta.title  || null,
-                artist: meta.artist || null,
-                album:  meta.album  || null,
-                year:   meta.year   || null,
+                title: meta.title || null, artist: meta.artist || null,
+                album: meta.album || null, year:   meta.year   || null,
               });
             }
 
-            // ── Cover: update thumbnail if found (ID3 = protected) ──────────────
+            // Embedded cover — top priority (isId3=true)
             if (meta.coverUrl) {
-              _updateRowThumbnail(file.id, meta.coverUrl, true);  // ID3 embedded
+              _updateRowThumbnail(file.id, meta.coverUrl, true);
               if (meta.coverBlob) DB.setMeta(file.id, { coverBlob: meta.coverBlob }).catch(() => {});
             }
 
-            // ── Full _applyMeta only for the currently playing track ─────────────
             if (Player.getCurrentTrack()?.id === file.id) _applyMeta(file, meta);
           } catch (_) { /* non-fatal */ }
         }
       }
-
-      await Promise.allSettled(
-        Array.from({ length: CONCURRENCY }, () => worker())
-      );
+      await Promise.allSettled(Array.from({ length: CONCURRENCY }, () => id3Worker()));
     }
 
-    // ── Pass 3: folder cover.jpg fallback (only when a real folderId is given) ──
-    // Skipped for search results (folderId=null) since files come from different folders.
-    const stillNeed = files.filter(file => !_rowHasCover(file.id));
-    if (stillNeed.length > 0 && folderId) {
-      const folderCover = await _getFolderCover(folderId);
-      if (folderCover) {
-        stillNeed.forEach(file => _updateRowThumbnail(file.id, folderCover));
+    // ── Pass 4: Cover Art Archive (MusicBrainz) ───────────────────────────────
+    // For songs still without an embedded ID3 cover but with a MB release ID.
+    // CAA URL: https://coverartarchive.org/release/{mbid}/front-250
+    if (typeof MusicBrainz !== 'undefined') {
+      const caaFiles = files.filter(file => {
+        const eid = CSS.escape(file.id);
+        const img = document.querySelector(`.top-list-item[data-id="${eid}"] .top-list-thumb img`)
+                 || document.querySelector(`.song-row[data-id="${eid}"] .song-thumb img`);
+        return !img || img.dataset.coverSrc !== 'id3'; // no embedded cover yet
+      });
+      if (caaFiles.length > 0) {
+        await Promise.allSettled(caaFiles.map(async file => {
+          try {
+            const m = await DB.getMeta(file.id);
+            if (!m?.mbReleaseMbid) return;
+            if (_rowHasCover(file.id)) {
+              // Only upgrade if not already an ID3 cover
+              const eid = CSS.escape(file.id);
+              const img = document.querySelector(`.top-list-item[data-id="${eid}"] .top-list-thumb img`)
+                       || document.querySelector(`.song-row[data-id="${eid}"] .song-thumb img`);
+              if (img?.dataset.coverSrc === 'id3') return;
+            }
+            const url = await MusicBrainz.fetchCoverUrl(m.mbReleaseMbid);
+            if (!url) return;
+            _updateRowThumbnail(file.id, url);
+            DB.setMeta(file.id, { thumbnailUrl: url }).catch(() => {});
+          } catch (_) {}
+        }));
       }
     }
 
-    // ── Pass 4: Last.fm cover lookup for files still missing art ──────────────
-    // Uses artist + album from ID3 cache (populated in Pass 2) or DB metadata.
-    // Queries are deduped by Lastfm._cache, so same album is only fetched once.
+    // ── Pass 5: folder cover.jpg fallback ─────────────────────────────────────
+    // Skipped for search results (folderId=null).
+    const stillNeed = files.filter(file => !_rowHasCover(file.id));
+    if (stillNeed.length > 0 && folderId) {
+      const folderCover = await _getFolderCover(folderId);
+      if (folderCover) stillNeed.forEach(file => _updateRowThumbnail(file.id, folderCover));
+    }
+
+    // ── Pass 6: Last.fm cover lookup ──────────────────────────────────────────
+    // Deduped by artist+album inside Lastfm module, so one request per album.
     if (typeof Lastfm === 'undefined') return;
     const lfmNeed = files.filter(file => !_rowHasCover(file.id));
     if (lfmNeed.length === 0) return;
-
     await Promise.allSettled(lfmNeed.map(async file => {
       try {
-        // Prefer in-memory Meta cache (populated by Pass 2 ID3 parse)
         const inMem  = (typeof Meta !== 'undefined') ? Meta.getCached(file.id) : null;
-        const artist = inMem?.artist || (await DB.getMeta(file.id))?.artist || '';
-        const album  = inMem?.album  || (await DB.getMeta(file.id))?.album  || '';
+        const dbM    = await DB.getMeta(file.id);
+        const artist = inMem?.artist || dbM?.artist || '';
+        const album  = inMem?.album  || dbM?.album  || '';
         if (!artist || !album) return;
-
         const url = await Lastfm.fetchCover(artist, album);
         if (!url) return;
-
         _updateRowThumbnail(file.id, url);
-        // Persist locally for next session
         DB.setMeta(file.id, { thumbnailUrl: url }).catch(() => {});
-        // Sync to Drive appProperties for cross-device use
         Drive.setAppProperties(file.id, { s_cover: url }).catch(() => {});
       } catch (_) { /* non-fatal */ }
     }));
 
-    // ── Pass 5: AudD.io audio fingerprinting ──────────────────────────────────
-    // Last resort for files that have no cover AND no ID3 artist/album.
-    // Identifies song from audio content, fills title/artist/album/cover.
-    // Sequential (not parallel) to respect rate limits.
-    // Uses auddTried flag in DB to avoid burning quota re-trying unrecognized files.
+    // ── Pass 7: AudD.io audio fingerprinting ──────────────────────────────────
+    // Last resort: identifies songs with no metadata at all from their audio content.
+    // Limited per folder open to conserve daily quota (CONFIG.AUDD_MAX_PER_FOLDER).
     if (typeof Audd === 'undefined') return;
     const auddCandidates = files.filter(file => !_rowHasCover(file.id));
     if (auddCandidates.length === 0) return;
-
     const auddLimit = Math.min(auddCandidates.length, CONFIG.AUDD_MAX_PER_FOLDER || 5);
     for (let i = 0; i < auddLimit; i++) {
       const file = auddCandidates[i];
       try {
-        // Skip if already tried (success or "not found" — not network errors)
         const dbMeta = await DB.getMeta(file.id);
         if (dbMeta?.auddTried) continue;
-
-        // Download first 1MB — enough for audio fingerprinting
         const blob = await Drive.downloadFileHead(file.id, 1024 * 1024);
         if (!blob) continue;
-
         let result = null;
-        try {
-          result = await Audd.identify(blob);
-        } catch (_) {
-          // Network / API error — do NOT mark as tried, allow retry next time
-          continue;
-        }
-
-        // Mark tried regardless of whether a match was found
-        // (avoids re-querying songs AudD.io genuinely doesn't know)
+        try { result = await Audd.identify(blob); }
+        catch (_) { continue; } // network error — allow retry next session
         await DB.setMeta(file.id, { auddTried: true });
-
-        if (!result) continue;  // not found
-
-        // Apply cover to the visible row
+        if (!result) continue;
         if (result.coverUrl) _updateRowThumbnail(file.id, result.coverUrl);
-
-        // Persist all identified fields locally
         const update = { auddTried: true };
-        if (result.title)    update.displayName = result.title;
-        if (result.artist)   update.artist      = result.artist;
-        if (result.album)    update.album       = result.album;
+        if (result.title)    update.displayName  = result.title;
+        if (result.artist)   update.artist       = result.artist;
+        if (result.album)    update.album        = result.album;
         if (result.coverUrl) update.thumbnailUrl = result.coverUrl;
         DB.setMeta(file.id, update).catch(() => {});
-
-        // Sync to Drive appProperties for cross-device use
-        const apUpdate = {};
-        if (result.coverUrl) apUpdate.s_cover  = result.coverUrl;
-        if (result.title)    apUpdate.s_title  = result.title;
-        if (result.artist)   apUpdate.s_artist = result.artist;
-        if (result.album)    apUpdate.s_album  = result.album;
-        if (Object.keys(apUpdate).length > 0) Drive.setAppProperties(file.id, apUpdate).catch(() => {});
-
+        const ap = {};
+        if (result.coverUrl) ap.s_cover  = result.coverUrl;
+        if (result.title)    ap.s_title  = result.title;
+        if (result.artist)   ap.s_artist = result.artist;
+        if (result.album)    ap.s_album  = result.album;
+        if (Object.keys(ap).length > 0) Drive.setAppProperties(file.id, ap).catch(() => {});
         console.log(`[Audd] ✓ ${result.artist} — ${result.title}`);
       } catch (_) { /* non-fatal */ }
     }
+  }
+
+  /**
+   * After MusicBrainz fills in track numbers, re-sort the currently rendered
+   * album detail list without wiping covers or text already in the DOM.
+   * Simply rebuilds the <ul> order in place.
+   */
+  async function _resortAlbumDetail(files) {
+    const container = document.querySelector('#lib-detail-content .top-list');
+    if (!container) return;
+
+    // Re-fetch track numbers for all files
+    const items = await Promise.all(files.map(async f => {
+      const m = await DB.getMeta(f.id).catch(() => null);
+      return { id: f.id, track: m?.track || '', el: container.querySelector(`.top-list-item[data-id="${CSS.escape(f.id)}"]`) };
+    }));
+
+    // Sort by track number, items without a track go to the end (by current DOM order)
+    items.sort((a, b) => {
+      const ta = parseInt(a.track, 10);
+      const tb = parseInt(b.track, 10);
+      if (!isNaN(ta) && !isNaN(tb)) return ta - tb;
+      if (!isNaN(ta)) return -1;
+      if (!isNaN(tb)) return  1;
+      return 0;  // preserve relative order for untracked items
+    });
+
+    // Re-append in new order (moves existing DOM nodes, no flicker)
+    items.forEach(({ el }) => { if (el) container.appendChild(el); });
   }
 
   /**
