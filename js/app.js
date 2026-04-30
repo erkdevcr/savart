@@ -806,6 +806,7 @@ const App = (() => {
         if (meta.title)  _persist.displayName = meta.title;
         if (meta.album)  _persist.album       = meta.album;
         if (meta.year)   _persist.year        = meta.year;
+        if (meta.track)  _persist.track       = meta.track;
         if (Object.keys(_persist).length > 0) DB.setMeta(item.id, _persist).catch(() => {});
       }
 
@@ -985,6 +986,7 @@ const App = (() => {
             if (meta.title)  textPatch.displayName = meta.title;
             if (meta.album)  textPatch.album       = meta.album;
             if (meta.year)   textPatch.year        = meta.year;
+            if (meta.track)  textPatch.track       = meta.track;
             if (Object.keys(textPatch).length > 0) {
               DB.setMeta(file.id, textPatch).catch(() => {});
               _patchMetaText(file.id, {
@@ -2851,6 +2853,10 @@ const App = (() => {
     if (_libInDetail) return; // don't replace a drill-down view
     try {
       const all = await DB.getAllMeta();
+      // Count all songs per folder (regardless of album tag) for accurate totals
+      const folderSongCount = new Map();
+      all.forEach(m => { if (m.folderId) folderSongCount.set(m.folderId, (folderSongCount.get(m.folderId) || 0) + 1); });
+
       const albumMap = new Map();
       all.forEach(m => {
         const album  = (m.album || '').trim();
@@ -2858,10 +2864,11 @@ const App = (() => {
         if (!album) return;
         const key = `${album.toLowerCase()}|${artist.toLowerCase()}`;
         if (!albumMap.has(key)) {
-          albumMap.set(key, { name: album, artist, songCount: 0, coverUrl: null, yearCounts: new Map() });
+          albumMap.set(key, { name: album, artist, songCount: 0, coverUrl: null, yearCounts: new Map(), folderIds: new Set() });
         }
         const a = albumMap.get(key);
         a.songCount++;
+        if (m.folderId) a.folderIds.add(m.folderId);
         if (!a.coverUrl && m.thumbnailUrl) a.coverUrl = m.thumbnailUrl;
         if (m.year) a.yearCounts.set(m.year, (a.yearCounts.get(m.year) || 0) + 1);
       });
@@ -2872,7 +2879,14 @@ const App = (() => {
           if (a.yearCounts.size > 0) {
             year = [...a.yearCounts.entries()].sort((x, y) => y[1] - x[1])[0][0];
           }
-          return { name: a.name, artist: a.artist, songCount: a.songCount, coverUrl: a.coverUrl, year };
+          // For single-folder albums, folder song count is more accurate
+          // (includes songs not yet ID3-tagged but residing in the same folder)
+          let songCount = a.songCount;
+          if (a.folderIds.size === 1) {
+            const fid = [...a.folderIds][0];
+            songCount = Math.max(songCount, folderSongCount.get(fid) || 0);
+          }
+          return { name: a.name, artist: a.artist, songCount, coverUrl: a.coverUrl, year };
         })
         .sort((a, b) => a.name.localeCompare(b.name));
       UI.renderLibraryAlbums(albums);
@@ -2891,16 +2905,19 @@ const App = (() => {
     try {
       const all = await DB.getAllMeta();
       const key = artist.name.toLowerCase();
+      const folderSongCount = new Map();
+      all.forEach(m => { if (m.folderId) folderSongCount.set(m.folderId, (folderSongCount.get(m.folderId) || 0) + 1); });
       const albumMap = new Map();
       all.forEach(m => {
         if ((m.artist || '').trim().toLowerCase() !== key) return;
         const album = (m.album || '').trim() || '(sin álbum)';
         const aKey  = album.toLowerCase();
         if (!albumMap.has(aKey)) {
-          albumMap.set(aKey, { name: album, artist: artist.name, songCount: 0, coverUrl: null, yearCounts: new Map() });
+          albumMap.set(aKey, { name: album, artist: artist.name, songCount: 0, coverUrl: null, yearCounts: new Map(), folderIds: new Set() });
         }
         const a = albumMap.get(aKey);
         a.songCount++;
+        if (m.folderId) a.folderIds.add(m.folderId);
         if (!a.coverUrl && m.thumbnailUrl) a.coverUrl = m.thumbnailUrl;
         if (m.year) a.yearCounts.set(m.year, (a.yearCounts.get(m.year) || 0) + 1);
       });
@@ -2910,7 +2927,12 @@ const App = (() => {
           if (a.yearCounts.size > 0) {
             year = [...a.yearCounts.entries()].sort((x, y) => y[1] - x[1])[0][0];
           }
-          return { name: a.name, artist: a.artist, songCount: a.songCount, coverUrl: a.coverUrl, year };
+          let songCount = a.songCount;
+          if (a.folderIds.size === 1) {
+            const fid = [...a.folderIds][0];
+            songCount = Math.max(songCount, folderSongCount.get(fid) || 0);
+          }
+          return { name: a.name, artist: a.artist, songCount, coverUrl: a.coverUrl, year };
         })
         .sort((a, b) => a.name.localeCompare(b.name));
       _libInDetail = true;
@@ -2932,22 +2954,45 @@ const App = (() => {
       const all = await DB.getAllMeta();
       const albumKey  = album.name.toLowerCase();
       const artistKey = (album.artist || '').toLowerCase();
-      const songs = all.filter(m => {
+
+      // Primary pass: match by album tag (+ optional artist filter)
+      const tagged = all.filter(m => {
         const mAlbum  = (m.album  || '').trim().toLowerCase();
         const mArtist = (m.artist || '').trim().toLowerCase();
-        const matchAlbum = mAlbum === albumKey || (albumKey === '(sin álbum)' && !mAlbum);
+        const matchAlbum  = mAlbum === albumKey || (albumKey === '(sin álbum)' && !mAlbum);
         const matchArtist = !artistKey || mArtist === artistKey;
         return matchAlbum && matchArtist;
-      }).map(m => ({
+      });
+
+      // Broaden: songs in the same folder(s) are almost certainly on the same album
+      // even if they haven't been ID3-tagged yet. Include them so the full disc shows.
+      const folderIds = new Set(tagged.map(m => m.folderId).filter(Boolean));
+      const taggedIds = new Set(tagged.map(m => m.id));
+      const extra = folderIds.size > 0
+        ? all.filter(m => m.folderId && folderIds.has(m.folderId) && !taggedIds.has(m.id))
+        : [];
+
+      const toMap = m => ({
         id:           m.id,
         name:         m.name         || m.id,
         displayName:  m.displayName  || m.name || m.id,
         artist:       m.artist       || '',
         album:        m.album        || '',
         year:         m.year         || '',
+        track:        m.track        || '',
         thumbnailUrl: m.thumbnailUrl || m.coverUrl || null,
         folderId:     m.folderId     || null,
-      }));
+      });
+
+      // Merge and sort: by track number (ID3, e.g. "3" or "3/12"), then by name
+      const songs = [...tagged, ...extra].map(toMap).sort((a, b) => {
+        const ta = parseInt(a.track, 10);
+        const tb = parseInt(b.track, 10);
+        if (!isNaN(ta) && !isNaN(tb)) return ta - tb;
+        if (!isNaN(ta)) return -1;
+        if (!isNaN(tb)) return  1;
+        return (a.displayName || a.name).localeCompare(b.displayName || b.name);
+      });
 
       // Resolve covers
       const enriched = await Promise.all(songs.map(async s => {
