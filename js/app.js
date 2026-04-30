@@ -996,11 +996,15 @@ const App = (() => {
           if (!result) continue;
 
           const patch = {};
-          if (result.track        && !m.track)  patch.track         = result.track;
-          if (result.artist       && !m.artist) patch.artist         = result.artist;
-          if (result.album        && !m.album)  patch.album          = result.album;
-          if (result.year         && !m.year)   patch.year           = result.year;
-          if (result.releaseMbid)               patch.mbReleaseMbid  = result.releaseMbid;
+          // MB can overwrite folder-inferred values (priority: ID3 > MB > folder name).
+          // ID3 runs in Pass 3 and always overwrites, so MB writes are safe to apply freely.
+          // Track number is the exception: MB ordering can differ from physical disc ordering,
+          // so we only fill it when empty.
+          if (result.track   && !m.track)  patch.track        = result.track;
+          if (result.artist)               patch.artist       = result.artist;
+          if (result.album)                patch.album        = result.album;
+          if (result.year)                 patch.year         = result.year;
+          if (result.releaseMbid)          patch.mbReleaseMbid = result.releaseMbid;
 
           if (Object.keys(patch).filter(k => k !== 'mbReleaseMbid').length > 0 || patch.mbReleaseMbid) {
             await DB.setMeta(file.id, patch);
@@ -1316,14 +1320,15 @@ const App = (() => {
    */
   function _rowHasCover(fileId) {
     const eid = CSS.escape(fileId);
+    const _validImg = img => img && img.src
+      && !img.src.endsWith(window.location.href)
+      && img.style.display !== 'none'; // onerror hides broken imgs
     // Browse view
     const browseRow = document.querySelector(`.song-row[data-id="${eid}"]`);
-    const browseImg = browseRow?.querySelector('.song-thumb img');
-    if (browseImg && browseImg.src && !browseImg.src.endsWith(window.location.href)) return true;
+    if (_validImg(browseRow?.querySelector('.song-thumb img'))) return true;
     // Library detail (top-list)
     const listRow = document.querySelector(`.top-list-item[data-id="${eid}"]`);
-    const listImg = listRow?.querySelector('.top-list-thumb img');
-    if (listImg && listImg.src && !listImg.src.endsWith(window.location.href)) return true;
+    if (_validImg(listRow?.querySelector('.top-list-thumb img'))) return true;
     return false;
   }
 
@@ -1406,12 +1411,11 @@ const App = (() => {
     function _applyToThumb(thumb) {
       if (!thumb) return;
       const img = thumb.querySelector('img');
-      // External source: only fill empty slots; never replace an ID3 cover.
       if (!isId3 && img) {
-        if (img.dataset.coverSrc === 'id3') return; // protected
-        return; // already has a cover — external doesn't upgrade
+        if (img.dataset.coverSrc === 'id3') return; // ID3 is always protected
+        img.src = coverUrl; // external can replace other external (e.g. CAA over expired Drive URL)
+        return;
       }
-      // ID3 source: replace anything that isn't already ID3.
       if (isId3 && img?.dataset.coverSrc === 'id3') return; // already ID3 — keep it
       thumb.innerHTML = IMG;
     }
@@ -1576,12 +1580,12 @@ const App = (() => {
     const img = thumb.querySelector('img');
     if (!isId3 && img) {
       if (img.dataset.coverSrc === 'id3') return;  // ID3 cover protected
-      img.src = coverUrl;
+      img.src = coverUrl; // external replaces external
     } else if (isId3 && img?.dataset.coverSrc === 'id3') {
       return;  // already ID3, don't overwrite
     } else {
       const srcTag = isId3 ? ' data-cover-src="id3"' : '';
-      thumb.innerHTML = `<img src="${coverUrl}"${srcTag} alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover">`;
+      thumb.innerHTML = `<img src="${coverUrl}"${srcTag} alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display='none'">`;
     }
   }
 
@@ -2938,10 +2942,12 @@ const App = (() => {
         if (!result) continue;
 
         const patch = {};
+        // _mbEnrichLibrary runs standalone (no ID3 pass after it), so keep guards
+        // to avoid overwriting ID3-sourced values already in DB.
         if (result.track       && !m.track)  patch.track        = result.track;
-        if (result.artist      && !m.artist) patch.artist        = result.artist;
-        if (result.album       && !m.album)  patch.album         = result.album;
-        if (result.year        && !m.year)   patch.year          = result.year;
+        if (result.artist      && !m.artist) patch.artist       = result.artist;
+        if (result.album       && !m.album)  patch.album        = result.album;
+        if (result.year        && !m.year)   patch.year         = result.year;
         if (result.releaseMbid)              patch.mbReleaseMbid = result.releaseMbid;
 
         const textFields = Object.keys(patch).filter(k => k !== 'mbReleaseMbid');
