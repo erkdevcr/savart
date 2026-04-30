@@ -2088,7 +2088,7 @@ const UI = (() => {
         Artistas
       </button>`;
     backRow.querySelector('.lib-back-btn').addEventListener('click', () => {
-      if (typeof App !== 'undefined') App._setLibTab('artists');
+      if (typeof App !== 'undefined') App._libGoBack('artists');
     });
     container.appendChild(backRow);
 
@@ -2156,7 +2156,7 @@ const UI = (() => {
     backRow.querySelector('.lib-back-btn').addEventListener('click', () => {
       if (typeof App !== 'undefined') {
         if (backTarget === 'artist') App.onArtistClick?.(backArtist);
-        else App._setLibTab('albums');
+        else App._libGoBack('albums');
       }
     });
     container.appendChild(backRow);

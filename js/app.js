@@ -2166,7 +2166,8 @@ const App = (() => {
 
   /* ── Library ─────────────────────────────────────────────── */
 
-  let _currentLibTab = 'favorites'; // persists tab across sync refreshes
+  let _currentLibTab  = 'favorites'; // persists tab across sync refreshes
+  let _libInDetail    = false;       // true while showing an artist/album drill-down
 
   const LIB_TAB_PLACEHOLDERS = {
     favorites: 'Buscar en Favoritos…',
@@ -2181,6 +2182,7 @@ const App = (() => {
    */
   function _setLibTab(tab) {
     _currentLibTab = tab;
+    _libInDetail   = false; // leaving any drill-down view
 
     // Active state on tab items
     document.querySelectorAll('#lib-sidebar .lib-tab').forEach(el => {
@@ -2198,6 +2200,28 @@ const App = (() => {
     if (tab === 'favorites') _loadStarred();
     if (tab === 'artists')   { _loadArtists();  setTimeout(_scanLibraryBackground, 400); }
     if (tab === 'albums')    { _loadAlbums();   setTimeout(_scanLibraryBackground, 400); }
+    if (tab === 'playlists') _loadPlaylists();
+  }
+
+  /**
+   * Navigate back to a parent list tab WITHOUT clearing the search input.
+   * Used by all back-buttons inside drill-down views (album detail, artist detail).
+   * After re-rendering the list, re-applies whatever is currently in the search bar.
+   */
+  function _libGoBack(tab) {
+    _currentLibTab = tab;
+    _libInDetail   = false;
+
+    document.querySelectorAll('#lib-sidebar .lib-tab').forEach(el => {
+      el.classList.toggle('active', el.dataset.tab === tab);
+    });
+
+    // Update placeholder but leave the search input text intact
+    UI.setLibSearchPlaceholder(LIB_TAB_PLACEHOLDERS[tab] || 'Buscar…');
+
+    // Reload data — each loader re-applies the current search filter after render
+    if (tab === 'artists') { _loadArtists();  setTimeout(_scanLibraryBackground, 400); }
+    if (tab === 'albums')  { _loadAlbums();   setTimeout(_scanLibraryBackground, 400); }
     if (tab === 'playlists') _loadPlaylists();
   }
 
@@ -2597,10 +2621,13 @@ const App = (() => {
 
     console.log(`[LibScan] Done. Patched metadata for ${patched} files.`);
 
-    // Refresh the current library tab so newly inferred data shows up
-    const tab = _currentLibTab;
-    if (tab === 'artists') _loadArtists();
-    if (tab === 'albums')  _loadAlbums();
+    // Refresh the current library tab so newly inferred data shows up.
+    // Skip if the user is inside a drill-down — the list re-renders on back-navigation.
+    if (!_libInDetail) {
+      const tab = _currentLibTab;
+      if (tab === 'artists') _loadArtists();
+      if (tab === 'albums')  _loadAlbums();
+    }
   }
 
   /**
@@ -2714,8 +2741,9 @@ const App = (() => {
         updated++;
       }
 
-      // Refresh the active library tab so updated album data shows immediately
-      if (updated > 0) {
+      // Refresh the active library tab so updated album data shows immediately.
+      // Skip if the user is inside a detail view — the list re-renders on back-navigation.
+      if (updated > 0 && !_libInDetail) {
         if (_currentLibTab === 'albums')  _loadAlbums();
         if (_currentLibTab === 'artists') _loadArtists();
       }
@@ -2729,6 +2757,7 @@ const App = (() => {
    * Groups by artist name, counts albums and songs.
    */
   async function _loadArtists() {
+    if (_libInDetail) return; // don't replace a drill-down view
     try {
       const all = await DB.getAllMeta();
       const artistMap = new Map();
@@ -2748,6 +2777,9 @@ const App = (() => {
         .map(a => ({ name: a.name, songCount: a.songCount, albumCount: a.albumSet.size || 1 }))
         .sort((a, b) => a.name.localeCompare(b.name));
       UI.renderArtists(artists);
+      // Re-apply any active search filter (persisted from before a drill-down)
+      const q = document.getElementById('lib-search-input')?.value || '';
+      if (q) _onLibSearch(q);
     } catch (err) {
       console.error('[App] Load artists error:', err);
     }
@@ -2758,6 +2790,7 @@ const App = (() => {
    * Groups by album name (+ artist), counts songs, picks a cover.
    */
   async function _loadAlbums() {
+    if (_libInDetail) return; // don't replace a drill-down view
     try {
       const all = await DB.getAllMeta();
       const albumMap = new Map();
@@ -2785,6 +2818,9 @@ const App = (() => {
         })
         .sort((a, b) => a.name.localeCompare(b.name));
       UI.renderLibraryAlbums(albums);
+      // Re-apply any active search filter (persisted from before a drill-down)
+      const q = document.getElementById('lib-search-input')?.value || '';
+      if (q) _onLibSearch(q);
     } catch (err) {
       console.error('[App] Load albums error:', err);
     }
@@ -2819,8 +2855,12 @@ const App = (() => {
           return { name: a.name, artist: a.artist, songCount: a.songCount, coverUrl: a.coverUrl, year };
         })
         .sort((a, b) => a.name.localeCompare(b.name));
+      _libInDetail = true;
       UI.renderLibraryArtistDetail(artist, albums);
       UI.setLibSearchPlaceholder(`Buscar álbum de ${artist.name}…`);
+      // Re-apply any active search filter
+      const q = document.getElementById('lib-search-input')?.value || '';
+      if (q) _onLibSearch(q);
     } catch (err) {
       console.error('[App] onArtistClick error:', err);
     }
@@ -2858,6 +2898,7 @@ const App = (() => {
       }));
 
       const backTarget = fromArtist ? 'artist' : 'albums';
+      _libInDetail = true;
       UI.renderLibraryAlbumDetail(album, enriched, backTarget, fromArtist || null);
       UI.setLibSearchPlaceholder(`Buscar en ${album.name}…`);
 
@@ -4035,6 +4076,7 @@ const App = (() => {
     _loadArtists,
     _loadAlbums,
     _setLibTab,
+    _libGoBack,
     _onNewPlaylist,
     _scanLibraryBackground,
     onArtistClick,
