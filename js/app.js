@@ -1185,11 +1185,11 @@ const App = (() => {
 
     if (!topAlbum) return; // nothing to patch
 
-    // Update name: "[year] - [album]" or just "[album]"
+    // Update name: "[year] - [album]" or just "[album]" — matches album.label format
     nameEl.textContent = topYear ? `${topYear} - ${topAlbum}` : topAlbum;
 
-    // Update subtitle with artist info if available
-    if (subEl && artist) {
+    // Update subtitle: artist · N canciones (year already in title, don't duplicate)
+    if (subEl) {
       const parts = [artist, songs.length + ' canciones'].filter(Boolean);
       subEl.textContent = parts.join(' · ');
     }
@@ -3132,9 +3132,10 @@ const App = (() => {
             const fid = [...a.folderIds][0];
             songCount = Math.max(songCount, folderSongCount.get(fid) || 0);
           }
-          return { name: a.name, artist: a.artist, songCount, coverUrl: a.coverUrl, year };
+          const label = year ? `${year} - ${a.name}` : a.name;
+          return { name: a.name, label, artist: a.artist, songCount, coverUrl: a.coverUrl, year };
         })
-        .sort((a, b) => a.name.localeCompare(b.name));
+        .sort((a, b) => a.label.localeCompare(b.label));
       UI.renderLibraryAlbums(albums);
       // Re-apply any active search filter (persisted from before a drill-down)
       const q = document.getElementById('lib-search-input')?.value || '';
@@ -3186,9 +3187,10 @@ const App = (() => {
             const fid = [...a.folderIds][0];
             songCount = Math.max(songCount, folderSongCount.get(fid) || 0);
           }
-          return { name: a.name, artist: a.artist, songCount, coverUrl: a.coverUrl, year };
+          const label = year ? `${year} - ${a.name}` : a.name;
+          return { name: a.name, label, artist: a.artist, songCount, coverUrl: a.coverUrl, year };
         })
-        .sort((a, b) => a.name.localeCompare(b.name));
+        .sort((a, b) => a.label.localeCompare(b.label));
       _libInDetail = true;
       UI.renderLibraryArtistDetail(artist, albums);
       UI.setLibSearchPlaceholder(`Buscar álbum de ${artist.name}…`);
