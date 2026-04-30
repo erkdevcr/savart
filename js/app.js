@@ -263,7 +263,7 @@ const App = (() => {
       _restoreSettings();
       _loadHomeData();
       const view = UI.getCurrentView();
-      if (view === 'library') _setLibTab(_currentLibTab || 'favorites');
+      if (view === 'library') _setLibTab(_currentLibTab || 'albums');
       // Start live 3-second polling (Last-Write-Wins)
       Sync.startLiveSync(_onSyncDataChanged);
     }).catch(() => {});
@@ -282,7 +282,7 @@ const App = (() => {
     if (needsHome) _loadHomeData();
 
     if (view === 'library' && types.some(t => ['playlists', 'favorites'].includes(t))) {
-      _setLibTab(_currentLibTab || 'favorites');
+      _setLibTab(_currentLibTab || 'albums');
     }
 
     if (view === 'history' && types.includes('history')) _loadHistory();
