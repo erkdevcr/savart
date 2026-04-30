@@ -228,6 +228,15 @@ const DB = (() => {
   }
 
   /**
+   * Get all metadata records (used for Artists / Albums aggregation in Library).
+   * @returns {Promise<Object[]>}
+   */
+  async function getAllMeta() {
+    const store = _tx('metadata');
+    return _promisify(store.getAll());
+  }
+
+  /**
    * Save or update metadata for a file.
    * Merges with existing metadata if present.
    * @param {string} fileId
@@ -704,6 +713,7 @@ const DB = (() => {
     clearCache,
     // Metadata
     getMeta,
+    getAllMeta,
     setMeta,
     incrementPlayCount,
     toggleStar,

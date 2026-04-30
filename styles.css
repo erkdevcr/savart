@@ -1431,6 +1431,232 @@ img { display: block; }
   text-overflow: ellipsis;
 }
 
+/* ── Library: vertical tab items (sidebar nav aesthetic) ─── */
+.lib-tab {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  user-select: none;
+}
+.lib-tab svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  opacity: 0.65;
+  transition: opacity 0.15s;
+}
+.lib-tab:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.lib-tab:hover svg { opacity: 1; }
+.lib-tab.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.lib-tab.active svg { opacity: 1; }
+
+/* ── Library: sticky search bar ─────────────────────────── */
+.lib-search-wrap {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--bg-base);
+}
+
+/* ── Library: back header (artist/album drill-down) ─────── */
+.lib-back-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid var(--bg-hover);
+}
+.lib-back-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--accent);
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+}
+.lib-back-btn:hover { opacity: 0.8; }
+.lib-detail-entity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px 14px;
+  border-bottom: 1px solid var(--bg-hover);
+}
+.lib-detail-entity-art {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 18px;
+  font-weight: 500;
+  overflow: hidden;
+}
+.lib-detail-entity-art.circle { border-radius: 50%; }
+.lib-detail-entity-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lib-detail-entity-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+/* ── Library: artist grid (3-col) ────────────────────────── */
+.lib-artist-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  padding: 14px;
+}
+.lib-artist-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  padding: 8px 4px;
+  border-radius: var(--radius-md);
+  transition: background 0.12s;
+}
+.lib-artist-card:hover { background: var(--bg-hover); }
+.lib-artist-avatar {
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  background: var(--bg-card);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+.lib-artist-name {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-primary);
+  text-align: center;
+  line-height: 1.3;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.lib-artist-sub {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* ── Library: album grid (2-col, home-card style) ────────── */
+.lib-album-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+  padding: 14px;
+}
+
+/* ── Library: new playlist button row ───────────────────── */
+.lib-new-pl-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  font-size: 13px;
+  color: var(--accent);
+  cursor: pointer;
+  border-bottom: 1px solid var(--bg-hover);
+  transition: background 0.12s;
+}
+.lib-new-pl-btn:hover { background: var(--bg-hover); }
+.lib-new-pl-btn svg { width: 16px; height: 16px; flex-shrink: 0; }
+
+/* ── Library: playlist items (detail pane) ───────────────── */
+.lib-pl-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--bg-hover);
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.lib-pl-item:last-child { border-bottom: none; }
+.lib-pl-item:hover { background: var(--bg-hover); }
+.lib-pl-thumb {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.lib-pl-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.lib-pl-info { flex: 1; min-width: 0; }
+.lib-pl-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lib-pl-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Mobile overrides for lib artist grid */
+@media (max-width: 767px) {
+  .lib-artist-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    padding: 10px;
+  }
+  .lib-artist-avatar {
+    width: 56px;
+    height: 56px;
+    font-size: 15px;
+  }
+  .lib-album-grid {
+    gap: 10px;
+    padding: 10px;
+  }
+}
+
 /* ── Settings screen ─────────────────────────────────────── */
 .settings-section {
   padding: 0;

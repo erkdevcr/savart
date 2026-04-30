@@ -1868,37 +1868,35 @@ const UI = (() => {
       return;
     }
 
-    // Section header
-    const header = document.createElement('div');
-    header.className = 'lib-detail-header';
-    const starIcon = `<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>`;
-    header.innerHTML = `${starIcon} ${t('lib_favorites')} <span class="lib-detail-count">${songs.length}</span>`;
-    container.appendChild(header);
+    // Top-list style (same aesthetic as Más reproducidas)
+    const list = document.createElement('div');
+    list.className = 'top-list';
 
-    songs.forEach(song => {
+    songs.forEach((song, i) => {
       const row = document.createElement('div');
-      row.className = 'song-row lib-song-row';
+      row.className = 'top-list-item';
       row.dataset.id = song.id;
+      row.dataset.searchKey = (song.displayName || song.name || '').toLowerCase()
+        + ' ' + (song.artist || '').toLowerCase();
 
-      const _ext  = (song.name || '').split('.').pop().toUpperCase();
-      const _size = song.size ? formatBytes(parseInt(song.size, 10)) : '';
       const _artist = song.artist || '';
-      const _album  = song.albumName || '';
-      const _sub = [_artist, _album].filter(Boolean).join(' · ') || [_size, _ext].filter(Boolean).join(' · ');
+      const _album  = song.albumName || song.album || '';
+      const _sub    = [_artist, _album].filter(Boolean).join(' — ');
 
       row.innerHTML = `
-        <div class="song-thumb">
+        <div class="top-list-rank">${i + 1}</div>
+        <div class="top-list-thumb">
           ${song.thumbnailUrl
-            ? `<img src="${song.thumbnailUrl}" alt="" loading="lazy">`
-            : `<div class="thumb-placeholder">${iconMusicNote(20)}</div>`
+            ? `<img src="${song.thumbnailUrl}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)">`
+            : iconMusicNote(22)
           }
         </div>
-        <div class="song-row-info">
-          <div class="song-row-title">${escHtml(song.displayName || song.name)}</div>
-          <div class="song-row-meta">${escHtml(_sub)}</div>
+        <div class="top-list-info">
+          <div class="top-list-title">${escHtml(song.displayName || song.name || '')}</div>
+          ${_sub ? `<div class="top-list-artist">${escHtml(_sub)}</div>` : ''}
         </div>
-        <button class="lib-star-btn active" aria-label="Quitar de favoritas">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+        <button class="lib-star-btn active" aria-label="Quitar de favoritas" style="margin-right:4px;color:var(--accent);background:none;border:none;cursor:pointer;display:flex;align-items:center;flex-shrink:0">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
         </button>
         <button class="btn-more" aria-label="Más opciones">${iconDots()}</button>
       `;
@@ -1907,10 +1905,8 @@ const UI = (() => {
         e.stopPropagation();
         if (typeof App !== 'undefined') App.onToggleStar(song);
         row.remove();
-        // Update count
-        const remaining = container.querySelectorAll('.lib-song-row').length;
-        const hdr = container.querySelector('.lib-detail-header .lib-detail-count');
-        if (hdr) hdr.textContent = remaining;
+        // Re-number remaining rows
+        list.querySelectorAll('.top-list-rank').forEach((el, idx) => { el.textContent = idx + 1; });
       });
 
       row.querySelector('.btn-more').addEventListener('click', (e) => {
@@ -1923,9 +1919,11 @@ const UI = (() => {
         if (typeof App !== 'undefined') App.onSongClick(song);
       });
 
-      if (typeof App !== 'undefined') App._cacheItem(song);
-      container.appendChild(row);
+      if (typeof App !== 'undefined') App._cacheItem?.(song);
+      list.appendChild(row);
     });
+
+    container.appendChild(list);
   }
 
   /* ── Library — Playlist detail (right pane) ─────────────── */
@@ -2015,7 +2013,7 @@ const UI = (() => {
    * @param {Object[]} artists - array of { id, name, songCount }
    */
   function renderArtists(artists) {
-    const container = document.getElementById('lib-artists');
+    const container = document.getElementById('lib-detail-content');
     if (!container) return;
     container.innerHTML = '';
 
@@ -2028,43 +2026,268 @@ const UI = (() => {
       return;
     }
 
-    // Count header
-    const header = document.createElement('div');
-    header.className = 'lib-count-header';
-    header.textContent = `${artists.length} ${t('artists').toUpperCase()}`;
-    container.appendChild(header);
+    const AVATAR_COLORS = [
+      { bg: '#1A1635', fg: '#7A6FE0' }, { bg: '#0D2A1E', fg: '#3ECF7A' },
+      { bg: '#2A150D', fg: '#E07755' }, { bg: '#1A1220', fg: '#C47ABF' },
+      { bg: '#0D1F35', fg: '#4A88F5' }, { bg: '#1A2A10', fg: '#7FC45B' },
+      { bg: '#2A1A10', fg: '#E0A055' },
+    ];
 
-    const AVATAR_COLORS = ['#2A3D6A','#2A4A2A','#4A2A2A','#3A2A4A','#1A3A4A','#4A3A1A','#3A1A4A','#1A4A3A','#3A3A1A'];
+    const grid = document.createElement('div');
+    grid.className = 'lib-artist-grid';
 
     artists.forEach(artist => {
-      const row = document.createElement('div');
-      row.className = 'artist-row';
+      const card = document.createElement('div');
+      card.className = 'lib-artist-card';
+      card.dataset.searchKey = (artist.name || '').toLowerCase();
 
-      // Deterministic avatar color
-      const hash = [...(artist.name || '')].reduce((a, c) => a + c.charCodeAt(0), 0);
-      const bg   = AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+      const hash   = [...(artist.name || '')].reduce((a, c) => a + c.charCodeAt(0), 0);
+      const colors = AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
 
-      // Initials: up to 2 letters
       const parts    = (artist.name || '').trim().split(/\s+/);
       const initials = parts.length >= 2
         ? (parts[0][0] + parts[1][0]).toUpperCase()
         : (artist.name || '?').substring(0, 2).toUpperCase();
 
+      const albumLabel = artist.albumCount === 1
+        ? '1 álbum'
+        : `${artist.albumCount} álbumes`;
+
+      card.innerHTML = `
+        <div class="lib-artist-avatar" style="background:${colors.bg};color:${colors.fg}">${initials}</div>
+        <div class="lib-artist-name">${escHtml(artist.name)}</div>
+        <div class="lib-artist-sub">${albumLabel}</div>
+      `;
+
+      card.addEventListener('click', () => {
+        if (typeof App !== 'undefined') App.onArtistClick?.(artist);
+      });
+
+      grid.appendChild(card);
+    });
+
+    container.appendChild(grid);
+  }
+
+  /**
+   * Render artist detail: back button + artist info + their albums grid.
+   * @param {Object}   artist       - { name, albumCount }
+   * @param {Object[]} albums       - [{ name, songCount, coverUrls[] }]
+   */
+  function renderLibraryArtistDetail(artist, albums) {
+    const container = document.getElementById('lib-detail-content');
+    if (!container) return;
+    container.innerHTML = '';
+
+    // Back button
+    const backRow = document.createElement('div');
+    backRow.className = 'lib-back-header';
+    backRow.innerHTML = `
+      <button class="lib-back-btn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+        Artistas
+      </button>`;
+    backRow.querySelector('.lib-back-btn').addEventListener('click', () => {
+      if (typeof App !== 'undefined') App._setLibTab('artists');
+    });
+    container.appendChild(backRow);
+
+    // Artist identity row
+    const AVATAR_COLORS = [
+      { bg: '#1A1635', fg: '#7A6FE0' }, { bg: '#0D2A1E', fg: '#3ECF7A' },
+      { bg: '#2A150D', fg: '#E07755' }, { bg: '#1A1220', fg: '#C47ABF' },
+      { bg: '#0D1F35', fg: '#4A88F5' }, { bg: '#1A2A10', fg: '#7FC45B' },
+      { bg: '#2A1A10', fg: '#E0A055' },
+    ];
+    const hash   = [...(artist.name || '')].reduce((a, c) => a + c.charCodeAt(0), 0);
+    const colors = AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+    const parts    = (artist.name || '').trim().split(/\s+/);
+    const initials = parts.length >= 2
+      ? (parts[0][0] + parts[1][0]).toUpperCase()
+      : (artist.name || '?').substring(0, 2).toUpperCase();
+
+    const entity = document.createElement('div');
+    entity.className = 'lib-detail-entity';
+    entity.innerHTML = `
+      <div class="lib-detail-entity-art circle" style="background:${colors.bg};color:${colors.fg};font-size:16px;font-weight:500">${initials}</div>
+      <div>
+        <div class="lib-detail-entity-name">${escHtml(artist.name)}</div>
+        <div class="lib-detail-entity-sub">${artist.albumCount} álbumes · ${artist.songCount} canciones</div>
+      </div>`;
+    container.appendChild(entity);
+
+    if (albums.length === 0) {
+      container.innerHTML += `<div class="empty-state"><p>Sin álbumes registrados</p></div>`;
+      return;
+    }
+
+    // Albums grid (home-card style)
+    const grid = document.createElement('div');
+    grid.className = 'lib-album-grid';
+
+    albums.forEach(album => {
+      grid.appendChild(_buildAlbumCard(album));
+    });
+
+    container.appendChild(grid);
+  }
+
+  /**
+   * Render album detail: back button + album info + song list (top-list style).
+   * @param {Object}   album      - { name, artist, songCount, coverUrl }
+   * @param {Object[]} songs      - array of song metadata
+   * @param {string}   backTarget - 'albums' | 'artist'
+   * @param {Object}   backArtist - artist object (only when backTarget='artist')
+   */
+  function renderLibraryAlbumDetail(album, songs, backTarget, backArtist) {
+    const container = document.getElementById('lib-detail-content');
+    if (!container) return;
+    container.innerHTML = '';
+
+    // Back button
+    const backLabel = backTarget === 'artist' ? escHtml(backArtist?.name || 'Artista') : 'Álbumes';
+    const backRow = document.createElement('div');
+    backRow.className = 'lib-back-header';
+    backRow.innerHTML = `
+      <button class="lib-back-btn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+        ${backLabel}
+      </button>`;
+    backRow.querySelector('.lib-back-btn').addEventListener('click', () => {
+      if (typeof App !== 'undefined') {
+        if (backTarget === 'artist') App.onArtistClick?.(backArtist);
+        else App._setLibTab('albums');
+      }
+    });
+    container.appendChild(backRow);
+
+    // Album identity row
+    const ALBUM_COLORS = ['#1A1635','#0D2A1E','#0D1F35','#2A150D','#1A1220','#1A2A10','#2A1A10'];
+    const hash   = [...(album.name || '')].reduce((a, c) => a + c.charCodeAt(0), 0);
+    const albBg  = ALBUM_COLORS[Math.abs(hash) % ALBUM_COLORS.length];
+
+    const entity = document.createElement('div');
+    entity.className = 'lib-detail-entity';
+    entity.innerHTML = `
+      <div class="lib-detail-entity-art" style="background:${albBg};color:var(--text-secondary)">
+        ${album.coverUrl
+          ? `<img src="${album.coverUrl}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)">`
+          : `<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 14.5c-2.49 0-4.5-2.01-4.5-4.5S9.51 7.5 12 7.5s4.5 2.01 4.5 4.5-2.01 4.5-4.5 4.5zm0-5.5c-.55 0-1 .45-1 1s.45 1 1 1 1-.45 1-1-.45-1-1-1z"/></svg>`
+        }
+      </div>
+      <div>
+        <div class="lib-detail-entity-name">${escHtml(album.name)}</div>
+        <div class="lib-detail-entity-sub">${escHtml(album.artist || '')} · ${songs.length} canciones</div>
+      </div>`;
+    container.appendChild(entity);
+
+    if (songs.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'empty-state';
+      empty.innerHTML = `<p>Sin canciones registradas</p>`;
+      container.appendChild(empty);
+      return;
+    }
+
+    // Songs in top-list style
+    const list = document.createElement('div');
+    list.className = 'top-list';
+
+    songs.forEach((song, i) => {
+      const row = document.createElement('div');
+      row.className = 'top-list-item';
+      row.dataset.id = song.id;
+      row.dataset.searchKey = (song.displayName || song.name || '').toLowerCase();
+
       row.innerHTML = `
-        <div class="artist-avatar" style="background:${bg}">${initials}</div>
-        <div class="artist-info">
-          <div class="artist-name">${escHtml(artist.name)}</div>
-          <div class="artist-sub">${t('lib_artist_fav')}</div>
+        <div class="top-list-rank">${i + 1}</div>
+        <div class="top-list-thumb">
+          ${song.thumbnailUrl
+            ? `<img src="${song.thumbnailUrl}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)">`
+            : iconMusicNote(22)
+          }
+        </div>
+        <div class="top-list-info">
+          <div class="top-list-title">${escHtml(song.displayName || song.name || '')}</div>
+          ${song.artist ? `<div class="top-list-artist">${escHtml(song.artist)}</div>` : ''}
         </div>
         <button class="btn-more" aria-label="Más opciones">${iconDots()}</button>
       `;
 
-      row.addEventListener('click', () => {
-        if (typeof App !== 'undefined') App.onArtistClick?.(artist);
+      row.querySelector('.btn-more').addEventListener('click', e => {
+        e.stopPropagation();
+        showContextMenu(e, 'song', song);
       });
 
-      container.appendChild(row);
+      row.addEventListener('click', e => {
+        if (e.target.closest('.btn-more')) return;
+        if (typeof App !== 'undefined') App.onSongClick(song);
+      });
+
+      if (typeof App !== 'undefined') App._cacheItem?.(song);
+      list.appendChild(row);
     });
+
+    container.appendChild(list);
+  }
+
+  /**
+   * Render albums grid (home-card style) into #lib-detail-content.
+   * @param {Object[]} albums - [{ name, artist, songCount, coverUrl }]
+   */
+  function renderLibraryAlbums(albums) {
+    const container = document.getElementById('lib-detail-content');
+    if (!container) return;
+    container.innerHTML = '';
+
+    if (albums.length === 0) {
+      container.innerHTML = `
+        <div class="empty-state">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 14.5c-2.49 0-4.5-2.01-4.5-4.5S9.51 7.5 12 7.5s4.5 2.01 4.5 4.5-2.01 4.5-4.5 4.5zm0-5.5c-.55 0-1 .45-1 1s.45 1 1 1 1-.45 1-1-.45-1-1-1z"/></svg>
+          <p>Sin álbumes en tu biblioteca</p>
+        </div>`;
+      return;
+    }
+
+    const grid = document.createElement('div');
+    grid.className = 'lib-album-grid';
+
+    albums.forEach(album => {
+      const card = _buildAlbumCard(album);
+      card.dataset.searchKey = (album.name + ' ' + (album.artist || '')).toLowerCase();
+      grid.appendChild(card);
+    });
+
+    container.appendChild(grid);
+  }
+
+  /** Build a single home-card-style album card. */
+  function _buildAlbumCard(album) {
+    const ALBUM_COLORS = ['#1A1635','#0D2A1E','#0D1F35','#2A150D','#1A1220','#1A2A10','#2A1A10'];
+    const hash  = [...(album.name || '')].reduce((a, c) => a + c.charCodeAt(0), 0);
+    const albBg = ALBUM_COLORS[Math.abs(hash) % ALBUM_COLORS.length];
+
+    const card = document.createElement('div');
+    card.className = 'home-card';
+    card.style.cursor = 'pointer';
+    card.dataset.searchKey = (album.name + ' ' + (album.artist || '')).toLowerCase();
+
+    card.innerHTML = `
+      <div class="home-card-art" style="background:${albBg}">
+        ${album.coverUrl
+          ? `<img src="${album.coverUrl}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-md)">`
+          : `<svg width="38" height="38" viewBox="0 0 24 24" fill="currentColor" style="color:var(--text-muted)"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 14.5c-2.49 0-4.5-2.01-4.5-4.5S9.51 7.5 12 7.5s4.5 2.01 4.5 4.5-2.01 4.5-4.5 4.5zm0-5.5c-.55 0-1 .45-1 1s.45 1 1 1 1-.45 1-1-.45-1-1-1z"/></svg>`
+        }
+      </div>
+      <div class="home-card-name">${escHtml(album.name)}</div>
+      <div class="home-card-sub">${escHtml(album.artist || '')}${album.artist && album.songCount ? ' · ' : ''}${album.songCount ? album.songCount + ' canciones' : ''}</div>
+    `;
+
+    card.addEventListener('click', () => {
+      if (typeof App !== 'undefined') App.onAlbumClick?.(album);
+    });
+
+    return card;
   }
 
   /* ── Library — Playlists ─────────────────────────────────── */
@@ -2077,29 +2300,21 @@ const UI = (() => {
   let _plSortMode = 'recent'; // 'recent' | 'az' | 'za'
 
   function renderPlaylists(playlists) {
-    const container = document.getElementById('playlists-list');
+    const container = document.getElementById('lib-detail-content');
     if (!container) return;
     container.innerHTML = '';
 
-    // ── Sort bar ───────────────────────────────────────────────
-    const sortBar = document.createElement('div');
-    sortBar.className = 'pl-sort-bar';
-    [
-      { mode: 'recent', label: t('pl_sort_recent') },
-      { mode: 'az',     label: 'A–Z'               },
-      { mode: 'za',     label: 'Z–A'               },
-    ].forEach(({ mode, label }) => {
-      const btn = document.createElement('button');
-      btn.className = 'pl-sort-btn' + (mode === _plSortMode ? ' active' : '');
-      btn.textContent = label;
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        _plSortMode = mode;
-        renderPlaylists(_lastPlaylists || playlists);
-      });
-      sortBar.appendChild(btn);
+    // "Nueva playlist" button at the top
+    const newBtn = document.createElement('div');
+    newBtn.className = 'lib-new-pl-btn';
+    newBtn.innerHTML = `
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+      Nueva playlist
+    `;
+    newBtn.addEventListener('click', () => {
+      if (typeof App !== 'undefined') App._onNewPlaylist?.();
     });
-    container.appendChild(sortBar);
+    container.appendChild(newBtn);
 
     if (playlists.length === 0) return;
 
@@ -2110,40 +2325,35 @@ const UI = (() => {
     const sorted = [...playlists];
     if (_plSortMode === 'az') sorted.sort((a, b) => a.name.localeCompare(b.name));
     if (_plSortMode === 'za') sorted.sort((a, b) => b.name.localeCompare(a.name));
-    // 'recent' = as returned from DB (insertion order)
 
     sorted.forEach(pl => {
       const item = document.createElement('div');
-      item.className = 'lib-sidebar-item';
-      item.dataset.plId = pl.id;
+      item.className = 'lib-pl-item';
+      item.dataset.plId      = pl.id;
       item.dataset.coverUrls = JSON.stringify(pl.coverUrls || []);
       item.dataset.plName    = pl.name;
+      item.dataset.searchKey = pl.name.toLowerCase();
 
-      // Thumbnail: always 2×2 mosaic (real covers when available, colored placeholders otherwise)
       const thumbHtml = _buildMosaicThumb(pl.coverUrls || [], pl.name);
-
       const songCount = pl.songIds?.length || 0;
       const songNoun  = songCount === 1
         ? (_currentLang === 'es' ? 'canción' : 'song')
         : (_currentLang === 'es' ? 'canciones' : 'songs');
+
       item.innerHTML = `
-        <div class="lib-sidebar-thumb">${thumbHtml}</div>
-        <div class="lib-sidebar-info">
-          <span class="lib-sidebar-name" title="${escHtml(pl.name)}">${escHtml(pl.name)}</span>
-          <span class="lib-sidebar-count">${songCount} ${songNoun}</span>
+        <div class="lib-pl-thumb">${thumbHtml}</div>
+        <div class="lib-pl-info">
+          <div class="lib-pl-name">${escHtml(pl.name)}</div>
+          <div class="lib-pl-meta">${songCount} ${songNoun}</div>
         </div>
-        <button class="pl-item-more" aria-label="Más opciones">${iconDots()}</button>
+        <button class="pl-item-more" aria-label="Más opciones" style="color:var(--text-muted);flex-shrink:0">${iconDots()}</button>
       `;
 
-      // Click on item (not the more button) → open detail
       item.addEventListener('click', (e) => {
         if (e.target.closest('.pl-item-more')) return;
-        document.querySelectorAll('.lib-sidebar-item').forEach(i => i.classList.remove('active'));
-        item.classList.add('active');
         if (typeof App !== 'undefined') App.onPlaylistClick?.(pl);
       });
 
-      // 3-dot menu
       item.querySelector('.pl-item-more').addEventListener('click', (e) => {
         e.stopPropagation();
         showContextMenu(e, 'playlist', pl);
@@ -2177,9 +2387,12 @@ const UI = (() => {
    * @param {string} coverUrl — newly resolved cover URL
    */
   function updatePlaylistSidebarCover(plId, coverUrl) {
-    const item = document.querySelector(`.lib-sidebar-item[data-pl-id="${CSS.escape(plId)}"]`);
+    // Works for both the old sidebar items and new lib-pl-items
+    const item = document.querySelector(
+      `.lib-pl-item[data-pl-id="${CSS.escape(plId)}"], .lib-sidebar-item[data-pl-id="${CSS.escape(plId)}"]`
+    );
     if (!item) return;
-    const thumb = item.querySelector('.lib-sidebar-thumb');
+    const thumb = item.querySelector('.lib-pl-thumb, .lib-sidebar-thumb');
     if (!thumb) return;
     let covers = [];
     try { covers = JSON.parse(item.dataset.coverUrls || '[]'); } catch (_) {}
@@ -2189,6 +2402,12 @@ const UI = (() => {
     }
     const name = item.dataset.plName || '';
     thumb.innerHTML = _buildMosaicThumb(covers, name);
+  }
+
+  /** Update the placeholder text in the library search input. */
+  function setLibSearchPlaceholder(text) {
+    const input = document.getElementById('lib-search-input');
+    if (input) input.placeholder = text;
   }
 
   /**
@@ -2445,8 +2664,12 @@ const UI = (() => {
     renderStarredSongs,
     renderPlaylistDetail,
     renderArtists,
+    renderLibraryAlbums,
+    renderLibraryArtistDetail,
+    renderLibraryAlbumDetail,
     renderPlaylists,
     updatePlaylistSidebarCover,
+    setLibSearchPlaceholder,
     // Search
     renderSearchResults,
     updateSearchChipCounts,

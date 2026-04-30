@@ -261,7 +261,7 @@ const App = (() => {
       _restoreSettings();
       _loadHomeData();
       const view = UI.getCurrentView();
-      if (view === 'library') { _loadPlaylists(); _loadStarred(); }
+      if (view === 'library') _setLibTab(_currentLibTab || 'favorites');
       // Start live 3-second polling (Last-Write-Wins)
       Sync.startLiveSync(_onSyncDataChanged);
     }).catch(() => {});
@@ -280,8 +280,7 @@ const App = (() => {
     if (needsHome) _loadHomeData();
 
     if (view === 'library' && types.some(t => ['playlists', 'favorites'].includes(t))) {
-      _loadPlaylists();
-      _loadStarred();
+      _setLibTab(_currentLibTab || 'favorites');
     }
 
     if (view === 'history' && types.includes('history')) _loadHistory();
@@ -1640,8 +1639,7 @@ const App = (() => {
   /** Open Library view and navigate directly to the tapped playlist. */
   function onPlaylistHomeCardClick(pl) {
     UI.showView('library');
-    _loadPlaylists();
-    _loadStarred();
+    _setLibTab('playlists');
     // Small delay so Library renders before we open the detail
     setTimeout(() => onPlaylistClick(pl), 80);
   }
@@ -2147,6 +2145,53 @@ const App = (() => {
 
   /* ── Library ─────────────────────────────────────────────── */
 
+  let _currentLibTab = 'favorites'; // persists tab across sync refreshes
+
+  const LIB_TAB_PLACEHOLDERS = {
+    favorites: 'Buscar en Favoritos…',
+    artists:   'Buscar artista…',
+    albums:    'Buscar álbum…',
+    playlists: 'Buscar playlist…',
+  };
+
+  /**
+   * Switch the active library tab: update DOM active state,
+   * update search placeholder and load the tab's data.
+   */
+  function _setLibTab(tab) {
+    _currentLibTab = tab;
+
+    // Active state on tab items
+    document.querySelectorAll('#lib-sidebar .lib-tab').forEach(el => {
+      el.classList.toggle('active', el.dataset.tab === tab);
+    });
+
+    // Clear search input
+    const searchInput = document.getElementById('lib-search-input');
+    if (searchInput) searchInput.value = '';
+
+    // Update placeholder
+    UI.setLibSearchPlaceholder(LIB_TAB_PLACEHOLDERS[tab] || 'Buscar…');
+
+    // Load data
+    if (tab === 'favorites') _loadStarred();
+    if (tab === 'artists')   _loadArtists();
+    if (tab === 'albums')    _loadAlbums();
+    if (tab === 'playlists') _loadPlaylists();
+  }
+
+  /** Filter visible items in #lib-detail-content by search text. */
+  function _onLibSearch(query) {
+    const q = query.trim().toLowerCase();
+    const container = document.getElementById('lib-detail-content');
+    if (!container) return;
+
+    container.querySelectorAll('[data-search-key]').forEach(el => {
+      const match = !q || el.dataset.searchKey.includes(q);
+      el.style.display = match ? '' : 'none';
+    });
+  }
+
   async function _loadPlaylists() {
     try {
       const playlists = await DB.getPlaylists();
@@ -2465,7 +2510,6 @@ const App = (() => {
         return url ? { ...song, thumbnailUrl: url } : song;
       }));
       UI.renderStarredSongs(enriched);
-      // Drive fallback: fetch thumbnailLink for songs still without cover after local passes
       _driveThumbFallback(
         enriched.filter(s => !s.thumbnailUrl),
         _songRowHasCover,
@@ -2476,29 +2520,136 @@ const App = (() => {
     }
   }
 
+  /**
+   * Aggregate all metadata into artists map.
+   * Groups by artist name, counts albums and songs.
+   */
   async function _loadArtists() {
-    // Artists are derived from starred songs' artist tags
     try {
-      const starred  = await DB.getStarred();
+      const all = await DB.getAllMeta();
       const artistMap = new Map();
-      starred.forEach(song => {
-        if (song.artist) {
-          const key = song.artist.trim().toLowerCase();
-          if (!artistMap.has(key)) {
-            artistMap.set(key, { id: key, name: song.artist, songCount: 0 });
-          }
-          artistMap.get(key).songCount++;
+      all.forEach(m => {
+        const name = (m.artist || '').trim();
+        if (!name) return;
+        const key = name.toLowerCase();
+        if (!artistMap.has(key)) {
+          artistMap.set(key, { name, songCount: 0, albumSet: new Set() });
         }
+        const a = artistMap.get(key);
+        a.songCount++;
+        const album = (m.album || '').trim();
+        if (album) a.albumSet.add(album.toLowerCase());
       });
-      const artists = Array.from(artistMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+      const artists = Array.from(artistMap.values())
+        .map(a => ({ name: a.name, songCount: a.songCount, albumCount: a.albumSet.size || 1 }))
+        .sort((a, b) => a.name.localeCompare(b.name));
       UI.renderArtists(artists);
     } catch (err) {
       console.error('[App] Load artists error:', err);
     }
   }
 
-  function onArtistClick(artist) {
-    UI.showToast(`Artista: ${artist.name}`); // TODO: open artist view
+  /**
+   * Aggregate all metadata into albums map.
+   * Groups by album name (+ artist), counts songs, picks a cover.
+   */
+  async function _loadAlbums() {
+    try {
+      const all = await DB.getAllMeta();
+      const albumMap = new Map();
+      all.forEach(m => {
+        const album  = (m.album || '').trim();
+        const artist = (m.artist || '').trim();
+        if (!album) return;
+        const key = `${album.toLowerCase()}|${artist.toLowerCase()}`;
+        if (!albumMap.has(key)) {
+          albumMap.set(key, { name: album, artist, songCount: 0, coverUrl: null });
+        }
+        const a = albumMap.get(key);
+        a.songCount++;
+        if (!a.coverUrl && m.thumbnailUrl) a.coverUrl = m.thumbnailUrl;
+      });
+      const albums = Array.from(albumMap.values())
+        .sort((a, b) => a.name.localeCompare(b.name));
+      UI.renderLibraryAlbums(albums);
+    } catch (err) {
+      console.error('[App] Load albums error:', err);
+    }
+  }
+
+  /**
+   * Show albums for a given artist (drill-down from artist grid).
+   */
+  async function onArtistClick(artist) {
+    try {
+      const all = await DB.getAllMeta();
+      const key = artist.name.toLowerCase();
+      const albumMap = new Map();
+      all.forEach(m => {
+        if ((m.artist || '').trim().toLowerCase() !== key) return;
+        const album = (m.album || '').trim() || '(sin álbum)';
+        const aKey  = album.toLowerCase();
+        if (!albumMap.has(aKey)) {
+          albumMap.set(aKey, { name: album, artist: artist.name, songCount: 0, coverUrl: null });
+        }
+        const a = albumMap.get(aKey);
+        a.songCount++;
+        if (!a.coverUrl && m.thumbnailUrl) a.coverUrl = m.thumbnailUrl;
+      });
+      const albums = Array.from(albumMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+      UI.renderLibraryArtistDetail(artist, albums);
+      UI.setLibSearchPlaceholder(`Buscar álbum de ${artist.name}…`);
+    } catch (err) {
+      console.error('[App] onArtistClick error:', err);
+    }
+  }
+
+  /**
+   * Show songs for a given album (drill-down from album grid or artist detail).
+   */
+  async function onAlbumClick(album, fromArtist) {
+    try {
+      const all = await DB.getAllMeta();
+      const albumKey  = album.name.toLowerCase();
+      const artistKey = (album.artist || '').toLowerCase();
+      const songs = all.filter(m => {
+        const mAlbum  = (m.album  || '').trim().toLowerCase();
+        const mArtist = (m.artist || '').trim().toLowerCase();
+        const matchAlbum = mAlbum === albumKey || (albumKey === '(sin álbum)' && !mAlbum);
+        const matchArtist = !artistKey || mArtist === artistKey;
+        return matchAlbum && matchArtist;
+      }).map(m => ({
+        id:           m.id,
+        name:         m.name         || m.id,
+        displayName:  m.displayName  || m.name || m.id,
+        artist:       m.artist       || '',
+        album:        m.album        || '',
+        thumbnailUrl: m.thumbnailUrl || m.coverUrl || null,
+        folderId:     m.folderId     || null,
+      }));
+
+      // Resolve covers
+      const enriched = await Promise.all(songs.map(async s => {
+        const url = await _resolveCoverUrl(s.id, s.thumbnailUrl);
+        return url ? { ...s, thumbnailUrl: url } : s;
+      }));
+
+      const backTarget = fromArtist ? 'artist' : 'albums';
+      UI.renderLibraryAlbumDetail(album, enriched, backTarget, fromArtist || null);
+      UI.setLibSearchPlaceholder(`Buscar en ${album.name}…`);
+    } catch (err) {
+      console.error('[App] onAlbumClick error:', err);
+    }
+  }
+
+  /** Called from the "Nueva playlist" button rendered inside the Playlists tab. */
+  async function _onNewPlaylist() {
+    const name = prompt(UI.t('prompt_playlist_name'), UI.t('prompt_playlist_default'));
+    if (!name || !name.trim()) return;
+    await DB.createPlaylist(name.trim());
+    UI.showToast(`"${name.trim()}" — ${UI.t('toast_pl_created')}`);
+    _loadPlaylists();
+    Sync.push('playlists');
   }
 
   async function onPlaylistClick(pl) {
@@ -2841,7 +2992,7 @@ const App = (() => {
     UI.showView(viewId);
     if (viewId !== 'search') UI.updateSearchChipCounts(null); // clear chip counts when leaving search
     if (viewId === 'home')    _loadHomeData();
-    if (viewId === 'library') { _loadPlaylists(); _loadStarred(); }
+    if (viewId === 'library') _setLibTab('favorites');
     if (viewId === 'history') _loadHistory();
     if (viewId === 'settings') {
       _buildEQSliders();
@@ -3597,15 +3748,14 @@ const App = (() => {
       }
     });
 
-    // Library: new playlist
-    document.getElementById('btn-new-playlist')?.addEventListener('click', async () => {
-      const name = prompt(UI.t('prompt_playlist_name'), UI.t('prompt_playlist_default'));
-      if (name) {
-        await DB.createPlaylist(name.trim());
-        UI.showToast(`"${name}" — ${UI.t('toast_pl_created')}`);
-        // Refresh playlist list
-        _loadPlaylists();
-      }
+    // Library: tab clicks
+    document.querySelectorAll('#lib-sidebar .lib-tab').forEach(el => {
+      el.addEventListener('click', () => _setLibTab(el.dataset.tab));
+    });
+
+    // Library: search input
+    document.getElementById('lib-search-input')?.addEventListener('input', e => {
+      _onLibSearch(e.target.value);
     });
 
     // Refresh cache bar when settings is opened
@@ -3651,7 +3801,11 @@ const App = (() => {
     _loadStarred,
     _loadPlaylists,
     _loadArtists,
+    _loadAlbums,
+    _setLibTab,
+    _onNewPlaylist,
     onArtistClick,
+    onAlbumClick,
     onPlaylistClick,
     onPlaylistPlay,
     onPlaylistQueue,
