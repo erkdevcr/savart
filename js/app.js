@@ -966,12 +966,33 @@ const App = (() => {
             if (!blob) blob = await Drive.downloadFileHead(file.id);
             if (!blob) continue;
             const meta = await Meta.parse(file.id, blob);
-            if (meta?.coverUrl) {
-              _updateRowThumbnail(file.id, meta.coverUrl);
-              // Persist cover blob for future sessions (no re-parse needed)
-              if (meta.coverBlob) DB.setMeta(file.id, { coverBlob: meta.coverBlob }).catch(() => {});
-              if (Player.getCurrentTrack()?.id === file.id) _applyMeta(file, meta);
+            if (!meta) continue;
+
+            // ── Text metadata: persist + patch visible rows regardless of cover ──
+            // This is what enriches artist/title/year in the library album-detail view.
+            const textPatch = {};
+            if (meta.artist) textPatch.artist      = meta.artist;
+            if (meta.title)  textPatch.displayName = meta.title;
+            if (meta.album)  textPatch.album       = meta.album;
+            if (meta.year)   textPatch.year        = meta.year;
+            if (Object.keys(textPatch).length > 0) {
+              DB.setMeta(file.id, textPatch).catch(() => {});
+              _patchMetaText(file.id, {
+                title:  meta.title  || null,
+                artist: meta.artist || null,
+                album:  meta.album  || null,
+                year:   meta.year   || null,
+              });
             }
+
+            // ── Cover: update thumbnail if found ────────────────────────────────
+            if (meta.coverUrl) {
+              _updateRowThumbnail(file.id, meta.coverUrl);
+              if (meta.coverBlob) DB.setMeta(file.id, { coverBlob: meta.coverBlob }).catch(() => {});
+            }
+
+            // ── Full _applyMeta only for the currently playing track ─────────────
+            if (Player.getCurrentTrack()?.id === file.id) _applyMeta(file, meta);
           } catch (_) { /* non-fatal */ }
         }
       }
@@ -2452,10 +2473,17 @@ const App = (() => {
         }
       });
 
-      // ── Top-played / history meta line ─────────────────────────
-      // Reconstruct the same "artist — album · year" format used by _buildTopPlayedItem
+      // ── Top-played / library-detail artist line ─────────────────
+      // Library album-detail rows use .top-list-artist; home/top-played use .top-list-meta.
       const metaLine = [artist, [album, year].filter(Boolean).join(' · ')].filter(Boolean).join(' — ');
       document.querySelectorAll(`.top-list-item[data-id="${eid}"]`).forEach(el => {
+        // Library detail layout: update or inject .top-list-artist
+        const artistEl = el.querySelector('.top-list-artist');
+        if (artistEl) {
+          artistEl.textContent = artist;
+          return;
+        }
+        // Home / top-played layout: update or inject .top-list-meta
         let metaEl = el.querySelector('.top-list-meta');
         if (metaEl) {
           metaEl.textContent = metaLine;

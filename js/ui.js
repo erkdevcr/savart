@@ -2209,7 +2209,7 @@ const UI = (() => {
         </div>
         <div class="top-list-info">
           <div class="top-list-title">${escHtml(song.displayName || song.name || '')}</div>
-          ${song.artist ? `<div class="top-list-artist">${escHtml(song.artist)}</div>` : ''}
+          <div class="top-list-artist">${escHtml(song.artist || '')}</div>
         </div>
         <button class="btn-more" aria-label="Más opciones">${iconDots()}</button>
       `;
