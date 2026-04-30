@@ -936,7 +936,7 @@ const App = (() => {
 
         if (dbMeta.coverBlob && typeof Meta !== 'undefined') {
           const url = Meta.injectCover(file.id, dbMeta.coverBlob);
-          if (url) { _updateRowThumbnail(file.id, url); return; }
+          if (url) { _updateRowThumbnail(file.id, url, true); return; }  // ID3 embedded
         }
 
         const persistedUrl = dbMeta.coverUrl || dbMeta.thumbnailUrl;
@@ -944,10 +944,10 @@ const App = (() => {
       } catch (_) {}
     }));
 
-    // ── Pass 1: instant — use in-memory Meta cache ────────────
+    // ── Pass 1: instant — use in-memory Meta cache (always ID3) ────────────
     files.forEach(file => {
       const meta = (typeof Meta !== 'undefined') ? Meta.getCached(file.id) : null;
-      if (meta?.coverUrl) _updateRowThumbnail(file.id, meta.coverUrl);
+      if (meta?.coverUrl) _updateRowThumbnail(file.id, meta.coverUrl, true);
     });
 
     // ── Pass 2: read cached blobs from IndexedDB, parse ID3 ───
@@ -995,9 +995,9 @@ const App = (() => {
               });
             }
 
-            // ── Cover: update thumbnail if found ────────────────────────────────
+            // ── Cover: update thumbnail if found (ID3 = protected) ──────────────
             if (meta.coverUrl) {
-              _updateRowThumbnail(file.id, meta.coverUrl);
+              _updateRowThumbnail(file.id, meta.coverUrl, true);  // ID3 embedded
               if (meta.coverBlob) DB.setMeta(file.id, { coverBlob: meta.coverBlob }).catch(() => {});
             }
 
@@ -1163,11 +1163,11 @@ const App = (() => {
     UI.updateMiniPlayer(enriched, Player.isPlaying());
     UI.updateExpandedPlayer(enriched, Player.isPlaying());
 
-    // Update all visible thumbnail surfaces with the resolved cover
+    // Update all visible thumbnail surfaces with the resolved cover (ID3 = protected)
     if (meta.coverUrl) {
-      _updateRowThumbnail(item.id, meta.coverUrl);
+      _updateRowThumbnail(item.id, meta.coverUrl, true);
       _updateHomeCardThumbnail(item.id, meta.coverUrl);
-      _updateTopListThumb(item.id, meta.coverUrl);
+      _updateTopListThumb(item.id, meta.coverUrl, true);
       // Queue panel: patch the row for this song (needed when AudD resolves
       // after the panel was already open, since _prefetchQueueCovers ran before
       // the cover was available)
@@ -1188,26 +1188,39 @@ const App = (() => {
    * Swap the thumbnail in a visible song row with the cover art URL.
    * Handles both browse rows (.song-row / .song-thumb) and library
    * detail rows (.top-list-item / .top-list-thumb).
-   * @param {string} fileId
-   * @param {string} coverUrl — object URL from Meta.parse
+   *
+   * @param {string}  fileId
+   * @param {string}  coverUrl — URL (blob: from ID3, or https: from Drive/Last.fm)
+   * @param {boolean} [isId3=false] — true when the cover is embedded in the audio file.
+   *   ID3 covers always replace whatever is currently shown (they are the highest-quality
+   *   source).  External covers (thumbnailLink, Last.fm, folder.jpg) only fill empty
+   *   slots and never overwrite a previously set ID3 cover.
    */
-  function _updateRowThumbnail(fileId, coverUrl) {
-    const eid = CSS.escape(fileId);
-    const IMG = `<img src="${coverUrl}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;border-radius:inherit" onerror="this.parentNode.innerHTML='<div class=\\'thumb-placeholder\\'></div>'">`;
+  function _updateRowThumbnail(fileId, coverUrl, isId3 = false) {
+    const eid    = CSS.escape(fileId);
+    const srcTag = isId3 ? ' data-cover-src="id3"' : '';
+    const IMG    = `<img src="${coverUrl}"${srcTag} alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;border-radius:inherit" onerror="this.parentNode.innerHTML='<div class=\\'thumb-placeholder\\'></div>'">`;
+
+    function _applyToThumb(thumb) {
+      if (!thumb) return;
+      const img = thumb.querySelector('img');
+      // External source: only fill empty slots; never replace an ID3 cover.
+      if (!isId3 && img) {
+        if (img.dataset.coverSrc === 'id3') return; // protected
+        return; // already has a cover — external doesn't upgrade
+      }
+      // ID3 source: replace anything that isn't already ID3.
+      if (isId3 && img?.dataset.coverSrc === 'id3') return; // already ID3 — keep it
+      thumb.innerHTML = IMG;
+    }
 
     // Browse view (.song-row → .song-thumb)
     const browseRow = document.querySelector(`.song-row[data-id="${eid}"]`);
-    if (browseRow) {
-      const thumb = browseRow.querySelector('.song-thumb');
-      if (thumb && !thumb.querySelector('img')) thumb.innerHTML = IMG;
-    }
+    if (browseRow) _applyToThumb(browseRow.querySelector('.song-thumb'));
 
     // Library detail view (.top-list-item → .top-list-thumb)
     const listRow = document.querySelector(`.top-list-item[data-id="${eid}"]`);
-    if (listRow) {
-      const thumb = listRow.querySelector('.top-list-thumb');
-      if (thumb && !thumb.querySelector('img')) thumb.innerHTML = IMG;
-    }
+    if (listRow) _applyToThumb(listRow.querySelector('.top-list-thumb'));
   }
 
   /**
@@ -1307,7 +1320,7 @@ const App = (() => {
         if (!dbMeta) return;
         if (dbMeta.coverBlob) {
           const url = Meta.injectCover(item.id, dbMeta.coverBlob);
-          if (url) { _updateTopListThumb(item.id, url); return; }
+          if (url) { _updateTopListThumb(item.id, url, true); return; }  // ID3 embedded
         }
         // External URL persisted from Last.fm / AudD.io in a previous session
         const persistedUrl = dbMeta.coverUrl || dbMeta.thumbnailUrl;
@@ -1317,10 +1330,10 @@ const App = (() => {
       } catch (_) {}
     }));
 
-    // Pass 1: in-memory Meta cache (instant)
+    // Pass 1: in-memory Meta cache (always ID3)
     items.forEach(item => {
       const meta = Meta.getCached(item.id);
-      if (meta?.coverUrl) _updateTopListThumb(item.id, meta.coverUrl);
+      if (meta?.coverUrl) _updateTopListThumb(item.id, meta.coverUrl, true);
     });
 
     // Pass 2: IndexedDB cached blobs → parse ID3 (2 workers)
@@ -1336,7 +1349,7 @@ const App = (() => {
           if (!blob) continue;
           const meta = await Meta.parse(item.id, blob);
           if (meta?.coverUrl) {
-            _updateTopListThumb(item.id, meta.coverUrl);
+            _updateTopListThumb(item.id, meta.coverUrl, true);  // ID3 embedded
             if (meta.coverBlob) DB.setMeta(item.id, { coverBlob: meta.coverBlob }).catch(() => {});
           }
         } catch (_) { /* non-fatal */ }
@@ -1353,17 +1366,20 @@ const App = (() => {
     return !!(el && el.querySelector('.top-list-thumb img'));
   }
 
-  function _updateTopListThumb(fileId, coverUrl) {
-    // Find the top-list-item for this fileId via a data attribute we'll add
+  function _updateTopListThumb(fileId, coverUrl, isId3 = false) {
     const el = document.querySelector(`.top-list-item[data-id="${CSS.escape(fileId)}"]`);
     if (!el) return;
     const thumb = el.querySelector('.top-list-thumb');
     if (!thumb) return;
     const img = thumb.querySelector('img');
-    if (img) {
+    if (!isId3 && img) {
+      if (img.dataset.coverSrc === 'id3') return;  // ID3 cover protected
       img.src = coverUrl;
+    } else if (isId3 && img?.dataset.coverSrc === 'id3') {
+      return;  // already ID3, don't overwrite
     } else {
-      thumb.innerHTML = `<img src="${coverUrl}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover">`;
+      const srcTag = isId3 ? ' data-cover-src="id3"' : '';
+      thumb.innerHTML = `<img src="${coverUrl}"${srcTag} alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover">`;
     }
   }
 
@@ -1376,22 +1392,26 @@ const App = (() => {
   }
 
   /** Inject (or replace) a cover image inside the .song-thumb of a .song-row. */
-  function _updateSongRowThumb(fileId, url) {
+  function _updateSongRowThumb(fileId, url, isId3 = false) {
     const row = document.querySelector(`.song-row[data-id="${CSS.escape(fileId)}"]`);
     if (!row) return;
     const thumb = row.querySelector('.song-thumb');
     if (!thumb) return;
     const img = thumb.querySelector('img');
-    if (img) {
+    if (!isId3 && img) {
+      if (img.dataset.coverSrc === 'id3') return;  // ID3 cover protected
       img.src = url;
+    } else if (isId3 && img?.dataset.coverSrc === 'id3') {
+      return;  // already ID3, don't overwrite
     } else {
       // Remove placeholder icon if present
       const ph = thumb.querySelector('.thumb-placeholder');
       if (ph) ph.remove();
       const newImg = document.createElement('img');
-      newImg.src  = url;
-      newImg.alt  = '';
+      newImg.src = url;
+      newImg.alt = '';
       newImg.setAttribute('loading', 'lazy');
+      if (isId3) newImg.dataset.coverSrc = 'id3';
       thumb.insertBefore(newImg, thumb.firstChild);
     }
   }
