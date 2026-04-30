@@ -831,6 +831,15 @@ img { display: block; }
   color: var(--accent);
 }
 
+.home-card-year {
+  font-size: 10px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0.7;
+}
+
 .home-card-name {
   font-size: 12px;
   font-weight: 500;
@@ -838,6 +847,7 @@ img { display: block; }
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  margin-top: 1px;
 }
 
 .home-card-sub {
@@ -847,6 +857,16 @@ img { display: block; }
   overflow: hidden;
   text-overflow: ellipsis;
   margin-top: 2px;
+}
+
+.home-card-count {
+  font-size: 10px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 2px;
+  opacity: 0.6;
 }
 
 /* 3-dots button overlaid in top-right corner of home cards.
@@ -4202,10 +4222,16 @@ img { display: block; }
     height: 98px;
     margin-bottom: 6px;
   }
+  .home-card-year {
+    font-size: 9px;
+  }
   .home-card-name {
     font-size: 10px;
   }
   .home-card-sub {
+    font-size: 9px;
+  }
+  .home-card-count {
     font-size: 9px;
   }
   .home-card-more {
