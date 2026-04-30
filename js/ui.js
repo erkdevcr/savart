@@ -2305,6 +2305,11 @@ const UI = (() => {
    * If the text overflows the container, injects a <span class="marquee-inner">
    * that pans left/right like an LED sign.  Clears any previous marquee state.
    *
+   * Measurement strategy:
+   *   overflow = hidden on the container blocks scrollWidth in some engines.
+   *   We temporarily lift overflow, read span.offsetWidth vs el.clientWidth,
+   *   then restore — one synchronous layout thrash that is invisible to the user.
+   *
    * CSS vars set on el:
    *   --mo      negative translateX offset (e.g. "-134px")
    *   --mo-dur  animation cycle duration (proportional to overflow, 6–20s)
@@ -2315,7 +2320,7 @@ const UI = (() => {
   function _applyMarquee(el, text) {
     if (!el) return;
 
-    // Clear previous marquee: remove span, CSS vars, animation
+    // Clear previous marquee state
     el.innerHTML = '';
     el.style.removeProperty('--mo');
     el.style.removeProperty('--mo-dur');
@@ -2324,20 +2329,42 @@ const UI = (() => {
     span.textContent = text;
     el.appendChild(span);
 
-    // Measure after two animation frames (ensures layout is complete)
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      const overflow = span.scrollWidth - el.clientWidth;
+    // Wait until the element actually has layout (handles display:none → flex transition).
+    // We retry every rAF until clientWidth > 0, then measure.
+    let retries = 0;
+    function measure() {
+      if (!el.isConnected) return;
+
+      // Temporarily lift overflow so offsetWidth is unrestricted
+      const prevOverflow = el.style.overflow;
+      el.style.overflow = 'visible';
+      const spanW = span.offsetWidth;
+      el.style.overflow = prevOverflow || '';
+
+      const containerW = el.clientWidth || el.offsetWidth;
+
+      if (containerW === 0 && retries < 10) {
+        // Element not laid out yet — retry next frame
+        retries++;
+        requestAnimationFrame(measure);
+        return;
+      }
+
+      const overflow = Math.round(spanW - containerW);
       if (overflow > 4) {
-        // Speed: ~55 px/s — comfortable for reading while scrolling
+        // Speed: ~55 px/s — comfortable reading while scrolling
         const scrollSecs = Math.ceil(overflow / 55);
-        // Total cycle: 18% pause-start + 54% scroll + 18% pause-end + 10% snap
-        // scrollSecs covers the 54% portion → total = scrollSecs / 0.54
+        // 18% start-pause + 54% scroll + 18% end-pause + 10% snap-back
         const total = Math.min(Math.max(Math.round(scrollSecs / 0.54), 6), 20);
         span.className = 'marquee-inner';
         el.style.setProperty('--mo',     `-${overflow}px`);
         el.style.setProperty('--mo-dur', `${total}s`);
       }
-    }));
+    }
+
+    // Two rAFs: first lets the browser apply any pending display changes,
+    // second reads layout from the now-visible element.
+    requestAnimationFrame(() => requestAnimationFrame(measure));
   }
 
   /* ── Loading wave overlay ───────────────────────────────── */
