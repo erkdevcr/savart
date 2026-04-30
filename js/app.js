@@ -951,11 +951,21 @@ const App = (() => {
     });
 
     // ── Pass 2: read cached blobs from IndexedDB, parse ID3 ───
-    // Only files whose row still has no img (no cover yet)
-    const needCover = files.filter(file => !_rowHasCover(file.id));
-    if (needCover.length > 0 && typeof Meta !== 'undefined') {
+    // Includes files that:
+    //   (a) have no cover rendered yet, OR
+    //   (b) are in a library-detail row (.top-list-artist) that is still empty.
+    // Case (b) catches songs that got a thumbnailUrl from the folder scan but never
+    // had their artist/album/year fetched — they would otherwise be skipped here.
+    const needEnrichment = files.filter(file => {
+      if (!_rowHasCover(file.id)) return true;
+      const artistEl = document.querySelector(
+        `.top-list-item[data-id="${CSS.escape(file.id)}"] .top-list-artist`
+      );
+      return !!(artistEl && !artistEl.textContent.trim());
+    });
+    if (needEnrichment.length > 0 && typeof Meta !== 'undefined') {
       const CONCURRENCY = 3;
-      const queue = [...needCover];
+      const queue = [...needEnrichment];
 
       async function worker() {
         while (queue.length > 0) {
