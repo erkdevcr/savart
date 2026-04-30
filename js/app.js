@@ -915,7 +915,14 @@ const App = (() => {
    * @param {string}      folderId
    * @param {DriveItem[]} files
    */
-  async function _prefetchAndApplyFolderCovers(folderId, files) {
+  /**
+   * @param {boolean} [force=false] — when true, performs a full re-enrichment:
+   *   • Skips Pass 0 (appProperties/DB restore) so stale data doesn't block MB.
+   *   • Forces MB to run on every file regardless of existing text metadata.
+   *   • Forces ID3 parse on every file regardless of DOM cover state.
+   *   MB is always the primary source; ID3 and AudD fill only what MB missed.
+   */
+  async function _prefetchAndApplyFolderCovers(folderId, files, force = false) {
     if (!files || files.length === 0) return;
 
     // ── Pass -1: Ensure every file has folderId + basic info in DB ───────────
@@ -939,29 +946,32 @@ const App = (() => {
     // 0a. appProperties.s_cover — synced cover from another device via Drive API
     // 0b. coverBlob             — ID3 embedded art saved locally (highest quality)
     // 0c. coverUrl / thumbnailUrl — external URL persisted from a prior session
-    await Promise.allSettled(files.map(async file => {
-      try {
-        const ap = file.appProperties;
-        if (ap?.s_cover) {
-          _updateRowThumbnail(file.id, ap.s_cover);
-          const save = { thumbnailUrl: ap.s_cover };
-          if (ap.s_title)  save.displayName = ap.s_title;
-          if (ap.s_artist) save.artist      = ap.s_artist;
-          if (ap.s_album)  save.album       = ap.s_album;
-          if (ap.s_year)   save.year        = ap.s_year;
-          DB.setMeta(file.id, save).catch(() => {});
-          return;
-        }
-        const dbMeta = await DB.getMeta(file.id);
-        if (!dbMeta) return;
-        if (dbMeta.coverBlob && typeof Meta !== 'undefined') {
-          const url = Meta.injectCover(file.id, dbMeta.coverBlob);
-          if (url) { _updateRowThumbnail(file.id, url, true); return; }
-        }
-        const persistedUrl = dbMeta.coverUrl || dbMeta.thumbnailUrl;
-        if (persistedUrl) _updateRowThumbnail(file.id, persistedUrl);
-      } catch (_) {}
-    }));
+    // Skipped on force-rescan so stale synced values don't prevent MB from re-running.
+    if (!force) {
+      await Promise.allSettled(files.map(async file => {
+        try {
+          const ap = file.appProperties;
+          if (ap?.s_cover) {
+            _updateRowThumbnail(file.id, ap.s_cover);
+            const save = { thumbnailUrl: ap.s_cover };
+            if (ap.s_title)  save.displayName = ap.s_title;
+            if (ap.s_artist) save.artist      = ap.s_artist;
+            if (ap.s_album)  save.album       = ap.s_album;
+            if (ap.s_year)   save.year        = ap.s_year;
+            DB.setMeta(file.id, save).catch(() => {});
+            return;
+          }
+          const dbMeta = await DB.getMeta(file.id);
+          if (!dbMeta) return;
+          if (dbMeta.coverBlob && typeof Meta !== 'undefined') {
+            const url = Meta.injectCover(file.id, dbMeta.coverBlob);
+            if (url) { _updateRowThumbnail(file.id, url, true); return; }
+          }
+          const persistedUrl = dbMeta.coverUrl || dbMeta.thumbnailUrl;
+          if (persistedUrl) _updateRowThumbnail(file.id, persistedUrl);
+        } catch (_) {}
+      }));
+    }
 
     // ── Pass 1: in-memory Meta cache (always ID3, session) ────────────────────
     files.forEach(file => {
@@ -970,10 +980,8 @@ const App = (() => {
     });
 
     // ── Pass 2: MusicBrainz — text metadata ───────────────────────────────────
-    // Queries by song title (+ artist if known) to fill missing artist/album/year/track.
-    // Runs BEFORE ID3 so the UI shows something immediately; ID3 (Pass 3) will
-    // overwrite with file-specific values when it finds them.
-    // Also persists releaseMbid so Pass 4 can fetch the cover from Cover Art Archive.
+    // MB is the authoritative source: artist, album, year always come from MB when found.
+    // ID3 (Pass 3) only fills fields MB left empty. AudD (Pass 7) fills what ID3 also missed.
     // Sequential: 1 req/sec rate limit.
     if (typeof MusicBrainz !== 'undefined') {
       const mbQueue = [];
@@ -983,7 +991,8 @@ const App = (() => {
           if (m?.mbTried) continue;
           const title = m?.displayName || m?.name || file.name || '';
           if (!title) continue;
-          const needsText = !m?.artist || !m?.album || !m?.year || !m?.track;
+          // On force-rescan always query MB. On normal load, skip if all text fields are filled.
+          const needsText = force || !m?.artist || !m?.album || !m?.year || !m?.track;
           if (!needsText) { DB.setMeta(file.id, { mbTried: true }).catch(() => {}); continue; }
           mbQueue.push({ file, title, artist: m?.artist || '', album: m?.album || '', m: m || {} });
         } catch (_) {}
@@ -997,14 +1006,12 @@ const App = (() => {
           if (!result) continue;
 
           const patch = {};
-          // MB can overwrite folder-inferred values (priority: ID3 > MB > folder name).
-          // ID3 runs in Pass 3 and always overwrites, so MB writes are safe to apply freely.
-          // Track number is the exception: MB ordering can differ from physical disc ordering,
-          // so we only fill it when empty.
-          if (result.track   && !m.track)  patch.track        = result.track;
-          if (result.artist)               patch.artist       = result.artist;
-          if (result.album)                patch.album        = result.album;
-          if (result.year)                 patch.year         = result.year;
+          // MB always wins for artist/album/year — it is the canonical metadata source.
+          // Track is fill-only: MB numbering may differ from physical disc order.
+          if (result.track   && !m.track)  patch.track         = result.track;
+          if (result.artist)               patch.artist        = result.artist;
+          if (result.album)                patch.album         = result.album;
+          if (result.year)                 patch.year          = result.year;
           if (result.releaseMbid)          patch.mbReleaseMbid = result.releaseMbid;
 
           if (Object.keys(patch).filter(k => k !== 'mbReleaseMbid').length > 0 || patch.mbReleaseMbid) {
@@ -1033,11 +1040,12 @@ const App = (() => {
     }
 
     // ── Pass 3: ID3 blob parse — text + embedded cover ────────────────────────
-    // Text from ID3 overwrites MB (file-specific tags are more accurate).
+    // MB is primary; ID3 only fills fields MB didn't provide.
+    // displayName (display title) always comes from ID3 — it's the cleanest source.
     // Embedded cover art = highest cover priority (isId3=true, protected from overwrite).
-    // Runs on: files without any cover, OR with a cover that isn't yet ID3-sourced,
-    // OR in album-detail rows where artist text is still empty.
-    const needEnrichment = files.filter(file => {
+    // Normal: runs only on files without a cover or without ID3-sourced cover.
+    // Force-rescan: runs on every file so covers and text are fully refreshed.
+    const needEnrichment = force ? [...files] : files.filter(file => {
       const eid = CSS.escape(file.id);
       const img = document.querySelector(`.top-list-item[data-id="${eid}"] .top-list-thumb img`)
                || document.querySelector(`.song-row[data-id="${eid}"] .song-thumb img`);
@@ -1060,10 +1068,11 @@ const App = (() => {
             const meta = await Meta.parse(file.id, blob);
             if (!meta) continue;
 
-            // Text — MB is primary source; ID3 only fills fields MB didn't set
+            // MB is the primary text source — ID3 only fills fields MB left empty.
+            // displayName is the exception: always use the ID3 title as the display name.
             const existingMeta = await DB.getMeta(file.id).catch(() => null);
             const textPatch = {};
-            if (meta.title)                           textPatch.displayName = meta.title; // display title always from ID3
+            if (meta.title)                           textPatch.displayName = meta.title;
             if (meta.artist && !existingMeta?.artist) textPatch.artist      = meta.artist;
             if (meta.album  && !existingMeta?.album)  textPatch.album       = meta.album;
             if (meta.year   && !existingMeta?.year)   textPatch.year        = meta.year;
@@ -1260,11 +1269,15 @@ const App = (() => {
   async function onAlbumRescan(songs, folderId) {
     if (!songs || songs.length === 0) return;
     UI.showToast('Rescaneando álbum…');
-    // Reset mbTried so MB lookup runs again for every song
-    await Promise.all(songs.map(s =>
-      DB.setMeta(s.id, { mbTried: false }).catch(() => {})
-    ));
-    await _prefetchAndApplyFolderCovers(folderId, songs);
+    // Full reset: clear all enrichment fields so MB re-runs on clean data.
+    // coverBlob (embedded ID3 art) and user data (starred, playCount) are preserved.
+    await Promise.all(songs.map(async s => {
+      await DB.clearEnrichment(s.id).catch(() => {});
+      if (typeof Meta !== 'undefined') Meta.revoke(s.id); // clear in-memory ID3 cache
+    }));
+    // Clear folder cover cache so cover.jpg is re-fetched
+    if (folderId) _folderCoverCache.delete(folderId);
+    await _prefetchAndApplyFolderCovers(folderId, songs, true); // force=true
     await _patchAlbumDetailHeader(songs);
     UI.showToast('Rescan completado');
   }
@@ -1281,10 +1294,13 @@ const App = (() => {
     if (icon) icon.style.animation = 'spin 1s linear infinite';
     try {
       UI.showToast('Rescaneando carpeta…');
-      await Promise.all(_browseFiles.map(f =>
-        DB.setMeta(f.id, { mbTried: false }).catch(() => {})
-      ));
-      await _prefetchAndApplyFolderCovers(_browseFolderId, _browseFiles);
+      // Full reset: clear all enrichment fields so MB re-runs on clean data.
+      await Promise.all(_browseFiles.map(async f => {
+        await DB.clearEnrichment(f.id).catch(() => {});
+        if (typeof Meta !== 'undefined') Meta.revoke(f.id);
+      }));
+      if (_browseFolderId) _folderCoverCache.delete(_browseFolderId);
+      await _prefetchAndApplyFolderCovers(_browseFolderId, _browseFiles, true); // force=true
       UI.showToast('Rescan completado');
       // Refresh Albums/Artists grid so the newly enriched folder appears there
       if (!_libInDetail) {

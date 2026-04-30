@@ -701,6 +701,26 @@ const DB = (() => {
     for (const e of toDelete) await _promisify(store.delete(e.id));
   }
 
+  /**
+   * Clear enrichment fields so a song can be fully re-enriched from scratch.
+   * Preserves user data (starred, playCount, starredAt) and basic file info
+   * (id, name, displayName, folderId, coverBlob).
+   * Called by the Rescan action before re-running the enrichment pipeline.
+   * @param {string} fileId
+   */
+  async function clearEnrichment(fileId) {
+    const store    = _tx('metadata', 'readwrite');
+    const existing = await _promisify(store.get(fileId));
+    if (!existing) return;
+    const ENRICH_FIELDS = [
+      'artist', 'album', 'year', 'track',
+      'mbTried', 'auddTried', 'mbReleaseMbid',
+      'thumbnailUrl', 'coverUrl',
+    ];
+    for (const f of ENRICH_FIELDS) delete existing[f];
+    return _promisify(store.put(existing));
+  }
+
   /* ── Expose ─────────────────────────────────────────────── */
   return {
     open,
@@ -751,5 +771,7 @@ const DB = (() => {
     getPinned,
     togglePin,
     getPinnedFolders,
+    // Rescan
+    clearEnrichment,
   };
 })();

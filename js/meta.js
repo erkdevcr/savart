@@ -157,6 +157,7 @@ const Meta = (() => {
     const hdrLen = isV22 ? 6 : 10; // id(3|4) + size(3|4) + flags(0|2)
 
     const result = {};
+    const apicFrames = []; // collect ALL picture frames, pick best after loop
 
     while (pos + hdrLen <= end) {
       // Padding check
@@ -180,13 +181,26 @@ const Meta = (() => {
         result[textKey] = _textFrame(bytes, dPos, frameSize) || undefined;
       }
 
-      // ── Cover art frames ──────────────────────────────────
-      if ((id === 'APIC' || id === 'PIC') && !result.coverUrl) {
+      // ── Cover art frames — collect all, pick best below ───
+      if ((id === 'APIC' || id === 'PIC') && apicFrames.length < 8) {
         const cover = _apicFrame(bytes, dPos, frameSize, isV22);
-        if (cover) { result.coverUrl = cover.url; result.coverBlob = cover.blob; }
+        if (cover) apicFrames.push(cover);
       }
 
       pos += hdrLen + frameSize;
+    }
+
+    // Pick best cover: type 3 (front) > type 0 (other) > first available.
+    // Revoke unused Object URLs immediately to avoid memory leaks.
+    if (apicFrames.length > 0) {
+      const best = apicFrames.find(f => f.pictureType === 3)
+                || apicFrames.find(f => f.pictureType === 0)
+                || apicFrames[0];
+      result.coverUrl  = best.url;
+      result.coverBlob = best.blob;
+      for (const f of apicFrames) {
+        if (f !== best) URL.revokeObjectURL(f.url);
+      }
     }
 
     // ── MP3 bitrate: scan first audio frame after ID3 tag ────
@@ -198,8 +212,9 @@ const Meta = (() => {
   /* ── FLAC parser ─────────────────────────────────────────── */
 
   function _parseFlac(bytes, fileSize) {
-    const result = {};
-    let   pos    = 4; // skip "fLaC"
+    const result   = {};
+    const pictures = []; // collect ALL PICTURE blocks, pick best after loop
+    let   pos      = 4;  // skip "fLaC"
 
     while (pos + 4 <= bytes.length) {
       const blockType = bytes[pos] & 0x7F;
@@ -243,14 +258,26 @@ const Meta = (() => {
         _parseVorbisComment(bytes, pos, pos + blockSize, result);
       }
 
-      // PICTURE (block type 6) — cover art
-      if (blockType === 6 && !result.coverUrl) {
+      // PICTURE (block type 6) — collect all, pick best below
+      if (blockType === 6 && pictures.length < 8) {
         const cover = _parseFLACPicture(bytes, pos, pos + blockSize);
-        if (cover) { result.coverUrl = cover.url; result.coverBlob = cover.blob; }
+        if (cover) pictures.push(cover);
       }
 
       pos += blockSize;
       if (isLast) break;
+    }
+
+    // Pick best cover: type 3 (front) > type 0 (other) > first available.
+    if (pictures.length > 0) {
+      const best = pictures.find(p => p.pictureType === 3)
+                || pictures.find(p => p.pictureType === 0)
+                || pictures[0];
+      result.coverUrl  = best.url;
+      result.coverBlob = best.blob;
+      for (const p of pictures) {
+        if (p !== best) URL.revokeObjectURL(p.url);
+      }
     }
 
     return result;
@@ -286,7 +313,7 @@ const Meta = (() => {
     // + width(4) + height(4) + depth(4) + colors(4) + dataLen(4) + data
     let pos = start;
     if (pos + 8 > end) return null;
-    pos += 4; // skip pictureType
+    const pictureType = _uint32(bytes, pos); pos += 4; // 3 = front cover, 4 = back cover…
     const mimeLen = _uint32(bytes, pos); pos += 4 + mimeLen;
     const descLen = _uint32(bytes, pos); pos += 4 + descLen;
     pos += 16; // width + height + depth + colors
@@ -295,7 +322,7 @@ const Meta = (() => {
     const pic = bytes.slice(pos, pos + dataLen);
     const mime = (pic[0] === 0xFF && pic[1] === 0xD8) ? 'image/jpeg' : 'image/png';
     const picBlob = new Blob([pic], { type: mime });
-    return { url: URL.createObjectURL(picBlob), blob: picBlob };
+    return { url: URL.createObjectURL(picBlob), blob: picBlob, pictureType };
   }
 
   /* ── Frame helpers ───────────────────────────────────────── */
@@ -340,7 +367,8 @@ const Meta = (() => {
       i++; // skip null terminator of MIME string
     }
 
-    i++; // skip picture type byte
+    // Read picture type (3 = Cover front, 4 = Cover back, 0 = Other, …)
+    const pictureType = bytes[i++];
 
     // Skip description (null-terminated; double-null for UTF-16)
     if (enc === 1 || enc === 2) {
@@ -362,7 +390,7 @@ const Meta = (() => {
                : 'image/jpeg';
 
     const picBlob = new Blob([pic], { type: mime });
-    return { url: URL.createObjectURL(picBlob), blob: picBlob };
+    return { url: URL.createObjectURL(picBlob), blob: picBlob, pictureType };
   }
 
   /* ── Bit / byte helpers ──────────────────────────────────── */
