@@ -1053,18 +1053,21 @@ const App = (() => {
             const meta = await Meta.parse(file.id, blob);
             if (!meta) continue;
 
-            // Text — always overwrite MB values when ID3 has something more specific
+            // Text — MB is primary source; ID3 only fills fields MB didn't set
+            const existingMeta = await DB.getMeta(file.id).catch(() => null);
             const textPatch = {};
-            if (meta.artist) textPatch.artist      = meta.artist;
-            if (meta.title)  textPatch.displayName = meta.title;
-            if (meta.album)  textPatch.album       = meta.album;
-            if (meta.year)   textPatch.year        = meta.year;
-            if (meta.track)  textPatch.track       = meta.track;
+            if (meta.title)                           textPatch.displayName = meta.title; // display title always from ID3
+            if (meta.artist && !existingMeta?.artist) textPatch.artist      = meta.artist;
+            if (meta.album  && !existingMeta?.album)  textPatch.album       = meta.album;
+            if (meta.year   && !existingMeta?.year)   textPatch.year        = meta.year;
+            if (meta.track  && !existingMeta?.track)  textPatch.track       = meta.track;
             if (Object.keys(textPatch).length > 0) {
               DB.setMeta(file.id, textPatch).catch(() => {});
               _patchMetaText(file.id, {
-                title: meta.title || null, artist: meta.artist || null,
-                album: meta.album || null, year:   meta.year   || null,
+                title: meta.title || null,
+                artist: textPatch.artist || null,
+                album:  textPatch.album  || null,
+                year:   textPatch.year   || null,
               });
             }
 
