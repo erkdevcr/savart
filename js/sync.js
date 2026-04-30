@@ -41,6 +41,7 @@ const Sync = (() => {
     playcounts: 'savart_playcounts.json',
     settings:   'savart_settings.json',
     history:    'savart_history.json',
+    metadata:   'savart_metadata.json',
   };
 
   /* ── Private state ─────────────────────────────────────── */
@@ -334,6 +335,26 @@ const Sync = (() => {
         if (validHistory.length) await DB.bulkPutHistory(validHistory);
         break;
       }
+
+      case 'metadata': {
+        // Field-level fill: only write fields the local device doesn't have yet.
+        // mbTried / auddTried are flags — if remote is true, adopt it to skip re-enrichment.
+        const PATCH_FIELDS = ['artist', 'album', 'year', 'mbTried', 'auddTried',
+                              'mbReleaseMbid', 'thumbnailUrl', 'coverUrl'];
+        for (const item of (data || [])) {
+          if (!item?.id) continue;
+          const ex = await DB.getMeta(item.id);
+          const patch = {};
+          for (const f of PATCH_FIELDS) {
+            if (item[f] === null || item[f] === undefined || item[f] === '') continue;
+            if (f === 'mbTried'   && item[f]) { patch[f] = true; continue; }
+            if (f === 'auddTried' && item[f]) { patch[f] = true; continue; }
+            if (!ex?.[f]) patch[f] = item[f];
+          }
+          if (Object.keys(patch).length > 0) await DB.setMeta(item.id, patch);
+        }
+        break;
+      }
     }
   }
 
@@ -410,6 +431,27 @@ const Sync = (() => {
     console.log(`[Sync] Pushed history (${history.length})`);
   }
 
+  async function _pushMetadata() {
+    const SYNC_FIELDS = ['artist', 'album', 'year', 'mbTried', 'auddTried', 'mbReleaseMbid'];
+    const isExternalUrl = u => u && !u.startsWith('blob:')
+      && !u.includes('googleusercontent.com') && !u.includes('googleapis.com');
+
+    const all = await DB.getAllMeta();
+    const enriched = all
+      .filter(m => m.mbTried || m.auddTried || m.artist || m.album || m.year)
+      .map(m => {
+        const rec = { id: m.id };
+        for (const f of SYNC_FIELDS) {
+          if (m[f] !== null && m[f] !== undefined && m[f] !== '') rec[f] = m[f];
+        }
+        if (isExternalUrl(m.thumbnailUrl)) rec.thumbnailUrl = m.thumbnailUrl;
+        if (isExternalUrl(m.coverUrl))     rec.coverUrl     = m.coverUrl;
+        return rec;
+      });
+    await _writeFile(FILENAMES.metadata, enriched);
+    console.log(`[Sync] Pushed metadata (${enriched.length} enriched)`);
+  }
+
   const _pushFns = {
     favorites:  _pushFavorites,
     playlists:  _pushPlaylists,
@@ -418,6 +460,7 @@ const Sync = (() => {
     playcounts: _pushPlaycounts,
     settings:   _pushSettings,
     history:    _pushHistory,
+    metadata:   _pushMetadata,
   };
 
   /* ── Live polling ────────────────────────────────────────── */
@@ -514,6 +557,7 @@ const Sync = (() => {
         manifest,
         remoteFavs, remotePlaylists, remotePinned,
         remoteRecents, remotePlaycounts, remoteSettings, remoteHistory,
+        remoteMetadata,
       ] = await Promise.all([
         _readManifest(),
         _readFile(FILENAMES.favorites).catch(() => null),
@@ -523,6 +567,7 @@ const Sync = (() => {
         _readFile(FILENAMES.playcounts).catch(() => null),
         _readFile(FILENAMES.settings).catch(() => null),
         _readFile(FILENAMES.history).catch(() => null),
+        _readFile(FILENAMES.metadata).catch(() => null),
       ]);
 
       // Seed remote timestamps from manifest
@@ -649,6 +694,32 @@ const Sync = (() => {
           await DB.bulkPutHistory(toWrite);
           console.log(`[Sync] Merged history: ${toWrite.filter(m => !localMap.has(m.id)).length} added, ${toWrite.filter(m => localMap.has(m.id)).length} updated`);
         }
+      });
+
+      // ── Merge enriched metadata (MB / ID3 / AudD) ────────────────────────────
+      await _mergeStep('metadata', async () => {
+        if (!Array.isArray(remoteMetadata) || remoteMetadata.length === 0) return;
+        const PATCH_FIELDS = ['artist', 'album', 'year', 'mbTried', 'auddTried',
+                              'mbReleaseMbid', 'thumbnailUrl', 'coverUrl'];
+        let applied = 0;
+        for (const item of remoteMetadata) {
+          if (!item?.id) continue;
+          const ex = await DB.getMeta(item.id);
+          const patch = {};
+          for (const f of PATCH_FIELDS) {
+            if (item[f] === null || item[f] === undefined || item[f] === '') continue;
+            // mbTried / auddTried: if remote is true, mark as tried (skip re-enrichment)
+            if (f === 'mbTried'  && item[f]) { patch[f] = true; continue; }
+            if (f === 'auddTried'&& item[f]) { patch[f] = true; continue; }
+            // All other fields: only fill local gaps
+            if (!ex?.[f]) patch[f] = item[f];
+          }
+          if (Object.keys(patch).length > 0) {
+            await DB.setMeta(item.id, patch);
+            applied++;
+          }
+        }
+        if (applied) console.log(`[Sync] Merged metadata: ${applied} songs enriched from remote`);
       });
 
       // Push merged state back + update manifest.

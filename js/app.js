@@ -948,6 +948,7 @@ const App = (() => {
           if (ap.s_title)  save.displayName = ap.s_title;
           if (ap.s_artist) save.artist      = ap.s_artist;
           if (ap.s_album)  save.album       = ap.s_album;
+          if (ap.s_year)   save.year        = ap.s_year;
           DB.setMeta(file.id, save).catch(() => {});
           return;
         }
@@ -1008,6 +1009,12 @@ const App = (() => {
 
           if (Object.keys(patch).filter(k => k !== 'mbReleaseMbid').length > 0 || patch.mbReleaseMbid) {
             await DB.setMeta(file.id, patch);
+            // Mirror MB text fields to Drive appProperties for immediate cross-device access
+            const apMB = {};
+            if (patch.artist) apMB.s_artist = patch.artist;
+            if (patch.album)  apMB.s_album  = patch.album;
+            if (patch.year)   apMB.s_year   = patch.year;
+            if (Object.keys(apMB).length) Drive.setAppProperties(file.id, apMB).catch(() => {});
             if (patch.artist || patch.album || patch.year) {
               _patchMetaText(file.id, {
                 title:  null,
@@ -1178,6 +1185,9 @@ const App = (() => {
         console.log(`[Audd] ✓ ${result.artist} — ${result.title}`);
       } catch (_) { /* non-fatal */ }
     }
+
+    // Persist any newly enriched metadata to Drive for cross-device sync
+    if (typeof Sync !== 'undefined') Sync.push('metadata');
   }
 
   /**
