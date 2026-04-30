@@ -266,6 +266,8 @@ const App = (() => {
       if (view === 'library') _setLibTab(_currentLibTab || 'albums');
       // Start live 3-second polling (Last-Write-Wins)
       Sync.startLiveSync(_onSyncDataChanged);
+      // One-time migration: upload appProperties for already-enriched songs
+      _migrateAppProperties().catch(() => {});
     }).catch(() => {});
   }
 
@@ -310,6 +312,58 @@ const App = (() => {
         }).catch(() => {});
       }
     }
+  }
+
+  /**
+   * One-time migration: write appProperties (s_cover, s_artist, s_album, s_year)
+   * to Drive for every song already enriched in the local DB.
+   *
+   * Runs once per install — controlled by 'appPropsMigrated' in DB state.
+   * Rate-limited to ~4 requests/sec to stay within Drive API quota.
+   * After this migration, any device that browses a folder gets covers instantly
+   * from Pass 0 (appProperties) without waiting for a metadata sync poll.
+   */
+  async function _migrateAppProperties() {
+    const MIGRATION_KEY = 'appPropsMigrated_v1';
+    const done = await DB.getState(MIGRATION_KEY).catch(() => null);
+    if (done) return;
+
+    const all = await DB.getAllMeta().catch(() => []);
+    const toMigrate = all.filter(m =>
+      m.mbReleaseMbid || m.artist || m.album || m.year
+    );
+    if (!toMigrate.length) {
+      await DB.setState(MIGRATION_KEY, true).catch(() => {});
+      return;
+    }
+
+    console.log(`[App] Migrating appProperties for ${toMigrate.length} songs…`);
+    let count = 0;
+    for (const m of toMigrate) {
+      try {
+        const ap = {};
+        if (m.mbReleaseMbid) ap.s_cover  = `https://coverartarchive.org/release/${m.mbReleaseMbid}/front-250`;
+        else if (m.thumbnailUrl && !m.thumbnailUrl.startsWith('blob:')
+              && !m.thumbnailUrl.includes('googleusercontent.com')
+              && !m.thumbnailUrl.includes('googleapis.com')) {
+          ap.s_cover = m.thumbnailUrl;
+        }
+        if (m.artist) ap.s_artist = m.artist;
+        if (m.album)  ap.s_album  = m.album;
+        if (m.year)   ap.s_year   = m.year;
+        if (Object.keys(ap).length) {
+          await Drive.setAppProperties(m.id, ap);
+          count++;
+        }
+      } catch (_) { /* non-fatal — skip individual failures */ }
+      // Rate limit: ~4 req/sec
+      await new Promise(r => setTimeout(r, 250));
+    }
+
+    await DB.setState(MIGRATION_KEY, true).catch(() => {});
+    // Also push the full metadata JSON so device B picks it up via poll
+    if (typeof Sync !== 'undefined') Sync.push('metadata');
+    console.log(`[App] appProperties migration done: ${count} songs updated ✓`);
   }
 
   function _restoreUserInfo() {
