@@ -337,25 +337,37 @@ const Sync = (() => {
       }
 
       case 'metadata': {
-        // Field-level fill: only write fields the local device doesn't have yet.
-        // This lets both devices converge without overwriting locally-enriched values.
-        // mbTried / auddTried: if remote is true, adopt it to skip redundant lookups.
-        const PATCH_FIELDS = [
-          'name', 'displayName', 'folderId',         // album membership + display title
-          'artist', 'album', 'year',                  // enriched text
-          'mbTried', 'auddTried', 'mbReleaseMbid',    // enrichment flags / IDs
-          'thumbnailUrl', 'coverUrl',                 // cover art URLs
-        ];
+        // Merge strategy:
+        //   • name / displayName / folderId / thumbnailUrl / coverUrl → fill-only (local file data wins)
+        //   • mbTried / auddTried → adopt if remote is true (skip redundant enrichment)
+        //   • mbReleaseMbid → fill-only (both devices queried MB independently)
+        //   • artist / album / year → fill-only normally, BUT overwrite if remote was MB/AudD-enriched
+        //     (mbTried || auddTried on the remote record means those values came from a real lookup,
+        //      not from folder-name inference — they should win over the locally inferred values)
+        const FILL_ONLY   = ['name', 'displayName', 'folderId', 'mbReleaseMbid', 'thumbnailUrl', 'coverUrl'];
+        const TEXT_FIELDS = ['artist', 'album', 'year'];
         for (const item of (data || [])) {
           if (!item?.id) continue;
           const ex = await DB.getMeta(item.id);
           const patch = {};
-          for (const f of PATCH_FIELDS) {
+
+          // Enrichment flags
+          if (item.mbTried)   patch.mbTried   = true;
+          if (item.auddTried) patch.auddTried = true;
+
+          // Fill-only fields
+          for (const f of FILL_ONLY) {
             if (item[f] === null || item[f] === undefined || item[f] === '') continue;
-            if (f === 'mbTried'   && item[f]) { patch[f] = true; continue; }
-            if (f === 'auddTried' && item[f]) { patch[f] = true; continue; }
             if (!ex?.[f]) patch[f] = item[f];
           }
+
+          // Text fields: overwrite if remote is enriched (MB/AudD), otherwise fill-only
+          const remoteIsEnriched = item.mbTried || item.auddTried;
+          for (const f of TEXT_FIELDS) {
+            if (item[f] === null || item[f] === undefined || item[f] === '') continue;
+            if (remoteIsEnriched || !ex?.[f]) patch[f] = item[f];
+          }
+
           if (Object.keys(patch).length > 0) await DB.setMeta(item.id, patch);
         }
         break;
@@ -711,29 +723,33 @@ const Sync = (() => {
       });
 
       // ── Merge song metadata (name, album membership, enrichment) ─────────────
-      // Covers: Library reconstruction (name/displayName/folderId), enriched text
-      // (artist/album/year), MB/AudD flags to skip redundant lookups, cover URLs.
+      // Text fields (artist/album/year): overwrite if remote was MB/AudD-enriched —
+      // those values are authoritative over locally folder-inferred names.
+      // Structural fields (name/displayName/folderId) and cover URLs: fill-only.
       await _mergeStep('metadata', async () => {
         if (!Array.isArray(remoteMetadata) || remoteMetadata.length === 0) return;
-        const PATCH_FIELDS = [
-          'name', 'displayName', 'folderId',
-          'artist', 'album', 'year',
-          'mbTried', 'auddTried', 'mbReleaseMbid',
-          'thumbnailUrl', 'coverUrl',
-        ];
+        const FILL_ONLY   = ['name', 'displayName', 'folderId', 'mbReleaseMbid', 'thumbnailUrl', 'coverUrl'];
+        const TEXT_FIELDS = ['artist', 'album', 'year'];
         let applied = 0;
         for (const item of remoteMetadata) {
           if (!item?.id) continue;
           const ex = await DB.getMeta(item.id);
           const patch = {};
-          for (const f of PATCH_FIELDS) {
+
+          if (item.mbTried)   patch.mbTried   = true;
+          if (item.auddTried) patch.auddTried = true;
+
+          for (const f of FILL_ONLY) {
             if (item[f] === null || item[f] === undefined || item[f] === '') continue;
-            // Enrichment flags: if remote is true, adopt to skip re-enrichment
-            if (f === 'mbTried'   && item[f]) { patch[f] = true; continue; }
-            if (f === 'auddTried' && item[f]) { patch[f] = true; continue; }
-            // All other fields: only fill local gaps (never overwrite)
             if (!ex?.[f]) patch[f] = item[f];
           }
+
+          const remoteIsEnriched = item.mbTried || item.auddTried;
+          for (const f of TEXT_FIELDS) {
+            if (item[f] === null || item[f] === undefined || item[f] === '') continue;
+            if (remoteIsEnriched || !ex?.[f]) patch[f] = item[f];
+          }
+
           if (Object.keys(patch).length > 0) {
             await DB.setMeta(item.id, patch);
             applied++;
