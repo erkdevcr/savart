@@ -2175,8 +2175,8 @@ const App = (() => {
 
     // Load data
     if (tab === 'favorites') _loadStarred();
-    if (tab === 'artists')   _loadArtists();
-    if (tab === 'albums')    _loadAlbums();
+    if (tab === 'artists')   { _loadArtists();  setTimeout(_scanLibraryBackground, 400); }
+    if (tab === 'albums')    { _loadAlbums();   setTimeout(_scanLibraryBackground, 400); }
     if (tab === 'playlists') _loadPlaylists();
   }
 
@@ -2518,6 +2518,142 @@ const App = (() => {
     } catch (err) {
       console.error('[App] Load starred error:', err);
     }
+  }
+
+  /* ── Library background scanner ─────────────────────────── */
+
+  let _libScanDone = false; // run once per session
+
+  /**
+   * BFS scan from ROOT_FOLDER_ID.
+   * For each folder that contains ≥2 audio files:
+   *   - album   = folder name
+   *   - artist  = parent folder name (if not root)
+   *   - cover   = cover/folder.jpg in the folder → common thumbnailLink → first DB thumbnailUrl
+   * Only patches fields that are missing in DB (never overwrites enriched values).
+   * Runs entirely in background; refreshes the active library tab when done.
+   */
+  async function _scanLibraryBackground() {
+    if (_libScanDone) return;
+    if (!Auth.getValidToken()) return;
+    _libScanDone = true;
+
+    console.log('[LibScan] Starting background library scan…');
+
+    // BFS queue: { id, name, parentName }
+    const queue   = [{ id: CONFIG.ROOT_FOLDER_ID, name: CONFIG.ROOT_FOLDER_NAME, parentName: '' }];
+    const visited = new Set();
+    let   patched = 0;
+
+    while (queue.length > 0) {
+      const { id, name: folderName, parentName } = queue.shift();
+      if (visited.has(id)) continue;
+      visited.add(id);
+
+      let page;
+      try {
+        page = await Drive.listFolderScan(id);
+      } catch (err) {
+        if (err instanceof Drive.AuthError || err?.name === 'AuthError') break;
+        console.warn('[LibScan] Error scanning folder:', folderName, err);
+        continue;
+      }
+
+      // Push subfolders — current folder becomes the artist level for its children
+      for (const f of page.folders) {
+        queue.push({ id: f.id, name: f.name, parentName: folderName });
+      }
+
+      // Only process folders with ≥2 audio files (single files are loose tracks, not albums)
+      if (page.audioFiles.length >= 2) {
+        const n = await _inferAlbumMeta(folderName, parentName, page.audioFiles, page.imageFiles);
+        patched += n;
+      }
+
+      // Small yield to avoid blocking audio playback / UI
+      await new Promise(r => setTimeout(r, 60));
+    }
+
+    console.log(`[LibScan] Done. Patched metadata for ${patched} files.`);
+
+    // Refresh the current library tab so newly inferred data shows up
+    const tab = _currentLibTab;
+    if (tab === 'artists') _loadArtists();
+    if (tab === 'albums')  _loadAlbums();
+  }
+
+  /**
+   * Infer and persist album metadata for a batch of audio files in the same folder.
+   * @returns {number} count of files patched
+   */
+  async function _inferAlbumMeta(albumName, artistName, audioFiles, imageFiles) {
+    // ── Find the best cover for this folder ─────────────────
+    let coverUrl = null;
+
+    // 1. Prefer a cover/folder/artwork image file in the folder
+    const COVER_RE = /^(cover|folder|artwork|front|album)\./i;
+    const IMAGE_EXT = /\.(jpg|jpeg|png|webp)$/i;
+    const coverFile = imageFiles.find(f => COVER_RE.test(f.name) && IMAGE_EXT.test(f.name))
+                   || imageFiles.find(f => IMAGE_EXT.test(f.name));
+    if (coverFile?.thumbnailLink) coverUrl = coverFile.thumbnailLink;
+
+    // 2. Most common thumbnailLink among audio files
+    //    (happens when Drive generates artwork from embedded ID3 album art)
+    if (!coverUrl) {
+      const thumbs = audioFiles.map(f => f.thumbnailUrl).filter(Boolean);
+      if (thumbs.length > 0) {
+        const freq = new Map();
+        for (const t of thumbs) freq.set(t, (freq.get(t) || 0) + 1);
+        const best = [...freq.entries()].sort((a, b) => b[1] - a[1])[0];
+        if (best) coverUrl = best[0];
+      }
+    }
+
+    // 3. Fall back to any thumbnailUrl already stored in DB for songs in this folder
+    if (!coverUrl) {
+      for (const f of audioFiles) {
+        const m = await DB.getMeta(f.id).catch(() => null);
+        if (m?.thumbnailUrl) { coverUrl = m.thumbnailUrl; break; }
+      }
+    }
+
+    // ── Determine artist label ───────────────────────────────
+    // Only use parentName as artist if it's not the root folder
+    const inferredArtist = (artistName && artistName !== CONFIG.ROOT_FOLDER_NAME)
+      ? artistName
+      : '';
+
+    // ── Patch DB for each file ───────────────────────────────
+    let count = 0;
+    for (const file of audioFiles) {
+      const existing = await DB.getMeta(file.id).catch(() => null);
+
+      const patch = {};
+      // Never overwrite values that were already enriched (ID3 / Last.fm / AudD)
+      if (!existing?.album  && albumName)       patch.album       = albumName;
+      if (!existing?.artist && inferredArtist)  patch.artist      = inferredArtist;
+      if (!existing?.thumbnailUrl && coverUrl)  patch.thumbnailUrl = coverUrl;
+
+      // Always ensure basic file info is present so the song is playable from Library
+      if (!existing?.name)        patch.name        = file.name;
+      if (!existing?.displayName) patch.displayName = file.displayName || cleanTitle(file.name);
+      if (!existing?.folderId)    patch.folderId    = file.parents?.[0] || null;
+
+      if (Object.keys(patch).length > 0) {
+        await DB.setMeta(file.id, { id: file.id, ...patch });
+        count++;
+      }
+
+      // Keep item in the in-memory cache so it's clickable from Library
+      _cacheItem({
+        ...file,
+        folderId:    file.parents?.[0] || null,
+        artist:      (existing?.artist || patch.artist || ''),
+        album:       (existing?.album  || patch.album  || ''),
+        thumbnailUrl:(existing?.thumbnailUrl || patch.thumbnailUrl || null),
+      });
+    }
+    return count;
   }
 
   /**
@@ -3804,6 +3940,7 @@ const App = (() => {
     _loadAlbums,
     _setLibTab,
     _onNewPlaylist,
+    _scanLibraryBackground,
     onArtistClick,
     onAlbumClick,
     onPlaylistClick,

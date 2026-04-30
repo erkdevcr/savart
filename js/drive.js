@@ -120,6 +120,46 @@ const Drive = (() => {
     return { folders: allFolders, files: allFiles };
   }
 
+  /**
+   * List folder contents for library scanning (auto-paginates).
+   * Unlike listFolder, also returns image files (used to detect album covers).
+   *
+   * @param {string} folderId
+   * @returns {Promise<{ folders: DriveItem[], audioFiles: DriveItem[], imageFiles: Object[] }>}
+   */
+  async function listFolderScan(folderId) {
+    const allFolders = [];
+    const allAudio   = [];
+    const allImages  = [];
+    let pageToken    = null;
+
+    do {
+      const params = new URLSearchParams({
+        q:         `'${folderId}' in parents and trashed = false`,
+        pageSize:  CONFIG.FOLDER_PAGE_SIZE,
+        fields:    `nextPageToken,files(${CONFIG.FILE_FIELDS})`,
+        orderBy:   'folder,name',
+      });
+      if (pageToken) params.set('pageToken', pageToken);
+
+      const res  = await _fetch(`${CONFIG.API_BASE}/files?${params}`);
+      const data = await res.json();
+
+      for (const raw of (data.files || [])) {
+        if (isFolder(raw.mimeType)) {
+          allFolders.push(_normalizeItem(raw));
+        } else if (isAudio(raw.mimeType)) {
+          allAudio.push(_normalizeItem(raw));
+        } else if (raw.mimeType?.startsWith('image/')) {
+          allImages.push({ id: raw.id, name: raw.name, thumbnailLink: raw.thumbnailLink || null });
+        }
+      }
+      pageToken = data.nextPageToken || null;
+    } while (pageToken);
+
+    return { folders: allFolders, audioFiles: allAudio, imageFiles: allImages };
+  }
+
   /* ── searchFiles ─────────────────────────────────────────── */
   /**
    * Search audio files by name across Drive (within a root folder if provided).
@@ -396,6 +436,7 @@ const Drive = (() => {
   return {
     listFolder,
     listFolderAll,
+    listFolderScan,
     searchFiles,
     downloadFile,
     downloadFileHead,

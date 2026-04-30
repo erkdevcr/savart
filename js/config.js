@@ -103,7 +103,7 @@ const CONFIG = {
 
   // ── App metadata ──────────────────────────────────────────
   APP_NAME: 'Savart',
-  VERSION:  '1.4.5',
+  VERSION:  '1.4.6',
 };
 
 /* ── Audio format detection helpers ───────────────────────── */
