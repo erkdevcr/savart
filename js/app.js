@@ -2591,18 +2591,20 @@ const App = (() => {
    * @returns {Promise<string|null>}
    */
   async function _resolveCoverUrl(id, storedUrl) {
-    // 1. Stored web URL (non-blob, persisted from Drive thumbnailLink — rare for audio)
-    if (storedUrl && !storedUrl.startsWith('blob:')) return storedUrl;
-    // 2. In-memory Meta cache: song was parsed this session (fastest, no DB needed)
+    // Priority: ID3 embedded art > external persisted URL
+    // 1. In-memory Meta cache: song was parsed this session (fastest, no DB round-trip)
     const inMem = (typeof Meta !== 'undefined') ? Meta.getCached(id) : null;
     if (inMem?.coverUrl) return inMem.coverUrl;
-    // 3. Persisted coverBlob in DB (saved after browse or playback)
-    const meta = await DB.getMeta(id).catch(() => null);
-    if (meta?.coverBlob) {
-      const url = Meta.injectCover(id, meta.coverBlob);
+    // 2. Persisted coverBlob in DB (ID3 embedded — wins over external URLs)
+    const dbMeta = await DB.getMeta(id).catch(() => null);
+    if (dbMeta?.coverBlob && typeof Meta !== 'undefined') {
+      const url = Meta.injectCover(id, dbMeta.coverBlob);
       if (url) return url;
     }
-    // 4. Drive thumbnail from item cache (always null for audio files)
+    // 3. Stored web URL (non-blob, from Last.fm / AudD / Drive thumbnailLink)
+    const ext = dbMeta?.thumbnailUrl || storedUrl || null;
+    if (ext && !ext.startsWith('blob:')) return ext;
+    // 4. Drive thumbnail from item cache (rarely set for audio)
     const cached = _itemCache.get(id);
     return cached?.thumbnailLink || cached?.thumbnailUrl || null;
   }
@@ -2864,12 +2866,20 @@ const App = (() => {
         if (!album) return;
         const key = `${album.toLowerCase()}|${artist.toLowerCase()}`;
         if (!albumMap.has(key)) {
-          albumMap.set(key, { name: album, artist, songCount: 0, coverUrl: null, yearCounts: new Map(), folderIds: new Set() });
+          albumMap.set(key, { name: album, artist, songCount: 0, coverUrl: null, hasBlobCover: false, yearCounts: new Map(), folderIds: new Set() });
         }
         const a = albumMap.get(key);
         a.songCount++;
         if (m.folderId) a.folderIds.add(m.folderId);
-        if (!a.coverUrl && m.thumbnailUrl) a.coverUrl = m.thumbnailUrl;
+        // Prefer ID3 embedded cover (coverBlob) over external thumbnailUrl
+        if (!a.hasBlobCover) {
+          if (m.coverBlob && typeof Meta !== 'undefined') {
+            const url = Meta.injectCover(m.id, m.coverBlob);
+            if (url) { a.coverUrl = url; a.hasBlobCover = true; }
+          } else if (!a.coverUrl && m.thumbnailUrl) {
+            a.coverUrl = m.thumbnailUrl;
+          }
+        }
         if (m.year) a.yearCounts.set(m.year, (a.yearCounts.get(m.year) || 0) + 1);
       });
       const albums = Array.from(albumMap.values())
@@ -2913,12 +2923,20 @@ const App = (() => {
         const album = (m.album || '').trim() || '(sin álbum)';
         const aKey  = album.toLowerCase();
         if (!albumMap.has(aKey)) {
-          albumMap.set(aKey, { name: album, artist: artist.name, songCount: 0, coverUrl: null, yearCounts: new Map(), folderIds: new Set() });
+          albumMap.set(aKey, { name: album, artist: artist.name, songCount: 0, coverUrl: null, hasBlobCover: false, yearCounts: new Map(), folderIds: new Set() });
         }
         const a = albumMap.get(aKey);
         a.songCount++;
         if (m.folderId) a.folderIds.add(m.folderId);
-        if (!a.coverUrl && m.thumbnailUrl) a.coverUrl = m.thumbnailUrl;
+        // Prefer ID3 embedded cover (coverBlob) over external thumbnailUrl
+        if (!a.hasBlobCover) {
+          if (m.coverBlob && typeof Meta !== 'undefined') {
+            const url = Meta.injectCover(m.id, m.coverBlob);
+            if (url) { a.coverUrl = url; a.hasBlobCover = true; }
+          } else if (!a.coverUrl && m.thumbnailUrl) {
+            a.coverUrl = m.thumbnailUrl;
+          }
+        }
         if (m.year) a.yearCounts.set(m.year, (a.yearCounts.get(m.year) || 0) + 1);
       });
       const albums = Array.from(albumMap.values())
