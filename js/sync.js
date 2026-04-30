@@ -344,8 +344,10 @@ const Sync = (() => {
         //   • artist / album / year → fill-only normally, BUT overwrite if remote was MB/AudD-enriched
         //     (mbTried || auddTried on the remote record means those values came from a real lookup,
         //      not from folder-name inference — they should win over the locally inferred values)
-        const FILL_ONLY   = ['name', 'displayName', 'folderId', 'mbReleaseMbid', 'thumbnailUrl', 'coverUrl'];
-        const TEXT_FIELDS = ['artist', 'album', 'year'];
+        // Fill-only: structural / identity fields — local data is authoritative
+        const FILL_ONLY   = ['name', 'displayName', 'folderId', 'mbReleaseMbid', 'coverUrl'];
+        // Enriched fields: overwrite when remote ran MB or AudD (real lookup beats folder inference)
+        const ENRICH_FIELDS = ['artist', 'album', 'year', 'thumbnailUrl'];
         for (const item of (data || [])) {
           if (!item?.id) continue;
           const ex = await DB.getMeta(item.id);
@@ -361,9 +363,11 @@ const Sync = (() => {
             if (!ex?.[f]) patch[f] = item[f];
           }
 
-          // Text fields: overwrite if remote is enriched (MB/AudD), otherwise fill-only
+          // Enriched fields: overwrite if remote came from a real lookup, otherwise fill-only.
+          // thumbnailUrl is included here: an MB/AudD cover beats a folder-inferred URL.
+          // (coverBlob — the embedded ID3 art — is never synced, so no risk of downgrading quality.)
           const remoteIsEnriched = item.mbTried || item.auddTried;
-          for (const f of TEXT_FIELDS) {
+          for (const f of ENRICH_FIELDS) {
             if (item[f] === null || item[f] === undefined || item[f] === '') continue;
             if (remoteIsEnriched || !ex?.[f]) patch[f] = item[f];
           }
@@ -728,8 +732,8 @@ const Sync = (() => {
       // Structural fields (name/displayName/folderId) and cover URLs: fill-only.
       await _mergeStep('metadata', async () => {
         if (!Array.isArray(remoteMetadata) || remoteMetadata.length === 0) return;
-        const FILL_ONLY   = ['name', 'displayName', 'folderId', 'mbReleaseMbid', 'thumbnailUrl', 'coverUrl'];
-        const TEXT_FIELDS = ['artist', 'album', 'year'];
+        const FILL_ONLY     = ['name', 'displayName', 'folderId', 'mbReleaseMbid', 'coverUrl'];
+        const ENRICH_FIELDS = ['artist', 'album', 'year', 'thumbnailUrl'];
         let applied = 0;
         for (const item of remoteMetadata) {
           if (!item?.id) continue;
@@ -745,7 +749,7 @@ const Sync = (() => {
           }
 
           const remoteIsEnriched = item.mbTried || item.auddTried;
-          for (const f of TEXT_FIELDS) {
+          for (const f of ENRICH_FIELDS) {
             if (item[f] === null || item[f] === undefined || item[f] === '') continue;
             if (remoteIsEnriched || !ex?.[f]) patch[f] = item[f];
           }

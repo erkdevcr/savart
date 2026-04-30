@@ -285,6 +285,16 @@ const App = (() => {
       _setLibTab(_currentLibTab || 'albums');
     }
 
+    // Metadata sync: re-render the active library tab so covers/names appear immediately
+    if (types.includes('metadata')) {
+      if (view === 'library' && !_libInDetail) {
+        if (_currentLibTab === 'albums')  _loadAlbums();
+        if (_currentLibTab === 'artists') _loadArtists();
+      }
+      // Also refresh home cards (top-played, recents may show stale covers)
+      _loadHomeData();
+    }
+
     if (view === 'history' && types.includes('history')) _loadHistory();
 
     if (types.includes('settings')) _restoreSettings();
@@ -2469,7 +2479,7 @@ const App = (() => {
 
   /* ── Library ─────────────────────────────────────────────── */
 
-  let _currentLibTab  = 'favorites'; // persists tab across sync refreshes
+  let _currentLibTab  = 'albums'; // persists tab across sync refreshes
   let _libInDetail    = false;       // true while showing an artist/album drill-down
 
   const LIB_TAB_PLACEHOLDERS = {
