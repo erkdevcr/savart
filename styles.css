@@ -1712,7 +1712,7 @@ img { display: block; }
 /* Mobile overrides for lib grids */
 @media (max-width: 767px) {
   .lib-artist-grid {
-    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    grid-template-columns: repeat(3, 1fr);  /* always exactly 3 columns on mobile */
     gap: 14px;
     padding: 14px;
   }

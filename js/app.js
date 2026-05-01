@@ -3462,7 +3462,8 @@ const App = (() => {
       const all = await DB.getAllMeta();
       const artistMap = new Map();
       all.forEach(m => {
-        const name = (m.artist || '').trim();
+        // Strip collaborators after ';' — e.g. "3 Doors Down;Josh Freese" → "3 Doors Down"
+        const name = (m.artist || '').split(';')[0].trim();
         if (!name) return;
         const key = name.toLowerCase();
         if (!artistMap.has(key)) {
@@ -3624,7 +3625,7 @@ const App = (() => {
 
       all.forEach(m => {
         const album  = (m.album  || '').trim();
-        const artist = (m.artist || '').trim();
+        const artist = (m.artist || '').split(';')[0].trim(); // strip collaborators after ';'
         if (!album || !m.folderId) return; // skip untagged or folder-less songs
         if (!folderMap.has(m.folderId)) {
           folderMap.set(m.folderId, {
@@ -3699,7 +3700,7 @@ const App = (() => {
       // Group by folderId — same rule as _loadAlbums, but scoped to this artist
       const folderMap = new Map();
       all.forEach(m => {
-        if ((m.artist || '').trim().toLowerCase() !== artistKey) return;
+        if ((m.artist || '').split(';')[0].trim().toLowerCase() !== artistKey) return;
         const album = (m.album || '').trim();
         if (!album || !m.folderId) return;
         if (!folderMap.has(m.folderId)) {
