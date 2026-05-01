@@ -905,14 +905,18 @@ const App = (() => {
   /**
    * Background metadata + cover enrichment for a folder / album view.
    *
-   * Pass 0 — DB cache + appProperties  (instant, no network)
-   * Pass 1 — In-memory Meta cache       (instant, session)
-   * Pass 2 — MusicBrainz               (text: artist, album, year, track — no file download)
-   * Pass 3 — ID3 blob parse            (text overrides MB; embedded cover = top priority)
-   * Pass 4 — Cover Art Archive (CAA)   (MusicBrainz cover for songs without embedded art)
-   * Pass 5 — Folder cover.jpg          (generic fallback)
-   * Pass 6 — Last.fm                   (external cover by artist+album)
-   * Pass 7 — AudD.io fingerprinting    (last resort: identifies song from audio)
+   * Pass 0  — DB cache                  (instant, no network; skipped when force=true)
+   * Pass 1  — In-memory Meta cache      (instant, session)
+   * Pre-2   — ID3 blob parse [force only] (overwrites artist/album/year from file tags first)
+   * Pass 2  — MusicBrainz              (text: artist, album, year, track — no file download)
+   *             normal: fills empty fields | force: has clean ID3 context → better accuracy
+   * Pass 3  — ID3 blob parse [normal / cover-only force]
+   *             normal: fills what MB missed + embedded cover
+   *             force:  only songs without a cover (pre-2 covered the rest)
+   * Pass 4  — Cover Art Archive (CAA)  (MusicBrainz cover for songs without embedded art)
+   * Pass 5  — Folder cover.jpg         (generic fallback)
+   * Pass 6  — Last.fm                  (external cover by artist+album)
+   * Pass 7  — AudD.io fingerprinting   (last resort: identifies song from audio)
    *
    * @param {string}      folderId
    * @param {DriveItem[]} files
@@ -981,8 +985,51 @@ const App = (() => {
       if (meta?.coverUrl) _updateRowThumbnail(file.id, meta.coverUrl, true);
     });
 
+    // ── Force pre-pass: ID3 first (when force=true) ──────────────────────────
+    // In force mode, ID3 runs BEFORE MusicBrainz so MB gets clean artist/album context
+    // directly from the actual audio file tags. MB then overwrites with its canonical data
+    // if it finds a match. In normal mode this block is skipped — MB runs first (Pass 2).
+    if (force && typeof Meta !== 'undefined') {
+      const forceId3Queue = [...files];
+      const CONCURRENCY_PRE = 3;
+      async function forceId3Worker() {
+        while (forceId3Queue.length > 0) {
+          const file = forceId3Queue.shift();
+          try {
+            let blob = await DB.getCachedBlob(file.id);
+            if (!blob) blob = await Drive.downloadFileHead(file.id);
+            if (!blob) continue;
+            const meta = await Meta.parse(file.id, blob);
+            if (!meta) continue;
+            const textPatch = {};
+            if (meta.title)  textPatch.displayName = meta.title;
+            if (meta.artist) textPatch.artist       = meta.artist;  // force: overwrite always
+            if (meta.album)  textPatch.album        = meta.album;
+            if (meta.year)   textPatch.year         = meta.year;
+            if (meta.track)  textPatch.track        = meta.track;
+            if (Object.keys(textPatch).length > 0) {
+              await DB.setMeta(file.id, textPatch).catch(() => {});
+              _patchMetaText(file.id, {
+                title:  meta.title  || null,
+                artist: meta.artist || null,
+                album:  meta.album  || null,
+                year:   meta.year   || null,
+              });
+            }
+            if (meta.coverUrl) {
+              _updateRowThumbnail(file.id, meta.coverUrl, true);
+              if (meta.coverBlob) DB.setMeta(file.id, { coverBlob: meta.coverBlob }).catch(() => {});
+            }
+            if (Player.getCurrentTrack()?.id === file.id) _applyMeta(file, meta);
+          } catch (_) {}
+        }
+      }
+      await Promise.allSettled(Array.from({ length: CONCURRENCY_PRE }, () => forceId3Worker()));
+    }
+
     // ── Pass 2: MusicBrainz — text metadata ───────────────────────────────────
     // MB is the authoritative source: artist, album, year always come from MB when found.
+    // In force mode, ID3 pre-pass has already set correct context so MB gets accurate input.
     // ID3 (Pass 3) only fills fields MB left empty. AudD (Pass 7) fills what ID3 also missed.
     // Sequential: 1 req/sec rate limit.
     if (typeof MusicBrainz !== 'undefined') {
@@ -1041,21 +1088,22 @@ const App = (() => {
     }
 
     // ── Pass 3: ID3 blob parse — text + embedded cover ────────────────────────
-    // MB is primary; ID3 only fills fields MB didn't provide.
-    // displayName (display title) always comes from ID3 — it's the cleanest source.
-    // Embedded cover art = highest cover priority (isId3=true, protected from overwrite).
-    // Normal: runs only on files without a cover or without ID3-sourced cover.
-    // Force-rescan: runs on every file so covers and text are fully refreshed.
-    const needEnrichment = force ? [...files] : files.filter(file => {
-      const eid = CSS.escape(file.id);
-      const img = document.querySelector(`.top-list-item[data-id="${eid}"] .top-list-thumb img`)
-               || document.querySelector(`.song-row[data-id="${eid}"] .song-thumb img`);
-      // Parse if: no cover at all, or cover isn't yet from ID3 (so we can find embedded art)
-      if (!img || img.dataset.coverSrc !== 'id3') return true;
-      // Already has ID3 cover — only parse if artist text still empty
-      const artistEl = document.querySelector(`.top-list-item[data-id="${eid}"] .top-list-artist`);
-      return !!(artistEl && !artistEl.textContent.trim());
-    });
+    // In force mode: ID3 pre-pass already ran before MB with full overwrite rights.
+    //   Pass 3 here only handles songs that failed the pre-pass (no cached blob, no cover yet).
+    //   Text is fill-only — MB already had its turn and is authoritative.
+    // In normal mode: MB ran first; ID3 fills remaining gaps + embedded cover.
+    // displayName always comes from ID3 — it's the cleanest display title source.
+    // Embedded cover = highest priority (isId3=true, protected from external overwrite).
+    const needEnrichment = force
+      ? files.filter(file => !_rowHasCover(file.id))   // pre-pass covered the rest
+      : files.filter(file => {
+          const eid = CSS.escape(file.id);
+          const img = document.querySelector(`.top-list-item[data-id="${eid}"] .top-list-thumb img`)
+                   || document.querySelector(`.song-row[data-id="${eid}"] .song-thumb img`);
+          if (!img || img.dataset.coverSrc !== 'id3') return true;
+          const artistEl = document.querySelector(`.top-list-item[data-id="${eid}"] .top-list-artist`);
+          return !!(artistEl && !artistEl.textContent.trim());
+        });
     if (needEnrichment.length > 0 && typeof Meta !== 'undefined') {
       const CONCURRENCY = 3;
       const queue = [...needEnrichment];
@@ -1069,22 +1117,22 @@ const App = (() => {
             const meta = await Meta.parse(file.id, blob);
             if (!meta) continue;
 
-            // MB is the primary text source — ID3 only fills fields MB left empty.
-            // displayName is the exception: always use the ID3 title as the display name.
+            // Fill-only: MB is authoritative (it already ran in Pass 2).
+            // displayName always comes from ID3 regardless.
             const existingMeta = await DB.getMeta(file.id).catch(() => null);
             const textPatch = {};
-            if (meta.title)                           textPatch.displayName = meta.title;
-            if (meta.artist && !existingMeta?.artist) textPatch.artist      = meta.artist;
-            if (meta.album  && !existingMeta?.album)  textPatch.album       = meta.album;
-            if (meta.year   && !existingMeta?.year)   textPatch.year        = meta.year;
-            if (meta.track  && !existingMeta?.track)  textPatch.track       = meta.track;
+            if (meta.title)                        textPatch.displayName = meta.title;
+            if (meta.artist && !existingMeta?.artist) textPatch.artist   = meta.artist;
+            if (meta.album  && !existingMeta?.album)  textPatch.album    = meta.album;
+            if (meta.year   && !existingMeta?.year)   textPatch.year     = meta.year;
+            if (meta.track  && !existingMeta?.track)  textPatch.track    = meta.track;
             if (Object.keys(textPatch).length > 0) {
               DB.setMeta(file.id, textPatch).catch(() => {});
               _patchMetaText(file.id, {
-                title: meta.title || null,
-                artist: textPatch.artist || null,
-                album:  textPatch.album  || null,
-                year:   textPatch.year   || null,
+                title:  meta.title          || null,
+                artist: textPatch.artist    || null,
+                album:  textPatch.album     || null,
+                year:   textPatch.year      || null,
               });
             }
 
