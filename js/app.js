@@ -3342,15 +3342,91 @@ const App = (() => {
         const album = (m.album || '').trim();
         if (album) a.albumSet.add(album.toLowerCase());
       });
+
+      // Load persisted artist images (stored from previous TheAudioDB enrichment)
+      const storedImages = (await DB.getState('artistImages').catch(() => null)) || {};
+
       const artists = Array.from(artistMap.values())
-        .map(a => ({ name: a.name, songCount: a.songCount, albumCount: a.albumSet.size || 1 }))
+        .map(a => ({
+          name:       a.name,
+          songCount:  a.songCount,
+          albumCount: a.albumSet.size || 1,
+          imageUrl:   storedImages[a.name.toLowerCase()] || null,
+        }))
         .sort((a, b) => a.name.localeCompare(b.name));
+
       UI.renderArtists(artists);
+
       // Re-apply any active search filter (persisted from before a drill-down)
       const q = document.getElementById('lib-search-input')?.value || '';
       if (q) _onLibSearch(q);
+
+      // Fetch missing artist photos in background (non-blocking)
+      _enrichArtistImages(artists, storedImages).catch(() => {});
     } catch (err) {
       console.error('[App] Load artists error:', err);
+    }
+  }
+
+  /* ── Artist image enrichment ─────────────────────────────── */
+
+  let _artistImgRunning = false;
+
+  /**
+   * For each artist not yet in storedImages, fetch a photo from TheAudioDB.
+   * Updates the DOM avatar in real-time as images arrive.
+   * Results are persisted to DB so they load instantly on next session.
+   *
+   * @param {Object[]} artists      — current artist list
+   * @param {Object}   storedImages — { artistNameLower: url|null } already in DB
+   */
+  async function _enrichArtistImages(artists, storedImages) {
+    if (typeof Lastfm?.fetchArtistImage !== 'function') return;
+    if (_artistImgRunning) return;
+    _artistImgRunning = true;
+
+    try {
+      // Only fetch artists with no stored result (undefined = never tried;
+      // null = tried before and no image found — skip to save quota)
+      const toFetch = artists.filter(a => !(a.name.toLowerCase() in storedImages));
+      if (toFetch.length === 0) return;
+
+      console.log(`[Artists] Fetching images for ${toFetch.length} artists…`);
+      const updates = { ...storedImages };
+      let fetched = 0;
+
+      for (const artist of toFetch) {
+        if (!Auth.getValidToken()) break;
+        // Stop if the user navigated away from the artist grid
+        if (_libInDetail || _currentLibTab !== 'artists') break;
+
+        const key = artist.name.toLowerCase();
+        const url = await Lastfm.fetchArtistImage(artist.name);
+        updates[key] = url; // null stored so we don't retry next session
+
+        if (url) {
+          // Update the avatar DOM immediately — no full re-render needed
+          document.querySelectorAll('.lib-artist-avatar[data-artist-key]').forEach(el => {
+            if (el.dataset.artistKey === key) {
+              el.style.background = '';
+              el.style.color = '';
+              el.innerHTML = `<img src="${url}" alt="" loading="lazy">`;
+            }
+          });
+          fetched++;
+
+          // Persist every 5 successful fetches so partial progress survives reload
+          if (fetched % 5 === 0) DB.setState('artistImages', updates).catch(() => {});
+        }
+
+        await new Promise(r => setTimeout(r, 500)); // 500ms — polite to TheAudioDB
+      }
+
+      // Final persist
+      if (toFetch.length > 0) await DB.setState('artistImages', updates).catch(() => {});
+      if (fetched > 0) console.log(`[Artists] ${fetched} artist images loaded.`);
+    } finally {
+      _artistImgRunning = false;
     }
   }
 

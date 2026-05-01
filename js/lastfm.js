@@ -130,12 +130,43 @@ const Lastfm = (() => {
     }
   }
 
+  /* ── fetchArtistImage ──────────────────────────────────────
+   * Fetch an artist photo from TheAudioDB (free, no auth required).
+   * Returns the strArtistThumb URL (square photo, suitable for circular avatars),
+   * or null if not found.
+   *
+   * @param {string} artistName
+   * @returns {Promise<string|null>}
+   */
+  async function fetchArtistImage(artistName) {
+    if (!artistName?.trim()) return null;
+
+    const key = `artist::${artistName.trim().toLowerCase()}`;
+    if (_cache.has(key)) return _cache.get(key);
+
+    try {
+      const res = await fetch(
+        `https://www.theaudiodb.com/api/v1/json/2/search.php?s=${encodeURIComponent(artistName.trim())}`
+      );
+      if (!res.ok) { _cache.set(key, null); return null; }
+      const data = await res.json();
+      const artist = data.artists?.[0];
+      // Prefer strArtistThumb (portrait/square photo) over fanart (landscape)
+      const url = artist?.strArtistThumb || null;
+      _cache.set(key, url);
+      return url;
+    } catch (_) {
+      _cache.set(key, null);
+      return null;
+    }
+  }
+
   /* ── clearCache ─────────────────────────────────────────────
    * Clear the in-memory cache (e.g. on logout or session end).
    */
   function clearCache() { _cache.clear(); }
 
   /* ── Expose ─────────────────────────────────────────────── */
-  return { fetchCover, fetchCoverByTrack, clearCache };
+  return { fetchCover, fetchCoverByTrack, fetchArtistImage, clearCache };
 
 })();

@@ -2070,8 +2070,18 @@ const UI = (() => {
         ? '1 álbum'
         : `${artist.albumCount} álbumes`;
 
+      const artistKey = (artist.name || '').toLowerCase();
+
+      // Avatar: photo if available, else coloured initials
+      const avatarStyle = artist.imageUrl
+        ? ''
+        : `background:${colors.bg};color:${colors.fg}`;
+      const avatarInner = artist.imageUrl
+        ? `<img src="${artist.imageUrl}" alt="" loading="lazy">`
+        : initials;
+
       card.innerHTML = `
-        <div class="lib-artist-avatar" style="background:${colors.bg};color:${colors.fg}">${initials}</div>
+        <div class="lib-artist-avatar" style="${avatarStyle}" data-artist-key="${escHtml(artistKey)}">${avatarInner}</div>
         <div class="lib-artist-name">${escHtml(artist.name)}</div>
         <div class="lib-artist-sub">${albumLabel}</div>
       `;

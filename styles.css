@@ -1582,6 +1582,14 @@ img { display: block; }
   font-weight: 500;
   color: var(--text-secondary);
   flex-shrink: 0;
+  overflow: hidden; /* clips the photo to the circle */
+}
+.lib-artist-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+  display: block;
 }
 .lib-artist-name {
   font-size: 11px;
