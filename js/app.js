@@ -3039,6 +3039,9 @@ const App = (() => {
     _lastLibScanAt = new Date().toISOString();
     console.log(`[LibScan] Done. Patched metadata for ${patched} files.`);
 
+    // Single metadata push for the entire scan — avoids one push per folder
+    if (patched > 0 && typeof Sync !== 'undefined') Sync.push('metadata');
+
     // Refresh the current library tab so newly inferred data shows up.
     // Skip if the user is inside a drill-down — the list re-renders on back-navigation.
     if (!_libInDetail) {
@@ -3388,8 +3391,11 @@ const App = (() => {
       });
     }
 
-    // Push any new/updated song entries to Drive so other devices see the album
-    if (count > 0 && typeof Sync !== 'undefined') Sync.push('metadata');
+    // NOTE: Sync.push('metadata') is NOT called here.
+    // _inferAlbumMeta is called in a loop (BFS scan, rescan) and pushing per-folder
+    // would saturate the debounce queue, causing one full metadata write per folder.
+    // Callers (_scanLibraryBackground, _fullLibraryRefresh) issue a single push after
+    // the entire loop completes.
     return count;
   }
 

@@ -45,6 +45,20 @@ const DB = (() => {
           metaStore.createIndex('folderId',  'folderId',  { unique: false });
           metaStore.createIndex('starred',   'starred',   { unique: false });
           metaStore.createIndex('playCount', 'playCount', { unique: false });
+        } else {
+          // Migration: add missing indexes to an existing metadata store.
+          // Indexes were only created when the store was first built, so older
+          // DB instances that predate these indexes never received them.
+          const metaStore = event.target.transaction.objectStore('metadata');
+          if (!metaStore.indexNames.contains('folderId')) {
+            metaStore.createIndex('folderId',  'folderId',  { unique: false });
+          }
+          if (!metaStore.indexNames.contains('starred')) {
+            metaStore.createIndex('starred',   'starred',   { unique: false });
+          }
+          if (!metaStore.indexNames.contains('playCount')) {
+            metaStore.createIndex('playCount', 'playCount', { unique: false });
+          }
         }
 
         // state store (key-value)
