@@ -4370,16 +4370,28 @@ img { display: block; }
     overflow-y: auto;
   }
 
-  /* ── Remove the generic .screen bottom padding for the library screen.
-     That 162px padding was designed for screens whose scroll container IS
-     .screen itself. In the library, scrolling happens inside .lib-detail,
-     so the padding just creates dead dark space below the grid.
-     Instead we push clearance onto the actual scroll container. ────────── */
+  /* ── Library screen: eliminate the dark empty strip at the bottom.
+     ─────────────────────────────────────────────────────────────────
+     Problem: .screen has padding-bottom ≈ 162px so content can scroll
+     above the fixed mini-player. In the library this padding is wasted
+     because the ACTUAL scroll container is .lib-detail (inside
+     .lib-layout which is overflow:hidden). Result: 162px of dark dead
+     space sits below .lib-layout — the user sees it as a black bar.
+
+     Fix:
+       1. Remove padding from #screen-library (so the dark strip vanishes).
+       2. Prevent #screen-library itself from ever scrolling (lib-layout
+          fills it completely; overflow hidden ensures no rogue scroll).
+       3. Move bottom clearance to .lib-detail — the real scroll pane —
+          so the last list item can still be scrolled above the mini-player.
+     ────────────────────────────────────────────────────────────────── */
   #screen-library {
     padding-bottom: 0;
+    overflow-y: hidden;   /* only .lib-detail scrolls; screen never does */
   }
 
-  #screen-library #lib-detail-content {
+  #screen-library .lib-detail {
+    /* Mini-player (fixed overlay) is ~70px + 8px margin + 60px nav + 16px gap */
     padding-bottom: calc(var(--mini-player-h) + var(--mini-margin) * 2 + var(--bottom-nav-h) + 16px);
   }
 }
