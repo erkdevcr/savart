@@ -4092,9 +4092,9 @@ const App = (() => {
     grid.innerHTML = '<div class="ds-attention-empty" style="grid-column:1/-1">Cargando artistas…</div>';
 
     try {
-      // Get all metadata records and extract unique artists
+      // Extract unique artists from metadata
       const all = await DB.getAllMeta().catch(() => []);
-      const artistMap = new Map(); // normalised key → display name
+      const artistMap = new Map(); // lowercase key → display name
       for (const m of all) {
         if (!m.artist) continue;
         const key = m.artist.trim().toLowerCase();
@@ -4106,10 +4106,23 @@ const App = (() => {
         return;
       }
 
-      // Load photo URLs from DB
-      const photoMap = await DB.getState('ds_artistPhotos').catch(() => ({})) || {};
+      // Build combined photo map:
+      //   1. Auto-fetched via Last.fm / TheAudioDB (stored under 'artistImages')
+      //   2. Manually set by user in this tool (stored under 'ds_artistPhotos')
+      //   Manual entries override auto-fetched ones.
+      const autoPhotos   = (await DB.getState('artistImages').catch(() => null))    || {};
+      const manualPhotos = (await DB.getState('ds_artistPhotos').catch(() => null)) || {};
+      // Merge: manual takes priority; skip null/undefined auto entries
+      const photoMap = {};
+      for (const [key] of artistMap) {
+        const manual = manualPhotos[key];
+        const auto   = autoPhotos[key];
+        if (manual)      photoMap[key] = manual;
+        else if (auto)   photoMap[key] = auto;
+        // else: no photo
+      }
 
-      const artists = [...artistMap.entries()].sort((a,b) => a[0].localeCompare(b[0]));
+      const artists = [...artistMap.entries()].sort((a, b) => a[0].localeCompare(b[0]));
       _dsRenderArtists(artists, photoMap);
     } catch (err) {
       console.error('[DS Artists]', err);
@@ -4144,12 +4157,14 @@ const App = (() => {
       const card = document.createElement('div');
       card.className = 'ds-artist-card';
       card.dataset.artistKey = key;
+      // Avatar: show image if available, always keep initials as fallback
+      const avatarInner = url
+        ? `<img src="${_escHtml(url)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display=''"><span style="display:none">${_escHtml(initials)}</span>`
+        : `<span>${_escHtml(initials)}</span>`;
+
       card.innerHTML = `
         <div class="ds-artist-card-top">
-          <div class="ds-artist-avatar">
-            ${url ? `<img src="${_escHtml(url)}" alt="" onerror="this.style.display='none'">` : ''}
-            ${!url ? `<span>${_escHtml(initials)}</span>` : ''}
-          </div>
+          <div class="ds-artist-avatar">${avatarInner}</div>
           <span class="ds-artist-name" title="${_escHtml(name)}">${_escHtml(name)}</span>
         </div>
         <div class="ds-artist-url-row">
@@ -4184,13 +4199,15 @@ const App = (() => {
         const btn    = card.querySelector('.ds-artist-save-btn');
         btn.disabled = true;
         try {
-          const existing = await DB.getState('ds_artistPhotos').catch(() => ({})) || {};
-          if (newUrl) {
-            existing[key] = newUrl;
-          } else {
-            delete existing[key];
-          }
-          await DB.setState('ds_artistPhotos', existing);
+          // Save to manual overrides (ds_artistPhotos)
+          const manual = await DB.getState('ds_artistPhotos').catch(() => ({})) || {};
+          if (newUrl) { manual[key] = newUrl; } else { delete manual[key]; }
+          await DB.setState('ds_artistPhotos', manual);
+
+          // Also write into artistImages so the Library tab picks it up immediately
+          const auto = await DB.getState('artistImages').catch(() => ({})) || {};
+          if (newUrl) { auto[key] = newUrl; } else if (key in auto) { auto[key] = null; }
+          await DB.setState('artistImages', auto);
 
           // Update avatar immediately
           const avatar = card.querySelector('.ds-artist-avatar');
@@ -4201,16 +4218,18 @@ const App = (() => {
           }
           card.classList.remove('ds-artist-card--open');
 
-          // Update counters
-          const withP  = grid.querySelectorAll('.ds-artist-card').length;
-          const noPhoto = [...grid.querySelectorAll('.ds-artist-card')].filter(c => {
+          // Recount by checking which cards have a visible img src
+          const allCards  = [...grid.querySelectorAll('.ds-artist-card')];
+          const withPhoto = allCards.filter(c => {
             const img = c.querySelector('.ds-artist-avatar img');
-            return !img || img.style.display === 'none';
+            return img && img.src && img.style.display !== 'none';
           }).length;
-          _dsSetCounter('ds-art-con',   withP - noPhoto);
-          _dsSetCounter('ds-art-sin',   noPhoto);
+          const total = allCards.length;
+          _dsSetCounter('ds-art-con',   withPhoto);
+          _dsSetCounter('ds-art-sin',   total - withPhoto);
+          _dsSetCounter('ds-art-total', total);
 
-          UI.showToast('Foto guardada');
+          UI.showToast(newUrl ? 'Foto guardada' : 'Foto eliminada');
         } catch (err) {
           console.error('[DS] Save artist photo error:', err);
           UI.showToast('Error al guardar', 'error');
