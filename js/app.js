@@ -1355,6 +1355,9 @@ const App = (() => {
     await _patchAlbumDetailHeader(songs);
     // Push metadata so thumbnailUrls (including Last.fm backup URLs) reach other devices
     if (typeof Sync !== 'undefined') Sync.push('metadata');
+    // Run Last.fm thumb pass for this album in case the pipeline didn't produce a URL.
+    // Runs in background — does not block the UI toast.
+    _lfmThumbLibrary().catch(() => {});
     UI.showToast('Rescan completado');
   }
 
@@ -1379,6 +1382,7 @@ const App = (() => {
       await _prefetchAndApplyFolderCovers(_browseFolderId, _browseFiles, true); // force=true
       // Push metadata so thumbnailUrls (including Last.fm backup URLs) reach other devices
       if (typeof Sync !== 'undefined') Sync.push('metadata');
+      _lfmThumbLibrary().catch(() => {});
       UI.showToast('Rescan completado');
       // Refresh Albums/Artists grid so the newly enriched folder appears there
       if (!_libInDetail) {

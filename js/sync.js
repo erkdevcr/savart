@@ -344,16 +344,15 @@ const Sync = (() => {
 
       case 'metadata': {
         // Merge strategy:
-        //   • name / displayName / folderId / thumbnailUrl / coverUrl → fill-only (local file data wins)
+        //   • name / displayName / folderId / mbReleaseMbid / coverUrl → fill-only
         //   • mbTried / auddTried → adopt if remote is true (skip redundant enrichment)
-        //   • mbReleaseMbid → fill-only (both devices queried MB independently)
-        //   • artist / album / year → fill-only normally, BUT overwrite if remote was MB/AudD-enriched
-        //     (mbTried || auddTried on the remote record means those values came from a real lookup,
-        //      not from folder-name inference — they should win over the locally inferred values)
-        // Fill-only: structural / identity fields — local data is authoritative
-        const FILL_ONLY   = ['name', 'displayName', 'folderId', 'mbReleaseMbid', 'coverUrl'];
-        // Enriched fields: overwrite when remote ran MB or AudD (real lookup beats folder inference)
-        const ENRICH_FIELDS = ['artist', 'album', 'year', 'thumbnailUrl'];
+        //   • artist / album / year → overwrite if remote was MB/AudD-enriched; else fill-only
+        //   • thumbnailUrl → ALWAYS overwrite when remote has a value.
+        //       It is always an external URL (CAA/Last.fm) — never folder-inferred.
+        //       A rescan on Device A may produce a better/different URL; Device B must
+        //       adopt it even if it already stored an older URL from a previous sync.
+        const FILL_ONLY     = ['name', 'displayName', 'folderId', 'mbReleaseMbid', 'coverUrl'];
+        const ENRICH_FIELDS = ['artist', 'album', 'year'];
         for (const item of (data || [])) {
           if (!item?.id) continue;
           const ex = await DB.getMeta(item.id);
@@ -369,17 +368,18 @@ const Sync = (() => {
             if (!ex?.[f]) patch[f] = item[f];
           }
 
-          // Enriched fields: overwrite if remote came from a real lookup, otherwise fill-only.
-          // thumbnailUrl is included here: an MB/AudD cover beats a folder-inferred URL.
-          // (coverBlob — the embedded ID3 art — is never synced, so no risk of downgrading quality.)
+          // Text enrichment: overwrite if remote ran MB or AudD; else fill-only.
           const remoteIsEnriched = item.mbTried || item.auddTried;
           for (const f of ENRICH_FIELDS) {
             if (item[f] === null || item[f] === undefined || item[f] === '') continue;
             if (remoteIsEnriched || !ex?.[f]) patch[f] = item[f];
           }
 
-          // If remote has mbReleaseMbid and no cover yet, derive the CAA URL directly.
-          // This is a stable, permanent URL — no extra network request needed.
+          // thumbnailUrl — always overwrite when remote has a value.
+          // Covers the case where Device A rescanned and obtained a new/better cover URL.
+          if (item.thumbnailUrl) patch.thumbnailUrl = item.thumbnailUrl;
+
+          // If remote has mbReleaseMbid and still no cover URL, derive CAA URL directly.
           const mbid = patch.mbReleaseMbid || ex?.mbReleaseMbid;
           if (mbid && !patch.thumbnailUrl && !ex?.thumbnailUrl) {
             patch.thumbnailUrl = `https://coverartarchive.org/release/${mbid}/front-250`;
@@ -746,7 +746,7 @@ const Sync = (() => {
       await _mergeStep('metadata', async () => {
         if (!Array.isArray(remoteMetadata) || remoteMetadata.length === 0) return;
         const FILL_ONLY     = ['name', 'displayName', 'folderId', 'mbReleaseMbid', 'coverUrl'];
-        const ENRICH_FIELDS = ['artist', 'album', 'year', 'thumbnailUrl'];
+        const ENRICH_FIELDS = ['artist', 'album', 'year'];
         let applied = 0;
         for (const item of remoteMetadata) {
           if (!item?.id) continue;
@@ -766,6 +766,9 @@ const Sync = (() => {
             if (item[f] === null || item[f] === undefined || item[f] === '') continue;
             if (remoteIsEnriched || !ex?.[f]) patch[f] = item[f];
           }
+
+          // thumbnailUrl — always overwrite when remote has a value (same logic as live poll).
+          if (item.thumbnailUrl) patch.thumbnailUrl = item.thumbnailUrl;
 
           // Derive stable CAA cover URL from mbReleaseMbid if no cover yet
           const mbid = patch.mbReleaseMbid || ex?.mbReleaseMbid;
