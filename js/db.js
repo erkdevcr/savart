@@ -719,6 +719,7 @@ const DB = (() => {
     const CLEAR_FIELDS = [
       'mbTried', 'auddTried', 'mbReleaseMbid',
       'thumbnailUrl', 'coverUrl', 'coverBlob',
+      'lfmThumbTried',  // re-attempt Last.fm after rescan
     ];
     for (const f of CLEAR_FIELDS) delete existing[f];
     return _promisify(store.put(existing));
