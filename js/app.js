@@ -3773,48 +3773,68 @@ const App = (() => {
         continue;
       }
 
-      // ── Run full recognition pipeline (same passes as Album Rescan) ──
-      _dsLogLine(`⟳ Reconociendo: ${path}  (${page.audioFiles.length} arch.)`);
+      // Skip folders with too many files (compilations / mega-folders)
+      if (page.audioFiles.length > 40) {
+        _dsLogLine(`↷ Ignorada (${page.audioFiles.length} arch. > 40): ${path}`);
+        _dsUpdateCounters(queue.length, startMs);
+        await new Promise(r => setTimeout(r, 10));
+        continue;
+      }
+
+      // ── Run full recognition pipeline — identical to manual Album Rescan ──
       _dsUpdateCounters(queue.length, startMs);
 
-      // Purge orphans (remove DB records for files no longer in Drive)
+      // 1. Purge orphans (same as onAlbumRescan)
       const liveIds = page.audioFiles.map(f => f.id);
       await DB.purgeOrphans(id, liveIds).catch(() => {});
 
-      // Clear enrichment so all passes re-run on fresh data
+      // 2. Clear enrichment for ALL files + reset folder cover cache (same as onAlbumRescan)
       await Promise.all(page.audioFiles.map(async f => {
         await DB.clearEnrichment(f.id).catch(() => {});
         if (typeof Meta !== 'undefined') Meta.revoke(f.id);
       }));
       _folderCoverCache.delete(id);
 
-      // Run all recognition passes: ID3 → MusicBrainz → Last.fm → AudD → CAA → cover.jpg
+      // 3. Log each file about to be processed
+      for (const f of page.audioFiles) {
+        _dsLogLine(`⟳ ${cleanTitle(f.name)}`);
+      }
+
+      // 4. Run all recognition passes with the full file array (same as onAlbumRescan)
       try {
         await _prefetchAndApplyFolderCovers(id, page.audioFiles, true);
       } catch (err) {
         _dsLogLine(`⚠ Pipeline error en "${name}": ${err?.message || err}`, 'warn');
       }
 
-      // Pause check — pipeline can take several seconds per folder
+      // Pause / stop check after pipeline (can take several seconds)
       while (_dsPaused && !_dsStopFlag) await new Promise(r => setTimeout(r, 200));
       if (_dsStopFlag) break;
 
-      // Check metadata completeness (post-enrichment)
+      // 5. Evaluate completeness post-enrichment — log each file result
       const attnSongs = [];
       for (const f of page.audioFiles) {
         const meta = await DB.getMeta(f.id).catch(() => null);
         const missingArtist = !meta?.artist;
         const missingAlbum  = !meta?.album;
         const missingYear   = !meta?.year;
+        const displayTitle  = meta?.displayName || cleanTitle(f.name);
         if (missingArtist || missingAlbum || missingYear) {
+          const missing = [
+            missingArtist ? 'artista' : '',
+            missingAlbum  ? 'álbum'   : '',
+            missingYear   ? 'año'     : '',
+          ].filter(Boolean).join(', ');
+          _dsLogLine(`  ⚠ ${displayTitle}  (sin: ${missing})`);
           attnSongs.push({
-            id: f.id, name: f.name,
-            displayName: meta?.displayName || cleanTitle(f.name),
+            id: f.id, name: f.name, displayName: displayTitle,
             artist: meta?.artist || '', album: meta?.album || '',
             year: meta?.year || '', track: meta?.track || '',
             mimeType: f.mimeType || '',
             missingArtist, missingAlbum, missingYear,
           });
+        } else {
+          _dsLogLine(`  ✓ ${displayTitle}`);
         }
       }
 
@@ -3830,7 +3850,6 @@ const App = (() => {
         };
         if (_dsListMode === 'attn') _dsAddOrUpdateFolderRow(id);
       } else if (page.audioFiles.length > 0) {
-        // All songs have metadata — add to completed list
         _dsSession.completedList[id] = { id, name, path, count: page.audioFiles.length };
         if (_dsListMode === 'done') _dsAddOrUpdateFolderRow(id);
       }
@@ -3838,7 +3857,7 @@ const App = (() => {
       _dsUpdateCounters(queue.length, startMs);
 
       if (_dsSession.scannedFolders % 5 === 0) await _dsSaveSession();
-      await new Promise(r => setTimeout(r, 30));
+      await new Promise(r => setTimeout(r, 20));
     }
 
     // Finished
