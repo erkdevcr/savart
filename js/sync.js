@@ -100,7 +100,13 @@ const Sync = (() => {
   }
 
   async function _readFile(filename) {
-    const fileId = _fileIds[filename];
+    let fileId = _fileIds[filename];
+    if (!fileId) {
+      // File may have been created on another device after our init().
+      // Refresh the file list once to discover any new files, then retry.
+      await _refreshFileList();
+      fileId = _fileIds[filename];
+    }
     if (!fileId) return null;
     const res = await _apiFetch(`${API}/files/${fileId}?alt=media`);
     return res.json();

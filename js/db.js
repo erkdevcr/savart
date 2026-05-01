@@ -712,12 +712,15 @@ const DB = (() => {
     const store    = _tx('metadata', 'readwrite');
     const existing = await _promisify(store.get(fileId));
     if (!existing) return;
-    const ENRICH_FIELDS = [
-      'artist', 'album', 'year', 'track',
+    // Only clear enrichment flags and cover data — preserve artist/album/year/track
+    // so that MusicBrainz can use them as context for a more accurate re-lookup.
+    // MB will overwrite them if it finds a better match; without this context, MB
+    // searches by title alone and returns random incorrect results.
+    const CLEAR_FIELDS = [
       'mbTried', 'auddTried', 'mbReleaseMbid',
-      'thumbnailUrl', 'coverUrl',
+      'thumbnailUrl', 'coverUrl', 'coverBlob',
     ];
-    for (const f of ENRICH_FIELDS) delete existing[f];
+    for (const f of CLEAR_FIELDS) delete existing[f];
     return _promisify(store.put(existing));
   }
 
