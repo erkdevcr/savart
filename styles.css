@@ -4436,10 +4436,14 @@ img { display: block; }
    Deep Scan screen  (v1.6.24)
    ═══════════════════════════════════════════════════════════ */
 
+/* Deep Scan is a fixed full-viewport overlay — above mini-player (19),
+   player-expanded (~70) and bottom-nav.  z-index 500 clears everything. */
 #screen-deep-scan {
   display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 500;
   flex-direction: column;
-  height: 100%;
   overflow: hidden;
   background: var(--bg-base);
 }
@@ -5240,5 +5244,5 @@ img { display: block; }
   .ds-table th, .ds-table td { padding: 2px 1px; }
   .ds-cell-input { font-size: 10px; padding: 2px 4px; }
   .ds-table-filename { font-size: 10px; }
-  #screen-deep-scan { padding-bottom: 0; }
+  /* #screen-deep-scan is position:fixed so bottom-nav padding is irrelevant */
 }
