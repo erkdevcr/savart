@@ -1608,6 +1608,13 @@ img { display: block; }
   padding: 14px;
 }
 
+/* Skip layout/paint for off-screen album cards — big scroll perf win on mobile.
+   contain-intrinsic-size approximates actual card height (art 130px + text ~60px). */
+.lib-album-grid .home-card {
+  content-visibility: auto;
+  contain-intrinsic-size: 0 190px;
+}
+
 /* ── Library: new playlist button row ───────────────────── */
 .lib-new-pl-btn {
   display: flex;
