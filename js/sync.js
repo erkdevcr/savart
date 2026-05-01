@@ -42,7 +42,12 @@ const Sync = (() => {
     settings:   'savart_settings.json',
     history:    'savart_history.json',
     metadata:   'savart_metadata.json',
+    hot:        'savart_hot.json',   // delta: only the most recent rescan batch (~5–50 songs)
   };
+
+  // Types that should not be pushed or merged during init().
+  // 'hot' is a transient delta — the full metadata.json covers initial sync.
+  const SKIP_ON_INIT = new Set(['hot']);
 
   /* ── Private state ─────────────────────────────────────── */
   let _fileIds          = {};   // filename → Drive fileId
@@ -342,8 +347,10 @@ const Sync = (() => {
         break;
       }
 
-      case 'metadata': {
-        // Merge strategy:
+      case 'metadata':
+      case 'hot': {
+        // Shared merge logic for both metadata (full library) and hot (rescan delta).
+        // Strategy:
         //   • name / displayName / folderId / mbReleaseMbid / coverUrl → fill-only
         //   • mbTried / auddTried → adopt if remote is true
         //   • artist / album / year → overwrite if remote was MB/AudD-enriched; else fill-only
@@ -351,6 +358,7 @@ const Sync = (() => {
         //
         // Performance: single bulk read + bulk write instead of per-song DB round-trips.
         // With 68K+ songs, per-song getMeta calls would take minutes; this takes seconds.
+        // For 'hot' (typically 5–50 songs), getAllMeta is still fast since IDB scan is indexed.
         const FILL_ONLY     = ['name', 'displayName', 'folderId', 'mbReleaseMbid', 'coverUrl'];
         const ENRICH_FIELDS = ['artist', 'album', 'year'];
 
@@ -391,7 +399,10 @@ const Sync = (() => {
           if (changed) toWrite.push(merged);
         }
 
-        if (toWrite.length > 0) await DB.bulkWriteMeta(toWrite);
+        if (toWrite.length > 0) {
+          await DB.bulkWriteMeta(toWrite);
+          if (type === 'hot') console.log(`[Sync] Applied hot delta: ${toWrite.length} songs updated`);
+        }
         break;
       }
     }
@@ -500,6 +511,36 @@ const Sync = (() => {
     console.log(`[Sync] Pushed metadata (${toSync.length} songs)`);
   }
 
+  /**
+   * Push a small delta file with only the songs from the current rescan batch.
+   * Called immediately (no debounce) from pushHot().
+   * Device B picks this up within 3 seconds and applies it without touching the
+   * full metadata.json — so album art and enrichment appear in near-real-time.
+   * @param {Object[]} metas  — full DB metadata records for just the rescanned songs
+   */
+  async function _pushHot(metas) {
+    if (!metas?.length) return;
+    const SYNC_FIELDS = [
+      'name', 'displayName', 'folderId',
+      'artist', 'album', 'year',
+      'mbTried', 'auddTried', 'mbReleaseMbid',
+    ];
+    const isExternalUrl = u => u && !u.startsWith('blob:')
+      && !u.includes('googleusercontent.com') && !u.includes('googleapis.com');
+
+    const toSync = metas.map(m => {
+      const rec = { id: m.id };
+      for (const f of SYNC_FIELDS) {
+        if (m[f] !== null && m[f] !== undefined && m[f] !== '') rec[f] = m[f];
+      }
+      if (isExternalUrl(m.thumbnailUrl)) rec.thumbnailUrl = m.thumbnailUrl;
+      if (isExternalUrl(m.coverUrl))     rec.coverUrl     = m.coverUrl;
+      return rec;
+    });
+    await _writeFile(FILENAMES.hot, toSync);
+    console.log(`[Sync] Pushed hot delta (${toSync.length} songs)`);
+  }
+
   const _pushFns = {
     favorites:  _pushFavorites,
     playlists:  _pushPlaylists,
@@ -509,6 +550,7 @@ const Sync = (() => {
     settings:   _pushSettings,
     history:    _pushHistory,
     metadata:   _pushMetadata,
+    hot:        () => Promise.resolve(), // no-op — hot is pushed only via pushHot(), not init
   };
 
   /* ── Live polling ────────────────────────────────────────── */
@@ -795,10 +837,10 @@ const Sync = (() => {
       });
 
       // Push merged state back + update manifest.
-      // Skip any type whose merge step failed — pushing empty data would overwrite
-      // the source device's records via LWW on its next poll (data-poisoning).
+      // Skip any type whose merge step failed (prevents data-poisoning via LWW).
+      // Also skip SKIP_ON_INIT types (e.g. 'hot' — transient delta, not pushed at init).
       const now = Date.now();
-      const safeToPush = Object.keys(FILENAMES).filter(t => !_failedTypes.has(t));
+      const safeToPush = Object.keys(FILENAMES).filter(t => !_failedTypes.has(t) && !SKIP_ON_INIT.has(t));
       await Promise.allSettled(safeToPush.map(t => _pushFns[t]()));
       for (const t of safeToPush) _localTs[t] = now;
       if (safeToPush.length) await _bumpManifest(safeToPush);
@@ -820,7 +862,7 @@ const Sync = (() => {
   /**
    * Debounced push: called by app after any local data change.
    * Writes data to Drive and bumps the manifest so other devices pick it up.
-   * @param {'favorites'|'playlists'|'pinned'|'recents'|'playcounts'|'settings'} type
+   * @param {'favorites'|'playlists'|'pinned'|'recents'|'playcounts'|'settings'|'metadata'} type
    */
   function push(type) {
     if (!_ready) return;
@@ -836,7 +878,32 @@ const Sync = (() => {
     }, 2000);
   }
 
+  /**
+   * Immediate (no debounce) hot-delta push for rescan results.
+   * Writes only the rescanned songs to savart_hot.json (~5 KB) so other
+   * devices see enriched metadata and album art within the next poll cycle (≤ 3 s).
+   * The full metadata push via push('metadata') continues in the background for
+   * initial-setup sync on new devices.
+   *
+   * @param {Array<{id:string}>} files — Drive file objects (or any objects with .id)
+   *   whose current DB metadata should be pushed.
+   */
+  async function pushHot(files) {
+    if (!_ready || !files?.length) return;
+    try {
+      // Fetch fresh DB records for just these songs (small count — no bulk needed)
+      const metas = await Promise.all(files.map(f => DB.getMeta(f.id || f).catch(() => null)));
+      const valid  = metas.filter(m => m?.id);
+      if (!valid.length) return;
+      await _pushHot(valid);
+      await _bumpManifest(['hot']);
+    } catch (err) {
+      if (err.isScope) return;
+      console.warn('[Sync] pushHot() failed:', err.message);
+    }
+  }
+
   /* ── Expose ─────────────────────────────────────────────── */
-  return { init, push, startLiveSync, stopLiveSync };
+  return { init, push, pushHot, startLiveSync, stopLiveSync };
 
 })();

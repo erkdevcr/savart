@@ -285,8 +285,8 @@ const App = (() => {
       _setLibTab(_currentLibTab || 'albums');
     }
 
-    // Metadata sync: re-render the active library tab so covers/names appear immediately
-    if (types.includes('metadata')) {
+    // Metadata sync (full or hot delta): re-render the active library tab so covers/names appear immediately
+    if (types.includes('metadata') || types.includes('hot')) {
       if (view === 'library' && !_libInDetail) {
         if (_currentLibTab === 'albums')  _loadAlbums();
         if (_currentLibTab === 'artists') _loadArtists();
@@ -1353,8 +1353,12 @@ const App = (() => {
     if (folderId) _folderCoverCache.delete(folderId);
     await _prefetchAndApplyFolderCovers(folderId, songs, true); // force=true
     await _patchAlbumDetailHeader(songs);
-    // Push metadata so thumbnailUrls (including Last.fm backup URLs) reach other devices
-    if (typeof Sync !== 'undefined') Sync.push('metadata');
+    if (typeof Sync !== 'undefined') {
+      // Hot push: immediate small delta (~5–50 songs, ~5 KB) so Device B sees changes within 3 s
+      Sync.pushHot(songs).catch(() => {});
+      // Full metadata push: background, for initial-setup on new devices (debounced 2 s)
+      Sync.push('metadata');
+    }
     // Run Last.fm thumb pass for this album in case the pipeline didn't produce a URL.
     // Runs in background — does not block the UI toast.
     _lfmThumbLibrary().catch(() => {});
@@ -1380,8 +1384,12 @@ const App = (() => {
       }));
       if (_browseFolderId) _folderCoverCache.delete(_browseFolderId);
       await _prefetchAndApplyFolderCovers(_browseFolderId, _browseFiles, true); // force=true
-      // Push metadata so thumbnailUrls (including Last.fm backup URLs) reach other devices
-      if (typeof Sync !== 'undefined') Sync.push('metadata');
+      if (typeof Sync !== 'undefined') {
+        // Hot push: immediate small delta so Device B sees changes within 3 s
+        Sync.pushHot(_browseFiles).catch(() => {});
+        // Full metadata push: background, for initial-setup on new devices (debounced 2 s)
+        Sync.push('metadata');
+      }
       _lfmThumbLibrary().catch(() => {});
       UI.showToast('Rescan completado');
       // Refresh Albums/Artists grid so the newly enriched folder appears there
