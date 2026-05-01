@@ -4368,4 +4368,16 @@ img { display: block; }
     min-height: 0;
     overflow-y: auto;
   }
+
+  /* Library screen: scrolling is handled by .lib-detail, not .screen itself.
+     The default .screen padding-bottom (162px) was creating a dark strip below
+     the layout because .lib-layout couldn't fill that reserved space.
+     Remove it here and transfer the clearance into the actual scroll container. */
+  #screen-library {
+    overflow: hidden;
+    padding-bottom: 0;
+  }
+  #screen-library #lib-detail-content {
+    padding-bottom: calc(var(--mini-player-h) + var(--mini-margin) * 2 + var(--bottom-nav-h) + 16px);
+  }
 }
