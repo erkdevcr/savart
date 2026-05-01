@@ -3773,7 +3773,33 @@ const App = (() => {
         continue;
       }
 
-      // Check metadata completeness
+      // ── Run full recognition pipeline (same passes as Album Rescan) ──
+      _dsLogLine(`⟳ Reconociendo: ${path}  (${page.audioFiles.length} arch.)`);
+      _dsUpdateCounters(queue.length, startMs);
+
+      // Purge orphans (remove DB records for files no longer in Drive)
+      const liveIds = page.audioFiles.map(f => f.id);
+      await DB.purgeOrphans(id, liveIds).catch(() => {});
+
+      // Clear enrichment so all passes re-run on fresh data
+      await Promise.all(page.audioFiles.map(async f => {
+        await DB.clearEnrichment(f.id).catch(() => {});
+        if (typeof Meta !== 'undefined') Meta.revoke(f.id);
+      }));
+      _folderCoverCache.delete(id);
+
+      // Run all recognition passes: ID3 → MusicBrainz → Last.fm → AudD → CAA → cover.jpg
+      try {
+        await _prefetchAndApplyFolderCovers(id, page.audioFiles, true);
+      } catch (err) {
+        _dsLogLine(`⚠ Pipeline error en "${name}": ${err?.message || err}`, 'warn');
+      }
+
+      // Pause check — pipeline can take several seconds per folder
+      while (_dsPaused && !_dsStopFlag) await new Promise(r => setTimeout(r, 200));
+      if (_dsStopFlag) break;
+
+      // Check metadata completeness (post-enrichment)
       const attnSongs = [];
       for (const f of page.audioFiles) {
         const meta = await DB.getMeta(f.id).catch(() => null);
@@ -3811,8 +3837,8 @@ const App = (() => {
 
       _dsUpdateCounters(queue.length, startMs);
 
-      if (_dsSession.scannedFolders % 8 === 0) await _dsSaveSession();
-      await new Promise(r => setTimeout(r, 60));
+      if (_dsSession.scannedFolders % 5 === 0) await _dsSaveSession();
+      await new Promise(r => setTimeout(r, 30));
     }
 
     // Finished
@@ -3833,6 +3859,10 @@ const App = (() => {
 
       // Record newly-scanned folders in Drive history
       _dsRecordScanned(newlyScanned, nameMap).catch(() => {});
+      // Sync enriched metadata across devices (background, debounced)
+      if (typeof Sync !== 'undefined') Sync.push('metadata');
+      // Run Last.fm thumb pass so library covers are fresh
+      _lfmThumbLibrary().catch(() => {});
     }
 
     await _dsSaveSession();
@@ -4163,34 +4193,12 @@ const App = (() => {
         : `<span>${_escHtml(initials)}</span>`;
 
       card.innerHTML = `
-        <div class="ds-artist-card-top">
-          <div class="ds-artist-avatar">${avatarInner}</div>
-          <span class="ds-artist-name" title="${_escHtml(name)}">${_escHtml(name)}</span>
-        </div>
+        <div class="ds-artist-avatar">${avatarInner}</div>
+        <span class="ds-artist-name" title="${_escHtml(name)}">${_escHtml(name)}</span>
         <div class="ds-artist-url-row">
-          <input class="ds-artist-url-input" type="url" placeholder="URL de imagen…" value="${_escHtml(url)}">
-          <div class="ds-artist-url-actions">
-            <button class="ds-artist-cancel-btn">Cancelar</button>
-            <button class="ds-artist-save-btn">Guardar</button>
-          </div>
+          <input class="ds-artist-url-input" type="url" placeholder="URL de foto…" value="${_escHtml(url)}">
+          <button class="ds-artist-save-btn">Guardar</button>
         </div>`;
-
-      // Open / close URL row
-      card.querySelector('.ds-artist-card-top').addEventListener('click', () => {
-        const isOpen = card.classList.contains('ds-artist-card--open');
-        // Close all others
-        grid.querySelectorAll('.ds-artist-card--open').forEach(c => c.classList.remove('ds-artist-card--open'));
-        if (!isOpen) {
-          card.classList.add('ds-artist-card--open');
-          card.querySelector('.ds-artist-url-input').focus();
-        }
-      });
-
-      // Cancel
-      card.querySelector('.ds-artist-cancel-btn').addEventListener('click', (e) => {
-        e.stopPropagation();
-        card.classList.remove('ds-artist-card--open');
-      });
 
       // Save
       card.querySelector('.ds-artist-save-btn').addEventListener('click', async (e) => {
@@ -4213,10 +4221,9 @@ const App = (() => {
           const avatar = card.querySelector('.ds-artist-avatar');
           if (avatar) {
             avatar.innerHTML = newUrl
-              ? `<img src="${_escHtml(newUrl)}" alt="" onerror="this.style.display='none'"><span>${_escHtml(initials)}</span>`
+              ? `<img src="${_escHtml(newUrl)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display=''"><span style="display:none">${_escHtml(initials)}</span>`
               : `<span>${_escHtml(initials)}</span>`;
           }
-          card.classList.remove('ds-artist-card--open');
 
           // Recount by checking which cards have a visible img src
           const allCards  = [...grid.querySelectorAll('.ds-artist-card')];

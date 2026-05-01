@@ -4989,29 +4989,25 @@ img { display: block; }
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   grid-auto-rows: min-content;
-  gap: 9px;
+  gap: 12px;
   align-content: start;
   min-height: 0;
 }
 .ds-artist-card {
   background: var(--bg-card);
-  border-radius: 10px;
-  overflow: hidden;
-  cursor: pointer;
-  transition: background 0.14s;
-  border: 1px solid transparent;
-}
-.ds-artist-card:hover { background: var(--bg-hover); }
-.ds-artist-card.ds-artist-card--open { border-color: var(--accent-soft); cursor: default; }
-.ds-artist-card-top {
+  border-radius: 14px;
+  border: 1px solid var(--border);
   display: flex;
+  flex-direction: column;
   align-items: center;
+  padding: 18px 12px 14px;
   gap: 8px;
-  padding: 9px;
+  transition: background 0.14s, border-color 0.14s;
 }
+.ds-artist-card:hover { background: var(--bg-hover); border-color: var(--accent-soft); }
 .ds-artist-avatar {
-  width: 38px;
-  height: 38px;
+  width: 84px;
+  height: 84px;
   border-radius: 50%;
   background: var(--bg-elevated);
   flex-shrink: 0;
@@ -5019,10 +5015,11 @@ img { display: block; }
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
+  font-size: 28px;
   font-weight: 700;
   color: var(--text-muted);
-  border: 1px solid var(--border);
+  border: 2px solid var(--border);
+  letter-spacing: -1px;
 }
 .ds-artist-avatar img {
   width: 100%;
@@ -5032,27 +5029,30 @@ img { display: block; }
 }
 .ds-artist-name {
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-primary);
+  text-align: center;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex: 1;
-  min-width: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  width: 100%;
+  line-height: 1.35;
+  min-height: 2em;
 }
 .ds-artist-url-row {
-  display: none;
-  padding: 0 9px 9px;
+  display: flex;
+  width: 100%;
   flex-direction: column;
-  gap: 6px;
+  gap: 5px;
+  margin-top: 2px;
 }
-.ds-artist-card.ds-artist-card--open .ds-artist-url-row { display: flex; }
 .ds-artist-url-input {
   width: 100%;
   box-sizing: border-box;
   background: var(--bg-elevated);
   border: 1px solid var(--border);
-  border-radius: 5px;
+  border-radius: 6px;
   padding: 5px 8px;
   font-size: 11px;
   color: var(--text-primary);
@@ -5060,28 +5060,19 @@ img { display: block; }
   transition: border-color 0.12s;
 }
 .ds-artist-url-input:focus { border-color: var(--accent); }
-.ds-artist-url-actions { display: flex; gap: 5px; justify-content: flex-end; }
 .ds-artist-save-btn {
+  width: 100%;
   font-size: 11px;
-  padding: 4px 11px;
+  padding: 5px 0;
   background: var(--accent);
   border: none;
-  border-radius: 5px;
+  border-radius: 6px;
   cursor: pointer;
   color: #fff;
-  font-weight: 500;
+  font-weight: 600;
+  transition: opacity 0.12s;
 }
-.ds-artist-save-btn:hover { opacity: 0.85; }
-.ds-artist-cancel-btn {
-  font-size: 11px;
-  padding: 4px 9px;
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  cursor: pointer;
-  color: var(--text-secondary);
-}
-.ds-artist-cancel-btn:hover { background: var(--bg-hover); }
+.ds-artist-save-btn:hover { opacity: 0.82; }
 
 /* ── Drive folder browser modal ──────────────────────────────── */
 .ds-modal {
@@ -5240,7 +5231,9 @@ img { display: block; }
   .ds-counter-lbl { font-size: 8px; }
   .ds-controls-bar { padding: 6px 10px; gap: 6px; }
   .ds-ctrl-btn { padding: 5px 8px; font-size: 11px; }
-  .ds-artists-grid { grid-template-columns: repeat(2, 1fr); padding: 10px; gap: 8px; }
+  .ds-artists-grid { grid-template-columns: repeat(2, 1fr); padding: 10px; gap: 10px; }
+  .ds-artist-avatar { width: 64px; height: 64px; font-size: 22px; }
+  .ds-artist-card { padding: 14px 10px 12px; }
   .ds-table th, .ds-table td { padding: 2px 1px; }
   .ds-cell-input { font-size: 10px; padding: 2px 4px; }
   .ds-table-filename { font-size: 10px; }
