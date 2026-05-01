@@ -3083,6 +3083,85 @@ const App = (() => {
         if (_currentLibTab === 'artists') _loadArtists();
       }
     }
+
+    // After MB enrichment, fetch Last.fm thumbnails for albums still without a cover URL.
+    // This ensures album cards show images even for albums MB didn't find,
+    // and provides syncable external URLs so other devices can display the covers too.
+    _lfmThumbLibrary().catch(() => {});
+  }
+
+  /**
+   * Background Last.fm thumbnail enrichment for the Library.
+   * Runs after _mbEnrichLibrary. For each album folder that has artist+album
+   * metadata but no thumbnailUrl, fetches a cover URL from Last.fm and stores
+   * it so the album grid can show the image without the user entering each album.
+   * Also triggers a metadata sync push so the URLs reach other devices.
+   *
+   * De-duplication:
+   *   • In-memory: Lastfm module caches by "artist::album" → 1 request per unique album
+   *   • Cross-session: once thumbnailUrl is in DB, song is excluded from candidates
+   */
+  async function _lfmThumbLibrary() {
+    if (typeof Lastfm === 'undefined') return;
+
+    const all = await DB.getAllMeta().catch(() => []);
+
+    // Build one entry per folder: pick the most-common artist+album for the lookup.
+    // Skip folders where at least one song already has a thumbnailUrl.
+    const folderData = new Map(); // folderId → { artistCounts, albumCounts, songIds }
+    for (const m of all) {
+      if (!m.folderId || !m.artist || !m.album) continue;
+      if (!folderData.has(m.folderId)) {
+        folderData.set(m.folderId, { artistCounts: new Map(), albumCounts: new Map(), songIds: [], hasUrl: false });
+      }
+      const f = folderData.get(m.folderId);
+      if (m.thumbnailUrl) { f.hasUrl = true; continue; } // folder already covered
+      f.artistCounts.set(m.artist, (f.artistCounts.get(m.artist) || 0) + 1);
+      f.albumCounts.set(m.album,   (f.albumCounts.get(m.album)   || 0) + 1);
+      f.songIds.push(m.id);
+    }
+
+    const _top = map => map.size > 0
+      ? [...map.entries()].sort((a, b) => b[1] - a[1])[0][0]
+      : null;
+
+    const candidates = [];
+    for (const [folderId, f] of folderData) {
+      if (f.hasUrl || f.songIds.length === 0) continue;
+      const artist = _top(f.artistCounts);
+      const album  = _top(f.albumCounts);
+      if (artist && album) candidates.push({ folderId, artist, album, songIds: f.songIds });
+    }
+
+    if (candidates.length === 0) return;
+    console.log(`[LastFm] Thumbnail enrichment: ${candidates.length} albums to try…`);
+
+    let fetched = 0;
+    for (const { folderId, artist, album, songIds } of candidates) {
+      if (!Auth.getValidToken()) break;
+      try {
+        const url = await Lastfm.fetchCover(artist, album);
+        if (!url) continue;
+        // Store thumbnailUrl for every song in the folder that doesn't have one yet
+        await Promise.all(songIds.map(id =>
+          DB.setMeta(id, { thumbnailUrl: url }).catch(() => {})
+        ));
+        fetched++;
+      } catch (_) {}
+      // Small yield between albums — keeps UI responsive and is polite to the API
+      await new Promise(r => setTimeout(r, 200));
+    }
+
+    if (fetched > 0) {
+      console.log(`[LastFm] Thumbnail enrichment: covers found for ${fetched} albums.`);
+      // Push thumbnailUrls to Drive so other devices get them
+      if (typeof Sync !== 'undefined') Sync.push('metadata');
+      // Refresh the album/artist grid with the new covers
+      if (!_libInDetail) {
+        if (_currentLibTab === 'albums')  _loadAlbums();
+        if (_currentLibTab === 'artists') _loadArtists();
+      }
+    }
   }
 
   /**
