@@ -345,48 +345,53 @@ const Sync = (() => {
       case 'metadata': {
         // Merge strategy:
         //   • name / displayName / folderId / mbReleaseMbid / coverUrl → fill-only
-        //   • mbTried / auddTried → adopt if remote is true (skip redundant enrichment)
+        //   • mbTried / auddTried → adopt if remote is true
         //   • artist / album / year → overwrite if remote was MB/AudD-enriched; else fill-only
-        //   • thumbnailUrl → ALWAYS overwrite when remote has a value.
-        //       It is always an external URL (CAA/Last.fm) — never folder-inferred.
-        //       A rescan on Device A may produce a better/different URL; Device B must
-        //       adopt it even if it already stored an older URL from a previous sync.
+        //   • thumbnailUrl → ALWAYS overwrite (always external URL, never folder-inferred)
+        //
+        // Performance: single bulk read + bulk write instead of per-song DB round-trips.
+        // With 68K+ songs, per-song getMeta calls would take minutes; this takes seconds.
         const FILL_ONLY     = ['name', 'displayName', 'folderId', 'mbReleaseMbid', 'coverUrl'];
         const ENRICH_FIELDS = ['artist', 'album', 'year'];
+
+        const allLocal = await DB.getAllMeta();
+        const localMap = new Map(allLocal.map(m => [m.id, m]));
+        const toWrite  = [];
+
         for (const item of (data || [])) {
           if (!item?.id) continue;
-          const ex = await DB.getMeta(item.id);
-          const patch = {};
+          const ex     = localMap.get(item.id) || {};
+          const merged = { ...ex };   // start with full local record
 
-          // Enrichment flags
-          if (item.mbTried)   patch.mbTried   = true;
-          if (item.auddTried) patch.auddTried = true;
+          if (item.mbTried)   merged.mbTried   = true;
+          if (item.auddTried) merged.auddTried = true;
 
-          // Fill-only fields
           for (const f of FILL_ONLY) {
-            if (item[f] === null || item[f] === undefined || item[f] === '') continue;
-            if (!ex?.[f]) patch[f] = item[f];
+            if (!item[f]) continue;
+            if (!merged[f]) merged[f] = item[f];
           }
 
-          // Text enrichment: overwrite if remote ran MB or AudD; else fill-only.
           const remoteIsEnriched = item.mbTried || item.auddTried;
           for (const f of ENRICH_FIELDS) {
-            if (item[f] === null || item[f] === undefined || item[f] === '') continue;
-            if (remoteIsEnriched || !ex?.[f]) patch[f] = item[f];
+            if (!item[f]) continue;
+            if (remoteIsEnriched || !merged[f]) merged[f] = item[f];
           }
 
           // thumbnailUrl — always overwrite when remote has a value.
-          // Covers the case where Device A rescanned and obtained a new/better cover URL.
-          if (item.thumbnailUrl) patch.thumbnailUrl = item.thumbnailUrl;
+          if (item.thumbnailUrl) merged.thumbnailUrl = item.thumbnailUrl;
 
-          // If remote has mbReleaseMbid and still no cover URL, derive CAA URL directly.
-          const mbid = patch.mbReleaseMbid || ex?.mbReleaseMbid;
-          if (mbid && !patch.thumbnailUrl && !ex?.thumbnailUrl) {
-            patch.thumbnailUrl = `https://coverartarchive.org/release/${mbid}/front-250`;
+          // Derive CAA URL if mbReleaseMbid present and still no cover URL.
+          if (merged.mbReleaseMbid && !merged.thumbnailUrl) {
+            merged.thumbnailUrl = `https://coverartarchive.org/release/${merged.mbReleaseMbid}/front-250`;
           }
 
-          if (Object.keys(patch).length > 0) await DB.setMeta(item.id, patch);
+          // Only queue if something actually changed vs local record
+          const changed = Object.keys(merged).some(k => merged[k] !== ex[k])
+                       || Object.keys(ex).some(k => merged[k] !== ex[k]);
+          if (changed) toWrite.push(merged);
         }
+
+        if (toWrite.length > 0) await DB.bulkWriteMeta(toWrite);
         break;
       }
     }
@@ -747,41 +752,46 @@ const Sync = (() => {
         if (!Array.isArray(remoteMetadata) || remoteMetadata.length === 0) return;
         const FILL_ONLY     = ['name', 'displayName', 'folderId', 'mbReleaseMbid', 'coverUrl'];
         const ENRICH_FIELDS = ['artist', 'album', 'year'];
-        let applied = 0;
+
+        // Single bulk read — avoids per-song getMeta overhead with large libraries
+        const allLocal = await DB.getAllMeta();
+        const localMap = new Map(allLocal.map(m => [m.id, m]));
+        const toWrite  = [];
+
         for (const item of remoteMetadata) {
           if (!item?.id) continue;
-          const ex = await DB.getMeta(item.id);
-          const patch = {};
+          const ex     = localMap.get(item.id) || {};
+          const merged = { ...ex };
 
-          if (item.mbTried)   patch.mbTried   = true;
-          if (item.auddTried) patch.auddTried = true;
+          if (item.mbTried)   merged.mbTried   = true;
+          if (item.auddTried) merged.auddTried = true;
 
           for (const f of FILL_ONLY) {
-            if (item[f] === null || item[f] === undefined || item[f] === '') continue;
-            if (!ex?.[f]) patch[f] = item[f];
+            if (!item[f]) continue;
+            if (!merged[f]) merged[f] = item[f];
           }
 
           const remoteIsEnriched = item.mbTried || item.auddTried;
           for (const f of ENRICH_FIELDS) {
-            if (item[f] === null || item[f] === undefined || item[f] === '') continue;
-            if (remoteIsEnriched || !ex?.[f]) patch[f] = item[f];
+            if (!item[f]) continue;
+            if (remoteIsEnriched || !merged[f]) merged[f] = item[f];
           }
 
-          // thumbnailUrl — always overwrite when remote has a value (same logic as live poll).
-          if (item.thumbnailUrl) patch.thumbnailUrl = item.thumbnailUrl;
+          if (item.thumbnailUrl) merged.thumbnailUrl = item.thumbnailUrl;
 
-          // Derive stable CAA cover URL from mbReleaseMbid if no cover yet
-          const mbid = patch.mbReleaseMbid || ex?.mbReleaseMbid;
-          if (mbid && !patch.thumbnailUrl && !ex?.thumbnailUrl) {
-            patch.thumbnailUrl = `https://coverartarchive.org/release/${mbid}/front-250`;
+          if (merged.mbReleaseMbid && !merged.thumbnailUrl) {
+            merged.thumbnailUrl = `https://coverartarchive.org/release/${merged.mbReleaseMbid}/front-250`;
           }
 
-          if (Object.keys(patch).length > 0) {
-            await DB.setMeta(item.id, patch);
-            applied++;
-          }
+          const changed = Object.keys(merged).some(k => merged[k] !== ex[k])
+                       || Object.keys(ex).some(k => merged[k] !== ex[k]);
+          if (changed) toWrite.push(merged);
         }
-        if (applied) console.log(`[Sync] Merged metadata: ${applied} songs updated from remote`);
+
+        if (toWrite.length > 0) {
+          await DB.bulkWriteMeta(toWrite);
+          console.log(`[Sync] Merged metadata: ${toWrite.length} songs updated from remote`);
+        }
       });
 
       // Push merged state back + update manifest.

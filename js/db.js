@@ -403,6 +403,27 @@ const DB = (() => {
   }
 
   /**
+   * Write pre-merged complete records in a single transaction.
+   * Unlike bulkPutMeta, this does NOT strip nulls or add defaults — the caller
+   * is responsible for providing fully-formed records (typically: spread of existing
+   * record + applied patch). Used by the sync metadata merge for performance.
+   * @param {Object[]} records — complete records, each must have an `id` field
+   */
+  async function bulkWriteMeta(records) {
+    if (!_db || !records?.length) return;
+    await new Promise((resolve, reject) => {
+      const tx    = _db.transaction('metadata', 'readwrite');
+      const store = tx.objectStore('metadata');
+      tx.oncomplete = resolve;
+      tx.onerror    = () => reject(tx.error);
+      tx.onabort    = () => reject(tx.error);
+      for (const rec of records) {
+        if (rec?.id) store.put(rec);
+      }
+    });
+  }
+
+  /**
    * Get recent items, most recent first.
    * @param {number} limit
    * @returns {Promise<Object[]>}
@@ -761,6 +782,7 @@ const DB = (() => {
     // Bulk writes (sync)
     bulkPutRecents,
     bulkPutMeta,
+    bulkWriteMeta,
     // Recents management
     removeRecent,
     clearRecents,
