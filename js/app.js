@@ -3370,6 +3370,8 @@ const App = (() => {
       if (!existing?.name)        patch.name        = file.name;
       if (!existing?.displayName) patch.displayName = file.displayName || cleanTitle(file.name);
       if (!existing?.folderId)    patch.folderId    = file.parents?.[0] || null;
+      // Persist mimeType so format badge works without re-scanning Drive
+      if (!existing?.mimeType && file.mimeType) patch.mimeType = file.mimeType;
 
       if (Object.keys(patch).length > 0) {
         await DB.setMeta(file.id, { id: file.id, ...patch });
@@ -3555,6 +3557,37 @@ const App = (() => {
    * Aggregate all metadata into albums map.
    * Groups by album name (+ artist), counts songs, picks a cover.
    */
+  /**
+   * Maps a MIME type (or filename) to a short format badge label.
+   * Falls back to uppercase extension if MIME is unknown.
+   * @param {string} mimeType
+   * @param {string} [filename]
+   * @returns {string|null}
+   */
+  function _formatLabel(mimeType, filename) {
+    const MIME_MAP = {
+      'audio/mpeg':    'MP3', 'audio/mp3':       'MP3',
+      'audio/flac':    'FLAC','audio/x-flac':    'FLAC',
+      'audio/ogg':     'OGG', 'audio/vorbis':    'OGG',
+      'audio/opus':    'OPUS',
+      'audio/aac':     'AAC',
+      'audio/mp4':     'AAC', 'audio/m4a':       'AAC', 'audio/x-m4a': 'AAC',
+      'audio/wav':     'WAV', 'audio/x-wav':     'WAV',
+      'audio/x-ms-wma':'WMA', 'audio/wma':       'WMA',
+    };
+    if (mimeType) {
+      const base = mimeType.split(';')[0].trim().toLowerCase();
+      if (MIME_MAP[base]) return MIME_MAP[base];
+    }
+    // Fallback: derive from filename extension
+    if (filename) {
+      const ext = filename.split('.').pop().toLowerCase();
+      const EXT_MAP = { mp3:'MP3', flac:'FLAC', ogg:'OGG', opus:'OPUS', aac:'AAC', m4a:'AAC', wav:'WAV', wma:'WMA' };
+      if (EXT_MAP[ext]) return EXT_MAP[ext];
+    }
+    return null;
+  }
+
   async function _loadAlbums() {
     if (_libInDetail) return; // don't replace a drill-down view
     try {
@@ -3579,6 +3612,7 @@ const App = (() => {
             albumCounts:  new Map(),
             artistCounts: new Map(),
             yearCounts:   new Map(),
+            formatCounts: new Map(),
             coverUrl:     null,  // first thumbnailUrl found (external, synced — preferred)
             blobId:       null,  // first song id with coverBlob (deferred — only used as fallback)
             blobData:     null,  // the coverBlob itself
@@ -3590,6 +3624,9 @@ const App = (() => {
         f.albumCounts.set(album,  (f.albumCounts.get(album)  || 0) + 1);
         if (artist) f.artistCounts.set(artist, (f.artistCounts.get(artist) || 0) + 1);
         if (m.year) f.yearCounts.set(m.year,   (f.yearCounts.get(m.year)   || 0) + 1);
+        // Track dominant audio format (mimeType → short label)
+        const fmt = _formatLabel(m.mimeType, m.name);
+        if (fmt) f.formatCounts.set(fmt, (f.formatCounts.get(fmt) || 0) + 1);
         // Cover priority: thumbnailUrl (external, synced) > coverBlob (embedded, local).
         // thumbnailUrl comes from MB/CAA/Last.fm and is authoritative after rescan.
         // We must NOT stop at the first coverBlob — a later song may have thumbnailUrl.
@@ -3607,13 +3644,14 @@ const App = (() => {
           const name      = _top(f.albumCounts);
           const artist    = _top(f.artistCounts) || '';
           const year      = _top(f.yearCounts);
+          const format    = _top(f.formatCounts) || null;
           const songCount = Math.max(f.taggedCount, folderSongCount.get(f.folderId) || 0);
           // Use external URL if available; only fall back to blob if nothing else
           const coverUrl  = f.coverUrl
             || (f.blobId && f.blobData && typeof Meta !== 'undefined'
                 ? Meta.injectCover(f.blobId, f.blobData)
                 : null);
-          return { name, artist, songCount, coverUrl, year, folderId: f.folderId };
+          return { name, artist, songCount, coverUrl, year, format, folderId: f.folderId };
         })
         .sort((a, b) => a.name.localeCompare(b.name));
 
@@ -3648,6 +3686,7 @@ const App = (() => {
             folderId:     m.folderId,
             albumCounts:  new Map(),
             yearCounts:   new Map(),
+            formatCounts: new Map(),
             coverUrl:     null,
             hasBlobCover: false,
             taggedCount:  0,
@@ -3657,6 +3696,8 @@ const App = (() => {
         f.taggedCount++;
         f.albumCounts.set(album, (f.albumCounts.get(album) || 0) + 1);
         if (m.year) f.yearCounts.set(m.year, (f.yearCounts.get(m.year) || 0) + 1);
+        const fmt = _formatLabel(m.mimeType, m.name);
+        if (fmt) f.formatCounts.set(fmt, (f.formatCounts.get(fmt) || 0) + 1);
         if (!f.hasBlobCover) {
           if (m.coverBlob && typeof Meta !== 'undefined') {
             const url = Meta.injectCover(m.id, m.coverBlob);
@@ -3675,8 +3716,9 @@ const App = (() => {
         .map(f => {
           const name      = _top(f.albumCounts);
           const year      = _top(f.yearCounts);
+          const format    = _top(f.formatCounts) || null;
           const songCount = Math.max(f.taggedCount, folderSongCount.get(f.folderId) || 0);
-          return { name, artist: artist.name, songCount, coverUrl: f.coverUrl, year, folderId: f.folderId };
+          return { name, artist: artist.name, songCount, coverUrl: f.coverUrl, year, format, folderId: f.folderId };
         })
         .sort((a, b) => a.name.localeCompare(b.name));
 

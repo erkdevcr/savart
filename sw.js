@@ -9,7 +9,7 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '1.6.15';
+const APP_VERSION  = '1.6.17';
 const CACHE_NAME   = `savart-shell-v${APP_VERSION}`;
 
 /* Base path — auto-detected from sw.js location.
@@ -77,6 +77,9 @@ self.addEventListener('activate', (event) => {
 /* ── Fetch ───────────────────────────────────────────────── */
 
 self.addEventListener('fetch', (event) => {
+  // Cache API only supports GET — let all other methods go straight to network
+  if (event.request.method !== 'GET') return;
+
   const url = new URL(event.request.url);
 
   // Let Drive API and GIS requests go through to network always
