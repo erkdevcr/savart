@@ -1397,6 +1397,8 @@ img { display: block; }
   overflow-y: auto;
 }
 
+/* Desktop: 80px clears the desktop right-panel controls.
+   Mobile override below gives more room for mini-player + bottom-nav. */
 #lib-detail-content { padding-bottom: 80px; }
 
 .lib-detail-header {
@@ -1606,13 +1608,6 @@ img { display: block; }
   grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
   gap: 14px;
   padding: 14px;
-}
-
-/* Skip layout/paint for off-screen album cards — big scroll perf win on mobile.
-   contain-intrinsic-size approximates actual card height (art 130px + text ~60px). */
-.lib-album-grid .home-card {
-  content-visibility: auto;
-  contain-intrinsic-size: 0 190px;
 }
 
 /* ── Library: new playlist button row ───────────────────── */
@@ -4369,12 +4364,13 @@ img { display: block; }
     overflow-y: auto;
   }
 
-  /* Library screen: scrolling is handled by .lib-detail, not .screen itself.
-     The default .screen padding-bottom (162px) was creating a dark strip below
-     the layout because .lib-layout couldn't fill that reserved space.
-     Remove it here and transfer the clearance into the actual scroll container. */
+  /* On mobile the real scroll container is .lib-detail, not #screen-library.
+     The .screen padding-bottom (162px) was creating a dark empty strip between
+     the content area and the floating mini-player. Zero it out here so
+     .lib-layout fills the full height of the screen.
+     Content clearance (so last card isn't hidden behind the mini-player) is
+     handled by #lib-detail-content's own padding-bottom below. */
   #screen-library {
-    overflow: hidden;
     padding-bottom: 0;
   }
   #screen-library #lib-detail-content {

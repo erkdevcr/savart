@@ -2286,32 +2286,17 @@ const UI = (() => {
 
     const grid = document.createElement('div');
     grid.className = 'lib-album-grid';
-    container.appendChild(grid); // append empty grid first so it's in DOM immediately
 
-    // Render in chunks of 40 to keep the main thread free on mobile.
-    // First chunk paints instantly; subsequent chunks load progressively via rAF.
-    const CHUNK = 40;
-    let i = 0;
-
-    function renderChunk() {
-      const end  = Math.min(i + CHUNK, albums.length);
-      const frag = document.createDocumentFragment();
-      for (; i < end; i++) {
-        const album = albums[i];
-        const card  = _buildAlbumCard(album);
-        card.dataset.searchKey = (album.name + ' ' + (album.artist || '')).toLowerCase();
-        frag.appendChild(card);
-      }
-      grid.appendChild(frag);
-
-      if (i < albums.length) {
-        requestAnimationFrame(renderChunk);
-      } else {
-        onDone?.(); // all cards rendered — safe to apply search filter
-      }
+    // Use a single DocumentFragment to minimise reflows — one DOM write for all cards
+    const frag = document.createDocumentFragment();
+    for (const album of albums) {
+      const card = _buildAlbumCard(album);
+      card.dataset.searchKey = (album.name + ' ' + (album.artist || '')).toLowerCase();
+      frag.appendChild(card);
     }
-
-    renderChunk();
+    grid.appendChild(frag);
+    container.appendChild(grid);
+    onDone?.();
   }
 
   /** Build a single home-card-style album card. */
