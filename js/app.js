@@ -266,8 +266,6 @@ const App = (() => {
       if (view === 'library') _setLibTab(_currentLibTab || 'albums');
       // Start live 3-second polling (Last-Write-Wins)
       Sync.startLiveSync(_onSyncDataChanged);
-      // One-time migration: upload appProperties for already-enriched songs
-      _migrateAppProperties().catch(() => {});
     }).catch(() => {});
   }
 
@@ -312,58 +310,6 @@ const App = (() => {
         }).catch(() => {});
       }
     }
-  }
-
-  /**
-   * One-time migration: write appProperties (s_cover, s_artist, s_album, s_year)
-   * to Drive for every song already enriched in the local DB.
-   *
-   * Runs once per install — controlled by 'appPropsMigrated' in DB state.
-   * Rate-limited to ~4 requests/sec to stay within Drive API quota.
-   * After this migration, any device that browses a folder gets covers instantly
-   * from Pass 0 (appProperties) without waiting for a metadata sync poll.
-   */
-  async function _migrateAppProperties() {
-    const MIGRATION_KEY = 'appPropsMigrated_v1';
-    const done = await DB.getState(MIGRATION_KEY).catch(() => null);
-    if (done) return;
-
-    const all = await DB.getAllMeta().catch(() => []);
-    const toMigrate = all.filter(m =>
-      m.mbReleaseMbid || m.artist || m.album || m.year
-    );
-    if (!toMigrate.length) {
-      await DB.setState(MIGRATION_KEY, true).catch(() => {});
-      return;
-    }
-
-    console.log(`[App] Migrating appProperties for ${toMigrate.length} songs…`);
-    let count = 0;
-    for (const m of toMigrate) {
-      try {
-        const ap = {};
-        if (m.mbReleaseMbid) ap.s_cover  = `https://coverartarchive.org/release/${m.mbReleaseMbid}/front-250`;
-        else if (m.thumbnailUrl && !m.thumbnailUrl.startsWith('blob:')
-              && !m.thumbnailUrl.includes('googleusercontent.com')
-              && !m.thumbnailUrl.includes('googleapis.com')) {
-          ap.s_cover = m.thumbnailUrl;
-        }
-        if (m.artist) ap.s_artist = m.artist;
-        if (m.album)  ap.s_album  = m.album;
-        if (m.year)   ap.s_year   = m.year;
-        if (Object.keys(ap).length) {
-          await Drive.setAppProperties(m.id, ap);
-          count++;
-        }
-      } catch (_) { /* non-fatal — skip individual failures */ }
-      // Rate limit: ~4 req/sec
-      await new Promise(r => setTimeout(r, 250));
-    }
-
-    await DB.setState(MIGRATION_KEY, true).catch(() => {});
-    // Also push the full metadata JSON so device B picks it up via poll
-    if (typeof Sync !== 'undefined') Sync.push('metadata');
-    console.log(`[App] appProperties migration done: ${count} songs updated ✓`);
   }
 
   function _restoreUserInfo() {
@@ -796,12 +742,6 @@ const App = (() => {
             if (result.album)    update.album        = result.album;
             if (result.coverUrl) update.thumbnailUrl = result.coverUrl;
             DB.setMeta(item.id, update).catch(() => {});
-            const apUpdate = {};
-            if (result.coverUrl) apUpdate.s_cover  = result.coverUrl;
-            if (result.title)    apUpdate.s_title  = result.title;
-            if (result.artist)   apUpdate.s_artist = result.artist;
-            if (result.album)    apUpdate.s_album  = result.album;
-            if (Object.keys(apUpdate).length > 0) Drive.setAppProperties(item.id, apUpdate).catch(() => {});
           }
         } catch (_) { /* network / API error — non-fatal */ }
       }
@@ -830,7 +770,6 @@ const App = (() => {
         if (lfmUrl) {
           meta.coverUrl = lfmUrl;
           DB.setMeta(item.id, { thumbnailUrl: lfmUrl }).catch(() => {});
-          Drive.setAppProperties(item.id, { s_cover: lfmUrl }).catch(() => {});
         }
       }
 
@@ -841,7 +780,6 @@ const App = (() => {
         if (lfmUrl) {
           meta.coverUrl = lfmUrl;
           DB.setMeta(item.id, { thumbnailUrl: lfmUrl }).catch(() => {});
-          Drive.setAppProperties(item.id, { s_cover: lfmUrl }).catch(() => {});
         }
       }
 
@@ -1085,14 +1023,6 @@ const App = (() => {
               _updateRowThumbnail(file.id, patch.thumbnailUrl);
             }
             await DB.setMeta(file.id, patch);
-            // Mirror to Drive appProperties — any device browsing this folder gets the cover
-            // instantly from Pass 0 without waiting for a metadata sync poll.
-            const apMB = {};
-            if (patch.artist)      apMB.s_artist = patch.artist;
-            if (patch.album)       apMB.s_album  = patch.album;
-            if (patch.year)        apMB.s_year   = patch.year;
-            if (patch.thumbnailUrl) apMB.s_cover = patch.thumbnailUrl;
-            if (Object.keys(apMB).length) Drive.setAppProperties(file.id, apMB).catch(() => {});
             if (patch.artist || patch.album || patch.year) {
               _patchMetaText(file.id, {
                 title:  null,
@@ -1226,7 +1156,6 @@ const App = (() => {
         if (!url) return;
         _updateRowThumbnail(file.id, url);
         DB.setMeta(file.id, { thumbnailUrl: url }).catch(() => {});
-        Drive.setAppProperties(file.id, { s_cover: url }).catch(() => {});
       } catch (_) { /* non-fatal */ }
     }));
 
@@ -1256,12 +1185,6 @@ const App = (() => {
         if (result.album)    update.album        = result.album;
         if (result.coverUrl) update.thumbnailUrl = result.coverUrl;
         DB.setMeta(file.id, update).catch(() => {});
-        const ap = {};
-        if (result.coverUrl) ap.s_cover  = result.coverUrl;
-        if (result.title)    ap.s_title  = result.title;
-        if (result.artist)   ap.s_artist = result.artist;
-        if (result.album)    ap.s_album  = result.album;
-        if (Object.keys(ap).length > 0) Drive.setAppProperties(file.id, ap).catch(() => {});
         console.log(`[Audd] ✓ ${result.artist} — ${result.title}`);
       } catch (_) { /* non-fatal */ }
     }
