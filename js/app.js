@@ -2983,7 +2983,8 @@ const App = (() => {
 
   /* ── Library background scanner ─────────────────────────── */
 
-  let _libScanDone = false; // run once per session
+  let _libScanDone  = false; // run once per session
+  let _lastLibScanAt = null; // ISO timestamp of the last completed BFS scan
 
   /**
    * BFS scan from ROOT_FOLDER_ID.
@@ -3035,6 +3036,7 @@ const App = (() => {
       await new Promise(r => setTimeout(r, 60));
     }
 
+    _lastLibScanAt = new Date().toISOString();
     console.log(`[LibScan] Done. Patched metadata for ${patched} files.`);
 
     // Refresh the current library tab so newly inferred data shows up.
@@ -3119,8 +3121,9 @@ const App = (() => {
       const pruned = await DB.purgeAllOrphans([...liveIds]).catch(() => 0);
       if (pruned > 0) console.log(`[LibRefresh] Purged ${pruned} orphan record(s) from DB`);
 
-      // Reset session guard so next library open triggers a fresh background scan
-      _libScanDone = false;
+      // Mark scan timestamp and reset guard
+      _lastLibScanAt = new Date().toISOString();
+      _libScanDone   = false;
 
       // Push updated metadata to sync channel
       if (typeof Sync !== 'undefined') Sync.push('metadata');
@@ -4892,6 +4895,13 @@ const App = (() => {
     document.querySelectorAll('[data-nav="settings"]').forEach(el => {
       el.addEventListener('click', _refreshCacheBar);
     });
+
+    // ── Detect Drive changes when app returns to foreground ───
+    // On visibilitychange (tab/app comes back from background), do a single
+    // lightweight Drive call to check if ROOT_FOLDER modifiedTime has advanced
+    // past our last scan. If yes, reset _libScanDone so the next time the user
+    // opens Biblioteca the BFS scan runs automatically and picks up new folders.
+    document.addEventListener('visibilitychange', _onAppForeground);
   }
 
   /* ── Expose ─────────────────────────────────────────────── */
