@@ -4465,6 +4465,34 @@ const App = (() => {
 
   /* ── Event binding ───────────────────────────────────────── */
 
+  /**
+   * Called every time the app becomes visible again (tab focus, phone unlock, etc).
+   * Fires a single Drive API call to check the ROOT folder's modifiedTime.
+   * If Drive reports a change more recent than our last scan, we reset _libScanDone
+   * so the background scan triggers automatically next time Biblioteca opens.
+   * The user sees new/removed content within seconds of opening the library tab —
+   * no manual refresh needed, and no expensive full scan runs eagerly on wake.
+   */
+  async function _onAppForeground() {
+    if (document.hidden) return;            // fired on hide — ignore
+    if (!Auth.getValidToken()) return;      // not signed in
+
+    try {
+      const modTime = await Drive.getFolderModifiedTime(CONFIG.ROOT_FOLDER_ID);
+      if (!modTime) return;
+
+      const driveMs  = new Date(modTime).getTime();
+      const scanMs   = _lastLibScanAt ? new Date(_lastLibScanAt).getTime() : 0;
+
+      if (driveMs > scanMs) {
+        console.log('[App] Drive root changed since last scan — will rescan on next library open');
+        _libScanDone = false; // background scan will run when user opens Biblioteca
+      }
+    } catch {
+      // Network error or auth issue — silently ignore, don't disrupt user
+    }
+  }
+
   function _bindEvents() {
     // Login button
     document.getElementById('btn-login')?.addEventListener('click', () => {
