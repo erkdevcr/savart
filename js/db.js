@@ -746,6 +746,53 @@ const DB = (() => {
     return _promisify(store.put(existing));
   }
 
+  /**
+   * Global orphan purge: removes ALL metadata records whose IDs are not in liveIds.
+   * Use after a full Drive BFS scan to reconcile the entire DB against Drive.
+   *
+   * @param {string[]} liveIds  All file IDs currently found in Drive.
+   * @returns {Promise<number>} Number of orphan records deleted.
+   */
+  async function purgeAllOrphans(liveIds) {
+    if (!Array.isArray(liveIds)) return 0;
+    const liveSet = new Set(liveIds);
+    const store   = _tx('metadata', 'readwrite');
+    const all     = await _promisify(store.getAll());
+    let removed   = 0;
+    for (const rec of all) {
+      if (rec.id && !liveSet.has(rec.id)) {
+        await _promisify(store.delete(rec.id));
+        removed++;
+      }
+    }
+    return removed;
+  }
+
+  /**
+   * Remove metadata records for a folder whose file IDs are no longer in Drive.
+   * Uses the folderId index for efficiency — only scans records for that folder.
+   *
+   * @param {string}   folderId  The Drive folder ID that was rescanned.
+   * @param {string[]} liveIds   Array of file IDs currently present in Drive.
+   * @returns {Promise<number>}  Number of orphan records deleted.
+   */
+  async function purgeOrphans(folderId, liveIds) {
+    if (!folderId || !Array.isArray(liveIds)) return 0;
+    const liveSet = new Set(liveIds);
+    const store   = _tx('metadata', 'readwrite');
+    const index   = store.index('folderId');
+    // Fetch all metadata records belonging to this folder
+    const records = await _promisify(index.getAll(IDBKeyRange.only(folderId)));
+    let removed   = 0;
+    for (const rec of records) {
+      if (!liveSet.has(rec.id)) {
+        await _promisify(store.delete(rec.id));
+        removed++;
+      }
+    }
+    return removed;
+  }
+
   /* ── Expose ─────────────────────────────────────────────── */
   return {
     open,
@@ -799,5 +846,7 @@ const DB = (() => {
     getPinnedFolders,
     // Rescan
     clearEnrichment,
+    purgeOrphans,
+    purgeAllOrphans,
   };
 })();

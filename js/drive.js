@@ -313,6 +313,26 @@ const Drive = (() => {
     return res.blob();
   }
 
+  /* ── getFolderModifiedTime ───────────────────────────────── */
+  /**
+   * Returns the modifiedTime (ISO string) of a single folder.
+   * Extremely lightweight: requests only the modifiedTime field (~80 bytes response).
+   * Used to detect whether a folder has changed since the last library scan.
+   *
+   * @param {string} folderId
+   * @returns {Promise<string|null>}  ISO date string, or null on error.
+   */
+  async function getFolderModifiedTime(folderId) {
+    const url = `${CONFIG.API_BASE}/files/${encodeURIComponent(folderId)}?fields=modifiedTime`;
+    try {
+      const res  = await _fetch(url);
+      const data = await res.json();
+      return data.modifiedTime || null;
+    } catch {
+      return null;
+    }
+  }
+
   /* ── getFileInfo ─────────────────────────────────────────── */
   /**
    * Fetch metadata for a single file.
@@ -441,6 +461,7 @@ const Drive = (() => {
     downloadFile,
     downloadFileHead,
     getFileInfo,
+    getFolderModifiedTime,
     findCoverImage,
     setAppProperties,
     AuthError,

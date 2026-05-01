@@ -1344,6 +1344,15 @@ const App = (() => {
   async function onAlbumRescan(songs, folderId) {
     if (!songs || songs.length === 0) return;
     UI.showToast('Rescaneando álbum…');
+
+    // ── Purge orphans: remove DB records for files no longer in Drive ──
+    // songs[] is the fresh Drive listing for this folder.
+    if (folderId) {
+      const liveIds = songs.map(s => s.id);
+      const pruned  = await DB.purgeOrphans(folderId, liveIds).catch(() => 0);
+      if (pruned > 0) console.log(`[App] Purged ${pruned} orphan(s) from folder ${folderId}`);
+    }
+
     // Full reset: clear all enrichment fields so MB re-runs on clean data.
     // coverBlob (embedded ID3 art) and user data (starred, playCount) are preserved.
     await Promise.all(songs.map(async s => {
@@ -1378,6 +1387,23 @@ const App = (() => {
     if (icon) icon.style.animation = 'spin 1s linear infinite';
     try {
       UI.showToast('Rescaneando carpeta…');
+
+      // ── Purge orphans: remove DB records for files no longer in Drive ──
+      // _browseFiles is always refreshed from Drive before this point,
+      // so it represents the current live listing of the folder.
+      if (_browseFolderId) {
+        const liveIds = _browseFiles.map(f => f.id);
+        const pruned  = await DB.purgeOrphans(_browseFolderId, liveIds).catch(() => 0);
+        if (pruned > 0) {
+          console.log(`[App] Purged ${pruned} orphan(s) from folder ${_browseFolderId}`);
+          // Immediately refresh Albums/Artists so removed songs vanish from the grid
+          if (!_libInDetail) {
+            if (_currentLibTab === 'albums')  _loadAlbums();
+            if (_currentLibTab === 'artists') _loadArtists();
+          }
+        }
+      }
+
       // Full reset: clear all enrichment fields so MB re-runs on clean data.
       await Promise.all(_browseFiles.map(async f => {
         await DB.clearEnrichment(f.id).catch(() => {});
@@ -3028,6 +3054,98 @@ const App = (() => {
   }
 
   /**
+   * Full library refresh: BFS scan of all Drive from ROOT_FOLDER_ID, then
+   * purges DB records for files that no longer exist in Drive.
+   *
+   * Differences from _scanLibraryBackground:
+   *  - Always runs (ignores _libScanDone guard)
+   *  - Collects every live file ID across all folders
+   *  - After BFS, deletes DB records not found in Drive (global orphan cleanup)
+   *  - Shows live progress to the user via toasts
+   *  - Triggered explicitly by the user from Settings
+   */
+  async function _fullLibraryRefresh() {
+    const btn  = document.getElementById('btn-library-refresh');
+    const icon = document.getElementById('library-refresh-icon');
+    if (btn)  btn.disabled = true;
+    if (icon) icon.style.animation = 'spin 1s linear infinite';
+
+    try {
+      UI.showToast('Escaneando Drive…');
+
+      const liveIds     = new Set();
+      const queue       = [{ id: CONFIG.ROOT_FOLDER_ID, name: CONFIG.ROOT_FOLDER_NAME, parentName: '' }];
+      const visited     = new Set();
+      let   foldersScanned = 0;
+
+      while (queue.length > 0) {
+        const { id, name: folderName, parentName } = queue.shift();
+        if (visited.has(id)) continue;
+        visited.add(id);
+        foldersScanned++;
+
+        let page;
+        try {
+          page = await Drive.listFolderScan(id);
+        } catch (err) {
+          if (err instanceof Drive.AuthError || err?.name === 'AuthError') break;
+          console.warn('[LibRefresh] Error scanning folder:', folderName, err);
+          continue;
+        }
+
+        // Enqueue subfolders
+        for (const f of page.folders) {
+          queue.push({ id: f.id, name: f.name, parentName: folderName });
+        }
+
+        // Track all live audio file IDs
+        for (const f of page.audioFiles) liveIds.add(f.id);
+
+        // Patch missing metadata (same logic as background scan)
+        if (page.audioFiles.length >= 2) {
+          await _inferAlbumMeta(folderName, parentName, page.audioFiles, page.imageFiles);
+        }
+
+        // Progress feedback every 10 folders
+        if (foldersScanned % 10 === 0) {
+          UI.showToast(`Escaneando… ${foldersScanned} carpetas, ${liveIds.size} archivos`);
+        }
+
+        // Yield to avoid blocking playback / UI
+        await new Promise(r => setTimeout(r, 60));
+      }
+
+      // ── Purge global orphans ─────────────────────────────────
+      const pruned = await DB.purgeAllOrphans([...liveIds]).catch(() => 0);
+      if (pruned > 0) console.log(`[LibRefresh] Purged ${pruned} orphan record(s) from DB`);
+
+      // Reset session guard so next library open triggers a fresh background scan
+      _libScanDone = false;
+
+      // Push updated metadata to sync channel
+      if (typeof Sync !== 'undefined') Sync.push('metadata');
+
+      // Refresh current library view
+      if (!_libInDetail) {
+        if (_currentLibTab === 'albums')  _loadAlbums();
+        if (_currentLibTab === 'artists') _loadArtists();
+      }
+
+      const msg = pruned > 0
+        ? `Biblioteca actualizada — ${liveIds.size} archivos, ${pruned} eliminados`
+        : `Biblioteca actualizada — ${liveIds.size} archivos`;
+      UI.showToast(msg);
+
+    } catch (err) {
+      console.error('[LibRefresh] Error:', err);
+      UI.showToast('Error al actualizar la biblioteca');
+    } finally {
+      if (btn)  btn.disabled = false;
+      if (icon) icon.style.animation = '';
+    }
+  }
+
+  /**
    * Iterates all songs in the DB and runs MusicBrainz lookup for those missing
    * text metadata (artist, album, year, track). Runs sequentially at 1 req/sec.
    * Designed to run once per session in the background after _scanLibraryBackground.
@@ -4571,6 +4689,9 @@ const App = (() => {
       const track = Player.getCurrentTrack();
       if (track) onToggleStar(track);
     });
+
+    // Settings: full library refresh (scan all Drive, purge orphans)
+    document.getElementById('btn-library-refresh')?.addEventListener('click', _fullLibraryRefresh);
 
     // Settings logout
     document.getElementById('btn-logout')?.addEventListener('click', onLogout);
