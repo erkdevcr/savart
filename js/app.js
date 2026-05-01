@@ -1190,10 +1190,29 @@ const App = (() => {
 
     // ── Pass 6: Last.fm cover lookup ──────────────────────────────────────────
     // Deduped by artist+album inside Lastfm module, so one request per album.
+    //
+    // Runs in two modes:
+    //   • Normal: only for songs without a cover in DOM (primary goal = display cover).
+    //   • Force:  also for songs WITH a DOM cover (coverBlob / folder cover.jpg) that
+    //             have NO thumbnailUrl in DB. Goal = persist an external URL so other
+    //             devices (which don't have the local blob) can show the album thumbnail.
     if (typeof Lastfm === 'undefined') return;
-    const lfmNeed = files.filter(file => !_rowHasCover(file.id));
-    if (lfmNeed.length === 0) return;
-    await Promise.allSettled(lfmNeed.map(async file => {
+    let lfmEntries; // [{ file, updateDom }]
+    if (force) {
+      const checks = await Promise.all(files.map(async file => {
+        if (!_rowHasCover(file.id)) return { file, updateDom: true };
+        const m = await DB.getMeta(file.id).catch(() => null);
+        if (!m?.thumbnailUrl) return { file, updateDom: false }; // needs sync backup URL
+        return null;
+      }));
+      lfmEntries = checks.filter(Boolean);
+    } else {
+      lfmEntries = files
+        .filter(file => !_rowHasCover(file.id))
+        .map(file => ({ file, updateDom: true }));
+    }
+    if (lfmEntries.length === 0) return;
+    await Promise.allSettled(lfmEntries.map(async ({ file, updateDom }) => {
       try {
         const inMem  = (typeof Meta !== 'undefined') ? Meta.getCached(file.id) : null;
         const dbM    = await DB.getMeta(file.id);
@@ -1202,7 +1221,7 @@ const App = (() => {
         if (!artist || !album) return;
         const url = await Lastfm.fetchCover(artist, album);
         if (!url) return;
-        _updateRowThumbnail(file.id, url);
+        if (updateDom) _updateRowThumbnail(file.id, url);
         DB.setMeta(file.id, { thumbnailUrl: url }).catch(() => {});
       } catch (_) { /* non-fatal */ }
     }));
@@ -1334,6 +1353,8 @@ const App = (() => {
     if (folderId) _folderCoverCache.delete(folderId);
     await _prefetchAndApplyFolderCovers(folderId, songs, true); // force=true
     await _patchAlbumDetailHeader(songs);
+    // Push metadata so thumbnailUrls (including Last.fm backup URLs) reach other devices
+    if (typeof Sync !== 'undefined') Sync.push('metadata');
     UI.showToast('Rescan completado');
   }
 
@@ -1356,6 +1377,8 @@ const App = (() => {
       }));
       if (_browseFolderId) _folderCoverCache.delete(_browseFolderId);
       await _prefetchAndApplyFolderCovers(_browseFolderId, _browseFiles, true); // force=true
+      // Push metadata so thumbnailUrls (including Last.fm backup URLs) reach other devices
+      if (typeof Sync !== 'undefined') Sync.push('metadata');
       UI.showToast('Rescan completado');
       // Refresh Albums/Artists grid so the newly enriched folder appears there
       if (!_libInDetail) {
