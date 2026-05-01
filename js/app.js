@@ -3117,76 +3117,79 @@ const App = (() => {
   // Max Last.fm album lookups per session (avoids flooding the API on first run).
   // Albums already tried (lfmThumbTried=true in DB) are skipped regardless of this cap.
   const LFM_THUMB_SESSION_CAP = 80;
+  let _lfmThumbRunning = false; // guard: only one instance at a time
 
   async function _lfmThumbLibrary() {
     if (typeof Lastfm === 'undefined') return;
+    if (_lfmThumbRunning) return; // already in progress — skip silently
+    _lfmThumbRunning = true;
 
-    const all = await DB.getAllMeta().catch(() => []);
+    try {
+      const all = await DB.getAllMeta().catch(() => []);
 
-    // Build one entry per folder: pick the most-common artist+album for the lookup.
-    // Skip folders where:
-    //   • any song already has thumbnailUrl (cover already resolved), OR
-    //   • any song has lfmThumbTried=true (already attempted this session or previously)
-    const folderData = new Map(); // folderId → { artistCounts, albumCounts, songIds, skip }
-    for (const m of all) {
-      if (!m.folderId || !m.artist || !m.album) continue;
-      if (!folderData.has(m.folderId)) {
-        folderData.set(m.folderId, {
-          artistCounts: new Map(), albumCounts: new Map(),
-          songIds: [], skip: false, repId: null,
-        });
+      // Build one entry per folder: pick the most-common artist+album for the lookup.
+      // Skip folders where:
+      //   • any song already has thumbnailUrl (cover already resolved), OR
+      //   • any song has lfmThumbTried=true (already attempted this session or previously)
+      const folderData = new Map();
+      for (const m of all) {
+        if (!m.folderId || !m.artist || !m.album) continue;
+        if (!folderData.has(m.folderId)) {
+          folderData.set(m.folderId, {
+            artistCounts: new Map(), albumCounts: new Map(),
+            songIds: [], skip: false, repId: null,
+          });
+        }
+        const f = folderData.get(m.folderId);
+        if (f.skip) continue;
+        if (m.thumbnailUrl || m.lfmThumbTried) { f.skip = true; continue; }
+        f.artistCounts.set(m.artist, (f.artistCounts.get(m.artist) || 0) + 1);
+        f.albumCounts.set(m.album,   (f.albumCounts.get(m.album)   || 0) + 1);
+        f.songIds.push(m.id);
+        if (!f.repId) f.repId = m.id;
       }
-      const f = folderData.get(m.folderId);
-      if (f.skip) continue;
-      if (m.thumbnailUrl || m.lfmThumbTried) { f.skip = true; continue; }
-      f.artistCounts.set(m.artist, (f.artistCounts.get(m.artist) || 0) + 1);
-      f.albumCounts.set(m.album,   (f.albumCounts.get(m.album)   || 0) + 1);
-      f.songIds.push(m.id);
-      if (!f.repId) f.repId = m.id; // representative song for the lfmThumbTried flag
-    }
 
-    const _top = map => map.size > 0
-      ? [...map.entries()].sort((a, b) => b[1] - a[1])[0][0]
-      : null;
+      const _top = map => map.size > 0
+        ? [...map.entries()].sort((a, b) => b[1] - a[1])[0][0]
+        : null;
 
-    const candidates = [];
-    for (const [, f] of folderData) {
-      if (f.skip || f.songIds.length === 0) continue;
-      const artist = _top(f.artistCounts);
-      const album  = _top(f.albumCounts);
-      if (artist && album) candidates.push({ artist, album, songIds: f.songIds, repId: f.repId });
-    }
-
-    if (candidates.length === 0) return;
-    const toTry = candidates.slice(0, LFM_THUMB_SESSION_CAP);
-    console.log(`[LastFm] Thumbnail enrichment: ${toTry.length} albums to try (${candidates.length - toTry.length} deferred to next session)…`);
-
-    let fetched = 0;
-    for (const { artist, album, songIds, repId } of toTry) {
-      if (!Auth.getValidToken()) break;
-      try {
-        const url = await Lastfm.fetchCover(artist, album);
-        // Mark as tried on the representative song regardless of outcome,
-        // so we don't retry this album every session when Last.fm has no cover.
-        if (repId) DB.setMeta(repId, { lfmThumbTried: true }).catch(() => {});
-        if (!url) continue;
-        // Store thumbnailUrl for every song in the folder
-        await Promise.all(songIds.map(id =>
-          DB.setMeta(id, { thumbnailUrl: url }).catch(() => {})
-        ));
-        fetched++;
-      } catch (_) {}
-      // Brief yield between requests — stays polite to the API
-      await new Promise(r => setTimeout(r, 150));
-    }
-
-    if (fetched > 0) {
-      console.log(`[LastFm] Thumbnail enrichment: covers found for ${fetched} albums.`);
-      if (typeof Sync !== 'undefined') Sync.push('metadata');
-      if (!_libInDetail) {
-        if (_currentLibTab === 'albums')  _loadAlbums();
-        if (_currentLibTab === 'artists') _loadArtists();
+      const candidates = [];
+      for (const [, f] of folderData) {
+        if (f.skip || f.songIds.length === 0) continue;
+        const artist = _top(f.artistCounts);
+        const album  = _top(f.albumCounts);
+        if (artist && album) candidates.push({ artist, album, songIds: f.songIds, repId: f.repId });
       }
+
+      if (candidates.length === 0) return;
+      const toTry = candidates.slice(0, LFM_THUMB_SESSION_CAP);
+      console.log(`[LastFm] Thumbnail enrichment: ${toTry.length} albums to try…`);
+
+      let fetched = 0;
+      for (const { artist, album, songIds, repId } of toTry) {
+        if (!Auth.getValidToken()) break;
+        try {
+          const url = await Lastfm.fetchCover(artist, album);
+          if (repId) DB.setMeta(repId, { lfmThumbTried: true }).catch(() => {});
+          if (!url) continue;
+          await Promise.all(songIds.map(id =>
+            DB.setMeta(id, { thumbnailUrl: url }).catch(() => {})
+          ));
+          fetched++;
+        } catch (_) {}
+        await new Promise(r => setTimeout(r, 150));
+      }
+
+      if (fetched > 0) {
+        console.log(`[LastFm] Thumbnail enrichment: covers found for ${fetched} albums.`);
+        if (typeof Sync !== 'undefined') Sync.push('metadata');
+        if (!_libInDetail) {
+          if (_currentLibTab === 'albums')  _loadAlbums();
+          if (_currentLibTab === 'artists') _loadArtists();
+        }
+      }
+    } finally {
+      _lfmThumbRunning = false; // always release the lock, even on error
     }
   }
 
