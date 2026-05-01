@@ -25,13 +25,6 @@ const App = (() => {
   // folderId → object URL string | null (null = no image found)
   const _folderCoverCache = new Map();
 
-  /* ── Albums grid cache ────────────────────────────────────── */
-  // Computed album list from DB.getAllMeta(). Invalidated whenever metadata
-  // changes (sync, rescan, enrichment). Avoids repeating the expensive
-  // 68K-record grouping pass every time the user switches to the Albums tab.
-  let _albumsCache = null;
-
-  function _invalidateAlbumsCache() { _albumsCache = null; }
 
   /* ── Blob size cache ─────────────────────────────────────── */
   // fileId → blob.size (bytes). Populated in _onBlobReady.
@@ -295,7 +288,6 @@ const App = (() => {
 
     // Metadata sync (full or hot delta): re-render the active library tab so covers/names appear immediately
     if (types.includes('metadata') || types.includes('hot')) {
-      _invalidateAlbumsCache(); // remote data changed — force recompute on next render
       if (view === 'library' && !_libInDetail) {
         if (_currentLibTab === 'albums')  _loadAlbums();
         if (_currentLibTab === 'artists') _loadArtists();
@@ -1360,7 +1352,6 @@ const App = (() => {
     }));
     // Clear folder cover cache so cover.jpg is re-fetched
     if (folderId) _folderCoverCache.delete(folderId);
-    _invalidateAlbumsCache(); // rescan may have new covers/tags
     await _prefetchAndApplyFolderCovers(folderId, songs, true); // force=true
     await _patchAlbumDetailHeader(songs);
     if (typeof Sync !== 'undefined') {
@@ -1393,7 +1384,6 @@ const App = (() => {
         if (typeof Meta !== 'undefined') Meta.revoke(f.id);
       }));
       if (_browseFolderId) _folderCoverCache.delete(_browseFolderId);
-      _invalidateAlbumsCache(); // rescan may have new covers/tags
       await _prefetchAndApplyFolderCovers(_browseFolderId, _browseFiles, true); // force=true
       if (typeof Sync !== 'undefined') {
         // Hot push: immediate small delta so Device B sees changes within 3 s
@@ -3023,7 +3013,6 @@ const App = (() => {
 
     // Refresh the current library tab so newly inferred data shows up.
     // Skip if the user is inside a drill-down — the list re-renders on back-navigation.
-    if (patched > 0) _invalidateAlbumsCache();
     if (!_libInDetail) {
       const tab = _currentLibTab;
       if (tab === 'artists') _loadArtists();
@@ -3193,7 +3182,6 @@ const App = (() => {
 
     if (fetched > 0) {
       console.log(`[LastFm] Thumbnail enrichment: covers found for ${fetched} albums.`);
-      _invalidateAlbumsCache(); // new thumbnailUrls landed
       if (typeof Sync !== 'undefined') Sync.push('metadata');
       if (!_libInDetail) {
         if (_currentLibTab === 'albums')  _loadAlbums();
@@ -3318,12 +3306,9 @@ const App = (() => {
 
       // Refresh the active library tab so updated album data shows immediately.
       // Skip if the user is inside a detail view — the list re-renders on back-navigation.
-      if (updated > 0) {
-        _invalidateAlbumsCache(); // propagation wrote new artist/album/year values
-        if (!_libInDetail) {
-          if (_currentLibTab === 'albums')  _loadAlbums();
-          if (_currentLibTab === 'artists') _loadArtists();
-        }
+      if (updated > 0 && !_libInDetail) {
+        if (_currentLibTab === 'albums')  _loadAlbums();
+        if (_currentLibTab === 'artists') _loadArtists();
       }
 
       // Propagation writes artist/album/year to siblings — sync to Drive for cross-device
@@ -3373,63 +3358,66 @@ const App = (() => {
   async function _loadAlbums() {
     if (_libInDetail) return; // don't replace a drill-down view
     try {
-      // ── Use cache if data hasn't changed since last compute ──
-      if (!_albumsCache) {
-        const all = await DB.getAllMeta();
+      const all = await DB.getAllMeta();
 
-        // Total songs per folder (includes untagged — for accurate song count)
-        const folderSongCount = new Map();
-        all.forEach(m => { if (m.folderId) folderSongCount.set(m.folderId, (folderSongCount.get(m.folderId) || 0) + 1); });
+      // Total songs per folder (includes untagged — used for accurate song count)
+      const folderSongCount = new Map();
+      all.forEach(m => { if (m.folderId) folderSongCount.set(m.folderId, (folderSongCount.get(m.folderId) || 0) + 1); });
 
-        // ── Group by folderId: one folder = one album ───────────────────────
-        // Songs with different album tags but the same folder merge (majority name wins).
-        const folderMap = new Map();
+      // ── Group by folderId first: one folder = one album ───────────────────────
+      // Songs with different album tags but the same folder are merged (majority name wins).
+      // Songs in different folders are always separate entries even if they share a name.
+      const folderMap = new Map(); // folderId → accumulator
 
-        all.forEach(m => {
-          const album  = (m.album  || '').trim();
-          const artist = (m.artist || '').trim();
-          if (!album || !m.folderId) return;
-          if (!folderMap.has(m.folderId)) {
-            folderMap.set(m.folderId, {
-              folderId:     m.folderId,
-              albumCounts:  new Map(),
-              artistCounts: new Map(),
-              yearCounts:   new Map(),
-              coverUrl:     null,
-              taggedCount:  0,
-            });
+      all.forEach(m => {
+        const album  = (m.album  || '').trim();
+        const artist = (m.artist || '').trim();
+        if (!album || !m.folderId) return; // skip untagged or folder-less songs
+        if (!folderMap.has(m.folderId)) {
+          folderMap.set(m.folderId, {
+            folderId:     m.folderId,
+            albumCounts:  new Map(),
+            artistCounts: new Map(),
+            yearCounts:   new Map(),
+            coverUrl:     null,
+            hasBlobCover: false,
+            taggedCount:  0,  // songs with an album tag
+          });
+        }
+        const f = folderMap.get(m.folderId);
+        f.taggedCount++;
+        f.albumCounts.set(album,  (f.albumCounts.get(album)  || 0) + 1);
+        if (artist) f.artistCounts.set(artist, (f.artistCounts.get(artist) || 0) + 1);
+        if (m.year) f.yearCounts.set(m.year,   (f.yearCounts.get(m.year)   || 0) + 1);
+        // Cover: ID3 blob > thumbnailUrl (most recent thumbnailUrl wins so CAA updates land)
+        if (!f.hasBlobCover) {
+          if (m.coverBlob && typeof Meta !== 'undefined') {
+            const url = Meta.injectCover(m.id, m.coverBlob);
+            if (url) { f.coverUrl = url; f.hasBlobCover = true; }
+          } else if (m.thumbnailUrl) {
+            f.coverUrl = m.thumbnailUrl;
           }
-          const f = folderMap.get(m.folderId);
-          f.taggedCount++;
-          f.albumCounts.set(album,  (f.albumCounts.get(album)  || 0) + 1);
-          if (artist) f.artistCounts.set(artist, (f.artistCounts.get(artist) || 0) + 1);
-          if (m.year) f.yearCounts.set(m.year,   (f.yearCounts.get(m.year)   || 0) + 1);
-          // Grid cover: use thumbnailUrl (external URL, already cached by browser).
-          // We deliberately skip coverBlob here — creating blob URLs for 68K songs
-          // during grouping is expensive on mobile. The full embedded art appears
-          // when the user enters the album detail view.
-          if (!f.coverUrl && m.thumbnailUrl) f.coverUrl = m.thumbnailUrl;
-        });
+        }
+      });
 
-        const _top = map => map.size > 0
-          ? [...map.entries()].sort((a, b) => b[1] - a[1])[0][0]
-          : null;
+      const _top = map => map.size > 0
+        ? [...map.entries()].sort((a, b) => b[1] - a[1])[0][0]
+        : null;
 
-        _albumsCache = Array.from(folderMap.values())
-          .map(f => ({
-            name:      _top(f.albumCounts),
-            artist:    _top(f.artistCounts) || '',
-            year:      _top(f.yearCounts),
-            songCount: Math.max(f.taggedCount, folderSongCount.get(f.folderId) || 0),
-            coverUrl:  f.coverUrl,
-            folderId:  f.folderId,
-          }))
-          .sort((a, b) => a.name.localeCompare(b.name));
-      }
+      const albums = Array.from(folderMap.values())
+        .map(f => {
+          const name      = _top(f.albumCounts);
+          const artist    = _top(f.artistCounts) || '';
+          const year      = _top(f.yearCounts);
+          const songCount = Math.max(f.taggedCount, folderSongCount.get(f.folderId) || 0);
+          return { name, artist, songCount, coverUrl: f.coverUrl, year, folderId: f.folderId };
+        })
+        .sort((a, b) => a.name.localeCompare(b.name));
 
-      // Re-apply any active search filter after all cards finish rendering
+      UI.renderLibraryAlbums(albums);
+      // Re-apply any active search filter (persisted from before a drill-down)
       const q = document.getElementById('lib-search-input')?.value || '';
-      UI.renderLibraryAlbums(_albumsCache, q ? () => _onLibSearch(q) : null);
+      if (q) _onLibSearch(q);
     } catch (err) {
       console.error('[App] Load albums error:', err);
     }
