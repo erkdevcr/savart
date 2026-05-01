@@ -392,6 +392,19 @@
                 Actualizar
               </button>
             </div>
+
+            <div class="settings-row">
+              <div>
+                <div class="settings-row-label">Escaneo profundo</div>
+                <div class="settings-row-cat">Detecta canciones sin metadatos y permite editarlos</div>
+              </div>
+              <button id="btn-open-deep-scan" class="btn-sort-toggle" title="Abrir herramienta de escaneo profundo">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+                </svg>
+                Abrir
+              </button>
+            </div>
           </div><!-- /Biblioteca -->
 
           <!-- CUENTA -->
@@ -500,6 +513,200 @@
     </div>
 
   </div><!-- /#main -->
+
+  <!-- ═════════════════════════════════════════════════════
+       DEEP SCAN SCREEN  (v1.6.24)
+  ══════════════════════════════════════════════════════ -->
+  <div id="screen-deep-scan" class="screen">
+
+    <!-- Header: back + title + tabs + open-in-tab -->
+    <div class="ds-header">
+      <div class="ds-header-left">
+        <button id="btn-ds-back" class="ds-back-btn" aria-label="Volver a Ajustes">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+        </button>
+        <h1 class="ds-title">Escaneo profundo</h1>
+      </div>
+      <div class="ds-tabs">
+        <button class="ds-tab active" data-ds-tab="scan">Escaneo</button>
+        <button class="ds-tab" data-ds-tab="artists">Artistas</button>
+      </div>
+      <div class="ds-header-right">
+        <span class="ds-autosave" id="ds-autosave"></span>
+        <button id="btn-ds-new-tab" class="ds-newtab-btn" title="Abrir en nueva pestaña">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/></svg>
+          <span>Abrir en pestaña</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- ── ESCANEO TAB ────────────────────────────────── -->
+    <div class="ds-tab-content active" id="ds-tab-scan">
+
+      <!-- Folder picker bar -->
+      <div class="ds-folder-bar">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="color:var(--text-muted);flex-shrink:0"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>
+        <span class="ds-folder-bar-label">Carpeta:</span>
+        <span class="ds-folder-bar-name" id="ds-folder-name">MSK</span>
+        <button id="btn-ds-change-folder" class="ds-change-btn">Cambiar</button>
+      </div>
+
+      <!-- Controls bar: LED + status + buttons -->
+      <div class="ds-controls-bar">
+        <div class="ds-led" id="ds-led"></div>
+        <span class="ds-scanning-label" id="ds-status-text">Listo</span>
+        <div class="ds-ctrl-btns">
+          <button id="btn-ds-start" class="btn-primary ds-ctrl-btn">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+            Iniciar
+          </button>
+          <button id="btn-ds-pause" class="btn-sort-toggle ds-ctrl-btn" disabled>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+            Pausar
+          </button>
+          <button id="btn-ds-stop" class="btn-sort-toggle ds-ctrl-btn" disabled>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h12v12H6z"/></svg>
+            Detener
+          </button>
+        </div>
+      </div>
+
+      <!-- Counters row -->
+      <div class="ds-counters">
+        <div class="ds-counter">
+          <div class="ds-counter-val" id="ds-cnt-scanned">0</div>
+          <div class="ds-counter-lbl">Escaneadas</div>
+        </div>
+        <div class="ds-counter-sep"></div>
+        <div class="ds-counter">
+          <div class="ds-counter-val" id="ds-cnt-complete">0</div>
+          <div class="ds-counter-lbl">Completas</div>
+          <button class="ds-counter-show" id="btn-ds-show-complete">Mostrar</button>
+        </div>
+        <div class="ds-counter-sep"></div>
+        <div class="ds-counter ds-counter--attn">
+          <div class="ds-counter-val" id="ds-cnt-attention">0</div>
+          <div class="ds-counter-lbl">Sin datos</div>
+        </div>
+        <div class="ds-counter-sep"></div>
+        <div class="ds-counter">
+          <div class="ds-counter-val" id="ds-cnt-remaining">—</div>
+          <div class="ds-counter-lbl">Restantes</div>
+        </div>
+        <div class="ds-counter-sep"></div>
+        <div class="ds-counter">
+          <div class="ds-counter-val" id="ds-cnt-eta">—</div>
+          <div class="ds-counter-lbl">Estimado</div>
+        </div>
+      </div>
+
+      <!-- Progress bar (2px) -->
+      <div class="ds-prog-track">
+        <div class="ds-prog-fill" id="ds-prog-fill" style="width:0%"></div>
+      </div>
+
+      <!-- Log strip: always 3 lines -->
+      <div class="ds-log-strip" id="ds-log">
+        <div class="ds-log-entry ds-log-placeholder">Inicia un escaneo para ver el registro aquí…</div>
+      </div>
+
+      <!-- List area: toggle Sin datos / Completas -->
+      <div class="ds-list-area">
+        <div class="ds-list-header">
+          <div class="ds-list-toggle">
+            <button class="ds-list-toggle-btn active" id="btn-ds-show-attn">
+              Sin datos <span class="ds-badge" id="ds-attn-badge">0</span>
+            </button>
+            <button class="ds-list-toggle-btn" id="btn-ds-show-done">
+              Completas <span class="ds-badge ds-badge--green" id="ds-done-badge">0</span>
+            </button>
+          </div>
+        </div>
+        <div class="ds-attention-list" id="ds-attention-list">
+          <div class="ds-attention-empty">Sin carpetas para mostrar aún.</div>
+        </div>
+      </div>
+
+    </div><!-- /#ds-tab-scan -->
+
+    <!-- ── ARTISTAS TAB ──────────────────────────────── -->
+    <div class="ds-tab-content" id="ds-tab-artists">
+      <div class="ds-artists-header">
+        <div class="ds-artists-counters">
+          <span class="ds-artist-stat">
+            <span class="ds-artist-stat-val" id="ds-art-con">0</span> con foto
+          </span>
+          <span class="ds-artist-stat-sep">·</span>
+          <span class="ds-artist-stat ds-artist-stat--missing">
+            <span class="ds-artist-stat-val" id="ds-art-sin">0</span> sin foto
+          </span>
+          <span class="ds-artist-stat-sep">·</span>
+          <span class="ds-artist-stat">
+            <span class="ds-artist-stat-val" id="ds-art-total">0</span> total
+          </span>
+        </div>
+        <label class="ds-artists-toggle-wrap">
+          <div class="toggle" id="ds-toggle-no-photo"></div>
+          <span>Solo sin foto</span>
+        </label>
+      </div>
+      <div class="ds-artists-grid" id="ds-artists-grid">
+        <div class="ds-attention-empty" style="grid-column:1/-1">Abre este panel para cargar artistas…</div>
+      </div>
+    </div><!-- /#ds-tab-artists -->
+
+  </div><!-- /#screen-deep-scan -->
+
+  <!-- Drive folder browser modal -->
+  <div id="ds-folder-modal" class="ds-modal" style="display:none">
+    <div class="ds-modal-backdrop" id="ds-folder-modal-backdrop"></div>
+    <div class="ds-modal-card">
+      <div class="ds-modal-header">
+        <span class="ds-modal-title">Seleccionar carpeta</span>
+        <button id="btn-ds-modal-close" class="ds-modal-close">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </div>
+      <div class="ds-modal-breadcrumb" id="ds-modal-breadcrumb">MSK</div>
+      <div class="ds-modal-list" id="ds-modal-list">
+        <div class="ds-attention-empty">Cargando…</div>
+      </div>
+      <div class="ds-modal-footer">
+        <button id="btn-ds-modal-select" class="btn-primary" disabled>Seleccionar esta carpeta</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Rescan confirmation dialog -->
+  <div id="ds-rescan-dialog" class="ds-modal" style="display:none">
+    <div class="ds-modal-backdrop" id="ds-rescan-backdrop"></div>
+    <div class="ds-modal-card ds-modal-card--sm">
+      <div class="ds-modal-header">
+        <span class="ds-modal-title">Carpeta ya escaneada</span>
+      </div>
+      <div class="ds-rescan-body">
+        <p class="ds-rescan-desc" id="ds-rescan-desc">Esta carpeta contiene subcarpetas escaneadas anteriormente. ¿Qué deseas hacer?</p>
+        <label class="ds-radio-row">
+          <input type="radio" name="ds-rescan-mode" value="skip" checked>
+          <div>
+            <div class="ds-radio-label">Ignorar ya escaneadas</div>
+            <div class="ds-radio-desc">Solo procesa carpetas nuevas o no visitadas</div>
+          </div>
+        </label>
+        <label class="ds-radio-row">
+          <input type="radio" name="ds-rescan-mode" value="full">
+          <div>
+            <div class="ds-radio-label">Volver a escanear todo</div>
+            <div class="ds-radio-desc">Incluye carpetas previamente escaneadas</div>
+          </div>
+        </label>
+      </div>
+      <div class="ds-modal-footer">
+        <button id="btn-ds-rescan-cancel" class="btn-sort-toggle">Cancelar</button>
+        <button id="btn-ds-rescan-confirm" class="btn-primary">Confirmar</button>
+      </div>
+    </div>
+  </div>
 
 <!-- ═══════════════════════════════════════════════════════
      EXPANDED PLAYER (full-screen on mobile, right panel desktop)

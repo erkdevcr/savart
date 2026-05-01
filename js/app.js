@@ -268,6 +268,11 @@ const App = (() => {
       // Start live 3-second polling (Last-Write-Wins)
       Sync.startLiveSync(_onSyncDataChanged);
     }).catch(() => {});
+
+    // Auto-open Deep Scan if launched from "Abrir en pestaña"
+    if (location.hash === '#deep-scan' || location.hash === '#deep-scan-artists') {
+      _openDeepScan();
+    }
   }
 
   /**
@@ -3153,6 +3158,1070 @@ const App = (() => {
     }
   }
 
+  /* ── Deep Scan tool  (v1.6.24) ─────────────────────────────
+     BFS scan with:
+       • Selectable root folder
+       • Drive appDataFolder scan-history (which folders were scanned)
+       • Rescan confirmation if previously-scanned folders found
+       • LED activity indicator + discrete counters row
+       • Log strip (3 visible lines, rotating)
+       • Sin datos / Completas list toggle + Mostrar for completed
+       • Artistas tab: 3-col grid, per-artist photo URL editor
+  ─────────────────────────────────────────────────────────── */
+
+  let _dsRunning       = false;
+  let _dsPaused        = false;
+  let _dsStopFlag      = false;
+  let _dsSession       = null;
+  let _dsListMode      = 'attn';     // 'attn' | 'done'
+  let _dsArtistsLoaded = false;
+  let _dsOnlyNoPhoto   = false;
+
+  // ── Scan history stored in Drive appDataFolder ─────────────
+  // Shape: { folders: { folderId: { name, scannedAt } } }
+  const DS_HISTORY_FILE = 'savart-scan-history.json';
+  let _dsScanHistory   = null;   // cached in memory once loaded
+  let _dsHistoryFileId = null;   // Drive file ID once created/found
+
+  /* ── Drive appDataFolder helpers ──────────────────────────── */
+
+  async function _dsApiFetch(url, opts = {}) {
+    const token = Auth.getValidToken();
+    if (!token) throw new Error('No auth token');
+    const res = await fetch(url, {
+      ...opts,
+      headers: { 'Authorization': `Bearer ${token}`, ...(opts.headers || {}) },
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(`Drive ${res.status}: ${body.slice(0, 120)}`);
+    }
+    return res;
+  }
+
+  async function _dsLoadHistory() {
+    if (_dsScanHistory !== null) return _dsScanHistory;
+    try {
+      // Search for existing file
+      const q = encodeURIComponent(`name='${DS_HISTORY_FILE}' and trashed=false`);
+      const res = await _dsApiFetch(
+        `${CONFIG.API_BASE}/files?spaces=appDataFolder&q=${q}&fields=files(id,name)&pageSize=1`
+      );
+      const data = await res.json();
+      if (data.files && data.files.length > 0) {
+        _dsHistoryFileId = data.files[0].id;
+        const mediaRes = await _dsApiFetch(
+          `${CONFIG.API_BASE}/files/${_dsHistoryFileId}?alt=media`
+        );
+        _dsScanHistory = await mediaRes.json();
+      } else {
+        _dsScanHistory = { folders: {} };
+      }
+    } catch (err) {
+      console.warn('[DS] Could not load scan history:', err);
+      _dsScanHistory = { folders: {} };
+    }
+    return _dsScanHistory;
+  }
+
+  async function _dsSaveHistory() {
+    if (!_dsScanHistory) return;
+    try {
+      const body = JSON.stringify(_dsScanHistory);
+      if (_dsHistoryFileId) {
+        // PATCH existing file
+        await _dsApiFetch(
+          `https://www.googleapis.com/upload/drive/v3/files/${_dsHistoryFileId}?uploadType=media`,
+          { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body }
+        );
+      } else {
+        // POST new file in appDataFolder
+        const meta  = JSON.stringify({ name: DS_HISTORY_FILE, parents: ['appDataFolder'] });
+        const blob  = new Blob([
+          '--boundary\r\nContent-Type: application/json\r\n\r\n', meta,
+          '\r\n--boundary\r\nContent-Type: application/json\r\n\r\n', body,
+          '\r\n--boundary--',
+        ]);
+        const res = await _dsApiFetch(
+          `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart`,
+          { method: 'POST', headers: { 'Content-Type': 'multipart/related; boundary=boundary' }, body: blob }
+        );
+        const created = await res.json();
+        _dsHistoryFileId = created.id;
+      }
+    } catch (err) {
+      console.warn('[DS] Could not save scan history:', err);
+    }
+  }
+
+  /* Mark a set of folder IDs as scanned in history. */
+  async function _dsRecordScanned(folderIdSet, nameMap) {
+    const hist = await _dsLoadHistory();
+    const now  = new Date().toISOString();
+    for (const id of folderIdSet) {
+      hist.folders[id] = { name: nameMap[id] || '', scannedAt: now };
+    }
+    await _dsSaveHistory();
+  }
+
+  /* Return Set of previously-scanned folder IDs. */
+  async function _dsGetScannedIds() {
+    const hist = await _dsLoadHistory();
+    return new Set(Object.keys(hist.folders || {}));
+  }
+
+  /* ── Session management ─────────────────────────────────── */
+
+  async function _openDeepScan() {
+    UI.showView('deep-scan');
+    await _dsLoadSession();
+    _dsRenderAll();
+    // Auto-open artists tab if hash says so
+    if (location.hash === '#deep-scan-artists') {
+      _dsSwitchTab('artists');
+      location.hash = '';
+    }
+  }
+
+  async function _dsLoadSession() {
+    const saved = await DB.getState('deepScanSession').catch(() => null);
+    if (saved && typeof saved === 'object') {
+      _dsSession = saved;
+      // Back-compat: ensure new fields exist
+      if (!_dsSession.selectedFolderId)   _dsSession.selectedFolderId   = CONFIG.ROOT_FOLDER_ID;
+      if (!_dsSession.selectedFolderName) _dsSession.selectedFolderName = CONFIG.ROOT_FOLDER_NAME;
+      if (!_dsSession.completedList)      _dsSession.completedList      = {};
+      if (!_dsSession.rescanMode)         _dsSession.rescanMode         = 'skip';
+    } else {
+      _dsSession = {
+        status:             'idle',
+        startedAt:          null,
+        selectedFolderId:   CONFIG.ROOT_FOLDER_ID,
+        selectedFolderName: CONFIG.ROOT_FOLDER_NAME,
+        rescanMode:         'skip',
+        scannedFolders:     0,
+        totalFolders:       0,
+        visited:            [],
+        folders:            {},   // needs-attention entries
+        completedList:      {},   // folderId → {id,name,path,count}
+        log:                [],
+      };
+    }
+  }
+
+  async function _dsSaveSession() {
+    await DB.setState('deepScanSession', _dsSession).catch(() => {});
+    const el = document.getElementById('ds-autosave');
+    if (el) {
+      const t = new Date();
+      el.textContent = `${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}`;
+    }
+  }
+
+  /* Full render from session state. */
+  function _dsRenderAll() {
+    // Folder name
+    const nameEl = document.getElementById('ds-folder-name');
+    if (nameEl) nameEl.textContent = _dsSession.selectedFolderName || CONFIG.ROOT_FOLDER_NAME;
+
+    _dsUpdateControls();
+    _dsUpdateProgress();
+    _dsUpdateCounters();
+    _dsRestoreLog();
+
+    // Re-render list for current mode
+    if (_dsListMode === 'attn') {
+      _dsRenderAttentionList();
+    } else {
+      _dsRenderCompletedList();
+    }
+  }
+
+  /* ── Log strip ──────────────────────────────────────────── */
+
+  /* Keep at most 3 visible lines in the strip (newest at bottom). */
+  function _dsLogLine(msg, cls = '') {
+    const strip = document.getElementById('ds-log');
+    if (strip) {
+      // Remove placeholder
+      const ph = strip.querySelector('.ds-log-placeholder');
+      if (ph) ph.remove();
+
+      const div = document.createElement('div');
+      div.className = 'ds-log-entry' + (cls ? ' ' + cls : '');
+      div.textContent = msg;
+      strip.appendChild(div);
+
+      // Keep only last 3
+      while (strip.children.length > 3) strip.removeChild(strip.firstChild);
+    }
+    if (!_dsSession.log) _dsSession.log = [];
+    _dsSession.log.push(msg);
+    if (_dsSession.log.length > 300) _dsSession.log = _dsSession.log.slice(-300);
+  }
+
+  function _dsRestoreLog() {
+    const strip = document.getElementById('ds-log');
+    if (!strip) return;
+    strip.innerHTML = '';
+    const lines = (_dsSession.log || []).slice(-3);
+    if (lines.length === 0) {
+      strip.innerHTML = '<div class="ds-log-entry ds-log-placeholder">Inicia un escaneo para ver el registro aquí…</div>';
+      return;
+    }
+    for (const line of lines) {
+      const div = document.createElement('div');
+      div.className = 'ds-log-entry';
+      div.textContent = line;
+      strip.appendChild(div);
+    }
+  }
+
+  /* ── Controls + LED ─────────────────────────────────────── */
+
+  function _dsUpdateLED() {
+    const led = document.getElementById('ds-led');
+    if (!led) return;
+    led.classList.remove('ds-led--active', 'ds-led--paused');
+    if (_dsRunning && !_dsPaused) led.classList.add('ds-led--active');
+    else if (_dsPaused)           led.classList.add('ds-led--paused');
+    // else: no class = red solid (idle/stopped)
+  }
+
+  function _dsUpdateControls() {
+    const startBtn = document.getElementById('btn-ds-start');
+    const pauseBtn = document.getElementById('btn-ds-pause');
+    const stopBtn  = document.getElementById('btn-ds-stop');
+    const statusEl = document.getElementById('ds-status-text');
+    if (!startBtn || !_dsSession) return;
+
+    const running = _dsRunning && !_dsPaused;
+    const paused  = _dsRunning &&  _dsPaused;
+    const done    = !_dsRunning && _dsSession.status === 'done';
+
+    const iconPlay    = `<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>`;
+    const iconRestart = `<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-8 3.58-8 8s3.58 8 8 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>`;
+    if (done)         { startBtn.innerHTML = iconRestart + ' Reiniciar'; startBtn.disabled = false; }
+    else if (paused)  { startBtn.innerHTML = iconPlay    + ' Reanudar';  startBtn.disabled = false; }
+    else if (running) { startBtn.innerHTML = iconPlay    + ' Escaneando…'; startBtn.disabled = true; }
+    else              { startBtn.innerHTML = iconPlay    + ' Iniciar';   startBtn.disabled = false; }
+
+    pauseBtn.disabled = !running;
+    stopBtn.disabled  = !_dsRunning;
+
+    if (statusEl) {
+      if (done)          statusEl.textContent = `Completado · ${_dsSession.scannedFolders} carpetas`;
+      else if (paused)   statusEl.textContent = 'En pausa';
+      else if (running)  statusEl.textContent = `Escaneando… (${_dsSession.scannedFolders})`;
+      else if (_dsSession.status === 'stopped')
+                         statusEl.textContent = `Detenido · ${_dsSession.scannedFolders} carpetas`;
+      else if (_dsSession.scannedFolders > 0)
+                         statusEl.textContent = `${_dsSession.scannedFolders} carpetas escaneadas`;
+      else               statusEl.textContent = 'Listo';
+    }
+
+    _dsUpdateLED();
+  }
+
+  /* ── Counters ───────────────────────────────────────────── */
+
+  function _dsUpdateCounters(queueLen = null, startMs = null) {
+    if (!_dsSession) return;
+
+    const attnCount  = Object.values(_dsSession.folders || {})
+      .filter(f => f.status !== 'ignored' && !f.attended).length;
+    const doneCount  = Object.keys(_dsSession.completedList || {}).length;
+    const remaining  = queueLen !== null ? queueLen : (
+      _dsSession.totalFolders > _dsSession.scannedFolders
+        ? _dsSession.totalFolders - _dsSession.scannedFolders
+        : null
+    );
+
+    _dsSetCounter('ds-cnt-scanned',   _dsSession.scannedFolders || 0);
+    _dsSetCounter('ds-cnt-complete',  doneCount);
+    _dsSetCounter('ds-cnt-attention', attnCount);
+    _dsSetCounter('ds-cnt-remaining', remaining !== null ? remaining : '—');
+
+    // ETA
+    let eta = '—';
+    if (startMs && _dsRunning && remaining > 0 && _dsSession.scannedFolders > 0) {
+      const elapsed = Date.now() - startMs;
+      const perFolder = elapsed / _dsSession.scannedFolders;
+      const secsLeft  = Math.round((perFolder * remaining) / 1000);
+      if (secsLeft < 60)       eta = `${secsLeft}s`;
+      else if (secsLeft < 3600) eta = `${Math.ceil(secsLeft/60)}m`;
+      else                     eta = `${Math.floor(secsLeft/3600)}h${Math.ceil((secsLeft%3600)/60)}m`;
+    }
+    _dsSetCounter('ds-cnt-eta', eta);
+
+    // Badges in toggle bar
+    const attnBadge = document.getElementById('ds-attn-badge');
+    const doneBadge = document.getElementById('ds-done-badge');
+    if (attnBadge) attnBadge.textContent = attnCount;
+    if (doneBadge) doneBadge.textContent = doneCount;
+  }
+
+  function _dsSetCounter(id, val) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = val;
+  }
+
+  /* ── Progress bar ───────────────────────────────────────── */
+
+  function _dsUpdateProgress() {
+    const fill = document.getElementById('ds-prog-fill');
+    if (!fill || !_dsSession) return;
+    const total = _dsSession.totalFolders || 0;
+    const done  = _dsSession.scannedFolders || 0;
+    fill.style.width = total > 0 ? Math.min(100, (done / total) * 100) + '%' : '0%';
+  }
+
+  /* ── Folder picker ──────────────────────────────────────── */
+
+  // State for the folder browser modal
+  let _dsModalPath   = [];  // [{id, name}] breadcrumb
+  let _dsModalSel    = null; // currently highlighted {id, name}
+
+  async function _dsOpenFolderBrowser() {
+    const modal = document.getElementById('ds-folder-modal');
+    if (!modal) return;
+    modal.style.display = 'flex';
+    _dsModalPath = [{ id: CONFIG.ROOT_FOLDER_ID, name: CONFIG.ROOT_FOLDER_NAME }];
+    _dsModalSel  = null;
+    _dsUpdateModalSelectBtn();
+    await _dsLoadModalFolder(CONFIG.ROOT_FOLDER_ID);
+  }
+
+  function _dsCloseModal(modalId) {
+    const modal = document.getElementById(modalId);
+    if (modal) modal.style.display = 'none';
+  }
+
+  function _dsUpdateModalSelectBtn() {
+    const btn = document.getElementById('btn-ds-modal-select');
+    if (btn) btn.disabled = !_dsModalSel;
+  }
+
+  function _dsRenderModalBreadcrumb() {
+    const bc = document.getElementById('ds-modal-breadcrumb');
+    if (!bc) return;
+    bc.innerHTML = _dsModalPath.map((crumb, i) => {
+      if (i === _dsModalPath.length - 1) {
+        return `<span style="color:var(--text-primary);font-weight:500">${_escHtml(crumb.name)}</span>`;
+      }
+      return `<span class="ds-modal-crumb" data-idx="${i}">${_escHtml(crumb.name)}</span><span class="ds-modal-crumb-sep"> › </span>`;
+    }).join('');
+
+    bc.querySelectorAll('.ds-modal-crumb').forEach(el => {
+      el.addEventListener('click', async () => {
+        const idx = parseInt(el.dataset.idx, 10);
+        _dsModalPath = _dsModalPath.slice(0, idx + 1);
+        _dsModalSel  = null;
+        _dsUpdateModalSelectBtn();
+        await _dsLoadModalFolder(_dsModalPath[_dsModalPath.length - 1].id);
+      });
+    });
+  }
+
+  async function _dsLoadModalFolder(folderId) {
+    const listEl = document.getElementById('ds-modal-list');
+    if (!listEl) return;
+    listEl.innerHTML = '<div class="ds-attention-empty">Cargando…</div>';
+    _dsRenderModalBreadcrumb();
+
+    try {
+      const page = await Drive.listFolderScan(folderId);
+      listEl.innerHTML = '';
+
+      if (page.folders.length === 0) {
+        listEl.innerHTML = '<div class="ds-attention-empty">Sin subcarpetas</div>';
+        return;
+      }
+
+      for (const folder of page.folders) {
+        const item = document.createElement('div');
+        item.className = 'ds-modal-folder-item';
+        if (_dsModalSel?.id === folder.id) item.classList.add('ds-modal-folder-selected');
+        item.dataset.folderId   = folder.id;
+        item.dataset.folderName = folder.name;
+        item.innerHTML = `
+          <svg class="ds-modal-folder-icon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>
+          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_escHtml(folder.name)}</span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="color:var(--text-disabled);flex-shrink:0"><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6z"/></svg>`;
+
+        // Single click = select this folder
+        item.addEventListener('click', () => {
+          listEl.querySelectorAll('.ds-modal-folder-selected').forEach(el => el.classList.remove('ds-modal-folder-selected'));
+          item.classList.add('ds-modal-folder-selected');
+          _dsModalSel = { id: folder.id, name: folder.name };
+          _dsUpdateModalSelectBtn();
+        });
+
+        // Double-click = navigate into
+        item.addEventListener('dblclick', async () => {
+          _dsModalPath.push({ id: folder.id, name: folder.name });
+          _dsModalSel = null;
+          _dsUpdateModalSelectBtn();
+          await _dsLoadModalFolder(folder.id);
+        });
+
+        // Arrow button = navigate into
+        item.querySelector('svg:last-child').addEventListener('click', async (e) => {
+          e.stopPropagation();
+          _dsModalPath.push({ id: folder.id, name: folder.name });
+          _dsModalSel = { id: folder.id, name: folder.name };
+          _dsUpdateModalSelectBtn();
+          await _dsLoadModalFolder(folder.id);
+        });
+
+        listEl.appendChild(item);
+      }
+    } catch (err) {
+      listEl.innerHTML = `<div class="ds-attention-empty">Error: ${_escHtml(err?.message || err)}</div>`;
+    }
+  }
+
+  /* Called when user clicks "Seleccionar esta carpeta" */
+  async function _dsConfirmFolderSelect() {
+    if (!_dsModalSel) return;
+    const { id, name } = _dsModalSel;
+
+    // Build full path label from breadcrumb
+    const fullPath = [..._dsModalPath.map(c => c.name), name].join(' › ');
+
+    _dsCloseModal('ds-folder-modal');
+
+    // Update session
+    _dsSession.selectedFolderId   = id;
+    _dsSession.selectedFolderName = fullPath;
+    const nameEl = document.getElementById('ds-folder-name');
+    if (nameEl) nameEl.textContent = fullPath;
+
+    // Check if this folder (or its ancestors) was previously scanned
+    await _dsCheckRescan(id, fullPath);
+  }
+
+  /* Check scan history and possibly show the rescan dialog. */
+  async function _dsCheckRescan(folderId, folderLabel) {
+    try {
+      const scannedIds = await _dsGetScannedIds();
+      // Count how many already-scanned IDs are in or equal to the selected folder
+      // We check the selected folder itself and rely on session.visited for children
+      const isScanned = scannedIds.has(folderId);
+      // Count previously-scanned folders that are descendants (approximate)
+      const prevCount = [...scannedIds].filter(id => id === folderId).length +
+                        (isScanned ? 1 : 0);
+
+      if (isScanned) {
+        // Show rescan dialog
+        const descEl = document.getElementById('ds-rescan-desc');
+        if (descEl) {
+          descEl.textContent = `"${folderLabel}" fue escaneada anteriormente. ¿Qué deseas hacer?`;
+        }
+        // Reset radio to skip
+        const radio = document.querySelector('input[name="ds-rescan-mode"][value="skip"]');
+        if (radio) radio.checked = true;
+
+        const dialog = document.getElementById('ds-rescan-dialog');
+        if (dialog) dialog.style.display = 'flex';
+      }
+      // If not scanned: just ready to scan normally, no dialog needed
+    } catch (err) {
+      console.warn('[DS] rescan check failed:', err);
+    }
+  }
+
+  /* ── Start / Pause / Stop ──────────────────────────────── */
+
+  async function _startDeepScan() {
+    if (!_dsSession) await _dsLoadSession();
+
+    // Resume from pause
+    if (_dsRunning && _dsPaused) {
+      _dsPaused = false;
+      _dsUpdateControls();
+      _dsLogLine('▶ Reanudando…', 'info');
+      return;
+    }
+    if (_dsRunning && !_dsPaused) return;
+
+    // Restart if done
+    if (_dsSession.status === 'done') {
+      _dsSession.startedAt      = new Date().toISOString();
+      _dsSession.status         = 'running';
+      _dsSession.scannedFolders = 0;
+      _dsSession.totalFolders   = 0;
+      _dsSession.visited        = [];
+      _dsSession.completedList  = {};
+      _dsSession.log            = [];
+      _dsRestoreLog();
+      _dsRenderAttentionList();
+      _dsLogLine('Iniciando nuevo escaneo…', 'info');
+    } else {
+      if (!_dsSession.startedAt) _dsSession.startedAt = new Date().toISOString();
+      _dsSession.status = 'running';
+      if ((_dsSession.visited || []).length > 0) {
+        _dsLogLine(`▶ Continuando (${_dsSession.visited.length} ya visitadas)…`, 'info');
+      } else {
+        _dsLogLine(`Iniciando escaneo en "${_dsSession.selectedFolderName}"…`, 'info');
+      }
+    }
+
+    _dsRunning  = true;
+    _dsPaused   = false;
+    _dsStopFlag = false;
+    _dsUpdateControls();
+    await _dsSaveSession();
+
+    _runDeepScan().catch(err => {
+      console.error('[DeepScan] Error:', err);
+      _dsLogLine('⚠ Error: ' + (err?.message || err), 'warn');
+      _dsRunning = false;
+      _dsUpdateControls();
+    });
+  }
+
+  function _pauseDeepScan() {
+    if (!_dsRunning || _dsPaused) return;
+    _dsPaused = true;
+    _dsUpdateControls();
+    _dsLogLine('⏸ Pausado.', 'info');
+    _dsSaveSession().catch(() => {});
+  }
+
+  function _stopDeepScan() {
+    if (!_dsRunning) return;
+    _dsStopFlag = true;
+    _dsPaused   = false;
+    _dsLogLine('⏹ Deteniendo…', 'info');
+    _dsUpdateControls();
+  }
+
+  /* ── BFS scan loop ─────────────────────────────────────── */
+
+  async function _runDeepScan() {
+    const visitedSet   = new Set(_dsSession.visited || []);
+    const nameMap      = {};   // folderId → name (for history recording)
+    const newlyScanned = new Set();
+
+    // Determine which folder IDs to skip (history-based)
+    let skipIds = new Set();
+    if (_dsSession.rescanMode === 'skip') {
+      skipIds = await _dsGetScannedIds().catch(() => new Set());
+    }
+
+    const startFolderId   = _dsSession.selectedFolderId   || CONFIG.ROOT_FOLDER_ID;
+    const startFolderName = _dsSession.selectedFolderName || CONFIG.ROOT_FOLDER_NAME;
+
+    const queue = [{ id: startFolderId, name: startFolderName.split(' › ').pop(), path: startFolderName }];
+    let discovered = 1;
+    const startMs  = Date.now();
+
+    while (queue.length > 0) {
+      // Pause spin
+      while (_dsPaused && !_dsStopFlag) await new Promise(r => setTimeout(r, 200));
+      if (_dsStopFlag) break;
+
+      const { id, name, path } = queue.shift();
+      if (visitedSet.has(id)) continue;
+      visitedSet.add(id);
+      nameMap[id] = name;
+
+      // Skip if already in history and mode is 'skip'
+      if (skipIds.has(id)) {
+        _dsSession.scannedFolders++;
+        _dsLogLine(`↷ Omitida (ya escaneada): ${path}`);
+        _dsSession.visited = [...visitedSet];
+        _dsUpdateProgress();
+        _dsUpdateCounters(queue.length, startMs);
+        await new Promise(r => setTimeout(r, 10));
+        continue;
+      }
+
+      // List contents
+      let page;
+      try {
+        page = await Drive.listFolderScan(id);
+      } catch (err) {
+        if (err instanceof Drive.AuthError || err?.name === 'AuthError') {
+          _dsLogLine('⚠ Sin autenticación — deteniendo.', 'warn');
+          _dsStopFlag = true;
+          break;
+        }
+        _dsLogLine(`⚠ Error en "${name}": ${err?.message || err}`, 'warn');
+        continue;
+      }
+
+      // Enqueue subfolders
+      for (const f of page.folders) {
+        if (!visitedSet.has(f.id)) {
+          const childPath = path + ' › ' + f.name;
+          queue.push({ id: f.id, name: f.name, path: childPath });
+          discovered++;
+        }
+      }
+
+      _dsSession.scannedFolders++;
+      _dsSession.totalFolders = Math.max(_dsSession.totalFolders || 0, discovered + queue.length);
+      _dsSession.visited = [...visitedSet];
+      newlyScanned.add(id);
+      _dsUpdateProgress();
+      _dsUpdateCounters(queue.length, startMs);
+
+      if (page.audioFiles.length === 0) {
+        await new Promise(r => setTimeout(r, 20));
+        continue;
+      }
+
+      // Check metadata completeness
+      const attnSongs = [];
+      for (const f of page.audioFiles) {
+        const meta = await DB.getMeta(f.id).catch(() => null);
+        const missingArtist = !meta?.artist;
+        const missingAlbum  = !meta?.album;
+        const missingYear   = !meta?.year;
+        if (missingArtist || missingAlbum || missingYear) {
+          attnSongs.push({
+            id: f.id, name: f.name,
+            displayName: meta?.displayName || cleanTitle(f.name),
+            artist: meta?.artist || '', album: meta?.album || '',
+            year: meta?.year || '', track: meta?.track || '',
+            mimeType: f.mimeType || '',
+            missingArtist, missingAlbum, missingYear,
+          });
+        }
+      }
+
+      const needsAttn = attnSongs.length > 0;
+      _dsLogLine(`${needsAttn ? '⚠' : '✓'} ${path}  (${page.audioFiles.length} arch.${needsAttn ? ', ' + attnSongs.length + ' sin meta' : ''})`);
+
+      if (needsAttn) {
+        const existing = _dsSession.folders[id];
+        _dsSession.folders[id] = {
+          id, name, path, songs: attnSongs,
+          status:   existing?.status   || 'needs_attention',
+          attended: existing?.attended || false,
+        };
+        if (_dsListMode === 'attn') _dsAddOrUpdateFolderRow(id);
+      } else if (page.audioFiles.length > 0) {
+        // All songs have metadata — add to completed list
+        _dsSession.completedList[id] = { id, name, path, count: page.audioFiles.length };
+        if (_dsListMode === 'done') _dsAddOrUpdateFolderRow(id);
+      }
+
+      _dsUpdateCounters(queue.length, startMs);
+
+      if (_dsSession.scannedFolders % 8 === 0) await _dsSaveSession();
+      await new Promise(r => setTimeout(r, 60));
+    }
+
+    // Finished
+    _dsRunning = false;
+    _dsPaused  = false;
+
+    if (_dsStopFlag) {
+      _dsStopFlag = false;
+      _dsSession.status = 'stopped';
+      _dsLogLine('⏹ Detenido — progreso guardado.', 'info');
+    } else {
+      _dsSession.status = 'done';
+      const attnCount = Object.values(_dsSession.folders)
+        .filter(f => !f.attended && f.status !== 'ignored').length;
+      _dsLogLine(attnCount > 0
+        ? `✅ Listo · ${_dsSession.scannedFolders} carpetas, ${attnCount} sin metadatos`
+        : `✅ Listo · ${_dsSession.scannedFolders} carpetas — todo completo`, 'ok');
+
+      // Record newly-scanned folders in Drive history
+      _dsRecordScanned(newlyScanned, nameMap).catch(() => {});
+    }
+
+    await _dsSaveSession();
+    _dsUpdateControls();
+    _dsUpdateProgress();
+    _dsUpdateCounters();
+  }
+
+  /* ── List rendering ─────────────────────────────────────── */
+
+  function _dsRenderAttentionList() {
+    const list = document.getElementById('ds-attention-list');
+    if (!list) return;
+    const folders = Object.values(_dsSession?.folders || {})
+      .filter(f => f.status !== 'ignored' || true);   // show all (including ignored)
+    list.innerHTML = '';
+    if (folders.length === 0) {
+      list.innerHTML = '<div class="ds-attention-empty">Sin carpetas para mostrar aún.</div>';
+      return;
+    }
+    for (const folder of folders) list.appendChild(_dsBuildFolderRow(folder));
+  }
+
+  function _dsRenderCompletedList() {
+    const list = document.getElementById('ds-attention-list');
+    if (!list) return;
+    const folders = Object.values(_dsSession?.completedList || {});
+    list.innerHTML = '';
+    if (folders.length === 0) {
+      list.innerHTML = '<div class="ds-attention-empty">Ninguna carpeta completamente etiquetada aún.</div>';
+      return;
+    }
+    for (const folder of folders) {
+      const row = document.createElement('div');
+      row.className = 'ds-folder-row';
+      const pathParts = folder.path.split(' › ');
+      const leaf      = pathParts.pop();
+      const parentStr = pathParts.length ? pathParts.join(' › ') + ' › ' : '';
+      row.innerHTML = `
+        <div class="ds-folder-header" style="cursor:default">
+          <div class="ds-status-dot green"></div>
+          <div class="ds-folder-path">
+            <span class="ds-folder-parent">${_escHtml(parentStr)}</span><span class="ds-folder-leaf">${_escHtml(leaf)}</span>
+          </div>
+          <span style="font-size:10px;color:var(--text-disabled);flex-shrink:0">${folder.count} arch.</span>
+        </div>`;
+      list.appendChild(row);
+    }
+  }
+
+  function _dsAddOrUpdateFolderRow(folderId) {
+    const list = document.getElementById('ds-attention-list');
+    if (!list) return;
+    const empty = list.querySelector('.ds-attention-empty');
+    if (empty) empty.remove();
+
+    if (_dsListMode === 'attn') {
+      const folder = _dsSession.folders[folderId];
+      if (!folder) return;
+      const existing = list.querySelector(`[data-folder-id="${CSS.escape(folderId)}"]`);
+      if (existing) {
+        const dot = existing.querySelector('.ds-status-dot');
+        if (dot) dot.className = 'ds-status-dot ' + _dsDotClass(folder);
+      } else {
+        list.appendChild(_dsBuildFolderRow(folder));
+      }
+    } else {
+      const folder = _dsSession.completedList?.[folderId];
+      if (!folder) return;
+      const existing = list.querySelector(`[data-folder-id="${CSS.escape(folderId)}"]`);
+      if (!existing) {
+        const row = document.createElement('div');
+        row.className = 'ds-folder-row';
+        row.dataset.folderId = folderId;
+        const pathParts = folder.path.split(' › ');
+        const leaf      = pathParts.pop();
+        const parentStr = pathParts.length ? pathParts.join(' › ') + ' › ' : '';
+        row.innerHTML = `
+          <div class="ds-folder-header" style="cursor:default">
+            <div class="ds-status-dot green"></div>
+            <div class="ds-folder-path">
+              <span class="ds-folder-parent">${_escHtml(parentStr)}</span><span class="ds-folder-leaf">${_escHtml(leaf)}</span>
+            </div>
+            <span style="font-size:10px;color:var(--text-disabled);flex-shrink:0">${folder.count} arch.</span>
+          </div>`;
+        list.appendChild(row);
+      }
+    }
+  }
+
+  function _dsDotClass(folder) {
+    if (folder.status === 'ignored') return 'red';
+    if (folder.attended)             return 'green';
+    return 'gray';
+  }
+
+  /* ── Build folder row (for needs-attention list) ─────────── */
+
+  function _dsBuildFolderRow(folder) {
+    const dotCls  = _dsDotClass(folder);
+    const ignored = folder.status === 'ignored';
+    const pathParts = folder.path.split(' › ');
+    const leaf      = pathParts.pop();
+    const parentStr = pathParts.length ? pathParts.join(' › ') + ' › ' : '';
+
+    const row = document.createElement('div');
+    row.className = 'ds-folder-row' + (ignored ? ' ds-ignored' : '');
+    row.dataset.folderId = folder.id;
+
+    row.innerHTML = `
+      <div class="ds-folder-header">
+        <div class="ds-status-dot ${dotCls}"></div>
+        <div class="ds-folder-path">
+          <span class="ds-folder-parent">${_escHtml(parentStr)}</span><span class="ds-folder-leaf">${_escHtml(leaf)}</span>
+        </div>
+        <button class="ds-ignore-btn" title="${ignored ? 'Designorar' : 'Ignorar'}">${ignored ? '↩' : '✕'}</button>
+        <svg class="ds-chevron" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+      </div>
+      <div class="ds-folder-detail">
+        ${_dsBuildTable(folder)}
+        <div class="ds-table-actions">
+          <button class="ds-apply-all-btn">Aplicar fila 1 a todas</button>
+          <button class="ds-save-btn">Guardar</button>
+        </div>
+      </div>`;
+
+    row.querySelector('.ds-folder-header').addEventListener('click', (e) => {
+      if (e.target.closest('.ds-ignore-btn')) return;
+      row.classList.toggle('ds-open');
+    });
+    row.querySelector('.ds-ignore-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      _dsToggleIgnore(folder.id, row);
+    });
+    row.querySelector('.ds-apply-all-btn').addEventListener('click', () => _dsApplyRow1(row, folder.id));
+    row.querySelector('.ds-save-btn').addEventListener('click', () => _dsSaveFolderEdits(row, folder.id));
+
+    return row;
+  }
+
+  function _dsBuildTable(folder) {
+    const rows = folder.songs.map(song => {
+      const mA  = song.missingArtist ? ' missing' : '';
+      const mAl = song.missingAlbum  ? ' missing' : '';
+      const mY  = song.missingYear   ? ' missing' : '';
+      return `<tr data-song-id="${_escHtml(song.id)}">
+        <td class="ds-table-filename" title="${_escHtml(song.name)}">${_escHtml(song.displayName || cleanTitle(song.name))}</td>
+        <td><input class="ds-cell-input${mA}"  data-field="artist" value="${_escHtml(song.artist)}"  placeholder="Artista"></td>
+        <td><input class="ds-cell-input${mAl}" data-field="album"  value="${_escHtml(song.album)}"   placeholder="Álbum"></td>
+        <td><input class="ds-cell-input${mY}"  data-field="year"   value="${_escHtml(song.year)}"    placeholder="Año" style="max-width:55px"></td>
+        <td><input class="ds-cell-input"       data-field="track"  value="${_escHtml(song.track)}"   placeholder="#" style="max-width:40px"></td>
+      </tr>`;
+    }).join('');
+    return `<table class="ds-table"><thead><tr>
+      <th style="width:28%">Canción</th><th style="width:25%">Artista</th>
+      <th style="width:25%">Álbum</th><th style="width:11%">Año</th><th style="width:11%">Pista</th>
+    </tr></thead><tbody>${rows}</tbody></table>`;
+  }
+
+  function _escHtml(str) {
+    return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  async function _dsToggleIgnore(folderId, rowEl) {
+    const folder = _dsSession.folders[folderId];
+    if (!folder) return;
+    folder.status   = folder.status === 'ignored' ? 'needs_attention' : 'ignored';
+    folder.attended = false;
+    const ignored   = folder.status === 'ignored';
+    rowEl.classList.toggle('ds-ignored', ignored);
+    const dot    = rowEl.querySelector('.ds-status-dot');
+    if (dot) dot.className = 'ds-status-dot ' + _dsDotClass(folder);
+    const ignBtn = rowEl.querySelector('.ds-ignore-btn');
+    if (ignBtn) { ignBtn.textContent = ignored ? '↩' : '✕'; ignBtn.title = ignored ? 'Designorar' : 'Ignorar'; }
+    _dsUpdateCounters();
+    await _dsSaveSession();
+  }
+
+  function _dsApplyRow1(rowEl) {
+    const rows = rowEl.querySelectorAll('.ds-table tbody tr');
+    if (rows.length < 2) return;
+    const first  = rows[0];
+    const artist = first.querySelector('[data-field="artist"]')?.value || '';
+    const album  = first.querySelector('[data-field="album"]')?.value  || '';
+    const year   = first.querySelector('[data-field="year"]')?.value   || '';
+    for (let i = 1; i < rows.length; i++) {
+      const aIn = rows[i].querySelector('[data-field="artist"]');
+      const lIn = rows[i].querySelector('[data-field="album"]');
+      const yIn = rows[i].querySelector('[data-field="year"]');
+      if (aIn) { aIn.value = artist; aIn.classList.remove('missing'); }
+      if (lIn) { lIn.value = album;  lIn.classList.remove('missing'); }
+      if (yIn) { yIn.value = year;   yIn.classList.remove('missing'); }
+    }
+  }
+
+  async function _dsSaveFolderEdits(rowEl, folderId) {
+    const folder  = _dsSession.folders[folderId];
+    if (!folder) return;
+    const saveBtn = rowEl.querySelector('.ds-save-btn');
+    if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Guardando…'; }
+    try {
+      const tableRows = rowEl.querySelectorAll('.ds-table tbody tr');
+      let saved = 0;
+      for (const tr of tableRows) {
+        const songId = tr.dataset.songId;
+        if (!songId) continue;
+        const artist = tr.querySelector('[data-field="artist"]')?.value?.trim() || '';
+        const album  = tr.querySelector('[data-field="album"]')?.value?.trim()  || '';
+        const year   = tr.querySelector('[data-field="year"]')?.value?.trim()   || '';
+        const track  = tr.querySelector('[data-field="track"]')?.value?.trim()  || '';
+        const patch  = {};
+        if (artist) patch.artist = artist;
+        if (album)  patch.album  = album;
+        if (year)   patch.year   = year;
+        if (track)  patch.track  = track;
+        if (Object.keys(patch).length > 0) {
+          await DB.setMeta(songId, patch);
+          saved++;
+          if (artist) tr.querySelector('[data-field="artist"]')?.classList.remove('missing');
+          if (album)  tr.querySelector('[data-field="album"]')?.classList.remove('missing');
+          if (year)   tr.querySelector('[data-field="year"]')?.classList.remove('missing');
+        }
+      }
+      folder.attended = true;
+      folder.status   = 'needs_attention';
+      const dot = rowEl.querySelector('.ds-status-dot');
+      if (dot) dot.className = 'ds-status-dot green';
+      rowEl.classList.remove('ds-ignored');
+      _dsUpdateCounters();
+      await _dsSaveSession();
+      if (typeof Sync !== 'undefined') Sync.push('metadata');
+      if (saveBtn) { saveBtn.textContent = '✓ Guardado'; setTimeout(() => { if(saveBtn){saveBtn.disabled=false;saveBtn.textContent='Guardar';} }, 1800); }
+      UI.showToast(`${saved} canciones actualizadas`);
+    } catch (err) {
+      console.error('[DeepScan] Save error:', err);
+      if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Guardar'; }
+      UI.showToast('Error al guardar', 'error');
+    }
+  }
+
+  /* ── Tab switching ──────────────────────────────────────── */
+
+  function _dsSwitchTab(tab) {
+    document.querySelectorAll('.ds-tab').forEach(b => b.classList.toggle('active', b.dataset.dsTab === tab));
+    document.querySelectorAll('.ds-tab-content').forEach(el => el.classList.toggle('active', el.id === 'ds-tab-' + tab));
+    if (tab === 'artists' && !_dsArtistsLoaded) {
+      _dsLoadArtists();
+    }
+  }
+
+  /* ── Artistas tab ───────────────────────────────────────── */
+
+  async function _dsLoadArtists() {
+    _dsArtistsLoaded = true;
+    const grid = document.getElementById('ds-artists-grid');
+    if (!grid) return;
+    grid.innerHTML = '<div class="ds-attention-empty" style="grid-column:1/-1">Cargando artistas…</div>';
+
+    try {
+      // Get all metadata records and extract unique artists
+      const all = await DB.getAllMeta().catch(() => []);
+      const artistMap = new Map(); // normalised key → display name
+      for (const m of all) {
+        if (!m.artist) continue;
+        const key = m.artist.trim().toLowerCase();
+        if (!artistMap.has(key)) artistMap.set(key, m.artist.trim());
+      }
+
+      if (artistMap.size === 0) {
+        grid.innerHTML = '<div class="ds-attention-empty" style="grid-column:1/-1">No hay artistas en la biblioteca aún.</div>';
+        return;
+      }
+
+      // Load photo URLs from DB
+      const photoMap = await DB.getState('ds_artistPhotos').catch(() => ({})) || {};
+
+      const artists = [...artistMap.entries()].sort((a,b) => a[0].localeCompare(b[0]));
+      _dsRenderArtists(artists, photoMap);
+    } catch (err) {
+      console.error('[DS Artists]', err);
+      if (grid) grid.innerHTML = '<div class="ds-attention-empty" style="grid-column:1/-1">Error al cargar artistas.</div>';
+    }
+  }
+
+  function _dsRenderArtists(artists, photoMap) {
+    const grid = document.getElementById('ds-artists-grid');
+    if (!grid) return;
+    grid.innerHTML = '';
+
+    const withPhoto  = artists.filter(([k]) => photoMap[k]);
+    const withoutPhoto = artists.filter(([k]) => !photoMap[k]);
+
+    // Update counters
+    _dsSetCounter('ds-art-con',   withPhoto.length);
+    _dsSetCounter('ds-art-sin',   withoutPhoto.length);
+    _dsSetCounter('ds-art-total', artists.length);
+
+    const filtered = _dsOnlyNoPhoto ? withoutPhoto : artists;
+
+    if (filtered.length === 0) {
+      grid.innerHTML = '<div class="ds-attention-empty" style="grid-column:1/-1">Todos los artistas tienen foto.</div>';
+      return;
+    }
+
+    for (const [key, name] of filtered) {
+      const url = photoMap[key] || '';
+      const initials = name.split(/\s+/).map(w => w[0]).join('').slice(0,2).toUpperCase();
+
+      const card = document.createElement('div');
+      card.className = 'ds-artist-card';
+      card.dataset.artistKey = key;
+      card.innerHTML = `
+        <div class="ds-artist-card-top">
+          <div class="ds-artist-avatar">
+            ${url ? `<img src="${_escHtml(url)}" alt="" onerror="this.style.display='none'">` : ''}
+            ${!url ? `<span>${_escHtml(initials)}</span>` : ''}
+          </div>
+          <span class="ds-artist-name" title="${_escHtml(name)}">${_escHtml(name)}</span>
+        </div>
+        <div class="ds-artist-url-row">
+          <input class="ds-artist-url-input" type="url" placeholder="URL de imagen…" value="${_escHtml(url)}">
+          <div class="ds-artist-url-actions">
+            <button class="ds-artist-cancel-btn">Cancelar</button>
+            <button class="ds-artist-save-btn">Guardar</button>
+          </div>
+        </div>`;
+
+      // Open / close URL row
+      card.querySelector('.ds-artist-card-top').addEventListener('click', () => {
+        const isOpen = card.classList.contains('ds-artist-card--open');
+        // Close all others
+        grid.querySelectorAll('.ds-artist-card--open').forEach(c => c.classList.remove('ds-artist-card--open'));
+        if (!isOpen) {
+          card.classList.add('ds-artist-card--open');
+          card.querySelector('.ds-artist-url-input').focus();
+        }
+      });
+
+      // Cancel
+      card.querySelector('.ds-artist-cancel-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        card.classList.remove('ds-artist-card--open');
+      });
+
+      // Save
+      card.querySelector('.ds-artist-save-btn').addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const newUrl = card.querySelector('.ds-artist-url-input').value.trim();
+        const btn    = card.querySelector('.ds-artist-save-btn');
+        btn.disabled = true;
+        try {
+          const existing = await DB.getState('ds_artistPhotos').catch(() => ({})) || {};
+          if (newUrl) {
+            existing[key] = newUrl;
+          } else {
+            delete existing[key];
+          }
+          await DB.setState('ds_artistPhotos', existing);
+
+          // Update avatar immediately
+          const avatar = card.querySelector('.ds-artist-avatar');
+          if (avatar) {
+            avatar.innerHTML = newUrl
+              ? `<img src="${_escHtml(newUrl)}" alt="" onerror="this.style.display='none'"><span>${_escHtml(initials)}</span>`
+              : `<span>${_escHtml(initials)}</span>`;
+          }
+          card.classList.remove('ds-artist-card--open');
+
+          // Update counters
+          const withP  = grid.querySelectorAll('.ds-artist-card').length;
+          const noPhoto = [...grid.querySelectorAll('.ds-artist-card')].filter(c => {
+            const img = c.querySelector('.ds-artist-avatar img');
+            return !img || img.style.display === 'none';
+          }).length;
+          _dsSetCounter('ds-art-con',   withP - noPhoto);
+          _dsSetCounter('ds-art-sin',   noPhoto);
+
+          UI.showToast('Foto guardada');
+        } catch (err) {
+          console.error('[DS] Save artist photo error:', err);
+          UI.showToast('Error al guardar', 'error');
+        }
+        btn.disabled = false;
+      });
+
+      grid.appendChild(card);
+    }
+  }
+
   /**
    * Iterates all songs in the DB and runs MusicBrainz lookup for those missing
    * text metadata (artist, album, year, track). Runs sequentially at 1 req/sec.
@@ -4788,6 +5857,86 @@ const App = (() => {
     // Settings: full library refresh (scan all Drive, purge orphans)
     document.getElementById('btn-library-refresh')?.addEventListener('click', _fullLibraryRefresh);
 
+    // Settings: open deep scan tool
+    document.getElementById('btn-open-deep-scan')?.addEventListener('click', _openDeepScan);
+
+    // Deep Scan: back button
+    document.getElementById('btn-ds-back')?.addEventListener('click', () => onNavClick('settings'));
+
+    // Deep Scan: playback controls
+    document.getElementById('btn-ds-start')?.addEventListener('click', _startDeepScan);
+    document.getElementById('btn-ds-pause')?.addEventListener('click', _pauseDeepScan);
+    document.getElementById('btn-ds-stop')?.addEventListener('click',  _stopDeepScan);
+
+    // Deep Scan: open in new tab
+    document.getElementById('btn-ds-new-tab')?.addEventListener('click', () => {
+      const url = location.href.split('#')[0] + '#deep-scan';
+      window.open(url, '_blank');
+    });
+
+    // Deep Scan: folder picker
+    document.getElementById('btn-ds-change-folder')?.addEventListener('click', _dsOpenFolderBrowser);
+    document.getElementById('btn-ds-modal-close')?.addEventListener('click',   () => _dsCloseModal('ds-folder-modal'));
+    document.getElementById('ds-folder-modal-backdrop')?.addEventListener('click', () => _dsCloseModal('ds-folder-modal'));
+    document.getElementById('btn-ds-modal-select')?.addEventListener('click',  _dsConfirmFolderSelect);
+
+    // Deep Scan: rescan dialog
+    document.getElementById('ds-rescan-backdrop')?.addEventListener('click', () => _dsCloseModal('ds-rescan-dialog'));
+    document.getElementById('btn-ds-rescan-cancel')?.addEventListener('click', () => _dsCloseModal('ds-rescan-dialog'));
+    document.getElementById('btn-ds-rescan-confirm')?.addEventListener('click', () => {
+      const checked = document.querySelector('input[name="ds-rescan-mode"]:checked');
+      if (_dsSession) _dsSession.rescanMode = checked?.value || 'skip';
+      _dsCloseModal('ds-rescan-dialog');
+    });
+
+    // Deep Scan: tab switching
+    document.querySelectorAll('.ds-tab').forEach(btn => {
+      btn.addEventListener('click', () => _dsSwitchTab(btn.dataset.dsTab));
+    });
+
+    // Deep Scan: list toggle (Sin datos / Completas)
+    document.getElementById('btn-ds-show-attn')?.addEventListener('click', () => {
+      if (_dsListMode === 'attn') return;
+      _dsListMode = 'attn';
+      document.getElementById('btn-ds-show-attn')?.classList.add('active');
+      document.getElementById('btn-ds-show-done')?.classList.remove('active');
+      _dsRenderAttentionList();
+    });
+    document.getElementById('btn-ds-show-done')?.addEventListener('click', () => {
+      if (_dsListMode === 'done') return;
+      _dsListMode = 'done';
+      document.getElementById('btn-ds-show-done')?.classList.add('active');
+      document.getElementById('btn-ds-show-attn')?.classList.remove('active');
+      _dsRenderCompletedList();
+    });
+    // "Mostrar" button under Completas counter
+    document.getElementById('btn-ds-show-complete')?.addEventListener('click', () => {
+      if (_dsListMode !== 'done') {
+        _dsListMode = 'done';
+        document.getElementById('btn-ds-show-done')?.classList.add('active');
+        document.getElementById('btn-ds-show-attn')?.classList.remove('active');
+        _dsRenderCompletedList();
+      }
+    });
+
+    // Deep Scan: artistas "Solo sin foto" toggle
+    document.getElementById('ds-toggle-no-photo')?.addEventListener('click', async () => {
+      _dsOnlyNoPhoto = !_dsOnlyNoPhoto;
+      document.getElementById('ds-toggle-no-photo')?.classList.toggle('active', _dsOnlyNoPhoto);
+      // Re-render
+      const all = await DB.getAllMeta().catch(() => []);
+      const artistMap = new Map();
+      for (const m of all) {
+        if (!m.artist) continue;
+        const key = m.artist.trim().toLowerCase();
+        if (!artistMap.has(key)) artistMap.set(key, m.artist.trim());
+      }
+      const photoMap = await DB.getState('ds_artistPhotos').catch(() => ({})) || {};
+      _dsRenderArtists([...artistMap.entries()].sort((a,b) => a[0].localeCompare(b[0])), photoMap);
+    });
+
+    // (Deep scan auto-open is handled in _onTokenReady after auth completes)
+
     // Settings logout
     document.getElementById('btn-logout')?.addEventListener('click', onLogout);
 
@@ -5048,6 +6197,13 @@ const App = (() => {
     onRenamePlaylist,
     onDeletePlaylist,
     onRemoveFromPlaylist,
+    // Deep Scan
+    _openDeepScan,
+    _startDeepScan,
+    _pauseDeepScan,
+    _stopDeepScan,
+    _dsOpenFolderBrowser,
+    _dsLoadArtists,
   };
 })();
 
