@@ -3458,9 +3458,10 @@ const App = (() => {
             albumCounts:  new Map(),
             artistCounts: new Map(),
             yearCounts:   new Map(),
-            coverUrl:     null,
-            hasBlobCover: false,
-            taggedCount:  0,  // songs with an album tag
+            coverUrl:     null,  // first thumbnailUrl found (external, synced — preferred)
+            blobId:       null,  // first song id with coverBlob (deferred — only used as fallback)
+            blobData:     null,  // the coverBlob itself
+            taggedCount:  0,
           });
         }
         const f = folderMap.get(m.folderId);
@@ -3468,15 +3469,12 @@ const App = (() => {
         f.albumCounts.set(album,  (f.albumCounts.get(album)  || 0) + 1);
         if (artist) f.artistCounts.set(artist, (f.artistCounts.get(artist) || 0) + 1);
         if (m.year) f.yearCounts.set(m.year,   (f.yearCounts.get(m.year)   || 0) + 1);
-        // Cover: ID3 blob > thumbnailUrl (most recent thumbnailUrl wins so CAA updates land)
-        if (!f.hasBlobCover) {
-          if (m.coverBlob && typeof Meta !== 'undefined') {
-            const url = Meta.injectCover(m.id, m.coverBlob);
-            if (url) { f.coverUrl = url; f.hasBlobCover = true; }
-          } else if (m.thumbnailUrl) {
-            f.coverUrl = m.thumbnailUrl;
-          }
-        }
+        // Cover priority: thumbnailUrl (external, synced) > coverBlob (embedded, local).
+        // thumbnailUrl comes from MB/CAA/Last.fm and is authoritative after rescan.
+        // We must NOT stop at the first coverBlob — a later song may have thumbnailUrl.
+        if (!f.coverUrl && m.thumbnailUrl) f.coverUrl = m.thumbnailUrl;
+        // Blob is a fallback: store the first one found, created lazily only if no external URL.
+        if (!f.blobId && m.coverBlob) { f.blobId = m.id; f.blobData = m.coverBlob; }
       });
 
       const _top = map => map.size > 0
@@ -3489,7 +3487,12 @@ const App = (() => {
           const artist    = _top(f.artistCounts) || '';
           const year      = _top(f.yearCounts);
           const songCount = Math.max(f.taggedCount, folderSongCount.get(f.folderId) || 0);
-          return { name, artist, songCount, coverUrl: f.coverUrl, year, folderId: f.folderId };
+          // Use external URL if available; only fall back to blob if nothing else
+          const coverUrl  = f.coverUrl
+            || (f.blobId && f.blobData && typeof Meta !== 'undefined'
+                ? Meta.injectCover(f.blobId, f.blobData)
+                : null);
+          return { name, artist, songCount, coverUrl, year, folderId: f.folderId };
         })
         .sort((a, b) => a.name.localeCompare(b.name));
 

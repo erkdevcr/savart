@@ -4369,4 +4369,17 @@ img { display: block; }
     min-height: 0;
     overflow-y: auto;
   }
+
+  /* ── Remove the generic .screen bottom padding for the library screen.
+     That 162px padding was designed for screens whose scroll container IS
+     .screen itself. In the library, scrolling happens inside .lib-detail,
+     so the padding just creates dead dark space below the grid.
+     Instead we push clearance onto the actual scroll container. ────────── */
+  #screen-library {
+    padding-bottom: 0;
+  }
+
+  #screen-library #lib-detail-content {
+    padding-bottom: calc(var(--mini-player-h) + var(--mini-margin) * 2 + var(--bottom-nav-h) + 16px);
+  }
 }
