@@ -1499,6 +1499,25 @@ img { display: block; }
 }
 .lib-tab.active svg { opacity: 1; }
 
+/* Count badge inside each library tab */
+.lib-tab-count {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--bg-hover);
+  border-radius: 8px;
+  padding: 1px 5px;
+  line-height: 1.5;
+  min-width: 18px;
+  text-align: center;
+  display: none; /* hidden until a count is set */
+}
+.lib-tab-count:not(:empty) { display: inline-block; }
+.lib-tab.active .lib-tab-count {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  color: var(--accent);
+}
+
 /* ── Library: sticky search bar ─────────────────────────── */
 .lib-search-wrap {
   position: sticky;
@@ -1588,14 +1607,14 @@ img { display: block; }
 }
 .lib-artist-card:hover { background: var(--bg-hover); }
 .lib-artist-avatar {
-  width: 68px;
-  height: 68px;
+  width: 136px;
+  height: 136px;
   border-radius: 50%;
   background: var(--bg-card);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
+  font-size: 36px;
   font-weight: 500;
   color: var(--text-secondary);
   flex-shrink: 0;
@@ -1698,9 +1717,9 @@ img { display: block; }
     padding: 10px;
   }
   .lib-artist-avatar {
-    width: 56px;
-    height: 56px;
-    font-size: 15px;
+    width: 112px;
+    height: 112px;
+    font-size: 30px;
   }
   .lib-album-grid {
     grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));

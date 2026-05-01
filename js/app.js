@@ -2659,6 +2659,7 @@ const App = (() => {
         return { ...pl, songCount: songIds.length, coverUrls };
       }));
       UI.renderPlaylists(enriched);
+      _setLibTabCount('playlists', enriched.length);
       // Background: resolve covers for playlists that still have none
       // (happens when songs were never played — no coverBlob in DB yet)
       _prefetchPlaylistCovers(enriched).catch(() => {});
@@ -2971,6 +2972,7 @@ const App = (() => {
         return url ? { ...song, thumbnailUrl: url } : song;
       }));
       UI.renderStarredSongs(enriched);
+      _setLibTabCount('fav', enriched.length);
       _driveThumbFallback(
         enriched.filter(s => !s.thumbnailUrl),
         _songRowHasCover,
@@ -3485,6 +3487,7 @@ const App = (() => {
         .sort((a, b) => a.name.localeCompare(b.name));
 
       UI.renderArtists(artists);
+      _setLibTabCount('artists', artists.length);
 
       // Re-apply any active search filter (persisted from before a drill-down)
       const q = document.getElementById('lib-search-input')?.value || '';
@@ -3563,6 +3566,17 @@ const App = (() => {
    * Aggregate all metadata into albums map.
    * Groups by album name (+ artist), counts songs, picks a cover.
    */
+  /**
+   * Update the count badge on a library tab.
+   * @param {'albums'|'artists'|'playlists'|'fav'} tab
+   * @param {number} count
+   */
+  function _setLibTabCount(tab, count) {
+    const el = document.getElementById(`lib-count-${tab}`);
+    if (!el) return;
+    el.textContent = count > 0 ? count : '';
+  }
+
   /**
    * Maps a MIME type (or filename) to a short format badge label.
    * Falls back to uppercase extension if MIME is unknown.
@@ -3662,6 +3676,7 @@ const App = (() => {
         .sort((a, b) => a.name.localeCompare(b.name));
 
       UI.renderLibraryAlbums(albums);
+      _setLibTabCount('albums', albums.length);
       // Re-apply any active search filter (persisted from before a drill-down)
       const q = document.getElementById('lib-search-input')?.value || '';
       if (q) _onLibSearch(q);
