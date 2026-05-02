@@ -151,14 +151,36 @@ const Auth = (() => {
     if (_warnTimer) clearTimeout(_warnTimer);
     const warnIn = expiresInMs - CONFIG.TOKEN_WARN_BEFORE_EXPIRY_MS;
     if (warnIn > 0) {
-      _warnTimer = setTimeout(() => {
-        console.warn('[Auth] Token expiring soon — showing renewal banner');
-        _onExpiring();
-      }, warnIn);
+      _warnTimer = setTimeout(_attemptSilentRenew, warnIn);
     } else {
-      // Already within warning window — show banner immediately
-      _onExpiring();
+      _attemptSilentRenew();
     }
+  }
+
+  /**
+   * Tries to silently renew the access token using prompt:'none'.
+   * Succeeds as long as the user's Google session is active in the browser
+   * (e.g. PC left running overnight). If it fails, falls back to showing
+   * the manual renewal banner so the user can click to re-authenticate.
+   */
+  function _attemptSilentRenew() {
+    _tryCreateClient();
+    if (!_tokenClient) {
+      // GIS not ready — fall straight to banner
+      console.warn('[Auth] Silent renewal: GIS not ready, showing banner');
+      _onExpiring();
+      return;
+    }
+    console.log('[Auth] Token expiring — attempting silent renewal (prompt:none)…');
+    _onAutoLoginFail = (err) => {
+      // Silent renewal failed (Google session also expired) → show banner
+      console.warn('[Auth] Silent renewal failed:', err, '— showing renewal banner');
+      _onAutoLoginFail = null;
+      _onExpiring();
+    };
+    _tokenClient.requestAccessToken({ prompt: 'none' });
+    // On success: _handleTokenResponse fires → _saveToken → _scheduleExpiryWarning
+    // resets the timer. No banner is ever shown.
   }
 
   /* ── Public API ─────────────────────────────────────────── */
