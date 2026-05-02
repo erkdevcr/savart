@@ -3421,22 +3421,30 @@ const App = (() => {
   }
 
   function _dsUpdateControls() {
-    const startBtn = document.getElementById('btn-ds-start');
-    const pauseBtn = document.getElementById('btn-ds-pause');
-    const stopBtn  = document.getElementById('btn-ds-stop');
-    const statusEl = document.getElementById('ds-status-text');
+    const startBtn   = document.getElementById('btn-ds-start');
+    const restartBtn = document.getElementById('btn-ds-restart');
+    const pauseBtn   = document.getElementById('btn-ds-pause');
+    const stopBtn    = document.getElementById('btn-ds-stop');
+    const statusEl   = document.getElementById('ds-status-text');
     if (!startBtn || !_dsSession) return;
 
     const running = _dsRunning && !_dsPaused;
     const paused  = _dsRunning &&  _dsPaused;
     const done    = !_dsRunning && _dsSession.status === 'done';
+    const stopped = !_dsRunning && _dsSession.status === 'stopped';
 
     const iconPlay    = `<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>`;
     const iconRestart = `<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-8 3.58-8 8s3.58 8 8 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>`;
-    if (done)         { startBtn.innerHTML = iconRestart + ' Reiniciar'; startBtn.disabled = false; }
-    else if (paused)  { startBtn.innerHTML = iconPlay    + ' Reanudar';  startBtn.disabled = false; }
+
+    // Start button: Reiniciar (done) | Reanudar (paused) | Continuar (stopped) | Iniciar (idle)
+    if (done)         { startBtn.innerHTML = iconRestart + ' Reiniciar';  startBtn.disabled = false; }
+    else if (paused)  { startBtn.innerHTML = iconPlay    + ' Reanudar';   startBtn.disabled = false; }
     else if (running) { startBtn.innerHTML = iconPlay    + ' Escaneando…'; startBtn.disabled = true; }
-    else              { startBtn.innerHTML = iconPlay    + ' Iniciar';   startBtn.disabled = false; }
+    else if (stopped) { startBtn.innerHTML = iconPlay    + ' Continuar';  startBtn.disabled = false; }
+    else              { startBtn.innerHTML = iconPlay    + ' Iniciar';    startBtn.disabled = false; }
+
+    // Restart button: only visible when stopped (offers full reset alongside Continue)
+    if (restartBtn) restartBtn.style.display = stopped ? '' : 'none';
 
     pauseBtn.disabled = !running;
     stopBtn.disabled  = !_dsRunning;
@@ -3445,8 +3453,7 @@ const App = (() => {
       if (done)          statusEl.textContent = `Completado · ${_dsSession.scannedFolders} carpetas`;
       else if (paused)   statusEl.textContent = 'En pausa';
       else if (running)  statusEl.textContent = `Escaneando… (${_dsSession.scannedFolders})`;
-      else if (_dsSession.status === 'stopped')
-                         statusEl.textContent = `Detenido · ${_dsSession.scannedFolders} carpetas`;
+      else if (stopped)  statusEl.textContent = `Detenido · ${_dsSession.scannedFolders} carpetas`;
       else if (_dsSession.scannedFolders > 0)
                          statusEl.textContent = `${_dsSession.scannedFolders} carpetas escaneadas`;
       else               statusEl.textContent = 'Listo';
@@ -3730,6 +3737,33 @@ const App = (() => {
     _dsUpdateControls();
   }
 
+  /* Full reset: clears all progress and starts from scratch. */
+  async function _restartDeepScan() {
+    if (_dsRunning) return;
+    _dsSession.startedAt      = new Date().toISOString();
+    _dsSession.status         = 'running';
+    _dsSession.scannedFolders = 0;
+    _dsSession.totalFolders   = 0;
+    _dsSession.visited        = [];
+    _dsSession.folders        = {};
+    _dsSession.completedList  = {};
+    _dsSession.log            = [];
+    _dsRestoreLog();
+    _dsRenderAttentionList();
+    _dsUpdateControls();
+    _dsUpdateProgress();
+    _dsUpdateCounters(0);
+    _dsLogLine('Iniciando nuevo escaneo desde cero…', 'info');
+    await _dsSaveSession();
+    _dsRunning = true;
+    _runDeepScan().catch(err => {
+      console.error('[DeepScan] Error:', err);
+      _dsLogLine('⚠ Error: ' + (err?.message || err), 'warn');
+      _dsRunning = false;
+      _dsUpdateControls();
+    });
+  }
+
   /* ── BFS scan loop ─────────────────────────────────────── */
 
   async function _runDeepScan() {
@@ -3794,14 +3828,15 @@ const App = (() => {
         }
       }
 
-      _dsSession.scannedFolders++;
       _dsSession.totalFolders = Math.max(_dsSession.totalFolders || 0, discovered + queue.length);
-      _dsSession.visited = [...visitedSet];
-      newlyScanned.add(id);
       _dsUpdateProgress();
       _dsUpdateCounters(queue.length, startMs);
 
+      // Folders with no audio: count & persist immediately (no pipeline to run)
       if (page.audioFiles.length === 0) {
+        _dsSession.scannedFolders++;
+        _dsSession.visited = [...visitedSet];
+        newlyScanned.add(id);
         await new Promise(r => setTimeout(r, 20));
         continue;
       }
@@ -3809,52 +3844,67 @@ const App = (() => {
       // Skip folders with too many files (compilations / mega-folders)
       if (page.audioFiles.length > 40) {
         _dsLogLine(`↷ Ignorada (${page.audioFiles.length} arch. > 40): ${path}`);
+        _dsSession.scannedFolders++;
+        _dsSession.visited = [...visitedSet];
         _dsUpdateCounters(queue.length, startMs);
         await new Promise(r => setTimeout(r, 10));
         continue;
       }
 
       // ── Run full recognition pipeline — identical to manual Album Rescan ──
-      _dsUpdateCounters(queue.length, startMs);
+      // NOTE: scannedFolders / visited are only persisted AFTER the pipeline
+      // completes so that stopping mid-folder doesn't count it as done.
 
-      // 1. Purge orphans (same as onAlbumRescan)
+      // 1. Purge orphans
       const liveIds = page.audioFiles.map(f => f.id);
       await DB.purgeOrphans(id, liveIds).catch(() => {});
 
-      // 2. Clear enrichment for ALL files + reset folder cover cache (same as onAlbumRescan)
+      // 2. Clear enrichment + reset folder cover cache
       await Promise.all(page.audioFiles.map(async f => {
         await DB.clearEnrichment(f.id).catch(() => {});
         if (typeof Meta !== 'undefined') Meta.revoke(f.id);
       }));
       _folderCoverCache.delete(id);
 
-      // 3. Pin folder name on line 1, then log each file on lines 2-3
+      // 3. Pin folder name, log files queued
       _dsSetPinnedFolder(`${path}  (${page.audioFiles.length} arch.)`);
       for (const f of page.audioFiles) {
         _dsLogLine(`  ⟳ ${cleanTitle(f.name)}`);
       }
 
-      // 4. Run all recognition passes with the full file array (same as onAlbumRescan)
+      // 4. Run all recognition passes
       try {
         await _prefetchAndApplyFolderCovers(id, page.audioFiles, true);
       } catch (err) {
         _dsLogLine(`⚠ Pipeline error en "${name}": ${err?.message || err}`, 'warn');
       }
 
-      // Pause / stop check after pipeline (can take several seconds)
+      // Stop check immediately after pipeline — if set, this folder doesn't count
+      if (_dsStopFlag) break;
+
+      // Pause spin (folder already ran — just wait before moving on)
       while (_dsPaused && !_dsStopFlag) await new Promise(r => setTimeout(r, 200));
       if (_dsStopFlag) break;
 
-      // 5. Evaluate completeness post-enrichment — log each file result
+      // 5. Collect fresh metadata for all files
+      const songMetas = await Promise.all(
+        page.audioFiles.map(async f => ({ f, meta: await DB.getMeta(f.id).catch(() => null) }))
+      );
+
+      // 6. Determine cover threshold: flag folder only if ≥20% of files lack cover
+      const missingCoverCount = songMetas.filter(({ meta }) =>
+        !(meta?.coverBlob || meta?.coverUrl || meta?.thumbnailLink)
+      ).length;
+      const folderMissingCover = missingCoverCount >= Math.ceil(page.audioFiles.length * 0.20);
+
+      // 7. Build attention list
       const attnSongs = [];
-      for (const f of page.audioFiles) {
-        const meta = await DB.getMeta(f.id).catch(() => null);
+      for (const { f, meta } of songMetas) {
         const missingArtist = !meta?.artist;
         const missingAlbum  = !meta?.album;
         const missingYear   = !meta?.year;
-        const missingCover  = !(meta?.coverBlob || meta?.coverUrl || meta?.thumbnailLink);
+        const missingCover  = folderMissingCover && !(meta?.coverBlob || meta?.coverUrl || meta?.thumbnailLink);
         const displayTitle  = meta?.displayName || cleanTitle(f.name);
-        // Flag as needing attention if artist, album, or cover is missing — year is optional
         if (missingArtist || missingAlbum || missingCover) {
           const missing = [
             missingArtist ? 'artista' : '',
@@ -3886,11 +3936,15 @@ const App = (() => {
           attended: existing?.attended || false,
         };
         if (_dsListMode === 'attn') _dsAddOrUpdateFolderRow(id);
-      } else if (page.audioFiles.length > 0) {
+      } else {
         _dsSession.completedList[id] = { id, name, path, count: page.audioFiles.length };
         if (_dsListMode === 'done') _dsAddOrUpdateFolderRow(id);
       }
 
+      // Folder fully processed — now persist progress
+      _dsSession.scannedFolders++;
+      _dsSession.visited = [...visitedSet];
+      newlyScanned.add(id);
       _dsUpdateCounters(queue.length, startMs);
 
       if (_dsSession.scannedFolders % 5 === 0) await _dsSaveSession();
@@ -6027,6 +6081,7 @@ const App = (() => {
 
     // Deep Scan: playback controls
     document.getElementById('btn-ds-start')?.addEventListener('click', _startDeepScan);
+    document.getElementById('btn-ds-restart')?.addEventListener('click', _restartDeepScan);
     document.getElementById('btn-ds-pause')?.addEventListener('click', _pauseDeepScan);
     document.getElementById('btn-ds-stop')?.addEventListener('click',  _stopDeepScan);
 

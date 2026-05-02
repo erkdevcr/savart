@@ -753,7 +753,9 @@ const DB = (() => {
     // searches by title alone and returns random incorrect results.
     const CLEAR_FIELDS = [
       'mbTried', 'auddTried', 'mbReleaseMbid',
-      'thumbnailUrl', 'coverUrl', 'coverBlob',
+      'thumbnailUrl', 'coverUrl',
+      // coverBlob (embedded ID3 art) is intentionally preserved — it requires
+      // downloading the audio file to obtain and should survive rescans.
       'lfmThumbTried',  // re-attempt Last.fm after rescan
     ];
     for (const f of CLEAR_FIELDS) delete existing[f];
