@@ -178,7 +178,8 @@ const Meta = (() => {
       // ── Text frames ──────────────────────────────────────
       const textKey = _textKey(id, version);
       if (textKey && !result[textKey]) {
-        result[textKey] = _textFrame(bytes, dPos, frameSize) || undefined;
+        const raw = _textFrame(bytes, dPos, frameSize) || undefined;
+        result[textKey] = (textKey === 'artist' && raw) ? _firstArtist(raw) : raw;
       }
 
       // ── Cover art frames — collect all, pick best below ───
@@ -299,7 +300,7 @@ const Meta = (() => {
         const key = raw.slice(0, eq).toUpperCase();
         const val = raw.slice(eq + 1).trim();
         if (key === 'TITLE'       && !out.title)  out.title  = val;
-        if (key === 'ARTIST'      && !out.artist) out.artist = val;
+        if (key === 'ARTIST'      && !out.artist) out.artist = _firstArtist(val);
         if (key === 'ALBUM'       && !out.album)  out.album  = val;
         if (key === 'DATE'        && !out.year)   out.year   = val.slice(0, 4);
         if (key === 'TRACKNUMBER' && !out.track)  out.track  = val;
@@ -323,6 +324,15 @@ const Meta = (() => {
     const mime = (pic[0] === 0xFF && pic[1] === 0xD8) ? 'image/jpeg' : 'image/png';
     const picBlob = new Blob([pic], { type: mime });
     return { url: URL.createObjectURL(picBlob), blob: picBlob, pictureType };
+  }
+
+  /* ── Artist normalisation ───────────────────────────────────
+     ID3 / Vorbis tags often store multiple artists separated by
+     ";" (e.g. "3 Doors Down;Alfred Tom;Carlos Luis").
+     We keep only the primary artist (first token).              */
+  function _firstArtist(str) {
+    if (!str) return str;
+    return str.split(';')[0].trim() || str.trim();
   }
 
   /* ── Frame helpers ───────────────────────────────────────── */

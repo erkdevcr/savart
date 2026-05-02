@@ -4141,13 +4141,16 @@ const App = (() => {
     grid.innerHTML = '<div class="ds-attention-empty" style="grid-column:1/-1">Cargando artistas…</div>';
 
     try {
-      // Extract unique artists from metadata
+      // Extract unique artists from metadata.
+      // When the artist field contains multiple names separated by ";" only the first is used.
       const all = await DB.getAllMeta().catch(() => []);
-      const artistMap = new Map(); // lowercase key → display name
+      const artistMap = new Map(); // lowercase key → display name (first occurrence wins)
       for (const m of all) {
         if (!m.artist) continue;
-        const key = m.artist.trim().toLowerCase();
-        if (!artistMap.has(key)) artistMap.set(key, m.artist.trim());
+        const name = m.artist.split(';')[0].trim();
+        if (!name) continue;
+        const key = name.toLowerCase();
+        if (!artistMap.has(key)) artistMap.set(key, name);
       }
 
       if (artistMap.size === 0) {
