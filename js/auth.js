@@ -16,11 +16,13 @@ const Auth = (() => {
   let _accessToken  = null;   // lives in memory only
   let _expiresAt    = 0;      // epoch ms
   let _warnTimer    = null;   // setTimeout id for expiry warning
-  let _onReady          = null;   // callback when a fresh token arrives
+  let _onReady          = null;   // callback when a fresh token arrives (initial login only)
   let _onExpiring       = null;   // callback when token is about to expire
   let _onLogout         = null;   // callback when user logs out
   let _onAutoLoginFail  = null;   // callback when silent re-auth fails
   let _initialized      = false;
+  let _isSilentRenew    = false;  // true while a background token renewal is in flight
+  let _renewTimeoutId   = null;   // safety timeout for silent renewal
 
   /* ── LocalStorage keys ─────────────────────────────────── */
   const LS_EXPIRY  = 'savart_token_expiry';
@@ -84,9 +86,13 @@ const Auth = (() => {
 
   /* ── Token response handler ────────────────────────────── */
   function _handleTokenResponse(response) {
-    console.log('[Auth] Token callback fired. Error?', response?.error || 'none');
+    // Clear the silent-renewal safety timeout if one was running
+    if (_renewTimeoutId) { clearTimeout(_renewTimeoutId); _renewTimeoutId = null; }
+
+    console.log('[Auth] Token callback fired. Silent?', _isSilentRenew, 'Error?', response?.error || 'none');
     if (response.error) {
       console.error('[Auth] Token error:', response.error, response.error_description);
+      _isSilentRenew = false;
       // If this was a silent re-auth attempt that failed, notify caller
       if (_onAutoLoginFail) {
         const cb = _onAutoLoginFail;
@@ -98,11 +104,19 @@ const Auth = (() => {
       return;
     }
 
-    // Silent re-auth succeeded — clear any pending fail callback
+    // Success — clear any pending fail callback
     _onAutoLoginFail = null;
 
     const expiresInMs = (parseInt(response.expires_in, 10) || 3600) * 1000;
     _saveToken(response.access_token, expiresInMs);
+
+    if (_isSilentRenew) {
+      // Background renewal — just refresh the token, do NOT re-run app boot
+      _isSilentRenew = false;
+      console.log('[Auth] Silent renewal succeeded — token refreshed silently.');
+      return;
+    }
+
     console.log('[Auth] Token saved. Calling _onReady, fn=', typeof _onReady);
     try {
       _onReady();
@@ -114,6 +128,8 @@ const Auth = (() => {
 
   function _handleTokenError(error) {
     console.error('[Auth] GIS error:', error);
+    if (_renewTimeoutId) { clearTimeout(_renewTimeoutId); _renewTimeoutId = null; }
+    _isSilentRenew = false;
 
     // If this was a silent re-auth attempt, route the failure to the caller
     // (skip toasts — this is expected when the session has expired)
@@ -159,28 +175,45 @@ const Auth = (() => {
 
   /**
    * Tries to silently renew the access token using prompt:'none'.
-   * Succeeds as long as the user's Google session is active in the browser
-   * (e.g. PC left running overnight). If it fails, falls back to showing
-   * the manual renewal banner so the user can click to re-authenticate.
+   * Succeeds as long as the user's Google session is active in the browser.
+   * If it fails (or if GIS gives no response within 12 s — e.g. popup blocked
+   * on mobile), falls back to showing the manual renewal banner.
    */
   function _attemptSilentRenew() {
     _tryCreateClient();
     if (!_tokenClient) {
-      // GIS not ready — fall straight to banner
       console.warn('[Auth] Silent renewal: GIS not ready, showing banner');
       _onExpiring();
       return;
     }
+
     console.log('[Auth] Token expiring — attempting silent renewal (prompt:none)…');
+    _isSilentRenew = true;
+
+    // Safety net: mobile browsers often block the hidden popup and fire no
+    // callback at all. After 12 s with no response, treat it as failure.
+    if (_renewTimeoutId) clearTimeout(_renewTimeoutId);
+    _renewTimeoutId = setTimeout(() => {
+      _renewTimeoutId = null;
+      if (_isSilentRenew) {
+        _isSilentRenew    = false;
+        _onAutoLoginFail  = null;
+        console.warn('[Auth] Silent renewal timed out (no GIS response) — showing banner');
+        _onExpiring();
+      }
+    }, 12_000);
+
     _onAutoLoginFail = (err) => {
-      // Silent renewal failed (Google session also expired) → show banner
-      console.warn('[Auth] Silent renewal failed:', err, '— showing renewal banner');
+      // GIS explicitly rejected the silent renewal → show banner
+      console.warn('[Auth] Silent renewal failed:', err, '— showing banner');
       _onAutoLoginFail = null;
+      _isSilentRenew   = false;
       _onExpiring();
     };
+
     _tokenClient.requestAccessToken({ prompt: 'none' });
-    // On success: _handleTokenResponse fires → _saveToken → _scheduleExpiryWarning
-    // resets the timer. No banner is ever shown.
+    // On success: _handleTokenResponse fires → clears timeout → _saveToken →
+    // _scheduleExpiryWarning resets the 55-min timer. No banner is ever shown.
   }
 
   /* ── Public API ─────────────────────────────────────────── */
@@ -309,9 +342,11 @@ const Auth = (() => {
         console.log('[Auth] Token revoked.');
       });
     }
-    _accessToken = null;
-    _expiresAt   = 0;
-    if (_warnTimer) { clearTimeout(_warnTimer); _warnTimer = null; }
+    _accessToken   = null;
+    _expiresAt     = 0;
+    _isSilentRenew = false;
+    if (_warnTimer)      { clearTimeout(_warnTimer);      _warnTimer      = null; }
+    if (_renewTimeoutId) { clearTimeout(_renewTimeoutId); _renewTimeoutId = null; }
     try {
       localStorage.removeItem(LS_EXPIRY);
       localStorage.removeItem(LS_AUTHED);

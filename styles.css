@@ -1768,13 +1768,20 @@ img { display: block; }
 @media (max-width: 767px) {
   .lib-artist-grid {
     grid-template-columns: repeat(3, 1fr);  /* always exactly 3 columns on mobile */
-    gap: 14px;
-    padding: 14px;
+    gap: 8px;
+    padding: 10px;
+  }
+  .lib-artist-card {
+    padding: 8px 4px;
   }
   .lib-artist-avatar {
-    width: 112px;
-    height: 112px;
-    font-size: 30px;
+    /* Fluid: shrinks so 3 columns always fit.
+       Formula: (100vw - 2×grid-padding - 2×gap - 2×card-h-padding) / 3
+               = (100vw - 20px - 16px - 8px) / 3 = (100vw - 44px) / 3
+       Capped at 112px for large phones. */
+    width:  min(112px, calc((100vw - 44px) / 3));
+    height: min(112px, calc((100vw - 44px) / 3));
+    font-size: min(30px, calc((100vw - 44px) / 10));
   }
   .lib-album-grid {
     grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
