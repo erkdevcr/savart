@@ -135,18 +135,12 @@ const App = (() => {
     const verLabel = document.getElementById('app-version-label');
     if (verLabel) verLabel.textContent = `Savart — versión ${CONFIG.VERSION}`;
 
-    // 1. Open IndexedDB (show centered loading toast while it initialises)
-    const bootToast = document.getElementById('boot-toast');
+    // 1. Open IndexedDB
     try {
       await DB.open();
     } catch (err) {
       console.error('[App] DB init failed:', err);
       // App can still work without cache — continue
-    } finally {
-      if (bootToast) {
-        bootToast.classList.add('hidden');
-        setTimeout(() => bootToast.remove(), 350);
-      }
     }
 
     // 2. Restore user preferences
@@ -249,6 +243,15 @@ const App = (() => {
     const reconnecting = document.getElementById('login-reconnecting');
     if (reconnecting) reconnecting.style.display = 'none';
 
+    // Show the "loading from cloud" toast while Drive data syncs
+    const bootToast = document.getElementById('boot-toast');
+    const _hideBootToast = () => {
+      if (bootToast) {
+        bootToast.classList.add('hidden');
+        setTimeout(() => bootToast.remove(), 350);
+      }
+    };
+
     UI.hideTokenBanner();
     UI.showView('home');
     _loadHomeData();
@@ -273,7 +276,9 @@ const App = (() => {
       if (view === 'library') _setLibTab(_currentLibTab || 'albums');
       // Start live 3-second polling (Last-Write-Wins)
       Sync.startLiveSync(_onSyncDataChanged);
-    }).catch(() => {});
+    }).catch(() => {}).finally(() => {
+      _hideBootToast();
+    });
 
     // Auto-open Deep Scan if launched from "Abrir en pestaña"
     if (location.hash === '#deep-scan' || location.hash === '#deep-scan-artists') {
