@@ -3987,6 +3987,20 @@ const App = (() => {
     return 'gray';
   }
 
+  /* ── Missing-data chips for folder header ───────────────── */
+
+  function _dsMissingChips(folder) {
+    const songs = folder.songs || [];
+    const hasAR = songs.some(s => s.missingArtist);
+    const hasAL = songs.some(s => s.missingAlbum);
+    const hasCV = songs.some(s => s.missingCover);
+    return [
+      hasAR ? '<span class="ds-chip ds-chip--ar">AR</span>' : '',
+      hasAL ? '<span class="ds-chip ds-chip--al">AL</span>' : '',
+      hasCV ? '<span class="ds-chip ds-chip--cv">CV</span>' : '',
+    ].join('');
+  }
+
   /* ── Build folder row (for needs-attention list) ─────────── */
 
   function _dsBuildFolderRow(folder) {
@@ -4006,6 +4020,7 @@ const App = (() => {
         <div class="ds-folder-path">
           <span class="ds-folder-parent">${_escHtml(parentStr)}</span><span class="ds-folder-leaf">${_escHtml(leaf)}</span>
         </div>
+        <div class="ds-missing-chips">${_dsMissingChips(folder)}</div>
         <button class="ds-ignore-btn" title="${ignored ? 'Designorar' : 'Ignorar'}">${ignored ? '↩' : '✕'}</button>
         <svg class="ds-chevron" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
       </div>
@@ -4034,8 +4049,23 @@ const App = (() => {
             const lIn = tr.querySelector('[data-field="album"]');
             const yIn = tr.querySelector('[data-field="year"]');
             const tIn = tr.querySelector('[data-field="track"]');
+            const coverVal = meta.coverUrl || meta.thumbnailLink || '';
+            const cIn = tr.querySelector('[data-field="coverUrl"]');
             if (aIn) { aIn.value = meta.artist || ''; aIn.classList.toggle('missing', !meta.artist); }
             if (lIn) { lIn.value = meta.album  || ''; lIn.classList.toggle('missing', !meta.album);  }
+            if (cIn) {
+              cIn.value = coverVal;
+              cIn.classList.toggle('missing', !coverVal);
+              // Update thumbnail preview
+              const thumb = tr.querySelector('.ds-cover-thumb');
+              if (thumb) {
+                if (coverVal) {
+                  thumb.outerHTML = `<img src="${_escHtml(coverVal)}" class="ds-cover-thumb" onerror="this.style.display='none'">`;
+                } else {
+                  if (thumb.tagName === 'IMG') thumb.outerHTML = `<span class="ds-cover-thumb ds-cover-empty"></span>`;
+                }
+              }
+            }
             if (yIn) { yIn.value = meta.year   || ''; }
             if (tIn) { tIn.value = meta.track  || ''; }
           }
@@ -4057,17 +4087,27 @@ const App = (() => {
       const mA  = song.missingArtist ? ' missing' : '';
       const mAl = song.missingAlbum  ? ' missing' : '';
       const mY  = song.missingYear   ? ' missing' : '';
+      const mC  = song.missingCover  ? ' missing' : '';
+      const coverVal = song.coverUrl || '';
+      const thumb = coverVal
+        ? `<img src="${_escHtml(coverVal)}" class="ds-cover-thumb" onerror="this.style.display='none'">`
+        : `<span class="ds-cover-thumb ds-cover-empty"></span>`;
       return `<tr data-song-id="${_escHtml(song.id)}">
         <td class="ds-table-filename" title="${_escHtml(song.name)}">${_escHtml(song.displayName || cleanTitle(song.name))}</td>
         <td><input class="ds-cell-input${mA}"  data-field="artist" value="${_escHtml(song.artist)}"  placeholder="Artista"></td>
         <td><input class="ds-cell-input${mAl}" data-field="album"  value="${_escHtml(song.album)}"   placeholder="Álbum"></td>
+        <td class="ds-cover-cell">
+          ${thumb}
+          <input class="ds-cell-input${mC}" data-field="coverUrl" value="${_escHtml(coverVal)}" placeholder="URL cover…">
+        </td>
         <td><input class="ds-cell-input${mY}"  data-field="year"   value="${_escHtml(song.year)}"    placeholder="Año" style="max-width:55px"></td>
         <td><input class="ds-cell-input"       data-field="track"  value="${_escHtml(song.track)}"   placeholder="#" style="max-width:40px"></td>
       </tr>`;
     }).join('');
     return `<table class="ds-table"><thead><tr>
-      <th style="width:28%">Canción</th><th style="width:25%">Artista</th>
-      <th style="width:25%">Álbum</th><th style="width:11%">Año</th><th style="width:11%">Pista</th>
+      <th style="width:20%">Canción</th><th style="width:18%">Artista</th>
+      <th style="width:18%">Álbum</th><th style="width:28%">Cover</th>
+      <th style="width:9%">Año</th><th style="width:7%">Pista</th>
     </tr></thead><tbody>${rows}</tbody></table>`;
   }
 
@@ -4093,17 +4133,20 @@ const App = (() => {
   function _dsApplyRow1(rowEl) {
     const rows = rowEl.querySelectorAll('.ds-table tbody tr');
     if (rows.length < 2) return;
-    const first  = rows[0];
-    const artist = first.querySelector('[data-field="artist"]')?.value || '';
-    const album  = first.querySelector('[data-field="album"]')?.value  || '';
-    const year   = first.querySelector('[data-field="year"]')?.value   || '';
+    const first    = rows[0];
+    const artist   = first.querySelector('[data-field="artist"]')?.value   || '';
+    const album    = first.querySelector('[data-field="album"]')?.value    || '';
+    const year     = first.querySelector('[data-field="year"]')?.value     || '';
+    const coverUrl = first.querySelector('[data-field="coverUrl"]')?.value || '';
     for (let i = 1; i < rows.length; i++) {
       const aIn = rows[i].querySelector('[data-field="artist"]');
       const lIn = rows[i].querySelector('[data-field="album"]');
       const yIn = rows[i].querySelector('[data-field="year"]');
-      if (aIn) { aIn.value = artist; aIn.classList.remove('missing'); }
-      if (lIn) { lIn.value = album;  lIn.classList.remove('missing'); }
-      if (yIn) { yIn.value = year;   yIn.classList.remove('missing'); }
+      const cIn = rows[i].querySelector('[data-field="coverUrl"]');
+      if (aIn) { aIn.value = artist;   aIn.classList.remove('missing'); }
+      if (lIn) { lIn.value = album;    lIn.classList.remove('missing'); }
+      if (yIn) { yIn.value = year;     yIn.classList.remove('missing'); }
+      if (cIn) { cIn.value = coverUrl; if (coverUrl) cIn.classList.remove('missing'); }
     }
   }
 
@@ -4118,21 +4161,24 @@ const App = (() => {
       for (const tr of tableRows) {
         const songId = tr.dataset.songId;
         if (!songId) continue;
-        const artist = tr.querySelector('[data-field="artist"]')?.value?.trim() || '';
-        const album  = tr.querySelector('[data-field="album"]')?.value?.trim()  || '';
-        const year   = tr.querySelector('[data-field="year"]')?.value?.trim()   || '';
-        const track  = tr.querySelector('[data-field="track"]')?.value?.trim()  || '';
+        const artist   = tr.querySelector('[data-field="artist"]')?.value?.trim()   || '';
+        const album    = tr.querySelector('[data-field="album"]')?.value?.trim()    || '';
+        const year     = tr.querySelector('[data-field="year"]')?.value?.trim()     || '';
+        const track    = tr.querySelector('[data-field="track"]')?.value?.trim()    || '';
+        const coverUrl = tr.querySelector('[data-field="coverUrl"]')?.value?.trim() || '';
         const patch  = {};
-        if (artist) patch.artist = artist;
-        if (album)  patch.album  = album;
-        if (year)   patch.year   = year;
-        if (track)  patch.track  = track;
+        if (artist)   patch.artist       = artist;
+        if (album)    patch.album        = album;
+        if (year)     patch.year         = year;
+        if (track)    patch.track        = track;
+        if (coverUrl) patch.thumbnailLink = coverUrl;
         if (Object.keys(patch).length > 0) {
           await DB.setMeta(songId, patch);
           saved++;
-          if (artist) tr.querySelector('[data-field="artist"]')?.classList.remove('missing');
-          if (album)  tr.querySelector('[data-field="album"]')?.classList.remove('missing');
-          if (year)   tr.querySelector('[data-field="year"]')?.classList.remove('missing');
+          if (artist)   tr.querySelector('[data-field="artist"]')?.classList.remove('missing');
+          if (album)    tr.querySelector('[data-field="album"]')?.classList.remove('missing');
+          if (year)     tr.querySelector('[data-field="year"]')?.classList.remove('missing');
+          if (coverUrl) tr.querySelector('[data-field="coverUrl"]')?.classList.remove('missing');
         }
       }
       folder.attended = true;

@@ -4919,7 +4919,50 @@ img { display: block; }
 .ds-cell-input.missing { border-color: rgba(224,85,85,0.55); }
 .ds-cell-input.missing:focus { border-color: var(--error); }
 
+/* Cover cell */
+.ds-cover-cell {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 3px !important;
+}
+.ds-cover-thumb {
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  display: block;
+}
+.ds-cover-empty {
+  opacity: 0.35;
+}
+.ds-cover-cell .ds-cell-input {
+  flex: 1;
+  min-width: 0;
+}
+
 /* Table actions */
+.ds-missing-chips {
+  display: flex;
+  gap: 3px;
+  flex-shrink: 0;
+  margin-right: 4px;
+}
+.ds-chip {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 3px;
+  letter-spacing: 0.4px;
+  opacity: 0.85;
+}
+.ds-chip--ar { background: rgba(224, 85, 85, 0.18); color: #e05555; border: 1px solid rgba(224,85,85,0.3); }
+.ds-chip--al { background: rgba(160, 100, 220, 0.18); color: #a064dc; border: 1px solid rgba(160,100,220,0.3); }
+.ds-chip--cv { background: rgba(80, 160, 220, 0.18); color: #50a0dc; border: 1px solid rgba(80,160,220,0.3); }
+
 .ds-table-actions {
   display: flex;
   align-items: center;
