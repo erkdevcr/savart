@@ -1561,7 +1561,7 @@ img { display: block; }
   left: 50%;
   transform: translateX(-50%);
   z-index: 9999;
-  display: flex;
+  /* display is set to 'none' in HTML; JS switches to 'flex' at auth time */
   align-items: center;
   gap: 9px;
   background: #0a2a1a;
@@ -1573,11 +1573,11 @@ img { display: block; }
   box-shadow: 0 0 12px rgba(40, 200, 100, 0.25), 0 0 4px rgba(40, 200, 100, 0.15);
   white-space: nowrap;
   pointer-events: none;
-  opacity: 1;
-  transition: opacity 0.3s ease;
+  opacity: 0;
+  transition: opacity 0.35s ease;
 }
 #boot-toast.hidden {
-  opacity: 0;
+  opacity: 0 !important;
 }
 @keyframes bootSpin { to { transform: rotate(360deg); } }
 
@@ -4853,7 +4853,8 @@ img { display: block; }
   font-size: 9px;
   font-weight: 700;
 }
-.ds-badge--green { background: var(--success); }
+.ds-badge--green  { background: var(--success); }
+.ds-badge--yellow { background: #c8a020; }
 
 /* Scrollable list */
 .ds-attention-list {
@@ -4890,9 +4891,10 @@ img { display: block; }
   border-radius: 50%;
   flex-shrink: 0;
 }
-.ds-status-dot.gray  { background: var(--text-disabled); }
-.ds-status-dot.green { background: var(--success); }
-.ds-status-dot.red   { background: var(--error); }
+.ds-status-dot.gray   { background: var(--text-disabled); }
+.ds-status-dot.green  { background: var(--success); }
+.ds-status-dot.red    { background: var(--error); }
+.ds-status-dot.yellow { background: #c8a020; }
 
 /* Folder path */
 .ds-folder-path {
@@ -5342,8 +5344,8 @@ img { display: block; }
   .ds-counter-lbl { font-size: 8px; }
   .ds-controls-bar { padding: 6px 10px; gap: 6px; }
   .ds-ctrl-btn { padding: 5px 8px; font-size: 11px; }
-  .ds-artists-grid { grid-template-columns: repeat(2, 1fr); padding: 16px 10px; gap: 24px 8px; }
-  .ds-artist-avatar { width: 72px; height: 72px; font-size: 22px; }
+  .ds-artists-grid { grid-template-columns: repeat(3, 1fr); padding: 16px 8px; gap: 20px 6px; }
+  .ds-artist-avatar { width: min(80px, 26vw); height: min(80px, 26vw); font-size: 20px; }
   .ds-table th, .ds-table td { padding: 2px 1px; }
   .ds-cell-input { font-size: 10px; padding: 2px 4px; }
   .ds-table-filename { font-size: 10px; }

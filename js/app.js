@@ -243,13 +243,24 @@ const App = (() => {
     const reconnecting = document.getElementById('login-reconnecting');
     if (reconnecting) reconnecting.style.display = 'none';
 
-    // Show the "loading from cloud" toast while Drive data syncs
+    // Show the "loading from cloud" toast while Drive data syncs.
+    // Start hidden in HTML so it never flashes during login; show it here
+    // explicitly with a fade-in and enforce a minimum display of 1.2 s so
+    // it's always visible on mobile (where Sync.init may resolve very fast).
     const bootToast = document.getElementById('boot-toast');
+    const _bootShowTime = Date.now();
+    if (bootToast) {
+      bootToast.style.display = 'flex';
+      requestAnimationFrame(() => { bootToast.style.opacity = '1'; });
+    }
     const _hideBootToast = () => {
-      if (bootToast) {
+      if (!bootToast) return;
+      const elapsed = Date.now() - _bootShowTime;
+      const delay   = Math.max(0, 1200 - elapsed);
+      setTimeout(() => {
         bootToast.classList.add('hidden');
-        setTimeout(() => bootToast.remove(), 350);
-      }
+        setTimeout(() => { if (bootToast.parentNode) bootToast.remove(); }, 400);
+      }, delay);
     };
 
     UI.hideTokenBanner();
@@ -1695,7 +1706,7 @@ const App = (() => {
       const img = thumb.querySelector('img');
       if (!isId3 && img) {
         if (img.dataset.coverSrc === 'id3') return; // ID3 is always protected
-        img.src = coverUrl; // external can replace other external (e.g. CAA over expired Drive URL)
+        img.src = coverUrl;
         return;
       }
       if (isId3 && img?.dataset.coverSrc === 'id3') return; // already ID3 — keep it
@@ -1709,6 +1720,38 @@ const App = (() => {
     // Library detail view (.top-list-item → .top-list-thumb)
     const listRow = document.querySelector(`.top-list-item[data-id="${eid}"]`);
     if (listRow) _applyToThumb(listRow.querySelector('.top-list-thumb'));
+
+    // Live-update the album card in the library grid (non-blocking DB lookup)
+    DB.getMeta(fileId).then(m => {
+      if (m?.folderId) _updateAlbumCardCover(m.folderId, coverUrl);
+    }).catch(() => {});
+  }
+
+  /**
+   * Update the album card art in the library grid immediately, without a full re-render.
+   * Called from _updateRowThumbnail whenever a cover is found for any song.
+   * Only replaces the art if the card is currently showing a placeholder (no image),
+   * so the displayed cover is the first confirmed one — a full _loadAlbums() re-render
+   * will later apply the majority-vote cover.
+   */
+  function _updateAlbumCardCover(folderId, coverUrl) {
+    if (!folderId || !coverUrl) return;
+    const card = document.querySelector(
+      `#lib-detail-content .home-card[data-folder-id="${CSS.escape(folderId)}"]`
+    );
+    if (!card) return;
+    const art = card.querySelector('.home-card-art');
+    if (!art) return;
+    const img = art.querySelector('img');
+    if (img) {
+      // Already has a cover — only upgrade if it's the same source type
+      img.src = coverUrl;
+    } else {
+      // No cover yet — inject immediately
+      art.innerHTML = `<img src="${coverUrl}" alt="" loading="lazy"
+        style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-md)"
+        onerror="this.remove()">`;
+    }
   }
 
   /**
@@ -2723,9 +2766,17 @@ const App = (() => {
    * Switch the active library tab: update DOM active state,
    * update search placeholder and load the tab's data.
    */
+  function _setLibSearchBarVisible(visible) {
+    const wrap = document.querySelector('.lib-search-wrap');
+    if (wrap) wrap.style.display = visible ? '' : 'none';
+  }
+
   function _setLibTab(tab) {
     _currentLibTab = tab;
     _libInDetail   = false; // leaving any drill-down view
+
+    // Show search bar (hidden while inside a drill-down)
+    _setLibSearchBarVisible(true);
 
     // Active state on tab items
     document.querySelectorAll('#lib-sidebar .lib-tab').forEach(el => {
@@ -2756,6 +2807,9 @@ const App = (() => {
   function _libGoBack(tab) {
     _currentLibTab = tab;
     _libInDetail   = false;
+
+    // Restore search bar
+    _setLibSearchBarVisible(true);
 
     document.querySelectorAll('#lib-sidebar .lib-tab').forEach(el => {
       el.classList.toggle('active', el.dataset.tab === tab);
@@ -3312,7 +3366,7 @@ const App = (() => {
   let _dsPaused        = false;
   let _dsStopFlag      = false;
   let _dsSession       = null;
-  let _dsListMode      = 'attn';     // 'attn' | 'done' | 'all'
+  let _dsListMode      = 'attn';     // 'attn' | 'done' | 'skipped' | 'all'
   let _dsArtistsLoaded = false;
   let _dsOnlyNoPhoto   = false;
 
@@ -3430,6 +3484,7 @@ const App = (() => {
       if (!_dsSession.selectedFolderId)   _dsSession.selectedFolderId   = CONFIG.ROOT_FOLDER_ID;
       if (!_dsSession.selectedFolderName) _dsSession.selectedFolderName = CONFIG.ROOT_FOLDER_NAME;
       if (!_dsSession.completedList)      _dsSession.completedList      = {};
+      if (!_dsSession.skippedList)        _dsSession.skippedList        = {};
       if (!_dsSession.rescanMode)         _dsSession.rescanMode         = 'skip';
       if (!_dsSession.pendingQueue)       _dsSession.pendingQueue       = [];
     } else {
@@ -3445,6 +3500,7 @@ const App = (() => {
         pendingQueue:       [],   // saved BFS queue — restored on resume
         folders:            {},   // needs-attention entries
         completedList:      {},   // folderId → {id,name,path,count}
+        skippedList:        {},   // folderId → {id,name,path,count} — skipped (>40 files)
         log:                [],
       };
     }
@@ -3608,9 +3664,10 @@ const App = (() => {
   function _dsUpdateCounters(queueLen = null, startMs = null) {
     if (!_dsSession) return;
 
-    const attnCount  = Object.values(_dsSession.folders || {})
+    const attnCount    = Object.values(_dsSession.folders || {})
       .filter(f => f.status !== 'ignored' && !f.attended).length;
-    const doneCount  = Object.keys(_dsSession.completedList || {}).length;
+    const doneCount    = Object.keys(_dsSession.completedList || {}).length;
+    const skippedCount = Object.keys(_dsSession.skippedList   || {}).length;
     const remaining  = queueLen !== null ? queueLen : (
       _dsSession.totalFolders > _dsSession.scannedFolders
         ? _dsSession.totalFolders - _dsSession.scannedFolders
@@ -3635,10 +3692,12 @@ const App = (() => {
     _dsSetCounter('ds-cnt-eta', eta);
 
     // Badges in toggle bar
-    const attnBadge = document.getElementById('ds-attn-badge');
-    const doneBadge = document.getElementById('ds-done-badge');
-    if (attnBadge) attnBadge.textContent = attnCount;
-    if (doneBadge) doneBadge.textContent = doneCount;
+    const attnBadge    = document.getElementById('ds-attn-badge');
+    const doneBadge    = document.getElementById('ds-done-badge');
+    const skippedBadge = document.getElementById('ds-skipped-badge');
+    if (attnBadge)    attnBadge.textContent    = attnCount;
+    if (doneBadge)    doneBadge.textContent    = doneCount;
+    if (skippedBadge) skippedBadge.textContent = skippedCount;
   }
 
   function _dsSetCounter(id, val) {
@@ -3835,6 +3894,7 @@ const App = (() => {
       _dsSession.pendingQueue   = [];
       _dsSession.folders        = {};
       _dsSession.completedList  = {};
+      _dsSession.skippedList    = {};
       _dsSession.log            = [];
       _dsRestoreLog();
       _dsRenderAttentionList();
@@ -3890,6 +3950,7 @@ const App = (() => {
     _dsSession.pendingQueue   = [];
     _dsSession.folders        = {};
     _dsSession.completedList  = {};
+    _dsSession.skippedList    = {};
     _dsSession.log            = [];
     _dsRestoreLog();
     _dsRenderAttentionList();
@@ -3992,7 +4053,9 @@ const App = (() => {
 
       // Skip folders with too many files (compilations / mega-folders)
       if (page.audioFiles.length > 40) {
-        _dsLogLine(`↷ Ignorada (${page.audioFiles.length} arch. > 40): ${path}`);
+        _dsLogLine(`↷ Saltada (${page.audioFiles.length} arch. > 40): ${path}`);
+        _dsSession.skippedList[id] = { id, name, path, count: page.audioFiles.length };
+        if (_dsListMode === 'skipped' || _dsListMode === 'all') _dsAddOrUpdateFolderRow(id);
         _dsSession.scannedFolders++;
         _dsSession.visited = [...visitedSet];
         _dsUpdateCounters(queue.length, startMs);
@@ -4180,36 +4243,52 @@ const App = (() => {
     }
   }
 
-  /** Render all scanned folders: attention first (sorted), then completed. */
+  /** Build a simple (non-expandable) folder row for completed/skipped entries. */
+  function _dsBuildSimpleRow(folder, dotClass) {
+    const row = document.createElement('div');
+    row.className = 'ds-folder-row';
+    row.dataset.folderId = folder.id;
+    const pathParts = folder.path.split(' › ');
+    const leaf      = pathParts.pop();
+    const parentStr = pathParts.length ? pathParts.join(' › ') + ' › ' : '';
+    row.innerHTML = `
+      <div class="ds-folder-header" style="cursor:default">
+        <div class="ds-status-dot ${dotClass}"></div>
+        <div class="ds-folder-path">
+          <span class="ds-folder-parent">${_escHtml(parentStr)}</span><span class="ds-folder-leaf">${_escHtml(leaf)}</span>
+        </div>
+        <span style="font-size:10px;color:var(--text-disabled);flex-shrink:0">${folder.count} arch.</span>
+      </div>`;
+    return row;
+  }
+
+  function _dsRenderSkippedList() {
+    const list = document.getElementById('ds-attention-list');
+    if (!list) return;
+    const folders = Object.values(_dsSession?.skippedList || {});
+    list.innerHTML = '';
+    if (folders.length === 0) {
+      list.innerHTML = '<div class="ds-attention-empty">Ninguna carpeta saltada aún.</div>';
+      return;
+    }
+    for (const folder of folders) list.appendChild(_dsBuildSimpleRow(folder, 'yellow'));
+  }
+
+  /** Render all scanned folders: attention, completed, skipped. */
   function _dsRenderAllList() {
     const list = document.getElementById('ds-attention-list');
     if (!list) return;
     list.innerHTML = '';
-    const attnFolders = Object.values(_dsSession?.folders || {})
-      .filter(f => f.status !== 'ignored' || true);
-    const doneFolders = Object.values(_dsSession?.completedList || {});
-    if (attnFolders.length === 0 && doneFolders.length === 0) {
+    const attnFolders    = Object.values(_dsSession?.folders       || {}).filter(f => f.status !== 'ignored' || true);
+    const doneFolders    = Object.values(_dsSession?.completedList || {});
+    const skippedFolders = Object.values(_dsSession?.skippedList   || {});
+    if (attnFolders.length === 0 && doneFolders.length === 0 && skippedFolders.length === 0) {
       list.innerHTML = '<div class="ds-attention-empty">Sin carpetas para mostrar aún.</div>';
       return;
     }
-    for (const folder of attnFolders) list.appendChild(_dsBuildFolderRow(folder));
-    for (const folder of doneFolders) {
-      const row = document.createElement('div');
-      row.className = 'ds-folder-row';
-      row.dataset.folderId = folder.id;
-      const pathParts = folder.path.split(' › ');
-      const leaf      = pathParts.pop();
-      const parentStr = pathParts.length ? pathParts.join(' › ') + ' › ' : '';
-      row.innerHTML = `
-        <div class="ds-folder-header" style="cursor:default">
-          <div class="ds-status-dot green"></div>
-          <div class="ds-folder-path">
-            <span class="ds-folder-parent">${_escHtml(parentStr)}</span><span class="ds-folder-leaf">${_escHtml(leaf)}</span>
-          </div>
-          <span style="font-size:10px;color:var(--text-disabled);flex-shrink:0">${folder.count} arch.</span>
-        </div>`;
-      list.appendChild(row);
-    }
+    for (const folder of attnFolders)    list.appendChild(_dsBuildFolderRow(folder));
+    for (const folder of doneFolders)    list.appendChild(_dsBuildSimpleRow(folder, 'green'));
+    for (const folder of skippedFolders) list.appendChild(_dsBuildSimpleRow(folder, 'yellow'));
   }
 
   function _dsAddOrUpdateFolderRow(folderId) {
@@ -4233,24 +4312,16 @@ const App = (() => {
     }
     if (_dsListMode === 'done' || _dsListMode === 'all') {
       const folder = _dsSession.completedList?.[folderId];
-      if (!folder) return;
-      const existing = list.querySelector(`[data-folder-id="${CSS.escape(folderId)}"]`);
-      if (!existing) {
-        const row = document.createElement('div');
-        row.className = 'ds-folder-row';
-        row.dataset.folderId = folderId;
-        const pathParts = folder.path.split(' › ');
-        const leaf      = pathParts.pop();
-        const parentStr = pathParts.length ? pathParts.join(' › ') + ' › ' : '';
-        row.innerHTML = `
-          <div class="ds-folder-header" style="cursor:default">
-            <div class="ds-status-dot green"></div>
-            <div class="ds-folder-path">
-              <span class="ds-folder-parent">${_escHtml(parentStr)}</span><span class="ds-folder-leaf">${_escHtml(leaf)}</span>
-            </div>
-            <span style="font-size:10px;color:var(--text-disabled);flex-shrink:0">${folder.count} arch.</span>
-          </div>`;
-        list.appendChild(row);
+      if (folder) {
+        const existing = list.querySelector(`[data-folder-id="${CSS.escape(folderId)}"]`);
+        if (!existing) list.appendChild(_dsBuildSimpleRow(folder, 'green'));
+      }
+    }
+    if (_dsListMode === 'skipped') {
+      const folder = _dsSession.skippedList?.[folderId];
+      if (folder) {
+        const existing = list.querySelector(`[data-folder-id="${CSS.escape(folderId)}"]`);
+        if (!existing) list.appendChild(_dsBuildSimpleRow(folder, 'yellow'));
       }
     }
   }
@@ -5104,15 +5175,15 @@ const App = (() => {
         if (!album || !m.folderId) return; // skip untagged or folder-less songs
         if (!folderMap.has(m.folderId)) {
           folderMap.set(m.folderId, {
-            folderId:     m.folderId,
-            albumCounts:  new Map(),
-            artistCounts: new Map(),
-            yearCounts:   new Map(),
-            formatCounts: new Map(),
-            coverUrl:     null,  // first thumbnailUrl found (external, synced — preferred)
-            blobId:       null,  // first song id with coverBlob (deferred — only used as fallback)
-            blobData:     null,  // the coverBlob itself
-            taggedCount:  0,
+            folderId:        m.folderId,
+            albumCounts:     new Map(),
+            artistCounts:    new Map(),
+            yearCounts:      new Map(),
+            formatCounts:    new Map(),
+            coverUrlCounts:  new Map(), // url → count; majority wins
+            blobId:          null,      // first song id with coverBlob (fallback)
+            blobData:        null,
+            taggedCount:     0,
           });
         }
         const f = folderMap.get(m.folderId);
@@ -5123,11 +5194,9 @@ const App = (() => {
         // Track dominant audio format (mimeType → short label)
         const fmt = _formatLabel(m.mimeType, m.name);
         if (fmt) f.formatCounts.set(fmt, (f.formatCounts.get(fmt) || 0) + 1);
-        // Cover priority: thumbnailUrl (external, synced) > coverBlob (embedded, local).
-        // thumbnailUrl comes from MB/CAA/Last.fm and is authoritative after rescan.
-        // We must NOT stop at the first coverBlob — a later song may have thumbnailUrl.
-        if (!f.coverUrl && m.thumbnailUrl) f.coverUrl = m.thumbnailUrl;
-        // Blob is a fallback: store the first one found, created lazily only if no external URL.
+        // Count each cover URL — the most frequent one wins (majority rule).
+        if (m.thumbnailUrl) f.coverUrlCounts.set(m.thumbnailUrl, (f.coverUrlCounts.get(m.thumbnailUrl) || 0) + 1);
+        // Blob fallback: keep first found; embedded art is usually identical across tracks.
         if (!f.blobId && m.coverBlob) { f.blobId = m.id; f.blobData = m.coverBlob; }
       });
 
@@ -5142,8 +5211,8 @@ const App = (() => {
           const year      = _top(f.yearCounts);
           const format    = _top(f.formatCounts) || null;
           const songCount = Math.max(f.taggedCount, folderSongCount.get(f.folderId) || 0);
-          // Use external URL if available; only fall back to blob if nothing else
-          const coverUrl  = f.coverUrl
+          // Majority cover URL; fall back to embedded blob if no external URL at all
+          const coverUrl  = _top(f.coverUrlCounts)
             || (f.blobId && f.blobData && typeof Meta !== 'undefined'
                 ? Meta.injectCover(f.blobId, f.blobData)
                 : null);
@@ -5220,8 +5289,8 @@ const App = (() => {
         .sort((a, b) => a.name.localeCompare(b.name));
 
       _libInDetail = true;
+      _setLibSearchBarVisible(false);
       UI.renderLibraryArtistDetail(artist, albums);
-      UI.setLibSearchPlaceholder(`Buscar álbum de ${artist.name}…`);
       const q = document.getElementById('lib-search-input')?.value || '';
       if (q) _onLibSearch(q);
     } catch (err) {
@@ -5292,8 +5361,8 @@ const App = (() => {
 
       const backTarget = fromArtist ? 'artist' : 'albums';
       _libInDetail = true;
+      _setLibSearchBarVisible(false);
       UI.renderLibraryAlbumDetail(album, enriched, backTarget, fromArtist || null);
-      UI.setLibSearchPlaceholder(`Buscar en ${album.name}…`);
 
       // Background cover + metadata enrichment for songs in this album.
       // Uses the same multi-pass pipeline as the browse folder view:
@@ -6304,16 +6373,19 @@ const App = (() => {
     // Deep Scan: list toggle (Sin datos / Completas)
     const _dsSetListMode = (mode) => {
       _dsListMode = mode;
-      document.getElementById('btn-ds-show-all')?.classList.toggle('active',  mode === 'all');
-      document.getElementById('btn-ds-show-attn')?.classList.toggle('active', mode === 'attn');
-      document.getElementById('btn-ds-show-done')?.classList.toggle('active', mode === 'done');
-      if (mode === 'all')  _dsRenderAllList();
-      if (mode === 'attn') _dsRenderAttentionList();
-      if (mode === 'done') _dsRenderCompletedList();
+      document.getElementById('btn-ds-show-all')?.classList.toggle('active',     mode === 'all');
+      document.getElementById('btn-ds-show-attn')?.classList.toggle('active',    mode === 'attn');
+      document.getElementById('btn-ds-show-done')?.classList.toggle('active',    mode === 'done');
+      document.getElementById('btn-ds-show-skipped')?.classList.toggle('active', mode === 'skipped');
+      if (mode === 'all')     _dsRenderAllList();
+      if (mode === 'attn')    _dsRenderAttentionList();
+      if (mode === 'done')    _dsRenderCompletedList();
+      if (mode === 'skipped') _dsRenderSkippedList();
     };
-    document.getElementById('btn-ds-show-all')?.addEventListener('click',  () => { if (_dsListMode !== 'all')  _dsSetListMode('all');  });
-    document.getElementById('btn-ds-show-attn')?.addEventListener('click', () => { if (_dsListMode !== 'attn') _dsSetListMode('attn'); });
-    document.getElementById('btn-ds-show-done')?.addEventListener('click', () => { if (_dsListMode !== 'done') _dsSetListMode('done'); });
+    document.getElementById('btn-ds-show-all')?.addEventListener('click',     () => { if (_dsListMode !== 'all')     _dsSetListMode('all');     });
+    document.getElementById('btn-ds-show-attn')?.addEventListener('click',    () => { if (_dsListMode !== 'attn')    _dsSetListMode('attn');    });
+    document.getElementById('btn-ds-show-done')?.addEventListener('click',    () => { if (_dsListMode !== 'done')    _dsSetListMode('done');    });
+    document.getElementById('btn-ds-show-skipped')?.addEventListener('click', () => { if (_dsListMode !== 'skipped') _dsSetListMode('skipped'); });
     // "Mostrar" button under Completas counter (legacy, kept for safety)
     document.getElementById('btn-ds-show-complete')?.addEventListener('click', () => {
       if (_dsListMode !== 'done') _dsSetListMode('done');

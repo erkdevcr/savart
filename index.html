@@ -633,6 +633,9 @@
             <button class="ds-list-toggle-btn" id="btn-ds-show-done">
               Completas <span class="ds-badge ds-badge--green" id="ds-done-badge">0</span>
             </button>
+            <button class="ds-list-toggle-btn" id="btn-ds-show-skipped">
+              Saltadas <span class="ds-badge ds-badge--yellow" id="ds-skipped-badge">0</span>
+            </button>
           </div>
         </div>
         <div class="ds-attention-list" id="ds-attention-list">
@@ -1014,8 +1017,8 @@
 <!-- Toast container -->
 <div id="toast-container"></div>
 
-<!-- Boot loading toast: shown while DB opens, dismissed programmatically -->
-<div id="boot-toast">
+<!-- Boot loading toast: hidden until _onTokenReady shows it, then auto-dismissed -->
+<div id="boot-toast" style="display:none;opacity:0">
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="animation:bootSpin 1s linear infinite;flex-shrink:0"><path d="M21 12a9 9 0 1 1-9-9"/></svg>
   Cargando datos de la nube…
 </div>
