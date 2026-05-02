@@ -4565,6 +4565,20 @@ const App = (() => {
           if (album)    tr.querySelector('[data-field="album"]')?.classList.remove('missing');
           if (year)     tr.querySelector('[data-field="year"]')?.classList.remove('missing');
           if (coverUrl) tr.querySelector('[data-field="coverUrl"]')?.classList.remove('missing');
+
+          // Update the in-memory session so re-renders show the saved values
+          // (folder.songs is the source of truth for EP row rendering)
+          const sessionSong = folder.songs?.find(s => s.id === songId);
+          if (sessionSong) {
+            if (artist)   { sessionSong.artist  = artist;   sessionSong.missingArtist = false; }
+            if (album)    { sessionSong.album   = album;    sessionSong.missingAlbum  = false; }
+            if (year)     { sessionSong.year    = year;     sessionSong.missingYear   = false; }
+            if (track)    { sessionSong.track   = track; }
+            if (coverUrl && !coverUrl.startsWith('blob:')) {
+              sessionSong.thumbnailLink = coverUrl;
+              sessionSong.missingCover  = false;
+            }
+          }
         }
       }
       folder.attended = true;
