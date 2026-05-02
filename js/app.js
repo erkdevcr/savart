@@ -4465,6 +4465,24 @@ const App = (() => {
     return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
 
+  /**
+   * Returns true only for stable, cross-device-safe cover URLs that are worth
+   * persisting to IndexedDB and syncing to other devices.
+   *
+   * Excluded (treated as unstable / session-only):
+   *  • blob:   — created by the current browser session, gone on reload/other device
+   *  • lh*.googleusercontent.com — Drive-generated thumbnailLink, expires in hours
+   *  • *.googleapis.com thumbnails — same family of expiring Drive URLs
+   *
+   * Accepted: coverartarchive.org, Last.fm CDNs, AudD, any other permanent https URL.
+   */
+  function _isStableCoverUrl(url) {
+    if (!url) return false;
+    if (url.startsWith('blob:')) return false;
+    if (/googleusercontent\.com|lh\d+\./i.test(url)) return false;
+    return url.startsWith('https://') || url.startsWith('http://');
+  }
+
   async function _dsToggleIgnore(folderId, rowEl) {
     const folder = _dsSession.folders[folderId];
     if (!folder) return;
@@ -4814,7 +4832,10 @@ const App = (() => {
         }
         const f = folderData.get(m.folderId);
         if (f.skip) continue;
-        if (m.thumbnailUrl || m.lfmThumbTried) { f.skip = true; continue; }
+        // Skip only when cover is already a stable persistent URL.
+        // Expired Drive thumbnailLinks (lh*.googleusercontent.com) and blob: URLs
+        // must not block the Last.fm retry — treat them as "no cover".
+        if (_isStableCoverUrl(m.thumbnailUrl) || m.lfmThumbTried) { f.skip = true; continue; }
         f.artistCounts.set(m.artist, (f.artistCounts.get(m.artist) || 0) + 1);
         f.albumCounts.set(m.album,   (f.albumCounts.get(m.album)   || 0) + 1);
         f.songIds.push(m.id);
@@ -4915,7 +4936,11 @@ const App = (() => {
       // Never overwrite values that were already enriched (ID3 / Last.fm / AudD)
       if (!existing?.album  && albumName)       patch.album       = albumName;
       if (!existing?.artist && inferredArtist)  patch.artist      = inferredArtist;
-      if (!existing?.thumbnailUrl && coverUrl)  patch.thumbnailUrl = coverUrl;
+      // Only persist STABLE external URLs (MB, Last.fm, AudD, CAA…).
+      // Drive thumbnailLinks (lh*.googleusercontent.com) expire in hours and are
+      // worthless on other devices — storing them would block _lfmThumbLibrary from
+      // ever retrying the album with a real, permanent cover URL.
+      if (!existing?.thumbnailUrl && _isStableCoverUrl(coverUrl)) patch.thumbnailUrl = coverUrl;
 
       // Always ensure basic file info is present so the song is playable from Library
       if (!existing?.name)        patch.name        = file.name;
@@ -4937,6 +4962,15 @@ const App = (() => {
         album:       (existing?.album  || patch.album  || ''),
         thumbnailUrl:(existing?.thumbnailUrl || patch.thumbnailUrl || null),
       });
+    }
+
+    // Live-update the album card in the library while the scan is running.
+    // This works even when coverUrl is an unstable Drive thumbnailLink — it
+    // gives immediate visual feedback for the current session without persisting
+    // the URL (stable URLs were already written to DB above and will survive reload).
+    if (coverUrl && !_libInDetail && _currentLibTab === 'albums') {
+      const fId = audioFiles[0]?.parents?.[0];
+      if (fId) _updateAlbumCardCover(fId, coverUrl);
     }
 
     // NOTE: Sync.push('metadata') is NOT called here.
@@ -5195,7 +5229,9 @@ const App = (() => {
         const fmt = _formatLabel(m.mimeType, m.name);
         if (fmt) f.formatCounts.set(fmt, (f.formatCounts.get(fmt) || 0) + 1);
         // Count each cover URL — the most frequent one wins (majority rule).
-        if (m.thumbnailUrl) f.coverUrlCounts.set(m.thumbnailUrl, (f.coverUrlCounts.get(m.thumbnailUrl) || 0) + 1);
+        // Only stable external URLs are counted; expired Drive thumbnailLinks and
+        // blob: URLs would produce broken images and block _lfmThumbLibrary retries.
+        if (_isStableCoverUrl(m.thumbnailUrl)) f.coverUrlCounts.set(m.thumbnailUrl, (f.coverUrlCounts.get(m.thumbnailUrl) || 0) + 1);
         // Blob fallback: keep first found; embedded art is usually identical across tracks.
         if (!f.blobId && m.coverBlob) { f.blobId = m.id; f.blobData = m.coverBlob; }
       });

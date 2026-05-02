@@ -1775,13 +1775,13 @@ img { display: block; }
     padding: 8px 4px;
   }
   .lib-artist-avatar {
-    /* Fluid: shrinks so 3 columns always fit.
-       Formula: (100vw - 2×grid-padding - 2×gap - 2×card-h-padding) / 3
-               = (100vw - 20px - 16px - 8px) / 3 = (100vw - 44px) / 3
-       Capped at 112px for large phones. */
-    width:  min(112px, calc((100vw - 44px) / 3));
-    height: min(112px, calc((100vw - 44px) / 3));
-    font-size: min(30px, calc((100vw - 44px) / 10));
+    /* Use 100% of the card's content width — the card is already
+       constrained by the 1fr grid column, so no 100vw needed and
+       no horizontal overflow is introduced. aspect-ratio keeps it square. */
+    width: min(112px, 100%);
+    height: auto;
+    aspect-ratio: 1;
+    font-size: 28px;
   }
   .lib-album-grid {
     grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
