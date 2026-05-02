@@ -4436,8 +4436,11 @@ const App = (() => {
   function _dsSwitchTab(tab) {
     document.querySelectorAll('.ds-tab').forEach(b => b.classList.toggle('active', b.dataset.dsTab === tab));
     document.querySelectorAll('.ds-tab-content').forEach(el => el.classList.toggle('active', el.id === 'ds-tab-' + tab));
-    if (tab === 'artists' && !_dsArtistsLoaded) {
-      _dsLoadArtists();
+    if (tab === 'artists') {
+      // Reset toggle state when entering the artists tab
+      _dsOnlyNoPhoto = false;
+      document.getElementById('ds-toggle-no-photo')?.classList.remove('on');
+      if (!_dsArtistsLoaded) _dsLoadArtists();
     }
   }
 
@@ -6278,19 +6281,32 @@ const App = (() => {
     });
 
     // Deep Scan: artistas "Solo sin foto" toggle
-    document.getElementById('ds-toggle-no-photo')?.addEventListener('click', async () => {
+    // Listener is on the label wrapper (not the toggle div) so the label's
+    // default activation doesn't cause a second synthetic click on the div.
+    document.querySelector('.ds-artists-toggle-wrap')?.addEventListener('click', async (e) => {
+      e.preventDefault(); // stop label from re-dispatching click
       _dsOnlyNoPhoto = !_dsOnlyNoPhoto;
-      document.getElementById('ds-toggle-no-photo')?.classList.toggle('active', _dsOnlyNoPhoto);
-      // Re-render
+      document.getElementById('ds-toggle-no-photo')?.classList.toggle('on', _dsOnlyNoPhoto);
+      // Re-render with same artist/photo data
       const all = await DB.getAllMeta().catch(() => []);
       const artistMap = new Map();
       for (const m of all) {
         if (!m.artist) continue;
-        const key = m.artist.trim().toLowerCase();
-        if (!artistMap.has(key)) artistMap.set(key, m.artist.trim());
+        const name = m.artist.split(';')[0].trim();
+        if (!name) continue;
+        const key = name.toLowerCase();
+        if (!artistMap.has(key)) artistMap.set(key, name);
       }
-      const photoMap = await DB.getState('ds_artistPhotos').catch(() => ({})) || {};
-      _dsRenderArtists([...artistMap.entries()].sort((a,b) => a[0].localeCompare(b[0])), photoMap);
+      const autoPhotos   = (await DB.getState('artistImages').catch(() => null))    || {};
+      const manualPhotos = (await DB.getState('ds_artistPhotos').catch(() => null)) || {};
+      const photoMap = {};
+      for (const [key] of artistMap) {
+        const manual = manualPhotos[key];
+        const auto   = autoPhotos[key];
+        if (manual)    photoMap[key] = manual;
+        else if (auto) photoMap[key] = auto;
+      }
+      _dsRenderArtists([...artistMap.entries()].sort((a, b) => a[0].localeCompare(b[0])), photoMap);
     });
 
     // (Deep scan auto-open is handled in _onTokenReady after auth completes)
