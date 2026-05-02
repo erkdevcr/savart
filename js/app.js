@@ -3819,7 +3819,7 @@ const App = (() => {
         const missingArtist = !meta?.artist;
         const missingAlbum  = !meta?.album;
         const missingYear   = !meta?.year;
-        const missingCover  = !(meta?.coverUrl || meta?.thumbnailLink);
+        const missingCover  = !(meta?.coverBlob || meta?.coverUrl || meta?.thumbnailLink);
         const displayTitle  = meta?.displayName || cleanTitle(f.name);
         // Flag as needing attention if artist, album, or cover is missing — year is optional
         if (missingArtist || missingAlbum || missingCover) {
@@ -4049,7 +4049,7 @@ const App = (() => {
             const lIn = tr.querySelector('[data-field="album"]');
             const yIn = tr.querySelector('[data-field="year"]');
             const tIn = tr.querySelector('[data-field="track"]');
-            const coverVal = meta.coverUrl || meta.thumbnailLink || '';
+            const coverVal = meta.thumbnailLink || meta.coverUrl || '';
             const cIn = tr.querySelector('[data-field="coverUrl"]');
             if (aIn) { aIn.value = meta.artist || ''; aIn.classList.toggle('missing', !meta.artist); }
             if (lIn) { lIn.value = meta.album  || ''; lIn.classList.toggle('missing', !meta.album);  }
@@ -4088,10 +4088,15 @@ const App = (() => {
       const mAl = song.missingAlbum  ? ' missing' : '';
       const mY  = song.missingYear   ? ' missing' : '';
       const mC  = song.missingCover  ? ' missing' : '';
-      const coverVal = song.coverUrl || '';
+      // coverUrl may be a blob object URL (session-only); prefer thumbnailLink for display
+      const coverVal = song.thumbnailLink || song.coverUrl || '';
+      // If song has embedded blob art, show a placeholder checkmark instead of URL
+      const hasBlob = !!song.coverBlob;
       const thumb = coverVal
         ? `<img src="${_escHtml(coverVal)}" class="ds-cover-thumb" onerror="this.style.display='none'">`
-        : `<span class="ds-cover-thumb ds-cover-empty"></span>`;
+        : hasBlob
+          ? `<span class="ds-cover-thumb ds-cover-blob" title="Cover embebido (ID3)">♪</span>`
+          : `<span class="ds-cover-thumb ds-cover-empty"></span>`;
       return `<tr data-song-id="${_escHtml(song.id)}">
         <td class="ds-table-filename" title="${_escHtml(song.name)}">${_escHtml(song.displayName || cleanTitle(song.name))}</td>
         <td><input class="ds-cell-input${mA}"  data-field="artist" value="${_escHtml(song.artist)}"  placeholder="Artista"></td>

@@ -4939,6 +4939,14 @@ img { display: block; }
 .ds-cover-empty {
   opacity: 0.35;
 }
+.ds-cover-blob {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  color: var(--accent);
+  background: var(--bg-elevated);
+}
 .ds-cover-cell .ds-cell-input {
   flex: 1;
   min-width: 0;
