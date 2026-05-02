@@ -3292,6 +3292,7 @@ const App = (() => {
       if (!_dsSession.selectedFolderName) _dsSession.selectedFolderName = CONFIG.ROOT_FOLDER_NAME;
       if (!_dsSession.completedList)      _dsSession.completedList      = {};
       if (!_dsSession.rescanMode)         _dsSession.rescanMode         = 'skip';
+      if (!_dsSession.pendingQueue)       _dsSession.pendingQueue       = [];
     } else {
       _dsSession = {
         status:             'idle',
@@ -3302,6 +3303,7 @@ const App = (() => {
         scannedFolders:     0,
         totalFolders:       0,
         visited:            [],
+        pendingQueue:       [],   // saved BFS queue — restored on resume
         folders:            {},   // needs-attention entries
         completedList:      {},   // folderId → {id,name,path,count}
         log:                [],
@@ -3691,6 +3693,7 @@ const App = (() => {
       _dsSession.scannedFolders = 0;
       _dsSession.totalFolders   = 0;
       _dsSession.visited        = [];
+      _dsSession.pendingQueue   = [];
       _dsSession.folders        = {};
       _dsSession.completedList  = {};
       _dsSession.log            = [];
@@ -3745,6 +3748,7 @@ const App = (() => {
     _dsSession.scannedFolders = 0;
     _dsSession.totalFolders   = 0;
     _dsSession.visited        = [];
+    _dsSession.pendingQueue   = [];
     _dsSession.folders        = {};
     _dsSession.completedList  = {};
     _dsSession.log            = [];
@@ -3780,8 +3784,14 @@ const App = (() => {
     const startFolderId   = _dsSession.selectedFolderId   || CONFIG.ROOT_FOLDER_ID;
     const startFolderName = _dsSession.selectedFolderName || CONFIG.ROOT_FOLDER_NAME;
 
-    const queue = [{ id: startFolderId, name: startFolderName.split(' › ').pop(), path: startFolderName }];
-    let discovered = 1;
+    // Restore pending queue from a previous stop, or start fresh from root
+    const hasPending = Array.isArray(_dsSession.pendingQueue) && _dsSession.pendingQueue.length > 0;
+    const queue = hasPending
+      ? [..._dsSession.pendingQueue]
+      : [{ id: startFolderId, name: startFolderName.split(' › ').pop(), path: startFolderName }];
+    _dsSession.pendingQueue = [];  // consumed — clear so a fresh start doesn't re-use it
+
+    let discovered = hasPending ? ((_dsSession.totalFolders || 0) + queue.length) : 1;
     const startMs  = Date.now();
 
     while (queue.length > 0) {
@@ -3958,8 +3968,11 @@ const App = (() => {
     if (_dsStopFlag) {
       _dsStopFlag = false;
       _dsSession.status = 'stopped';
+      // Persist remaining queue so "Continuar" picks up exactly where we left off
+      _dsSession.pendingQueue = [...queue];
       _dsLogLine('⏹ Detenido — progreso guardado.', 'info');
     } else {
+      _dsSession.pendingQueue = [];  // clean slate on normal finish
       _dsSession.status = 'done';
       const attnCount = Object.values(_dsSession.folders)
         .filter(f => !f.attended && f.status !== 'ignored').length;
