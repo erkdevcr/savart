@@ -1380,6 +1380,126 @@ const App = (() => {
     UI.showToast('Rescan completado');
   }
 
+  /* ── Library search-results batch rescan ─────────────────────
+     Called when the user clicks the rescan button next to the
+     library search bar while albums tab is active.
+     ────────────────────────────────────────────────────────── */
+
+  let _libRescanRunning = false;
+
+  /**
+   * Collect visible album folder IDs from the current search results,
+   * prompt for confirmation if > 5, then run the rescan sequentially.
+   */
+  function onLibRescan() {
+    if (_libRescanRunning) return;
+
+    // Collect folder IDs of album cards currently visible
+    const cards = document.querySelectorAll(
+      '#lib-detail-content .home-card[data-folder-id]'
+    );
+    const folderIds = [];
+    for (const card of cards) {
+      if (card.style.display !== 'none' && card.dataset.folderId) {
+        folderIds.push(card.dataset.folderId);
+      }
+    }
+    if (folderIds.length === 0) {
+      UI.showToast('Sin álbumes visibles para rescanear', 'warn');
+      return;
+    }
+
+    if (folderIds.length > 5) {
+      // Show confirmation popup
+      const desc = document.getElementById('lib-rescan-desc');
+      if (desc) {
+        desc.textContent =
+          `Se van a rescanear ${folderIds.length} álbumes. ` +
+          `Este proceso puede tardar varios minutos dependiendo de la cantidad. ` +
+          `¿Deseas continuar?`;
+      }
+      const modal = document.getElementById('lib-rescan-dialog');
+      if (modal) {
+        modal.style.display = 'flex';
+        const onConfirm = () => {
+          modal.style.display = 'none';
+          cleanup();
+          _doLibRescan(folderIds);
+        };
+        const onCancel = () => {
+          modal.style.display = 'none';
+          cleanup();
+        };
+        const confirmBtn  = document.getElementById('btn-lib-rescan-confirm');
+        const cancelBtn   = document.getElementById('btn-lib-rescan-cancel');
+        const backdropEl  = document.getElementById('lib-rescan-backdrop');
+        confirmBtn?.addEventListener('click', onConfirm,  { once: true });
+        cancelBtn?.addEventListener('click',  onCancel,   { once: true });
+        backdropEl?.addEventListener('click', onCancel,   { once: true });
+        function cleanup() {
+          confirmBtn?.removeEventListener('click', onConfirm);
+          cancelBtn?.removeEventListener('click',  onCancel);
+          backdropEl?.removeEventListener('click', onCancel);
+        }
+      }
+    } else {
+      _doLibRescan(folderIds);
+    }
+  }
+
+  /**
+   * Run the full rescan pipeline sequentially for a list of folder IDs.
+   * Updates the button spinner and toast notifications.
+   */
+  async function _doLibRescan(folderIds) {
+    if (_libRescanRunning) return;
+    _libRescanRunning = true;
+
+    const btn  = document.getElementById('btn-lib-rescan');
+    const icon = document.getElementById('lib-rescan-icon');
+    if (btn)  { btn.disabled = true; btn.classList.add('spinning'); }
+
+    UI.showToast(`Rescaneando ${folderIds.length} álbum${folderIds.length > 1 ? 'es' : ''}…`);
+
+    let done = 0;
+    for (const folderId of folderIds) {
+      try {
+        const page = await Drive.listFolderScan(folderId);
+        const songs = page.audioFiles || [];
+        if (songs.length === 0 || songs.length > 40) { done++; continue; }
+
+        const liveIds = songs.map(s => s.id);
+        await DB.purgeOrphans(folderId, liveIds).catch(() => {});
+
+        await Promise.all(songs.map(async s => {
+          await DB.clearEnrichment(s.id).catch(() => {});
+          if (typeof Meta !== 'undefined') Meta.revoke(s.id);
+        }));
+        _folderCoverCache.delete(folderId);
+
+        await _prefetchAndApplyFolderCovers(folderId, songs, true);
+
+        if (typeof Sync !== 'undefined') {
+          Sync.pushHot(songs).catch(() => {});
+        }
+        done++;
+      } catch (err) {
+        console.warn('[LibRescan] Error on folder', folderId, err);
+        done++;
+      }
+    }
+
+    if (typeof Sync !== 'undefined') Sync.push('metadata');
+    _lfmThumbLibrary().catch(() => {});
+
+    _libRescanRunning = false;
+    if (btn)  { btn.disabled = false; btn.classList.remove('spinning'); }
+    UI.showToast(`Rescan completado — ${done} álbum${done > 1 ? 'es' : ''}`);
+
+    // Refresh albums grid so new data / covers appear immediately
+    _loadAlbums();
+  }
+
   /**
    * Force a full re-enrichment of the currently open browse folder.
    * Called from the Rescan button in the browse action bar.
@@ -2601,9 +2721,11 @@ const App = (() => {
       el.classList.toggle('active', el.dataset.tab === tab);
     });
 
-    // Clear search input
+    // Clear search input and hide rescan button
     const searchInput = document.getElementById('lib-search-input');
     if (searchInput) searchInput.value = '';
+    const rescanBtn = document.getElementById('btn-lib-rescan');
+    if (rescanBtn) rescanBtn.style.display = 'none';
 
     // Update placeholder
     UI.setLibSearchPlaceholder(LIB_TAB_PLACEHOLDERS[tab] || 'Buscar…');
@@ -2647,6 +2769,12 @@ const App = (() => {
       const match = !q || el.dataset.searchKey.includes(q);
       el.style.display = match ? '' : 'none';
     });
+
+    // Show/hide the batch-rescan button: only on albums tab with an active query
+    const rescanBtn = document.getElementById('btn-lib-rescan');
+    if (rescanBtn) {
+      rescanBtn.style.display = (_currentLibTab === 'albums' && q) ? '' : 'none';
+    }
   }
 
   async function _loadPlaylists() {
@@ -6362,6 +6490,9 @@ const App = (() => {
       _onLibSearch(e.target.value);
     });
 
+    // Library: batch rescan visible album search results
+    document.getElementById('btn-lib-rescan')?.addEventListener('click', onLibRescan);
+
     // Refresh cache bar when settings is opened
     document.querySelectorAll('[data-nav="settings"]').forEach(el => {
       el.addEventListener('click', _refreshCacheBar);
@@ -6427,6 +6558,8 @@ const App = (() => {
     onRenamePlaylist,
     onDeletePlaylist,
     onRemoveFromPlaylist,
+    // Library batch rescan
+    onLibRescan,
     // Deep Scan
     _openDeepScan,
     _startDeepScan,

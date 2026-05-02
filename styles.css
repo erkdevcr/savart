@@ -1524,7 +1524,32 @@ img { display: block; }
   top: 0;
   z-index: 2;
   background: var(--bg-base);
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
+.lib-search-wrap .search-bar {
+  flex: 1;
+}
+.lib-rescan-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: background 0.15s, color 0.15s;
+  margin-right: 2px;
+}
+.lib-rescan-btn:hover { background: var(--bg-hover); color: var(--accent); }
+.lib-rescan-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+@keyframes lib-rescan-spin { to { transform: rotate(360deg); } }
+.lib-rescan-btn.spinning #lib-rescan-icon { animation: lib-rescan-spin 1s linear infinite; }
 
 /* ── Library: back header (artist/album drill-down) ─────── */
 .lib-back-header {

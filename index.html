@@ -243,6 +243,10 @@
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
               <input type="text" id="lib-search-input" placeholder="Buscar en Favoritos…" autocomplete="off" spellcheck="false">
             </div>
+            <!-- Rescan button: only shown when albums tab is active and search has text -->
+            <button id="btn-lib-rescan" class="lib-rescan-btn" title="Rescanear álbumes mostrados" style="display:none" aria-label="Rescanear resultados">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" id="lib-rescan-icon"><path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-8 3.58-8 8s3.58 8 8 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+            </button>
           </div>
           <div id="lib-detail-content"></div>
         </div>
@@ -678,6 +682,23 @@
       </div>
       <div class="ds-modal-footer">
         <button id="btn-ds-modal-select" class="btn-primary" disabled>Seleccionar esta carpeta</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Library batch-rescan confirmation dialog -->
+  <div id="lib-rescan-dialog" class="ds-modal" style="display:none">
+    <div class="ds-modal-backdrop" id="lib-rescan-backdrop"></div>
+    <div class="ds-modal-card ds-modal-card--sm">
+      <div class="ds-modal-header">
+        <span class="ds-modal-title">Rescanear álbumes</span>
+      </div>
+      <div class="ds-rescan-body">
+        <p class="ds-rescan-desc" id="lib-rescan-desc"></p>
+      </div>
+      <div class="ds-modal-footer">
+        <button id="btn-lib-rescan-cancel" class="btn-sort-toggle">Cancelar</button>
+        <button id="btn-lib-rescan-confirm" class="btn-primary">Rescanear</button>
       </div>
     </div>
   </div>

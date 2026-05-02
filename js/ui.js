@@ -2299,6 +2299,7 @@ const UI = (() => {
     albums.forEach(album => {
       const card = _buildAlbumCard(album);
       card.dataset.searchKey = (album.name + ' ' + (album.artist || '')).toLowerCase();
+      if (album.folderId) card.dataset.folderId = album.folderId;
       grid.appendChild(card);
     });
 
