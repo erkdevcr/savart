@@ -1535,14 +1535,17 @@ img { display: block; }
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  justify-content: center;
-  width: 34px;
+  gap: 5px;
   height: 34px;
+  padding: 0 11px;
   background: none;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   cursor: pointer;
   color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
   transition: background 0.15s, color 0.15s;
   margin-right: 2px;
 }
@@ -1550,6 +1553,32 @@ img { display: block; }
 .lib-rescan-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 @keyframes lib-rescan-spin { to { transform: rotate(360deg); } }
 .lib-rescan-btn.spinning #lib-rescan-icon { animation: lib-rescan-spin 1s linear infinite; }
+
+/* ── Boot loading toast ──────────────────────────────────────── */
+#boot-toast {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--bg-hover);
+  padding: 11px 20px;
+  border-radius: var(--radius-pill);
+  font-size: 13px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 1;
+  transition: opacity 0.3s ease;
+}
+#boot-toast.hidden {
+  opacity: 0;
+}
+@keyframes bootSpin { to { transform: rotate(360deg); } }
 
 /* ── Library: back header (artist/album drill-down) ─────── */
 .lib-back-header {

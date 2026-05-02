@@ -135,12 +135,18 @@ const App = (() => {
     const verLabel = document.getElementById('app-version-label');
     if (verLabel) verLabel.textContent = `Savart — versión ${CONFIG.VERSION}`;
 
-    // 1. Open IndexedDB
+    // 1. Open IndexedDB (show centered loading toast while it initialises)
+    const bootToast = document.getElementById('boot-toast');
     try {
       await DB.open();
     } catch (err) {
       console.error('[App] DB init failed:', err);
       // App can still work without cache — continue
+    } finally {
+      if (bootToast) {
+        bootToast.classList.add('hidden');
+        setTimeout(() => bootToast.remove(), 350);
+      }
     }
 
     // 2. Restore user preferences

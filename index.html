@@ -245,7 +245,8 @@
             </div>
             <!-- Rescan button: only shown when albums tab is active and search has text -->
             <button id="btn-lib-rescan" class="lib-rescan-btn" title="Rescanear álbumes mostrados" style="display:none" aria-label="Rescanear resultados">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" id="lib-rescan-icon"><path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-8 3.58-8 8s3.58 8 8 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" id="lib-rescan-icon"><path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-8 3.58-8 8s3.58 8 8 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+              <span>Rescan</span>
             </button>
           </div>
           <div id="lib-detail-content"></div>
@@ -1009,6 +1010,12 @@
 
 <!-- Toast container -->
 <div id="toast-container"></div>
+
+<!-- Boot loading toast: shown while DB opens, dismissed programmatically -->
+<div id="boot-toast">
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="animation:bootSpin 1s linear infinite;flex-shrink:0"><path d="M21 12a9 9 0 1 1-9-9"/></svg>
+  Cargando base de datos…
+</div>
 
 <!-- ── Ctrl sheets — Speed / Timer (mobile overlays) ── -->
 <div id="overlay-speed" class="ctrl-sheet">
