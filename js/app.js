@@ -3836,6 +3836,21 @@ const App = (() => {
     const nameEl = document.getElementById('ds-folder-name');
     if (nameEl) nameEl.textContent = fullPath;
 
+    // Folder changed — any saved pending queue belongs to the OLD folder.
+    // Reset to idle so the start button shows "Iniciar" (not "Continuar").
+    if (_dsSession.status === 'stopped' || (_dsSession.pendingQueue && _dsSession.pendingQueue.length > 0)) {
+      _dsSession.pendingQueue   = [];
+      _dsSession.visited        = [];
+      _dsSession.status         = 'idle';
+      _dsSession.scannedFolders = 0;
+      _dsSession.totalFolders   = 0;
+      _dsSession.folders        = {};
+      _dsSession.completedList  = {};
+      _dsSession.skippedList    = {};
+      _dsSession.log            = [];
+      _dsUpdateControls();
+    }
+
     // Check if this folder (or its ancestors) was previously scanned
     await _dsCheckRescan(id, fullPath);
   }

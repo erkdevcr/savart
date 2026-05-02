@@ -1767,21 +1767,29 @@ img { display: block; }
 /* Mobile overrides for lib grids */
 @media (max-width: 767px) {
   .lib-artist-grid {
-    grid-template-columns: repeat(3, 1fr);  /* always exactly 3 columns on mobile */
+    /* minmax(0,1fr) prevents columns from growing beyond their fair share.
+       Plain 1fr allows the column to expand when a flex-container child
+       has min-width:auto (the default), which happens with long artist names
+       and causes the whole grid to overflow the viewport. */
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 8px;
     padding: 10px;
+    overflow: hidden; /* belt-and-suspenders: clip any residual bleed */
   }
   .lib-artist-card {
+    min-width: 0;   /* flex containers inside grid need this or they grow to content */
+    width: 100%;    /* fill the column exactly */
+    overflow: hidden;
     padding: 8px 4px;
   }
   .lib-artist-avatar {
-    /* Use 100% of the card's content width — the card is already
-       constrained by the 1fr grid column, so no 100vw needed and
-       no horizontal overflow is introduced. aspect-ratio keeps it square. */
     width: min(112px, 100%);
     height: auto;
     aspect-ratio: 1;
     font-size: 28px;
+  }
+  .lib-artist-name {
+    max-width: 100%; /* prevent long names from widening the card */
   }
   .lib-album-grid {
     grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
@@ -4465,6 +4473,7 @@ img { display: block; }
   .lib-detail {
     flex: 1;
     min-height: 0;
+    overflow-x: hidden; /* prevent any child from causing horizontal page scroll */
     overflow-y: auto;
   }
 
