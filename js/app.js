@@ -3339,7 +3339,26 @@ const App = (() => {
 
   /* ── Log strip ──────────────────────────────────────────── */
 
-  /* Keep at most 3 visible lines in the strip (newest at bottom). */
+  /* Line 1: pinned folder indicator — always visible, updated per folder.
+     Lines 2-3: scrolling activity log (newest at bottom, max 2 entries). */
+
+  function _dsSetPinnedFolder(path) {
+    const strip = document.getElementById('ds-log');
+    if (!strip) return;
+    // Remove placeholder if present
+    const ph = strip.querySelector('.ds-log-placeholder');
+    if (ph) ph.remove();
+    // Update or create the pinned line
+    let pinned = strip.querySelector('.ds-log-pinned');
+    if (!pinned) {
+      pinned = document.createElement('div');
+      pinned.className = 'ds-log-entry ds-log-pinned';
+      strip.insertBefore(pinned, strip.firstChild);
+    }
+    pinned.textContent = '📁 ' + path;
+  }
+
+  /* Keep at most 2 scrolling lines below the pinned folder line. */
   function _dsLogLine(msg, cls = '') {
     const strip = document.getElementById('ds-log');
     if (strip) {
@@ -3352,8 +3371,11 @@ const App = (() => {
       div.textContent = msg;
       strip.appendChild(div);
 
-      // Keep only last 3
-      while (strip.children.length > 3) strip.removeChild(strip.firstChild);
+      // Keep pinned line + at most 2 scrolling lines
+      const entries = [...strip.querySelectorAll('.ds-log-entry:not(.ds-log-pinned)')];
+      while (entries.length > 2) {
+        entries.shift().remove();
+      }
     }
     if (!_dsSession.log) _dsSession.log = [];
     _dsSession.log.push(msg);
@@ -3364,12 +3386,22 @@ const App = (() => {
     const strip = document.getElementById('ds-log');
     if (!strip) return;
     strip.innerHTML = '';
-    const lines = (_dsSession.log || []).slice(-3);
-    if (lines.length === 0) {
+    const allLines = _dsSession.log || [];
+    if (allLines.length === 0) {
       strip.innerHTML = '<div class="ds-log-entry ds-log-placeholder">Inicia un escaneo para ver el registro aquí…</div>';
       return;
     }
-    for (const line of lines) {
+    // Restore pinned folder: find last 📁 line
+    const lastFolder = [...allLines].reverse().find(l => l.startsWith('📁'));
+    if (lastFolder) {
+      const pinned = document.createElement('div');
+      pinned.className = 'ds-log-entry ds-log-pinned';
+      pinned.textContent = lastFolder;
+      strip.appendChild(pinned);
+    }
+    // Restore last 2 non-folder scrolling lines
+    const scrollLines = allLines.filter(l => !l.startsWith('📁')).slice(-2);
+    for (const line of scrollLines) {
       const div = document.createElement('div');
       div.className = 'ds-log-entry';
       div.textContent = line;
@@ -3796,9 +3828,10 @@ const App = (() => {
       }));
       _folderCoverCache.delete(id);
 
-      // 3. Log each file about to be processed
+      // 3. Pin folder name on line 1, then log each file on lines 2-3
+      _dsSetPinnedFolder(`${path}  (${page.audioFiles.length} arch.)`);
       for (const f of page.audioFiles) {
-        _dsLogLine(`⟳ ${cleanTitle(f.name)}`);
+        _dsLogLine(`  ⟳ ${cleanTitle(f.name)}`);
       }
 
       // 4. Run all recognition passes with the full file array (same as onAlbumRescan)

@@ -4734,9 +4734,18 @@ img { display: block; }
   text-overflow: ellipsis;
 }
 .ds-log-placeholder { color: var(--text-disabled); font-style: italic; }
-.ds-log-entry.warn { color: #f59e0b; }
-.ds-log-entry.info { color: var(--text-secondary); }
-.ds-log-entry.ok   { color: var(--success); }
+.ds-log-entry.warn  { color: #f59e0b; }
+.ds-log-entry.info  { color: var(--text-secondary); }
+.ds-log-entry.ok    { color: var(--success); }
+.ds-log-pinned {
+  color: var(--text-primary);
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 1px;
+  position: sticky;
+  top: 0;
+  background: var(--bg-elevated);
+}
 
 /* ── List area ───────────────────────────────────────────────── */
 .ds-list-area {
