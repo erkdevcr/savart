@@ -4452,20 +4452,24 @@ img { display: block; }
 /* ── Header ─────────────────────────────────────────────────── */
 .ds-header {
   display: flex;
-  align-items: stretch;
-  gap: 0;
-  padding: 0 16px 0 10px;
-  border-bottom: 1px solid var(--border);
+  flex-direction: column;
   flex-shrink: 0;
   background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+}
+.ds-header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px 0 10px;
   min-height: 48px;
+  gap: 0;
 }
 .ds-header-left {
   display: flex;
   align-items: center;
   gap: 6px;
   flex-shrink: 0;
-  padding-right: 12px;
 }
 .ds-back-btn {
   background: none;
@@ -4489,22 +4493,20 @@ img { display: block; }
 .ds-tabs {
   display: flex;
   gap: 0;
-  flex: 1;
-  justify-content: center;
-  align-items: stretch;
+  padding: 0 10px;
+  border-top: 1px solid var(--border);
 }
 .ds-tab {
   background: none;
   border: none;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--text-muted);
-  padding: 0 16px;
+  padding: 7px 14px;
   border-bottom: 2px solid transparent;
   transition: color 0.15s, border-color 0.15s;
   white-space: nowrap;
-  align-self: stretch;
 }
 .ds-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
 .ds-tab:hover:not(.active) { color: var(--text-secondary); }
@@ -4513,7 +4515,6 @@ img { display: block; }
   align-items: center;
   gap: 10px;
   flex-shrink: 0;
-  padding-left: 8px;
 }
 .ds-autosave {
   font-size: 10px;
@@ -5277,7 +5278,7 @@ img { display: block; }
 
 /* ── Mobile overrides ────────────────────────────────────────── */
 @media (max-width: 767px) {
-  .ds-header { padding: 0 10px 0 8px; min-height: 44px; }
+  .ds-header-top { padding: 0 10px 0 8px; min-height: 44px; }
   .ds-title { font-size: 14px; }
   .ds-newtab-btn span { display: none; }
   .ds-newtab-btn { padding: 4px 7px; }
