@@ -3819,12 +3819,14 @@ const App = (() => {
         const missingArtist = !meta?.artist;
         const missingAlbum  = !meta?.album;
         const missingYear   = !meta?.year;
+        const missingCover  = !(meta?.coverUrl || meta?.thumbnailLink);
         const displayTitle  = meta?.displayName || cleanTitle(f.name);
-        // Only flag as needing attention if artist or album is missing — year is optional
-        if (missingArtist || missingAlbum) {
+        // Flag as needing attention if artist, album, or cover is missing — year is optional
+        if (missingArtist || missingAlbum || missingCover) {
           const missing = [
             missingArtist ? 'artista' : '',
             missingAlbum  ? 'álbum'   : '',
+            missingCover  ? 'cover'   : '',
             missingYear   ? 'año'     : '',
           ].filter(Boolean).join(', ');
           _dsLogLine(`  ⚠ ${displayTitle}  (sin: ${missing})`);
@@ -3833,7 +3835,7 @@ const App = (() => {
             artist: meta?.artist || '', album: meta?.album || '',
             year: meta?.year || '', track: meta?.track || '',
             mimeType: f.mimeType || '',
-            missingArtist, missingAlbum, missingYear,
+            missingArtist, missingAlbum, missingYear, missingCover,
           });
         } else {
           _dsLogLine(`  ✓ ${displayTitle}`);
@@ -4015,9 +4017,30 @@ const App = (() => {
         </div>
       </div>`;
 
-    row.querySelector('.ds-folder-header').addEventListener('click', (e) => {
+    row.querySelector('.ds-folder-header').addEventListener('click', async (e) => {
       if (e.target.closest('.ds-ignore-btn')) return;
+      const opening = !row.classList.contains('ds-open');
       row.classList.toggle('ds-open');
+      // On first expand, refresh song values from DB so columns reflect current state
+      if (opening && folder.songs?.length) {
+        const tbody = row.querySelector('.ds-table tbody');
+        if (tbody) {
+          for (const tr of tbody.querySelectorAll('tr')) {
+            const sid  = tr.dataset.songId;
+            if (!sid) continue;
+            const meta = await DB.getMeta(sid).catch(() => null);
+            if (!meta) continue;
+            const aIn = tr.querySelector('[data-field="artist"]');
+            const lIn = tr.querySelector('[data-field="album"]');
+            const yIn = tr.querySelector('[data-field="year"]');
+            const tIn = tr.querySelector('[data-field="track"]');
+            if (aIn) { aIn.value = meta.artist || ''; aIn.classList.toggle('missing', !meta.artist); }
+            if (lIn) { lIn.value = meta.album  || ''; lIn.classList.toggle('missing', !meta.album);  }
+            if (yIn) { yIn.value = meta.year   || ''; }
+            if (tIn) { tIn.value = meta.track  || ''; }
+          }
+        }
+      }
     });
     row.querySelector('.ds-ignore-btn').addEventListener('click', (e) => {
       e.stopPropagation();
