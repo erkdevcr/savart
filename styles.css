@@ -1557,19 +1557,19 @@ img { display: block; }
 /* ── Boot loading toast ──────────────────────────────────────── */
 #boot-toast {
   position: fixed;
-  top: 50%;
+  top: 16.67vh;          /* 1/6 of viewport height */
   left: 50%;
-  transform: translate(-50%, -50%);
+  transform: translateX(-50%);
   z-index: 9999;
   display: flex;
   align-items: center;
   gap: 9px;
-  background: var(--bg-elevated);
-  border: 1px solid var(--bg-hover);
-  padding: 11px 20px;
+  background: #0d2a4a;
+  border: 1px solid #1e4a7a;
+  padding: 10px 20px;
   border-radius: var(--radius-pill);
-  font-size: 13px;
-  color: var(--text-primary);
+  font-size: 12px;
+  color: #7db8f0;
   white-space: nowrap;
   pointer-events: none;
   opacity: 1;
