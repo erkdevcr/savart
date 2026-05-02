@@ -4550,11 +4550,12 @@ const App = (() => {
         const track    = tr.querySelector('[data-field="track"]')?.value?.trim()    || '';
         const coverUrl = tr.querySelector('[data-field="coverUrl"]')?.value?.trim() || '';
         const patch  = {};
-        if (artist)   patch.artist       = artist;
-        if (album)    patch.album        = album;
-        if (year)     patch.year         = year;
-        if (track)    patch.track        = track;
-        if (coverUrl) patch.thumbnailLink = coverUrl;
+        if (artist)   patch.artist        = artist;
+        if (album)    patch.album         = album;
+        if (year)     patch.year          = year;
+        if (track)    patch.track         = track;
+        // thumbnailUrl is the stable, syncable field — thumbnailLink is the ephemeral Drive URL
+        if (coverUrl && !coverUrl.startsWith('blob:')) patch.thumbnailUrl = coverUrl;
         if (Object.keys(patch).length > 0) {
           await DB.setMeta(songId, patch);
           saved++;
