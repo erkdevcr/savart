@@ -3652,6 +3652,7 @@ const App = (() => {
       _dsSession.scannedFolders = 0;
       _dsSession.totalFolders   = 0;
       _dsSession.visited        = [];
+      _dsSession.folders        = {};
       _dsSession.completedList  = {};
       _dsSession.log            = [];
       _dsRestoreLog();
@@ -3884,10 +3885,15 @@ const App = (() => {
       _lfmThumbLibrary().catch(() => {});
     }
 
+    // Align totalFolders so remaining counter shows 0 when done
+    if (_dsSession.status === 'done') {
+      _dsSession.totalFolders = _dsSession.scannedFolders;
+    }
+
     await _dsSaveSession();
     _dsUpdateControls();
     _dsUpdateProgress();
-    _dsUpdateCounters();
+    _dsUpdateCounters(0);
   }
 
   /* ── List rendering ─────────────────────────────────────── */
