@@ -4549,7 +4549,9 @@ const App = (() => {
         const year     = tr.querySelector('[data-field="year"]')?.value?.trim()     || '';
         const track    = tr.querySelector('[data-field="track"]')?.value?.trim()    || '';
         const coverUrl = tr.querySelector('[data-field="coverUrl"]')?.value?.trim() || '';
-        const patch  = {};
+        // Always write folderId so _loadAlbums can group this track into an album card,
+        // and so the sync filter includes it (filter checks folderId || artist || album…)
+        const patch = { folderId };
         if (artist)   patch.artist        = artist;
         if (album)    patch.album         = album;
         if (year)     patch.year          = year;
