@@ -3307,7 +3307,7 @@ const App = (() => {
   let _dsPaused        = false;
   let _dsStopFlag      = false;
   let _dsSession       = null;
-  let _dsListMode      = 'attn';     // 'attn' | 'done'
+  let _dsListMode      = 'attn';     // 'attn' | 'done' | 'all'
   let _dsArtistsLoaded = false;
   let _dsOnlyNoPhoto   = false;
 
@@ -4079,10 +4079,10 @@ const App = (() => {
           status:   existing?.status   || 'needs_attention',
           attended: existing?.attended || false,
         };
-        if (_dsListMode === 'attn') _dsAddOrUpdateFolderRow(id);
+        if (_dsListMode === 'attn' || _dsListMode === 'all') _dsAddOrUpdateFolderRow(id);
       } else {
         _dsSession.completedList[id] = { id, name, path, count: page.audioFiles.length };
-        if (_dsListMode === 'done') _dsAddOrUpdateFolderRow(id);
+        if (_dsListMode === 'done' || _dsListMode === 'all') _dsAddOrUpdateFolderRow(id);
       }
 
       // Folder fully processed — now persist progress
@@ -4175,23 +4175,58 @@ const App = (() => {
     }
   }
 
+  /** Render all scanned folders: attention first (sorted), then completed. */
+  function _dsRenderAllList() {
+    const list = document.getElementById('ds-attention-list');
+    if (!list) return;
+    list.innerHTML = '';
+    const attnFolders = Object.values(_dsSession?.folders || {})
+      .filter(f => f.status !== 'ignored' || true);
+    const doneFolders = Object.values(_dsSession?.completedList || {});
+    if (attnFolders.length === 0 && doneFolders.length === 0) {
+      list.innerHTML = '<div class="ds-attention-empty">Sin carpetas para mostrar aún.</div>';
+      return;
+    }
+    for (const folder of attnFolders) list.appendChild(_dsBuildFolderRow(folder));
+    for (const folder of doneFolders) {
+      const row = document.createElement('div');
+      row.className = 'ds-folder-row';
+      row.dataset.folderId = folder.id;
+      const pathParts = folder.path.split(' › ');
+      const leaf      = pathParts.pop();
+      const parentStr = pathParts.length ? pathParts.join(' › ') + ' › ' : '';
+      row.innerHTML = `
+        <div class="ds-folder-header" style="cursor:default">
+          <div class="ds-status-dot green"></div>
+          <div class="ds-folder-path">
+            <span class="ds-folder-parent">${_escHtml(parentStr)}</span><span class="ds-folder-leaf">${_escHtml(leaf)}</span>
+          </div>
+          <span style="font-size:10px;color:var(--text-disabled);flex-shrink:0">${folder.count} arch.</span>
+        </div>`;
+      list.appendChild(row);
+    }
+  }
+
   function _dsAddOrUpdateFolderRow(folderId) {
     const list = document.getElementById('ds-attention-list');
     if (!list) return;
     const empty = list.querySelector('.ds-attention-empty');
     if (empty) empty.remove();
 
-    if (_dsListMode === 'attn') {
+    if (_dsListMode === 'attn' || _dsListMode === 'all') {
       const folder = _dsSession.folders[folderId];
-      if (!folder) return;
-      const existing = list.querySelector(`[data-folder-id="${CSS.escape(folderId)}"]`);
-      if (existing) {
-        const dot = existing.querySelector('.ds-status-dot');
-        if (dot) dot.className = 'ds-status-dot ' + _dsDotClass(folder);
-      } else {
-        list.appendChild(_dsBuildFolderRow(folder));
+      if (folder) {
+        const existing = list.querySelector(`[data-folder-id="${CSS.escape(folderId)}"]`);
+        if (existing) {
+          const dot = existing.querySelector('.ds-status-dot');
+          if (dot) dot.className = 'ds-status-dot ' + _dsDotClass(folder);
+        } else {
+          list.appendChild(_dsBuildFolderRow(folder));
+        }
+        return; // handled
       }
-    } else {
+    }
+    if (_dsListMode === 'done' || _dsListMode === 'all') {
       const folder = _dsSession.completedList?.[folderId];
       if (!folder) return;
       const existing = list.querySelector(`[data-folder-id="${CSS.escape(folderId)}"]`);
@@ -6262,28 +6297,21 @@ const App = (() => {
     });
 
     // Deep Scan: list toggle (Sin datos / Completas)
-    document.getElementById('btn-ds-show-attn')?.addEventListener('click', () => {
-      if (_dsListMode === 'attn') return;
-      _dsListMode = 'attn';
-      document.getElementById('btn-ds-show-attn')?.classList.add('active');
-      document.getElementById('btn-ds-show-done')?.classList.remove('active');
-      _dsRenderAttentionList();
-    });
-    document.getElementById('btn-ds-show-done')?.addEventListener('click', () => {
-      if (_dsListMode === 'done') return;
-      _dsListMode = 'done';
-      document.getElementById('btn-ds-show-done')?.classList.add('active');
-      document.getElementById('btn-ds-show-attn')?.classList.remove('active');
-      _dsRenderCompletedList();
-    });
-    // "Mostrar" button under Completas counter
+    const _dsSetListMode = (mode) => {
+      _dsListMode = mode;
+      document.getElementById('btn-ds-show-all')?.classList.toggle('active',  mode === 'all');
+      document.getElementById('btn-ds-show-attn')?.classList.toggle('active', mode === 'attn');
+      document.getElementById('btn-ds-show-done')?.classList.toggle('active', mode === 'done');
+      if (mode === 'all')  _dsRenderAllList();
+      if (mode === 'attn') _dsRenderAttentionList();
+      if (mode === 'done') _dsRenderCompletedList();
+    };
+    document.getElementById('btn-ds-show-all')?.addEventListener('click',  () => { if (_dsListMode !== 'all')  _dsSetListMode('all');  });
+    document.getElementById('btn-ds-show-attn')?.addEventListener('click', () => { if (_dsListMode !== 'attn') _dsSetListMode('attn'); });
+    document.getElementById('btn-ds-show-done')?.addEventListener('click', () => { if (_dsListMode !== 'done') _dsSetListMode('done'); });
+    // "Mostrar" button under Completas counter (legacy, kept for safety)
     document.getElementById('btn-ds-show-complete')?.addEventListener('click', () => {
-      if (_dsListMode !== 'done') {
-        _dsListMode = 'done';
-        document.getElementById('btn-ds-show-done')?.classList.add('active');
-        document.getElementById('btn-ds-show-attn')?.classList.remove('active');
-        _dsRenderCompletedList();
-      }
+      if (_dsListMode !== 'done') _dsSetListMode('done');
     });
 
     // Deep Scan: artistas "Solo sin foto" toggle
