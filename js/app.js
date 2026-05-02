@@ -3820,7 +3820,8 @@ const App = (() => {
         const missingAlbum  = !meta?.album;
         const missingYear   = !meta?.year;
         const displayTitle  = meta?.displayName || cleanTitle(f.name);
-        if (missingArtist || missingAlbum || missingYear) {
+        // Only flag as needing attention if artist or album is missing — year is optional
+        if (missingArtist || missingAlbum) {
           const missing = [
             missingArtist ? 'artista' : '',
             missingAlbum  ? 'álbum'   : '',
