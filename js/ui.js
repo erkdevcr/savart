@@ -2262,12 +2262,73 @@ const UI = (() => {
           : `<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 14.5c-2.49 0-4.5-2.01-4.5-4.5S9.51 7.5 12 7.5s4.5 2.01 4.5 4.5-2.01 4.5-4.5 4.5zm0-5.5c-.55 0-1 .45-1 1s.45 1 1 1 1-.45 1-1-.45-1-1-1z"/></svg>`
         }
       </div>
-      <div>
+      <div class="lib-detail-entity-info">
         ${(album.year || album.format) ? `<div class="lib-detail-entity-year">${[album.year ? `(${escHtml(album.year)})` : '', album.format ? `<span class="album-format-badge">${escHtml(album.format)}</span>` : ''].filter(Boolean).join(' ')}</div>` : ''}
         <div class="lib-detail-entity-name">${escHtml(album.name)}</div>
         <div class="lib-detail-entity-sub">${[album.artist, songs.length + ' canciones'].filter(Boolean).map(escHtml).join(' · ')}</div>
+      </div>
+      <button class="lib-detail-entity-more" title="Editar álbum" aria-label="Editar álbum">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
+      </button>`;
+
+    // ── Edit panel (initially hidden) ──
+    const editPanel = document.createElement('div');
+    editPanel.className = 'album-edit-panel';
+    editPanel.hidden = true;
+    editPanel.innerHTML = `
+      <div class="album-edit-row">
+        <label class="album-edit-label">Artista</label>
+        <input class="album-edit-input" data-field="artist" value="${escHtml(album.artist || '')}" placeholder="Artista">
+      </div>
+      <div class="album-edit-row">
+        <label class="album-edit-label">Álbum</label>
+        <input class="album-edit-input" data-field="album" value="${escHtml(album.name || '')}" placeholder="Álbum">
+      </div>
+      <div class="album-edit-row">
+        <label class="album-edit-label">Año</label>
+        <input class="album-edit-input" data-field="year" value="${escHtml(album.year || '')}" placeholder="Año" style="max-width:80px">
+      </div>
+      <div class="album-edit-row">
+        <label class="album-edit-label">Cover URL</label>
+        <input class="album-edit-input" data-field="coverUrl" value="${escHtml(album.coverUrl && !album.coverUrl.startsWith('blob:') ? album.coverUrl : '')}" placeholder="https://…">
+      </div>
+      <div class="album-edit-actions">
+        <button class="album-edit-save-btn">Guardar</button>
       </div>`;
+
+    // Toggle edit panel on ⋮ click
+    entity.querySelector('.lib-detail-entity-more').addEventListener('click', e => {
+      e.stopPropagation();
+      editPanel.hidden = !editPanel.hidden;
+      if (!editPanel.hidden) editPanel.querySelector('[data-field="artist"]').focus();
+    });
+
+    // Save → write to DB via App
+    editPanel.querySelector('.album-edit-save-btn').addEventListener('click', async () => {
+      const btn      = editPanel.querySelector('.album-edit-save-btn');
+      const artist   = editPanel.querySelector('[data-field="artist"]').value.trim();
+      const albumVal = editPanel.querySelector('[data-field="album"]').value.trim();
+      const year     = editPanel.querySelector('[data-field="year"]').value.trim();
+      const coverUrl = editPanel.querySelector('[data-field="coverUrl"]').value.trim();
+      btn.disabled = true; btn.textContent = 'Guardando…';
+      try {
+        await App.onAlbumEdit?.(folderId, { artist, album: albumVal, year, coverUrl });
+        btn.textContent = '✓ Guardado';
+        // Update the header display immediately
+        const nameEl = entity.querySelector('.lib-detail-entity-name');
+        const subEl  = entity.querySelector('.lib-detail-entity-sub');
+        const yearEl = entity.querySelector('.lib-detail-entity-year');
+        if (nameEl && albumVal)  nameEl.textContent = albumVal;
+        if (subEl)               subEl.textContent  = [artist, songs.length + ' canciones'].filter(Boolean).join(' · ');
+        if (yearEl && year)      yearEl.textContent  = `(${year})`;
+        setTimeout(() => { btn.disabled = false; btn.textContent = 'Guardar'; editPanel.hidden = true; }, 1500);
+      } catch {
+        btn.disabled = false; btn.textContent = 'Guardar';
+      }
+    });
+
     container.appendChild(entity);
+    container.appendChild(editPanel);
 
     if (songs.length === 0) {
       const empty = document.createElement('div');

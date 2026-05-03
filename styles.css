@@ -1609,6 +1609,73 @@ img { display: block; }
   padding: 10px 14px 14px;
   border-bottom: 1px solid var(--bg-hover);
 }
+.lib-detail-entity-info {
+  flex: 1;
+  min-width: 0;
+}
+.lib-detail-entity-more {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  padding: 6px;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.7;
+  transition: opacity 0.15s, background 0.15s;
+}
+.lib-detail-entity-more:hover { opacity: 1; background: var(--bg-hover); }
+
+/* ── Album inline edit panel ─────────────────────────────── */
+.album-edit-panel {
+  padding: 12px 14px 14px;
+  border-bottom: 1px solid var(--bg-hover);
+  background: var(--bg-card);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.album-edit-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.album-edit-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  width: 60px;
+  flex-shrink: 0;
+}
+.album-edit-input {
+  flex: 1;
+  background: var(--bg-input, var(--bg-hover));
+  border: 1px solid var(--border-color, rgba(255,255,255,0.1));
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 13px;
+  padding: 5px 8px;
+  outline: none;
+}
+.album-edit-input:focus { border-color: var(--accent); }
+.album-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 2px;
+}
+.album-edit-save-btn {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 6px 18px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.album-edit-save-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 .lib-detail-entity-art {
   width: 48px;
   height: 48px;

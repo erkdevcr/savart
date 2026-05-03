@@ -5548,6 +5548,32 @@ const App = (() => {
     }
   }
 
+  /**
+   * Save manual album-level edits from the detail view header.
+   * Writes artist / album / year / thumbnailUrl to every track in the folder.
+   * @param {string} folderId
+   * @param {{artist:string, album:string, year:string, coverUrl:string}} patch
+   */
+  async function onAlbumEdit(folderId, patch) {
+    if (!folderId) throw new Error('folderId missing');
+    const all   = await DB.getAllMeta();
+    const songs = all.filter(m => m.folderId === folderId);
+    if (songs.length === 0) throw new Error('No songs found for folder');
+
+    for (const m of songs) {
+      const update = { folderId };
+      if (patch.artist)   update.artist       = patch.artist;
+      if (patch.album)    update.album        = patch.album;
+      if (patch.year)     update.year         = patch.year;
+      if (patch.coverUrl && !patch.coverUrl.startsWith('blob:'))
+        update.thumbnailUrl = patch.coverUrl;
+      await DB.setMeta(m.id, update);
+    }
+
+    if (typeof Sync !== 'undefined') Sync.push('metadata');
+    UI.showToast(`${songs.length} canciones actualizadas`);
+  }
+
   /** Called from the "Nueva playlist" button rendered inside the Playlists tab. */
   async function _onNewPlaylist() {
     const name = prompt(UI.t('prompt_playlist_name'), UI.t('prompt_playlist_default'));
@@ -6850,6 +6876,7 @@ const App = (() => {
     onArtistClick,
     onAlbumClick,
     onAlbumRescan,
+    onAlbumEdit,
     onBrowseRescan,
     onPlaylistClick,
     onPlaylistPlay,
