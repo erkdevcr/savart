@@ -5568,3 +5568,82 @@ img { display: block; }
     overflow-y: auto;
   }
 }
+
+/* ══════════════════════════════════════════════════════════
+   Library: Playlists two-column layout  (v1.6.65)
+   ══════════════════════════════════════════════════════════ */
+
+/* Wrapper fills the full detail area as a two-column flex */
+#lib-pl-two-col {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+}
+
+/* Left pane — scrollable playlist list */
+#lib-pl-list-pane {
+  width: 260px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--bg-hover);
+  overflow-y: auto;
+  height: 100%;
+}
+
+/* Right pane — playlist detail / songs */
+#lib-pl-detail-pane {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  height: 100%;
+}
+
+/* Placeholder shown when no playlist is selected yet */
+.lib-pl-detail-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 160px;
+  color: var(--text-muted);
+  font-size: 12px;
+  gap: 6px;
+  user-select: none;
+}
+
+/* Selected playlist item highlight in left pane */
+.lib-pl-item.active {
+  background: var(--accent-soft);
+}
+.lib-pl-item.active .lib-pl-name { color: var(--accent); }
+
+/* Back button — desktop hides it, mobile shows it */
+@media (min-width: 768px) {
+  .lib-pl-back { display: none !important; }
+}
+
+/* ── Mobile: single column, detail pane toggled by JS ─── */
+@media (max-width: 767px) {
+  #lib-pl-two-col {
+    flex-direction: column;
+    height: auto;
+    min-height: 0;
+  }
+
+  #lib-pl-list-pane {
+    width: 100%;
+    height: auto;
+    border-right: none;
+    overflow-y: visible;
+  }
+
+  #lib-pl-detail-pane {
+    height: auto;
+    overflow-y: visible;
+    display: none; /* hidden until .open is added */
+  }
+  #lib-pl-detail-pane.open { display: block; }
+
+  /* Hide list when detail is visible */
+  #lib-pl-two-col.detail-open #lib-pl-list-pane { display: none; }
+}

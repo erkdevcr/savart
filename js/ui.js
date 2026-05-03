@@ -2175,20 +2175,41 @@ const UI = (() => {
    * @param {string}   name   - playlist name for the header
    */
   function renderPlaylistDetail(songs, name) {
-    const container = document.getElementById('lib-detail-content');
+    // Two-col mode: populate right pane. Mobile/fallback: use full content area.
+    const detailPane = document.getElementById('lib-pl-detail-pane');
+    const twoCol     = document.getElementById('lib-pl-two-col');
+    const container  = detailPane || document.getElementById('lib-detail-content');
     if (!container) return;
     container.innerHTML = '';
 
-    // Back button (visible on mobile where list and detail are separate panes)
+    // Mark selected playlist active in the left pane
+    if (detailPane) {
+      document.querySelectorAll('#lib-pl-list-pane .lib-pl-item').forEach(el => {
+        el.classList.toggle('active', el.dataset.plName === name);
+      });
+    }
+
+    // Mobile: slide detail into view
+    if (twoCol)     twoCol.classList.add('detail-open');
+    if (detailPane) detailPane.classList.add('open');
+
+    // Back button — hidden on desktop via CSS (.lib-pl-back), shown on mobile
     const backRow = document.createElement('div');
-    backRow.className = 'lib-back-header';
+    backRow.className = 'lib-back-header lib-pl-back';
     backRow.innerHTML = `
       <button class="lib-back-btn">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
         Playlists
       </button>`;
     backRow.querySelector('.lib-back-btn').addEventListener('click', () => {
-      if (typeof App !== 'undefined') App._libGoBack?.('playlists');
+      if (twoCol) {
+        // Mobile two-col: toggle back to list pane
+        twoCol.classList.remove('detail-open');
+        detailPane?.classList.remove('open');
+        document.querySelectorAll('#lib-pl-list-pane .lib-pl-item').forEach(el => el.classList.remove('active'));
+      } else {
+        if (typeof App !== 'undefined') App._libGoBack?.('playlists');
+      }
     });
     container.appendChild(backRow);
 
@@ -2799,7 +2820,25 @@ const UI = (() => {
     if (!container) return;
     container.innerHTML = '';
 
-    // "Nueva playlist" button at the top
+    // ── Two-column wrapper: left = list, right = detail ──────
+    const twoCol = document.createElement('div');
+    twoCol.id = 'lib-pl-two-col';
+
+    const listPane = document.createElement('div');
+    listPane.id = 'lib-pl-list-pane';
+
+    const detailPane = document.createElement('div');
+    detailPane.id = 'lib-pl-detail-pane';
+    // Placeholder shown until a playlist is selected
+    detailPane.innerHTML = `<div class="lib-pl-detail-placeholder">
+      <svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor" style="opacity:.2;margin-bottom:8px"><path d="M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zM17 6v8.18c-.31-.11-.65-.18-1-.18-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3V8h3V6h-5z"/></svg>
+    </div>`;
+
+    twoCol.appendChild(listPane);
+    twoCol.appendChild(detailPane);
+    container.appendChild(twoCol);
+
+    // "Nueva playlist" button at the top of the list pane
     const newBtn = document.createElement('div');
     newBtn.className = 'lib-new-pl-btn';
     newBtn.innerHTML = `
@@ -2809,7 +2848,7 @@ const UI = (() => {
     newBtn.addEventListener('click', () => {
       if (typeof App !== 'undefined') App._onNewPlaylist?.();
     });
-    container.appendChild(newBtn);
+    listPane.appendChild(newBtn);
 
     if (playlists.length === 0) return;
 
@@ -2852,7 +2891,7 @@ const UI = (() => {
         showContextMenu(e, 'playlist', pl);
       });
 
-      container.appendChild(item);
+      listPane.appendChild(item);
     });
   }
 
