@@ -1458,41 +1458,113 @@ const App = (() => {
   /**
    * Force a full re-enrichment of an album's songs, ignoring the mbTried flag.
    * Called from the Rescan button in the album detail view.
+   *
+   * If any songs have manual edits (manualAt > 0), shows a warning dialog before
+   * proceeding. On confirm, manual overrides are cleared so the enrichment pipeline
+   * can fully overwrite them. This is the "album-level" rescan — it warns first.
+   *
    * @param {Object[]} songs   — song objects currently rendered
    * @param {string}   folderId
    */
   async function onAlbumRescan(songs, folderId) {
     if (!songs || songs.length === 0) return;
+
+    // ── Check for manual edits and warn before proceeding ──────────────────
+    const manualFiles = await _getManualFiles(songs);
+    if (manualFiles.length > 0) {
+      const n    = manualFiles.length;
+      const noun = n === 1 ? UI.t('lbl_song') : UI.t('lbl_songs');
+      const warn = n === 1 ? UI.t('rescan_manual_warn_single') : UI.t('rescan_manual_warn');
+      const confirmed = await _showRescanDialog(`${n} ${noun} ${warn}`);
+      if (!confirmed) return;
+      // Note: resetToVirgin below already clears manualAt — no separate clear needed
+    }
+
     UI.showToast(UI.t('toast_rescan_start'));
 
     // ── Purge orphans: remove DB records for files no longer in Drive ──
-    // songs[] is the fresh Drive listing for this folder.
     if (folderId) {
       const liveIds = songs.map(s => s.id);
       const pruned  = await DB.purgeOrphans(folderId, liveIds).catch(() => 0);
       if (pruned > 0) console.log(`[App] Purged ${pruned} orphan(s) from folder ${folderId}`);
     }
 
-    // Full reset: clear all enrichment fields so MB re-runs on clean data.
-    // coverBlob (embedded ID3 art) and user data (starred, playCount) are preserved.
+    // Virgin reset: wipe all enrichment AND manual data — only stars/playCount survive.
+    // The pipeline will start from scratch using only the original filename.
     await Promise.all(songs.map(async s => {
-      await DB.clearEnrichment(s.id).catch(() => {});
-      if (typeof Meta !== 'undefined') Meta.revoke(s.id); // clear in-memory ID3 cache
+      await DB.resetToVirgin(s.id).catch(() => {});
+      if (typeof Meta !== 'undefined') Meta.revoke(s.id);
     }));
-    // Clear folder cover cache so cover.jpg is re-fetched
     if (folderId) _folderCoverCache.delete(folderId);
     await _prefetchAndApplyFolderCovers(folderId, songs, true); // force=true
     await _patchAlbumDetailHeader(songs);
     if (typeof Sync !== 'undefined') {
-      // Hot push: immediate small delta (~5–50 songs, ~5 KB) so Device B sees changes within 3 s
       Sync.pushHot(songs).catch(() => {});
-      // Full metadata push: background, for initial-setup on new devices (debounced 2 s)
       Sync.push('metadata');
     }
-    // Run Last.fm thumb pass for this album in case the pipeline didn't produce a URL.
-    // Runs in background — does not block the UI toast.
     _lfmThumbLibrary().catch(() => {});
     UI.showToast(UI.t('toast_rescan_done'));
+  }
+
+  /* ── Manual-data helpers for rescan flows ───────────────────
+     Before any forced rescan, check if any songs have manual
+     edits; if so, warn and clear them so the guard passes.
+     ────────────────────────────────────────────────────────── */
+
+  /**
+   * Returns the subset of files that have manualAt > 0 in IndexedDB.
+   * @param {Object[]} files
+   * @returns {Promise<Object[]>}
+   */
+  async function _getManualFiles(files) {
+    const results = await Promise.all(files.map(async f => {
+      const m = await DB.getMeta(f.id).catch(() => null);
+      return (m?.manualAt || 0) > 0 ? f : null;
+    }));
+    return results.filter(Boolean);
+  }
+
+  /**
+   * Clear manual-ownership data (manualAt, coverBlob, displayName) for files
+   * that have manualAt > 0. Called after the user confirms they want a full reset.
+   * @param {Object[]} files
+   */
+  async function _clearManualForFiles(files) {
+    await Promise.all(files.map(f => DB.clearManualOverrides(f.id).catch(() => {})));
+  }
+
+  /**
+   * Show the lib-rescan-dialog with a custom message.
+   * Resolves true if confirmed, false if cancelled.
+   * @param {string} message  — text to show in the description paragraph
+   * @returns {Promise<boolean>}
+   */
+  function _showRescanDialog(message) {
+    return new Promise(resolve => {
+      const modal      = document.getElementById('lib-rescan-dialog');
+      const desc       = document.getElementById('lib-rescan-desc');
+      const confirmBtn = document.getElementById('btn-lib-rescan-confirm');
+      const cancelBtn  = document.getElementById('btn-lib-rescan-cancel');
+      const backdrop   = document.getElementById('lib-rescan-backdrop');
+      if (!modal) { resolve(true); return; }
+
+      if (desc) desc.textContent = message;
+      modal.style.display = 'flex';
+
+      const finish = (result) => {
+        modal.style.display = 'none';
+        confirmBtn?.removeEventListener('click', onConfirm);
+        cancelBtn?.removeEventListener('click',  onCancel);
+        backdrop?.removeEventListener('click',   onCancel);
+        resolve(result);
+      };
+      const onConfirm = () => finish(true);
+      const onCancel  = () => finish(false);
+
+      confirmBtn?.addEventListener('click', onConfirm, { once: true });
+      cancelBtn?.addEventListener('click',  onCancel,  { once: true });
+      backdrop?.addEventListener('click',   onCancel,  { once: true });
+    });
   }
 
   /* ── Library search-results batch rescan ─────────────────────
@@ -1504,9 +1576,9 @@ const App = (() => {
 
   /**
    * Collect visible album folder IDs from the current search results,
-   * prompt for confirmation if > 5, then run the rescan sequentially.
+   * warn if any songs have manual edits, confirm, then run the rescan.
    */
-  function onLibRescan() {
+  async function onLibRescan() {
     if (_libRescanRunning) return;
 
     // Collect folder IDs of album cards currently visible
@@ -1524,44 +1596,17 @@ const App = (() => {
       return;
     }
 
-    if (folderIds.length > 5) {
-      // Show confirmation popup
-      const desc = document.getElementById('lib-rescan-desc');
-      if (desc) {
-        desc.textContent = `${folderIds.length} ${UI.t('rescan_confirm_msg')}`;
-      }
-      const modal = document.getElementById('lib-rescan-dialog');
-      if (modal) {
-        modal.style.display = 'flex';
-        const onConfirm = () => {
-          modal.style.display = 'none';
-          cleanup();
-          _doLibRescan(folderIds);
-        };
-        const onCancel = () => {
-          modal.style.display = 'none';
-          cleanup();
-        };
-        const confirmBtn  = document.getElementById('btn-lib-rescan-confirm');
-        const cancelBtn   = document.getElementById('btn-lib-rescan-cancel');
-        const backdropEl  = document.getElementById('lib-rescan-backdrop');
-        confirmBtn?.addEventListener('click', onConfirm,  { once: true });
-        cancelBtn?.addEventListener('click',  onCancel,   { once: true });
-        backdropEl?.addEventListener('click', onCancel,   { once: true });
-        function cleanup() {
-          confirmBtn?.removeEventListener('click', onConfirm);
-          cancelBtn?.removeEventListener('click',  onCancel);
-          backdropEl?.removeEventListener('click', onCancel);
-        }
-      }
-    } else {
-      _doLibRescan(folderIds);
-    }
+    // Build a dialog message that mentions both album count AND any manual edits
+    const baseMsg   = `${folderIds.length} ${UI.t('rescan_confirm_msg')}`;
+    const confirmed = await _showRescanDialog(baseMsg);
+    if (!confirmed) return;
+
+    _doLibRescan(folderIds);
   }
 
   /**
    * Run the full rescan pipeline sequentially for a list of folder IDs.
-   * Updates the button spinner and toast notifications.
+   * Clears manual overrides before enriching so the guard doesn't block.
    */
   async function _doLibRescan(folderIds) {
     if (_libRescanRunning) return;
@@ -1583,8 +1628,9 @@ const App = (() => {
         const liveIds = songs.map(s => s.id);
         await DB.purgeOrphans(folderId, liveIds).catch(() => {});
 
+        // Virgin reset: wipe all enrichment AND manual data — only stars/playCount survive.
         await Promise.all(songs.map(async s => {
-          await DB.clearEnrichment(s.id).catch(() => {});
+          await DB.resetToVirgin(s.id).catch(() => {});
           if (typeof Meta !== 'undefined') Meta.revoke(s.id);
         }));
         _folderCoverCache.delete(folderId);
@@ -1615,9 +1661,25 @@ const App = (() => {
   /**
    * Force a full re-enrichment of the currently open browse folder.
    * Called from the Rescan button in the browse action bar.
+   *
+   * If any songs have manual edits (manualAt > 0), shows a warning dialog
+   * before proceeding. On confirm, manual overrides are cleared so the
+   * enrichment pipeline can fully overwrite them.
    */
   async function onBrowseRescan() {
     if (!_browseFiles.length) return;
+
+    // ── Check for manual edits and warn before proceeding ──────────────────
+    const manualFiles = await _getManualFiles(_browseFiles);
+    if (manualFiles.length > 0) {
+      const n    = manualFiles.length;
+      const noun = n === 1 ? UI.t('lbl_song') : UI.t('lbl_songs');
+      const warn = n === 1 ? UI.t('rescan_manual_warn_single') : UI.t('rescan_manual_warn');
+      const confirmed = await _showRescanDialog(`${n} ${noun} ${warn}`);
+      if (!confirmed) return;
+      // Note: resetToVirgin below already clears manualAt — no separate clear needed
+    }
+
     const btn  = document.getElementById('btn-browse-rescan');
     const icon = document.getElementById('browse-rescan-icon');
     if (btn)  btn.disabled = true;
@@ -1641,9 +1703,9 @@ const App = (() => {
         }
       }
 
-      // Full reset: clear all enrichment fields so MB re-runs on clean data.
+      // Virgin reset: wipe all enrichment AND manual data — only stars/playCount survive.
       await Promise.all(_browseFiles.map(async f => {
-        await DB.clearEnrichment(f.id).catch(() => {});
+        await DB.resetToVirgin(f.id).catch(() => {});
         if (typeof Meta !== 'undefined') Meta.revoke(f.id);
       }));
       if (_browseFolderId) _folderCoverCache.delete(_browseFolderId);
@@ -4379,9 +4441,10 @@ const App = (() => {
       const liveIds = page.audioFiles.map(f => f.id);
       await DB.purgeOrphans(id, liveIds).catch(() => {});
 
-      // 2. Clear enrichment + reset folder cover cache
+      // 2. Virgin reset: wipe ALL metadata (enrichment + manual) — only stars/playCount survive.
+      // Deep Scan is the comprehensive power tool — runs unconditionally, no warning needed.
       await Promise.all(page.audioFiles.map(async f => {
-        await DB.clearEnrichment(f.id).catch(() => {});
+        await DB.resetToVirgin(f.id).catch(() => {});
         if (typeof Meta !== 'undefined') Meta.revoke(f.id);
       }));
       _folderCoverCache.delete(id);

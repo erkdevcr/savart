@@ -763,6 +763,48 @@ const DB = (() => {
   }
 
   /**
+   * Clear manual-ownership fields so that auto-enrichment can fully overwrite.
+   * Clears: manualAt, coverBlob, displayName
+   * Preserves: artist, album, year, track (still useful as MB search context)
+   * @param {string} fileId
+   */
+  async function clearManualOverrides(fileId) {
+    const store    = _tx('metadata', 'readwrite');
+    const existing = await _promisify(store.get(fileId));
+    if (!existing) return;
+    delete existing.manualAt;
+    delete existing.coverBlob;
+    delete existing.displayName;
+    return _promisify(store.put(existing));
+  }
+
+  /**
+   * Full virgin reset for a rescan: wipes all enrichment AND manual data,
+   * leaving the record as if the file had never been scanned.
+   *
+   * Only user-interaction data survives:
+   *   starred, playCount, playedAt, addedAt
+   *
+   * Everything else — displayName, artist, album, year, track, covers,
+   * manualAt, MB/AudD flags — is deleted so the pipeline starts from scratch
+   * using only the original filename as input.
+   *
+   * @param {string} fileId
+   */
+  async function resetToVirgin(fileId) {
+    const store    = _tx('metadata', 'readwrite');
+    const existing = await _promisify(store.get(fileId));
+    if (!existing) return;
+
+    // Preserve only the identity + user-interaction fields
+    const keep = {};
+    for (const f of ['id', 'name', 'folderId', 'starred', 'playCount', 'playedAt', 'addedAt']) {
+      if (existing[f] !== undefined) keep[f] = existing[f];
+    }
+    return _promisify(store.put(keep));
+  }
+
+  /**
    * Global orphan purge: removes ALL metadata records whose IDs are not in liveIds.
    * Use after a full Drive BFS scan to reconcile the entire DB against Drive.
    *
@@ -862,6 +904,8 @@ const DB = (() => {
     getPinnedFolders,
     // Rescan
     clearEnrichment,
+    clearManualOverrides,
+    resetToVirgin,
     purgeOrphans,
     purgeAllOrphans,
   };

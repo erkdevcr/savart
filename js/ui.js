@@ -288,6 +288,8 @@ const UI = (() => {
       ds_already_scanned:   'Carpeta ya escaneada',
       ds_rescan_prompt:     'Esta carpeta contiene subcarpetas escaneadas anteriormente. ¿Qué deseas hacer?',
       rescan_btn:           'Rescanear',
+      rescan_manual_warn:   'tienen datos editados manualmente que serán reemplazados al rescanear.',
+      rescan_manual_warn_single: 'tiene datos editados manualmente que serán reemplazados al rescanear.',
     },
     en: {
       // ── Navigation ─────────────────────────────────────────
@@ -554,6 +556,8 @@ const UI = (() => {
       ds_already_scanned:   'Folder already scanned',
       ds_rescan_prompt:     'This folder contains previously scanned subfolders. What do you want to do?',
       rescan_btn:           'Rescan',
+      rescan_manual_warn:   'have manually edited data that will be replaced on rescan.',
+      rescan_manual_warn_single: 'has manually edited data that will be replaced on rescan.',
     },
   };
 
