@@ -2278,10 +2278,12 @@ const UI = (() => {
       <div class="album-edit-row">
         <label class="album-edit-label">Artista</label>
         <input class="album-edit-input" data-field="artist" value="${escHtml(album.artist || '')}" placeholder="Artista">
+        <button class="album-edit-apply-btn" data-apply="artist" title="Aplicar a todas las canciones">Aplicar a todas</button>
       </div>
       <div class="album-edit-row">
         <label class="album-edit-label">Álbum</label>
         <input class="album-edit-input" data-field="album" value="${escHtml(album.name || '')}" placeholder="Álbum">
+        <button class="album-edit-apply-btn" data-apply="album" title="Aplicar a todas las canciones">Aplicar a todas</button>
       </div>
       <div class="album-edit-row">
         <label class="album-edit-label">Año</label>
@@ -2300,6 +2302,35 @@ const UI = (() => {
       e.stopPropagation();
       const isOpen = editPanel.classList.toggle('open');
       if (isOpen) editPanel.querySelector('[data-field="artist"]').focus();
+    });
+
+    // "Aplicar a todas" — applies just artist or album field to every track
+    editPanel.querySelectorAll('.album-edit-apply-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const field    = btn.dataset.apply;           // 'artist' | 'album'
+        const inputEl  = editPanel.querySelector(`[data-field="${field}"]`);
+        const value    = inputEl?.value.trim();
+        if (!value) return;
+        btn.disabled = true;
+        const orig = btn.textContent;
+        btn.textContent = '…';
+        try {
+          await App.onAlbumEdit?.(folderId, { [field]: value });
+          btn.textContent = '✓';
+          // also refresh header display for artist sub-line
+          if (field === 'artist') {
+            const subEl = entity.querySelector('.lib-detail-entity-sub');
+            if (subEl) subEl.textContent = [value, songs.length + ' canciones'].filter(Boolean).join(' · ');
+          }
+          if (field === 'album') {
+            const nameEl = entity.querySelector('.lib-detail-entity-name');
+            if (nameEl) nameEl.textContent = value;
+          }
+          setTimeout(() => { btn.disabled = false; btn.textContent = orig; }, 1500);
+        } catch {
+          btn.disabled = false; btn.textContent = orig;
+        }
+      });
     });
 
     // Save → write to DB via App

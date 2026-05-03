@@ -1679,6 +1679,20 @@ img { display: block; }
   transition: opacity 0.15s;
 }
 .album-edit-save-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.album-edit-apply-btn {
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+}
+.album-edit-apply-btn:hover { background: var(--accent); color: #fff; }
+.album-edit-apply-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .lib-detail-entity-art {
   width: 48px;
   height: 48px;
