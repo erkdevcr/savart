@@ -2295,6 +2295,9 @@ const UI = (() => {
       <div class="album-edit-row">
         <label class="album-edit-label">Cover URL</label>
         <input class="album-edit-input" data-field="coverUrl" value="${escHtml(album.coverUrl && !album.coverUrl.startsWith('blob:') ? album.coverUrl : '')}" placeholder="https://…">
+      </div>
+      <div class="album-edit-row album-edit-row--track-btn">
+        <button class="album-edit-track-btn">✎ Editar canciones</button>
       </div>`;
 
     // Toggle edit panel on ⋮ click — mark entity while open, unmark on close
@@ -2362,6 +2365,53 @@ const UI = (() => {
       }
     });
 
+    // "Editar canciones" — toggle inline rename on every track title
+    editPanel.querySelector('.album-edit-track-btn').addEventListener('click', () => {
+      const topList = container.querySelector('.top-list');
+      if (!topList) return;
+      const btn       = editPanel.querySelector('.album-edit-track-btn');
+      const isEditing = topList.classList.toggle('track-editing');
+      btn.textContent = isEditing ? '✓ Listo' : '✎ Editar canciones';
+      btn.classList.toggle('album-edit-track-btn--active', isEditing);
+
+      topList.querySelectorAll('.top-list-item').forEach(row => {
+        const titleEl = row.querySelector('.top-list-title');
+        if (!titleEl) return;
+        const songId = row.dataset.id;
+
+        if (isEditing) {
+          // Replace static text with an editable input
+          const currentName = titleEl.textContent.trim();
+          const inp = document.createElement('input');
+          inp.className  = 'track-rename-input';
+          inp.value      = currentName;
+          inp.dataset.original = currentName;
+          titleEl.textContent = '';
+          titleEl.appendChild(inp);
+
+          const _saveRename = async () => {
+            const newName  = inp.value.trim();
+            const original = inp.dataset.original;
+            if (!newName || newName === original) return;
+            try {
+              await App.onTrackRename?.(songId, newName);
+              inp.dataset.original = newName;
+            } catch { inp.value = original; }
+          };
+
+          inp.addEventListener('keydown', e => {
+            if (e.key === 'Enter')  { e.preventDefault(); _saveRename().then(() => inp.blur()); }
+            if (e.key === 'Escape') { inp.value = inp.dataset.original; inp.blur(); }
+          });
+          inp.addEventListener('blur', _saveRename);
+        } else {
+          // Restore static text using current (possibly edited) value
+          const inp = titleEl.querySelector('.track-rename-input');
+          titleEl.textContent = inp ? (inp.value.trim() || inp.dataset.original) : titleEl.textContent;
+        }
+      });
+    });
+
     container.appendChild(entity);
     container.appendChild(editPanel);
 
@@ -2405,7 +2455,10 @@ const UI = (() => {
 
       row.addEventListener('click', e => {
         if (e.target.closest('.btn-more')) return;
-        if (typeof App !== 'undefined') App.onSongClick(song);
+        if (e.target.closest('.track-rename-input')) return; // don't play while renaming
+        // Pass the full album song list so the player queues the whole album
+        // starting from the clicked track (with radio refill when ≤ 2 remain).
+        if (typeof App !== 'undefined') App.onSongClick(song, songs);
       });
 
       if (typeof App !== 'undefined') App._cacheItem?.(song);

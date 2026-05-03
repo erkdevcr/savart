@@ -1702,6 +1702,49 @@ img { display: block; }
 }
 .album-edit-apply-btn:hover { background: var(--accent); color: #fff; }
 .album-edit-apply-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* "Editar canciones" toggle button */
+.album-edit-row--track-btn { padding-top: 4px; }
+.album-edit-track-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 5px 12px;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  width: 100%;
+}
+.album-edit-track-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+.album-edit-track-btn--active {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Inline track rename input */
+.track-rename-input {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--accent);
+  border-radius: 0;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  outline: none;
+  padding: 1px 2px 2px;
+  width: 100%;
+}
+.track-rename-input:focus {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border-radius: 3px 3px 0 0;
+  padding: 1px 4px 2px;
+}
+
+/* In track-editing mode, prevent thumb from absorbing clicks */
+.top-list.track-editing .top-list-item { cursor: text; }
 .lib-detail-entity-art {
   width: 48px;
   height: 48px;

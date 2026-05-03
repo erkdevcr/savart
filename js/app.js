@@ -610,6 +610,7 @@ const App = (() => {
     if (dbPatch.album)        metaPatch.album    = dbPatch.album;
     if (dbPatch.year)         metaPatch.year     = dbPatch.year;
     if (dbPatch.thumbnailUrl) metaPatch.coverUrl = dbPatch.thumbnailUrl;
+    if (dbPatch.displayName)  metaPatch.title    = dbPatch.displayName; // Meta cache uses 'title'
 
     // Build Player-queue-compatible patch (DriveItem field names)
     const queuePatch = {};
@@ -617,6 +618,7 @@ const App = (() => {
     if (dbPatch.album)        queuePatch.albumName    = dbPatch.album;
     if (dbPatch.year)         queuePatch.year         = dbPatch.year;
     if (dbPatch.thumbnailUrl) queuePatch.thumbnailUrl = dbPatch.thumbnailUrl;
+    if (dbPatch.displayName)  queuePatch.displayName  = dbPatch.displayName;
 
     const hasMeta  = Object.keys(metaPatch).length  > 0;
     const hasQueue = Object.keys(queuePatch).length > 0;
@@ -2489,37 +2491,48 @@ const App = (() => {
 
   /**
    * User tapped a song row.
-   * Replaces the queue with all songs in the current folder view,
-   * starting from the clicked song.
+   *
+   * @param {DriveItem}   clickedSong   — the song that was tapped
+   * @param {DriveItem[]|null} contextSongs — when provided (e.g. album detail view),
+   *   the full ordered list of songs that should become the queue. The clicked song
+   *   becomes the starting position and radio refill activates when ≤ 2 remain.
    */
-  function onSongClick(clickedSong) {
-    // Only in Browse do we load the whole folder as queue.
-    // In Search, Home, Library, etc. we play just the clicked song —
-    // so the queue never auto-fills with files from other folders.
+  function onSongClick(clickedSong, contextSongs = null) {
     if (UI.getCurrentView() === 'browse') {
-      // Scope strictly to the Browse item-list — never leak into other screens
+      // Browse: queue = whole visible folder, no radio (folder is already curated)
       const browseList = document.querySelector('#screen-browse .item-list');
       const rows       = Array.from(browseList?.querySelectorAll('.song-row:not(.wma)') || []);
       const ids        = rows.map(r => r.dataset.id);
       const allSongs   = ids.map(id => _resolveItemById(id)).filter(Boolean);
 
-      _resetRadio(); // Browse always queues the folder — no radio needed
+      _resetRadio();
       if (allSongs.length > 0) {
         const startIdx = allSongs.findIndex(s => s.id === clickedSong.id);
         Player.setQueue(allSongs, startIdx >= 0 ? startIdx : 0);
       } else {
-        // Only one song visible — treat as single-song play → enable radio
         _radioModeActive = true;
         _radioQueuedIds  = new Set([clickedSong.id]);
         Player.setQueue([clickedSong], 0);
       }
+
+    } else if (contextSongs?.length > 0) {
+      // Album detail (or any view that passes the full context list):
+      // queue = whole album in order, radio kicks in when ≤ 2 songs remain.
+      _resetRadio();
+      _radioModeActive = true;
+      // Pre-seed all album IDs so radio never re-adds them as new results
+      _radioQueuedIds  = new Set(contextSongs.map(s => s.id));
+      // Pre-seed artist so radio can start searching without waiting for AudD
+      _radioArtist     = _guessArtistFromItem(clickedSong) || null;
+      const startIdx   = contextSongs.findIndex(s => s.id === clickedSong.id);
+      Player.setQueue(contextSongs, startIdx >= 0 ? startIdx : 0);
+
     } else {
-      // Search, Library, History, Top Played: single song → enable radio mode
+      // Search, History, Home, single-song Library clicks: one song → radio fills the rest
       _resetRadio();
       _radioModeActive = true;
       _radioQueuedIds  = new Set([clickedSong.id]);
-      // Pre-seed artist from item metadata or filename — avoids waiting for AudD
-      _radioArtist = _guessArtistFromItem(clickedSong) || null;
+      _radioArtist     = _guessArtistFromItem(clickedSong) || null;
       Player.setQueue([clickedSong], 0);
     }
   }
@@ -5876,6 +5889,20 @@ const App = (() => {
     UI.showToast(`${songs.length} canciones actualizadas`);
   }
 
+  /**
+   * Rename a single track's display name (from the album detail inline editor).
+   * Writes to DB, patches in-memory caches, and syncs.
+   * @param {string} songId
+   * @param {string} newName
+   */
+  async function onTrackRename(songId, newName) {
+    if (!songId || !newName?.trim()) return;
+    const name = newName.trim();
+    await DB.setMeta(songId, { displayName: name, manualAt: Date.now() });
+    _liveMetaUpdate([songId], { displayName: name });
+    if (typeof Sync !== 'undefined') Sync.push('metadata');
+  }
+
   /** Called from the "Nueva playlist" button rendered inside the Playlists tab. */
   async function _onNewPlaylist() {
     const name = prompt(UI.t('prompt_playlist_name'), UI.t('prompt_playlist_default'));
@@ -7191,6 +7218,7 @@ const App = (() => {
     onAlbumClick,
     onAlbumRescan,
     onAlbumEdit,
+    onTrackRename,
     onBrowseRescan,
     onPlaylistClick,
     onPlaylistPlay,
