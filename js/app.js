@@ -3595,11 +3595,29 @@ const App = (() => {
     }
   }
 
+  /**
+   * Shrinks the font of #ds-folder-name until the full path fits on one line.
+   * Starts at 12px and steps down to a minimum of 8px.
+   */
+  function _dsFitFolderName() {
+    const el = document.getElementById('ds-folder-name');
+    if (!el) return;
+    el.style.fontSize = '';          // reset to CSS default (12px)
+    requestAnimationFrame(() => {
+      let size = 12;
+      while (el.scrollWidth > el.offsetWidth && size > 8) {
+        size -= 0.5;
+        el.style.fontSize = size + 'px';
+      }
+    });
+  }
+
   /* Full render from session state. */
   function _dsRenderAll() {
     // Folder name
     const nameEl = document.getElementById('ds-folder-name');
     if (nameEl) nameEl.textContent = _dsSession.selectedFolderName || CONFIG.ROOT_FOLDER_NAME;
+    _dsFitFolderName();
 
     _dsUpdateControls();
     _dsUpdateProgress();
@@ -3943,6 +3961,7 @@ const App = (() => {
     _dsSession.selectedFolderName = fullPath;
     const nameEl = document.getElementById('ds-folder-name');
     if (nameEl) nameEl.textContent = fullPath;
+    _dsFitFolderName();
 
     // Folder changed — any saved pending queue belongs to the OLD folder.
     // Reset to idle so the start button shows "Iniciar" (not "Continuar").
