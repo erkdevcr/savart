@@ -6251,9 +6251,26 @@ const App = (() => {
       UI.setExpandedPlayerVisible(false);
     }
     UI.showView(viewId);
-    if (viewId !== 'search') UI.updateSearchChipCounts(null); // clear chip counts when leaving search
+    UI.updateSearchChipCounts(null); // clear search chip counts on every nav
     if (viewId === 'home')    _loadHomeData();
     if (viewId === 'library') _setLibTab(_currentLibTab || 'albums');
+    // When navigating away from browse, clear any active search so the
+    // folder list is restored immediately when Browse is opened again.
+    if (viewId !== 'browse') {
+      const inp = document.getElementById('search-input');
+      if (inp && inp.value) {
+        inp.value = '';
+        // Use the same toggle helper defined in index.html inline script
+        const browseList    = document.querySelector('#screen-browse .item-list:not(#search-results)');
+        const searchResults = document.getElementById('search-results');
+        const filters       = document.querySelector('.browse-search-filters');
+        const clearBtn      = document.getElementById('btn-search-clear');
+        if (browseList)    browseList.style.display    = '';
+        if (searchResults) { searchResults.style.display = 'none'; searchResults.innerHTML = ''; }
+        if (filters)       filters.style.display       = 'none';
+        if (clearBtn)      clearBtn.style.display      = 'none';
+      }
+    }
     if (viewId === 'history') _loadHistory();
     if (viewId === 'settings') {
       _buildEQSliders();

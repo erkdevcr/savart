@@ -85,10 +85,6 @@
         <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>
         <span data-i18n="browse">Examinar</span>
       </button>
-      <button class="nav-item" data-nav="search" data-view="search">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-        <span data-i18n="search">Buscar</span>
-      </button>
       <button class="nav-item" data-nav="library" data-view="library">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M4 6h2v12H4zm3 0h2v12H7zm3 0h12v2H10V6zm0 4h12v2H10v-2zm0 4h12v2H10v-2z"/></svg>
         <span data-i18n="library">Biblioteca</span>
@@ -181,30 +177,27 @@
             </div>
           </div>
         </div>
-      </div>
-      <!-- Item list rendered by UI.renderFolderContents() -->
-    </div>
-
-    <!-- ── SEARCH ─────────────────────────────────────────── -->
-    <div id="screen-search" class="screen">
-      <div class="screen-header">
-        <h1 data-i18n="search">Buscar</h1>
-      </div>
-      <div class="search-bar-wrap">
-        <div class="search-bar">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-          <input id="search-input" type="search" placeholder="Canciones, carpetas…" data-i18n-placeholder="search_placeholder" autocomplete="off" autocorrect="off" spellcheck="false">
+        <!-- Row 4: search bar (always visible, drives Drive-wide search) -->
+        <div class="browse-search-row">
+          <div class="search-bar">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+            <input id="search-input" type="search" placeholder="Canciones, carpetas…" data-i18n-placeholder="search_placeholder" autocomplete="off" autocorrect="off" spellcheck="false">
+            <button id="btn-search-clear" class="browse-search-clear" aria-label="Limpiar búsqueda" style="display:none">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+            </button>
+          </div>
         </div>
       </div>
-      <div class="search-filters">
+      <!-- Search filter chips — shown only while a search is active -->
+      <div class="search-filters browse-search-filters" style="display:none">
         <button class="filter-chip active" data-filter="all"><span data-i18n="filter_all">Todo</span><span class="chip-count"></span></button>
         <button class="filter-chip"        data-filter="songs"><span data-i18n="filter_songs">Canciones</span><span class="chip-count"></span></button>
         <button class="filter-chip"        data-filter="folders"><span data-i18n="filter_folders">Carpetas</span><span class="chip-count"></span></button>
       </div>
       <div id="search-count-bar"></div>
-      <div id="search-results" class="item-list">
-        <!-- Results rendered dynamically -->
-      </div>
+      <!-- Search results — shown only while a search is active (replaces folder item list) -->
+      <div id="search-results" style="display:none"></div>
+      <!-- Folder item list rendered by UI.renderFolderContents() -->
     </div>
 
     <!-- ── LIBRARY ────────────────────────────────────────── -->
@@ -916,10 +909,6 @@
     <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>
     <span data-i18n="browse">Examinar</span>
   </button>
-  <button class="nav-tab" data-nav="search" data-view="search">
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-    <span data-i18n="search">Buscar</span>
-  </button>
   <button class="nav-tab" data-nav="library" data-view="library">
     <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M4 6h2v12H4zm3 0h2v12H7zm3 0h12v2H10V6zm0 4h12v2H10v-2zm0 4h12v2H10v-2z"/></svg>
     <span data-i18n="library">Biblioteca</span>
@@ -1108,9 +1097,37 @@
 
 <!-- Inline: additional bindings that need the DOM -->
 <script>
-  // ── Home search shortcut ───────────────────────────────
+  // ── Home search shortcut → navigate to Browse and focus search bar ──
   document.getElementById('btn-home-search')?.addEventListener('click', () => {
-    App.onNavClick?.('search');
+    App.onNavClick?.('browse');
+    setTimeout(() => document.getElementById('search-input')?.focus(), 120);
+  });
+
+  // ── Browse search: toggle between folder list and Drive-wide results ──
+  function _toggleBrowseSearch(hasText) {
+    const browseList    = document.querySelector('#screen-browse .item-list:not(#search-results)');
+    const searchResults = document.getElementById('search-results');
+    const filters       = document.querySelector('.browse-search-filters');
+    const clearBtn      = document.getElementById('btn-search-clear');
+    if (hasText) {
+      if (browseList)    browseList.style.display    = 'none';
+      if (searchResults) searchResults.style.display = '';
+      if (filters)       filters.style.display       = '';
+      if (clearBtn)      clearBtn.style.display      = '';
+    } else {
+      if (browseList)    browseList.style.display    = '';
+      if (searchResults) { searchResults.style.display = 'none'; searchResults.innerHTML = ''; }
+      if (filters)       filters.style.display       = 'none';
+      if (clearBtn)      clearBtn.style.display      = 'none';
+      if (typeof UI !== 'undefined') UI.updateSearchChipCounts?.(null);
+    }
+  }
+
+  // Clear button
+  document.getElementById('btn-search-clear')?.addEventListener('click', () => {
+    const inp = document.getElementById('search-input');
+    if (inp) { inp.value = ''; inp.focus(); }
+    _toggleBrowseSearch(false);
   });
 
   // ── Search input debounce ──────────────────────────────
@@ -1118,10 +1135,8 @@
   document.getElementById('search-input')?.addEventListener('input', (e) => {
     clearTimeout(_searchTimer);
     const term = e.target.value.trim();
-    if (!term) {
-      document.getElementById('search-results').innerHTML = '';
-      return;
-    }
+    _toggleBrowseSearch(!!term);
+    if (!term) return;
     _searchTimer = setTimeout(() => App._doSearch?.(term), 400);
   });
 
@@ -1130,7 +1145,6 @@
     chip.addEventListener('click', () => {
       document.querySelectorAll('[data-filter]').forEach(c => c.classList.remove('active'));
       chip.classList.add('active');
-      // Re-run search with new filter if there's a term
       const term = document.getElementById('search-input')?.value.trim();
       if (term) App._doSearch?.(term);
     });

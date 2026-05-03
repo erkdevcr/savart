@@ -1060,7 +1060,8 @@ const UI = (() => {
     const rescanBtn = document.getElementById('btn-browse-rescan');
     if (rescanBtn) rescanBtn.style.display = files.length > 0 ? '' : 'none';
 
-    let list = screen.querySelector('.item-list');
+    // Explicitly skip #search-results — it shares the browse screen but is a separate container
+    let list = screen.querySelector('.item-list:not(#search-results)');
     if (!list) {
       list = document.createElement('div');
       list.className = 'item-list';

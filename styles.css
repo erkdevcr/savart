@@ -1197,10 +1197,9 @@ img { display: block; }
   color: var(--text-muted);
 }
 
-/* ── Search screen ───────────────────────────────────────── */
-.search-bar-wrap {
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--bg-hover);
+/* ── Search bar (now lives inside Browse header) ─────────── */
+.browse-search-row {
+  padding: 8px 12px 10px;
 }
 
 .search-bar {
@@ -1210,7 +1209,7 @@ img { display: block; }
   background: var(--bg-elevated);
   border: 1px solid var(--bg-hover);
   border-radius: var(--radius-pill);
-  padding: 8px 14px;
+  padding: 7px 12px;
 }
 
 .search-bar svg {
@@ -1231,17 +1230,19 @@ img { display: block; }
 
 .search-bar input::placeholder { color: var(--text-muted); }
 
-/* Search screen: only the results list scrolls; header + chips stay fixed */
-#screen-search.active {
-  overflow: hidden;
+/* Clear (✕) button inside the search bar */
+.browse-search-clear {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  padding: 0;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  transition: color 0.15s;
 }
-#screen-search #search-results {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  /* carry over the bottom padding that .screen normally provides */
-  padding-bottom: calc(var(--mini-player-h) + var(--mini-margin) * 2 + var(--bottom-nav-h) + 16px);
-}
+.browse-search-clear:hover { color: var(--text-primary); }
 
 .search-filters {
   display: flex;
@@ -3124,11 +3125,6 @@ img { display: block; }
   }
 
   .screen {
-    padding-bottom: 16px;
-  }
-
-  /* On desktop the search results scroll independently; reset mobile padding */
-  #screen-search #search-results {
     padding-bottom: 16px;
   }
 
