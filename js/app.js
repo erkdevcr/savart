@@ -4556,7 +4556,9 @@ const App = (() => {
         const coverUrl = tr.querySelector('[data-field="coverUrl"]')?.value?.trim() || '';
         // Always write folderId so _loadAlbums can group this track into an album card,
         // and so the sync filter includes it (filter checks folderId || artist || album…)
-        const patch = { folderId };
+        // manualAt is the LWW guard: prevents remote auto-enrichment from overwriting
+        // manual edits during the 2-second push debounce window.
+        const patch = { folderId, manualAt: Date.now() };
         if (artist)   patch.artist        = artist;
         if (album)    patch.album         = album;
         if (year)     patch.year          = year;
@@ -5560,8 +5562,9 @@ const App = (() => {
     const songs = all.filter(m => m.folderId === folderId);
     if (songs.length === 0) throw new Error('No songs found for folder');
 
+    const manualAt = Date.now();
     for (const m of songs) {
-      const update = { folderId };
+      const update = { folderId, manualAt };
       if (patch.artist)   update.artist       = patch.artist;
       if (patch.album)    update.album        = patch.album;
       if (patch.year)     update.year         = patch.year;

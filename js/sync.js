@@ -379,14 +379,27 @@ const Sync = (() => {
             if (!merged[f]) merged[f] = item[f];
           }
 
+          // LWW guard: if local record was manually edited more recently than
+          // the remote record, keep local values for artist/album/year/thumbnailUrl.
+          // manualAt is a Unix ms timestamp written by the app whenever the user
+          // manually edits a field. Remote wins only if its manualAt is strictly newer.
+          const localManualAt  = ex.manualAt  || 0;
+          const remoteManualAt = item.manualAt || 0;
+          const localManualWins = localManualAt > remoteManualAt;
+
+          // Propagate manualAt: take the newer of the two
+          if (remoteManualAt > localManualAt) merged.manualAt = remoteManualAt;
+
           const remoteIsEnriched = item.mbTried || item.auddTried;
           for (const f of ENRICH_FIELDS) {
             if (!item[f]) continue;
+            // If local was manually edited more recently, never overwrite with remote
+            if (localManualWins) continue;
             if (remoteIsEnriched || !merged[f]) merged[f] = item[f];
           }
 
-          // thumbnailUrl — always overwrite when remote has a value.
-          if (item.thumbnailUrl) merged.thumbnailUrl = item.thumbnailUrl;
+          // thumbnailUrl — remote wins unless local was manually edited more recently
+          if (item.thumbnailUrl && !localManualWins) merged.thumbnailUrl = item.thumbnailUrl;
 
           // Derive CAA URL if mbReleaseMbid present and still no cover URL.
           if (merged.mbReleaseMbid && !merged.thumbnailUrl) {
@@ -488,6 +501,7 @@ const Sync = (() => {
       'name', 'displayName', 'folderId',           // album membership + display title
       'artist', 'album', 'year',                    // enriched text
       'mbTried', 'auddTried', 'mbReleaseMbid',      // enrichment flags / IDs
+      'manualAt',                                   // LWW guard: timestamp of last manual edit
     ];
     const isExternalUrl = u => u && !u.startsWith('blob:')
       && !u.includes('googleusercontent.com') && !u.includes('googleapis.com');
@@ -524,6 +538,7 @@ const Sync = (() => {
       'name', 'displayName', 'folderId',
       'artist', 'album', 'year',
       'mbTried', 'auddTried', 'mbReleaseMbid',
+      'manualAt',
     ];
     const isExternalUrl = u => u && !u.startsWith('blob:')
       && !u.includes('googleusercontent.com') && !u.includes('googleapis.com');
