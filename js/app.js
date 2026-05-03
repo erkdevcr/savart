@@ -3709,19 +3709,21 @@ const App = (() => {
     const paused  = _dsRunning &&  _dsPaused;
     const done    = !_dsRunning && _dsSession.status === 'done';
     const stopped = !_dsRunning && _dsSession.status === 'stopped';
+    // crashed: app reloaded / tab closed while scan was in progress
+    const crashed = !_dsRunning && _dsSession.status === 'running';
 
     const iconPlay    = `<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>`;
     const iconRestart = `<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-8 3.58-8 8s3.58 8 8 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>`;
 
-    // Start button: Reiniciar (done) | Reanudar (paused) | Continuar (stopped) | Iniciar (idle)
-    if (done)         { startBtn.innerHTML = iconRestart + ' Reiniciar';  startBtn.disabled = false; }
-    else if (paused)  { startBtn.innerHTML = iconPlay    + ' Reanudar';   startBtn.disabled = false; }
-    else if (running) { startBtn.innerHTML = iconPlay    + ' Escaneando…'; startBtn.disabled = true; }
-    else if (stopped) { startBtn.innerHTML = iconPlay    + ' Continuar';  startBtn.disabled = false; }
-    else              { startBtn.innerHTML = iconPlay    + ' Iniciar';    startBtn.disabled = false; }
+    // Start button: Reiniciar (done) | Reanudar (paused) | Continuar (stopped|crashed) | Iniciar (idle)
+    if (done)                    { startBtn.innerHTML = iconRestart + ' Reiniciar';   startBtn.disabled = false; }
+    else if (paused)             { startBtn.innerHTML = iconPlay    + ' Reanudar';    startBtn.disabled = false; }
+    else if (running)            { startBtn.innerHTML = iconPlay    + ' Escaneando…'; startBtn.disabled = true;  }
+    else if (stopped || crashed) { startBtn.innerHTML = iconPlay    + ' Continuar';   startBtn.disabled = false; }
+    else                         { startBtn.innerHTML = iconPlay    + ' Iniciar';     startBtn.disabled = false; }
 
-    // Restart button: only visible when stopped (offers full reset alongside Continue)
-    if (restartBtn) restartBtn.style.display = stopped ? '' : 'none';
+    // Restart button: visible when stopped or crashed (offers full reset alongside Continue)
+    if (restartBtn) restartBtn.style.display = (stopped || crashed) ? '' : 'none';
 
     pauseBtn.disabled = !running;
     stopBtn.disabled  = !_dsRunning;
@@ -3731,6 +3733,7 @@ const App = (() => {
       else if (paused)   statusEl.textContent = 'En pausa';
       else if (running)  statusEl.textContent = `Escaneando… (${_dsSession.scannedFolders})`;
       else if (stopped)  statusEl.textContent = `Detenido · ${_dsSession.scannedFolders} carpetas`;
+      else if (crashed)  statusEl.textContent = `Interrumpido · ${_dsSession.scannedFolders} carpetas`;
       else if (_dsSession.scannedFolders > 0)
                          statusEl.textContent = `${_dsSession.scannedFolders} carpetas escaneadas`;
       else               statusEl.textContent = 'Listo';
@@ -4263,13 +4266,19 @@ const App = (() => {
         if (_dsListMode === 'done' || _dsListMode === 'all') _dsAddOrUpdateFolderRow(id);
       }
 
-      // Folder fully processed — now persist progress
+      // Folder fully processed — persist progress after every folder so that
+      // an external interruption (app kill, phone sleep, browser close) can resume
+      // from at most 1 folder back instead of up to 5.
+      // We also save pendingQueue here (not only on explicit stop) so the BFS
+      // position survives crashes — without it the BFS would restart from root
+      // and have to re-traverse the entire tree just to skip visited folders.
       _dsSession.scannedFolders++;
-      _dsSession.visited = [...visitedSet];
+      _dsSession.visited      = [...visitedSet];
+      _dsSession.pendingQueue = [...queue];   // checkpoint: survive external interruption
       newlyScanned.add(id);
       _dsUpdateCounters(queue.length, startMs);
 
-      if (_dsSession.scannedFolders % 5 === 0) await _dsSaveSession();
+      await _dsSaveSession();
       await new Promise(r => setTimeout(r, 20));
     }
 
