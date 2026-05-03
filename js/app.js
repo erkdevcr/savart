@@ -3595,21 +3595,10 @@ const App = (() => {
     }
   }
 
-  /**
-   * Shrinks the font of #ds-folder-name until the full path fits on one line.
-   * Starts at 12px and steps down to a minimum of 8px.
-   */
+  /** Resets any inline font-size override on the folder name element. */
   function _dsFitFolderName() {
     const el = document.getElementById('ds-folder-name');
-    if (!el) return;
-    el.style.fontSize = '';          // reset to CSS default (12px)
-    requestAnimationFrame(() => {
-      let size = 12;
-      while (el.scrollWidth > el.offsetWidth && size > 8) {
-        size -= 0.5;
-        el.style.fontSize = size + 'px';
-      }
-    });
+    if (el) el.style.fontSize = '';
   }
 
   /* Full render from session state. */
