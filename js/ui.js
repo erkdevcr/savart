@@ -86,6 +86,7 @@ const UI = (() => {
       queue_upcoming:   'A continuación',
       queue_empty:      'Cola vacía',
       // ── Library ────────────────────────────────────────────
+      lib_albums:        'Álbumes',
       lib_favorites:     'Favoritos',
       lib_new_playlist:  'Nueva playlist',
       lib_no_favorites:  'Sin favoritas aún.\nToca ♥ en cualquier canción.',
@@ -99,6 +100,11 @@ const UI = (() => {
       // ── Search ─────────────────────────────────────────────
       search_placeholder: 'Canciones, carpetas…',
       // ── Session / auth ─────────────────────────────────────
+      login_tagline_1:  'Tu música de Google Drive,',
+      login_tagline_2:  'donde quieras.',
+      login_reconnecting: 'Reconectando…',
+      login_btn:        'Continuar con Google',
+      login_disclaimer: 'Al continuar, Savart accederá a tus archivos de Google Drive en modo solo lectura.',
       session_expiring: 'La sesión expirará pronto.',
       renew:     'Renovar',
       logout:    'Cerrar sesión',
@@ -127,6 +133,25 @@ const UI = (() => {
       settings_text_size:   'Tamaño de texto',
       settings_account:     'Cuenta',
       settings_drive_linked:'Google Drive vinculado',
+      // ── Settings library rows ──────────────────────────────
+      settings_update_lib:      'Actualizar biblioteca',
+      settings_update_lib_desc: 'Detecta archivos nuevos o eliminados en Drive',
+      settings_scan_folder:     'Escanear carpeta',
+      settings_scan_folder_desc:'Elige una carpeta específica de Drive para escanear',
+      settings_deep_scan:       'Escaneo y edición',
+      settings_deep_scan_desc:  'Detecta canciones sin metadatos y permite editarlos',
+      // ── EQ ────────────────────────────────────────────────
+      eq_reset_btn:    'Resetear',
+      eq_my_presets:   'Mis presets',
+      eq_save_current: 'Guardar actual',
+      eq_preset_flat:  'Plano',
+      eq_preset_classical: 'Clásica',
+      // ── Misc buttons ──────────────────────────────────────
+      btn_update:  'Actualizar',
+      btn_pick:    'Elegir',
+      btn_open:    'Abrir',
+      btn_open_tab: 'Abrir en pestaña',
+      ds_tab_scan: 'Escaneo',
       // ── Player actions ─────────────────────────────────────
       player_queue:       'Cola',
       player_speed:       'Velocidad',
@@ -327,6 +352,7 @@ const UI = (() => {
       queue_upcoming:   'Up next',
       queue_empty:      'Empty queue',
       // ── Library ────────────────────────────────────────────
+      lib_albums:        'Albums',
       lib_favorites:     'Favorites',
       lib_new_playlist:  'New playlist',
       lib_no_favorites:  'No favorites yet.\nTap ♥ on any song.',
@@ -340,6 +366,11 @@ const UI = (() => {
       // ── Search ─────────────────────────────────────────────
       search_placeholder: 'Songs, folders…',
       // ── Session / auth ─────────────────────────────────────
+      login_tagline_1:  'Your Google Drive music,',
+      login_tagline_2:  'anywhere.',
+      login_reconnecting: 'Reconnecting…',
+      login_btn:        'Continue with Google',
+      login_disclaimer: 'By continuing, Savart will access your Google Drive files in read-only mode.',
       session_expiring: 'Session expiring soon.',
       renew:     'Renew',
       logout:    'Log out',
@@ -368,6 +399,25 @@ const UI = (() => {
       settings_text_size:   'Text size',
       settings_account:     'Account',
       settings_drive_linked:'Google Drive linked',
+      // ── Settings library rows ──────────────────────────────
+      settings_update_lib:      'Update library',
+      settings_update_lib_desc: 'Detects new or removed files in Drive',
+      settings_scan_folder:     'Scan folder',
+      settings_scan_folder_desc:'Pick a specific Drive folder to scan',
+      settings_deep_scan:       'Scan & edit',
+      settings_deep_scan_desc:  'Detects songs without metadata and lets you edit them',
+      // ── EQ ────────────────────────────────────────────────
+      eq_reset_btn:    'Reset',
+      eq_my_presets:   'My presets',
+      eq_save_current: 'Save current',
+      eq_preset_flat:  'Flat',
+      eq_preset_classical: 'Classical',
+      // ── Misc buttons ──────────────────────────────────────
+      btn_update:  'Update',
+      btn_pick:    'Pick',
+      btn_open:    'Open',
+      btn_open_tab: 'Open in tab',
+      ds_tab_scan: 'Scan',
       // ── Player actions ─────────────────────────────────────
       player_queue:       'Queue',
       player_speed:       'Speed',

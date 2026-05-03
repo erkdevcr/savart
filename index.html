@@ -36,11 +36,14 @@
       </svg>
     </div>
     <div class="login-logo">Savart</div>
-    <div class="login-tagline">Tu música de Google Drive,<br>donde quieras.</div>
+    <div class="login-tagline">
+      <span data-i18n="login_tagline_1">Tu música de Google Drive,</span><br>
+      <span data-i18n="login_tagline_2">donde quieras.</span>
+    </div>
     <!-- Reconnecting state (shown when wasAuthenticated and silent re-auth in progress) -->
     <div class="login-reconnecting" id="login-reconnecting" style="display:none">
       <div class="login-spinner"></div>
-      <span>Reconectando…</span>
+      <span data-i18n="login_reconnecting">Reconectando…</span>
     </div>
 
     <button id="btn-login" class="btn-primary">
@@ -50,9 +53,9 @@
         <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
         <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
       </svg>
-      Continuar con Google
+      <span data-i18n="login_btn">Continuar con Google</span>
     </button>
-    <p class="login-disclaimer">Al continuar, Savart accederá a tus archivos de Google Drive en modo solo lectura.</p>
+    <p class="login-disclaimer" data-i18n="login_disclaimer">Al continuar, Savart accederá a tus archivos de Google Drive en modo solo lectura.</p>
   </div>
 </div>
 
@@ -153,7 +156,7 @@
           <span id="browse-item-count" class="browse-item-count"></span>
           <button id="btn-browse-rescan" class="btn-sort-toggle" aria-label="Rescan con MusicBrainz" title="Rescan con MusicBrainz" style="display:none;margin-left:auto">
             <svg id="browse-rescan-icon" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
-            <span>Rescan</span>
+            <span data-i18n="rescan_btn">Rescan</span>
           </button>
           <div id="sort-wrap" style="position:relative">
             <button id="btn-browse-sort" class="btn-sort-toggle" aria-label="Ordenar">
@@ -210,7 +213,7 @@
         <div class="lib-sidebar" id="lib-sidebar">
           <div class="lib-tab active" id="lib-tab-albums" data-tab="albums">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 14.5c-2.49 0-4.5-2.01-4.5-4.5S9.51 7.5 12 7.5s4.5 2.01 4.5 4.5-2.01 4.5-4.5 4.5zm0-5.5c-.55 0-1 .45-1 1s.45 1 1 1 1-.45 1-1-.45-1-1-1z"/></svg>
-            <span>Álbumes</span>
+            <span data-i18n="lib_albums">Álbumes</span>
             <span class="lib-tab-count" id="lib-count-albums"></span>
           </div>
           <div class="lib-tab" id="lib-tab-artists" data-tab="artists">
@@ -239,7 +242,7 @@
             <!-- Rescan button: only shown when albums tab is active and search has text -->
             <button id="btn-lib-rescan" class="lib-rescan-btn" title="Rescanear álbumes mostrados" style="display:none" aria-label="Rescanear resultados">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" id="lib-rescan-icon"><path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-8 3.58-8 8s3.58 8 8 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
-              <span>Rescan</span>
+              <span data-i18n="rescan_btn">Rescan</span>
             </button>
           </div>
           <div id="lib-detail-content"></div>
@@ -269,18 +272,18 @@
           <button id="btn-eq-close" class="eq-back-btn" aria-label="Cerrar EQ">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
           </button>
-          <h2 class="eq-title">Ecualizador</h2>
+          <h2 class="eq-title" data-i18n="settings_eq">Ecualizador</h2>
           <div style="display:flex;align-items:center;gap:10px;margin-left:auto">
-            <button id="btn-eq-reset" class="eq-reset-btn">Resetear</button>
+            <button id="btn-eq-reset" class="eq-reset-btn" data-i18n="eq_reset_btn">Resetear</button>
             <div class="toggle" id="eq-toggle"></div>
           </div>
         </div>
         <div class="eq-presets-scroll">
-          <button class="eq-preset-chip" data-preset="flat">Plano</button>
+          <button class="eq-preset-chip" data-preset="flat" data-i18n="eq_preset_flat">Plano</button>
           <button class="eq-preset-chip active" data-preset="rock">Rock</button>
           <button class="eq-preset-chip" data-preset="pop">Pop</button>
           <button class="eq-preset-chip" data-preset="jazz">Jazz</button>
-          <button class="eq-preset-chip" data-preset="classical">Clásica</button>
+          <button class="eq-preset-chip" data-preset="classical" data-i18n="eq_preset_classical">Clásica</button>
           <button class="eq-preset-chip" data-preset="bass">Bass boost</button>
           <button class="eq-preset-chip" data-preset="vocal">Vocal</button>
         </div>
@@ -292,10 +295,10 @@
         </div>
         <div class="eq-custom-section">
           <div class="eq-custom-header">
-            <span class="t-label" style="color:var(--text-muted)">Mis presets</span>
+            <span class="t-label" style="color:var(--text-muted)" data-i18n="eq_my_presets">Mis presets</span>
             <button id="btn-eq-save" class="btn-primary" style="padding:6px 14px;font-size:12px">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
-              Guardar actual
+              <span data-i18n="eq_save_current">Guardar actual</span>
             </button>
           </div>
           <div class="eq-custom-list" id="eq-custom-list"></div>
@@ -358,7 +361,7 @@
                 <button class="sleep-pill" data-mins="15">15 min</button>
                 <button class="sleep-pill" data-mins="30">30 min</button>
                 <button class="sleep-pill" data-mins="60">60 min</button>
-                <button class="sleep-pill" data-mins="custom">Custom</button>
+                <button class="sleep-pill" data-mins="custom" data-i18n="sleep_custom">Personalizado</button>
               </div>
             </div>
           </div><!-- /Reproducción -->
@@ -380,40 +383,40 @@
 
             <div class="settings-row">
               <div>
-                <div class="settings-row-label">Actualizar biblioteca</div>
-                <div class="settings-row-cat">Detecta archivos nuevos o eliminados en Drive</div>
+                <div class="settings-row-label" data-i18n="settings_update_lib">Actualizar biblioteca</div>
+                <div class="settings-row-cat" data-i18n="settings_update_lib_desc">Detecta archivos nuevos o eliminados en Drive</div>
               </div>
               <button id="btn-library-refresh" class="btn-sort-toggle" title="Escanear Drive completo">
                 <svg id="library-refresh-icon" width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
                 </svg>
-                Actualizar
+                <span data-i18n="btn_update">Actualizar</span>
               </button>
             </div>
 
             <div class="settings-row">
               <div>
-                <div class="settings-row-label">Escanear carpeta</div>
-                <div class="settings-row-cat">Elige una carpeta específica de Drive para escanear</div>
+                <div class="settings-row-label" data-i18n="settings_scan_folder">Escanear carpeta</div>
+                <div class="settings-row-cat" data-i18n="settings_scan_folder_desc">Elige una carpeta específica de Drive para escanear</div>
               </div>
               <button id="btn-settings-folder-scan" class="btn-sort-toggle" title="Escanear carpeta específica">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
                 </svg>
-                Elegir
+                <span data-i18n="btn_pick">Elegir</span>
               </button>
             </div>
 
             <div class="settings-row">
               <div>
-                <div class="settings-row-label">Escaneo y edición</div>
-                <div class="settings-row-cat">Detecta canciones sin metadatos y permite editarlos</div>
+                <div class="settings-row-label" data-i18n="settings_deep_scan">Escaneo y edición</div>
+                <div class="settings-row-cat" data-i18n="settings_deep_scan_desc">Detecta canciones sin metadatos y permite editarlos</div>
               </div>
               <button id="btn-open-deep-scan" class="btn-sort-toggle" title="Abrir herramienta de escaneo profundo">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
                 </svg>
-                Abrir
+                <span data-i18n="btn_open">Abrir</span>
               </button>
             </div>
           </div><!-- /Biblioteca -->
@@ -537,19 +540,19 @@
           <button id="btn-ds-back" class="ds-back-btn" aria-label="Volver a Ajustes">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
           </button>
-          <h1 class="ds-title">Escaneo y edición</h1>
+          <h1 class="ds-title" data-i18n="settings_deep_scan">Escaneo y edición</h1>
         </div>
         <div class="ds-header-right">
           <span class="ds-autosave" id="ds-autosave"></span>
           <button id="btn-ds-new-tab" class="ds-newtab-btn" title="Abrir en nueva pestaña">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/></svg>
-            <span>Abrir en pestaña</span>
+            <span data-i18n="btn_open_tab">Abrir en pestaña</span>
           </button>
         </div>
       </div>
       <div class="ds-tabs">
-        <button class="ds-tab active" data-ds-tab="scan">Escaneo</button>
-        <button class="ds-tab" data-ds-tab="artists">Artistas</button>
+        <button class="ds-tab active" data-ds-tab="scan" data-i18n="ds_tab_scan">Escaneo</button>
+        <button class="ds-tab" data-ds-tab="artists" data-i18n="artists">Artistas</button>
       </div>
     </div>
 
@@ -1028,7 +1031,7 @@
   <div class="ctrl-sheet-backdrop"></div>
   <div class="ctrl-sheet-card">
     <div class="ctrl-sheet-hdr">
-      <span class="ctrl-sheet-title">Tempo</span>
+      <span class="ctrl-sheet-title" data-i18n="settings_tempo">Tempo</span>
       <button class="ctrl-sheet-close-btn" aria-label="Cerrar">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
       </button>
