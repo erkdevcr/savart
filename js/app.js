@@ -2324,6 +2324,9 @@ const App = (() => {
   function onPlaylistHomeCardClick(pl) {
     UI.showView('library');
     _setLibTab('playlists');
+    // Mark detail as open immediately so _loadPlaylists (async) won't
+    // overwrite the detail pane once it finishes its DB queries.
+    _libInDetail = true;
     // Small delay so Library renders before we open the detail
     setTimeout(() => onPlaylistClick(pl), 80);
   }
@@ -2953,6 +2956,13 @@ const App = (() => {
         }
         return { ...pl, songCount: songIds.length, coverUrls };
       }));
+      // If a playlist detail is already open (e.g. navigated from a pinned card),
+      // don't overwrite the detail pane — just update the count badge.
+      if (_libInDetail && _currentLibTab === 'playlists') {
+        _setLibTabCount('playlists', enriched.length);
+        _prefetchPlaylistCovers(enriched).catch(() => {});
+        return;
+      }
       UI.renderPlaylists(enriched);
       _setLibTabCount('playlists', enriched.length);
       // Background: resolve covers for playlists that still have none
