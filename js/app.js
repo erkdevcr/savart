@@ -777,9 +777,14 @@ const App = (() => {
         item = { ...item, size: blob.size };
       }
 
+      // Read DB meta first — needed to guard against overwriting manual edits
+      const dbMeta = await DB.getMeta(item.id).catch(() => null);
+      const playManual = (dbMeta?.manualAt || 0) > 0;
+
       // Persist embedded cover blob immediately — playlists/favorites can use it
       // across sessions without re-parsing the file.
-      if (meta?.coverBlob) {
+      // Skip if the user has manually set a custom cover (manualAt > 0).
+      if (meta?.coverBlob && !playManual) {
         DB.setMeta(item.id, { coverBlob: meta.coverBlob }).catch(() => {});
       }
 
@@ -792,7 +797,6 @@ const App = (() => {
 
       // 1a. DB — data persisted from a previous session
       // (AudD artist/title/album stored earlier, or cached thumbnailUrl)
-      const dbMeta = await DB.getMeta(item.id).catch(() => null);
       if (dbMeta) {
         if (!meta.artist && dbMeta.artist)      meta.artist = dbMeta.artist;
         if (!meta.title  && dbMeta.displayName) meta.title  = dbMeta.displayName;
@@ -859,7 +863,7 @@ const App = (() => {
       ─────────────────────────────────────────────────────────── */
 
       // 2a. Last.fm by album (album.getInfo — most reliable when album is known)
-      if (!meta.coverUrl && typeof Lastfm !== 'undefined' && meta.artist && meta.album) {
+      if (!meta.coverUrl && !playManual && typeof Lastfm !== 'undefined' && meta.artist && meta.album) {
         const lfmUrl = await Lastfm.fetchCover(meta.artist, meta.album);
         if (lfmUrl) {
           meta.coverUrl = lfmUrl;
@@ -868,7 +872,7 @@ const App = (() => {
       }
 
       // 2b. Last.fm by track (track.getInfo — works with artist+title alone)
-      if (!meta.coverUrl && typeof Lastfm !== 'undefined' && meta.artist && (meta.title || item.displayName)) {
+      if (!meta.coverUrl && !playManual && typeof Lastfm !== 'undefined' && meta.artist && (meta.title || item.displayName)) {
         const trackTitle = meta.title || item.displayName;
         const lfmUrl = await Lastfm.fetchCoverByTrack(meta.artist, trackTitle);
         if (lfmUrl) {
@@ -1052,15 +1056,18 @@ const App = (() => {
         try {
           const ap = file.appProperties;
           if (ap?.s_cover) {
-            _updateRowThumbnail(file.id, ap.s_cover);
             const apDbMeta  = await DB.getMeta(file.id).catch(() => null);
             const apManual  = (apDbMeta?.manualAt || 0) > 0;
-            const save = { thumbnailUrl: ap.s_cover };
-            if (ap.s_title)                   save.displayName = ap.s_title;
-            if (ap.s_artist && !apManual)     save.artist      = ap.s_artist;
-            if (ap.s_album  && !apManual)     save.album       = ap.s_album;
-            if (ap.s_year   && !apManual)     save.year        = ap.s_year;
-            DB.setMeta(file.id, save).catch(() => {});
+            if (!apManual) {
+              // Sync cover from Drive appProperties only when user hasn't set a custom cover
+              _updateRowThumbnail(file.id, ap.s_cover);
+              const save = { thumbnailUrl: ap.s_cover };
+              if (ap.s_title)  save.displayName = ap.s_title;
+              if (ap.s_artist) save.artist       = ap.s_artist;
+              if (ap.s_album)  save.album        = ap.s_album;
+              if (ap.s_year)   save.year         = ap.s_year;
+              DB.setMeta(file.id, save).catch(() => {});
+            }
             return;
           }
           const dbMeta = await DB.getMeta(file.id);
@@ -1076,7 +1083,10 @@ const App = (() => {
     }
 
     // ── Pass 1: in-memory Meta cache (always ID3, session) ────────────────────
+    // Only fills rows that have no cover yet — never replaces a cover that the
+    // initial DB pass already loaded (which may be a user's manually-set cover).
     files.forEach(file => {
+      if (_rowHasCover(file.id)) return; // already has a cover — don't overwrite
       const meta = (typeof Meta !== 'undefined') ? Meta.getCached(file.id) : null;
       if (meta?.coverUrl) _updateRowThumbnail(file.id, meta.coverUrl, true);
     });
@@ -1117,7 +1127,7 @@ const App = (() => {
                 year:   meta.year   || null,
               });
             }
-            if (meta.coverUrl) {
+            if (meta.coverUrl && !isManuallyEdited) {
               _updateRowThumbnail(file.id, meta.coverUrl, true);
               if (meta.coverBlob) DB.setMeta(file.id, { coverBlob: meta.coverBlob }).catch(() => {});
             }
@@ -1167,8 +1177,9 @@ const App = (() => {
           if (result.releaseMbid)                        patch.mbReleaseMbid = result.releaseMbid;
 
           if (Object.keys(patch).filter(k => k !== 'mbReleaseMbid').length > 0 || patch.mbReleaseMbid) {
-            // Derive a stable CAA cover URL from the MBID and store locally
-            if (patch.mbReleaseMbid && !m.thumbnailUrl) {
+            // Derive a stable CAA cover URL from the MBID and store locally.
+            // Never overwrite a manually set cover (manualAt > 0 = user took ownership).
+            if (patch.mbReleaseMbid && !m.thumbnailUrl && !mbManualGuard) {
               patch.thumbnailUrl = `https://coverartarchive.org/release/${patch.mbReleaseMbid}/front-250`;
               _updateRowThumbnail(file.id, patch.thumbnailUrl);
             }
@@ -1241,7 +1252,8 @@ const App = (() => {
             }
 
             // Embedded cover — top priority (isId3=true)
-            if (meta.coverUrl) {
+            // But respect manual edits: if user set a custom cover (manualAt > 0), never overwrite.
+            if (meta.coverUrl && !isManual) {
               _updateRowThumbnail(file.id, meta.coverUrl, true);
               if (meta.coverBlob) DB.setMeta(file.id, { coverBlob: meta.coverBlob }).catch(() => {});
             }
@@ -1268,6 +1280,8 @@ const App = (() => {
           try {
             const m = await DB.getMeta(file.id);
             if (!m?.mbReleaseMbid) return;
+            // Never overwrite a manually set cover
+            if ((m.manualAt || 0) > 0) return;
             if (_rowHasCover(file.id)) {
               // Only upgrade if not already an ID3 cover
               const eid = CSS.escape(file.id);
@@ -1320,6 +1334,8 @@ const App = (() => {
       try {
         const inMem  = (typeof Meta !== 'undefined') ? Meta.getCached(file.id) : null;
         const dbM    = await DB.getMeta(file.id);
+        // Never overwrite a manually set cover
+        if ((dbM?.manualAt || 0) > 0) return;
         const artist = inMem?.artist || dbM?.artist || '';
         const album  = inMem?.album  || dbM?.album  || '';
         if (!artist || !album) return;
@@ -1342,6 +1358,7 @@ const App = (() => {
       try {
         const dbMeta = await DB.getMeta(file.id);
         if (dbMeta?.auddTried) continue;
+        const auddManual = (dbMeta?.manualAt || 0) > 0;
         const blob = await Drive.downloadFileHead(file.id, 1024 * 1024);
         if (!blob) continue;
         let result = null;
@@ -1349,12 +1366,12 @@ const App = (() => {
         catch (_) { continue; } // network error — allow retry next session
         await DB.setMeta(file.id, { auddTried: true });
         if (!result) continue;
-        if (result.coverUrl) _updateRowThumbnail(file.id, result.coverUrl);
+        if (result.coverUrl && !auddManual) _updateRowThumbnail(file.id, result.coverUrl);
         const update = { auddTried: true };
-        if (result.title)    update.displayName  = result.title;
-        if (result.artist)   update.artist       = result.artist;
-        if (result.album)    update.album        = result.album;
-        if (result.coverUrl) update.thumbnailUrl = result.coverUrl;
+        if (result.title    && !auddManual) update.displayName  = result.title;
+        if (result.artist   && !auddManual) update.artist       = result.artist;
+        if (result.album    && !auddManual) update.album        = result.album;
+        if (result.coverUrl && !auddManual) update.thumbnailUrl = result.coverUrl;
         DB.setMeta(file.id, update).catch(() => {});
         console.log(`[Audd] ✓ ${result.artist} — ${result.title}`);
       } catch (_) { /* non-fatal */ }
@@ -1446,7 +1463,7 @@ const App = (() => {
    */
   async function onAlbumRescan(songs, folderId) {
     if (!songs || songs.length === 0) return;
-    UI.showToast('Rescaneando álbum…');
+    UI.showToast(UI.t('toast_rescan_start'));
 
     // ── Purge orphans: remove DB records for files no longer in Drive ──
     // songs[] is the fresh Drive listing for this folder.
@@ -1475,7 +1492,7 @@ const App = (() => {
     // Run Last.fm thumb pass for this album in case the pipeline didn't produce a URL.
     // Runs in background — does not block the UI toast.
     _lfmThumbLibrary().catch(() => {});
-    UI.showToast('Rescan completado');
+    UI.showToast(UI.t('toast_rescan_done'));
   }
 
   /* ── Library search-results batch rescan ─────────────────────
@@ -1503,7 +1520,7 @@ const App = (() => {
       }
     }
     if (folderIds.length === 0) {
-      UI.showToast('Sin álbumes visibles para rescanear', 'warn');
+      UI.showToast(UI.t('toast_rescan_none'), 'warn');
       return;
     }
 
@@ -1511,10 +1528,7 @@ const App = (() => {
       // Show confirmation popup
       const desc = document.getElementById('lib-rescan-desc');
       if (desc) {
-        desc.textContent =
-          `Se van a rescanear ${folderIds.length} álbumes. ` +
-          `Este proceso puede tardar varios minutos dependiendo de la cantidad. ` +
-          `¿Deseas continuar?`;
+        desc.textContent = `${folderIds.length} ${UI.t('rescan_confirm_msg')}`;
       }
       const modal = document.getElementById('lib-rescan-dialog');
       if (modal) {
@@ -1557,7 +1571,7 @@ const App = (() => {
     const icon = document.getElementById('lib-rescan-icon');
     if (btn)  { btn.disabled = true; btn.classList.add('spinning'); }
 
-    UI.showToast(`Rescaneando ${folderIds.length} álbum${folderIds.length > 1 ? 'es' : ''}…`);
+    UI.showToast(`${UI.t('toast_rescan_start').replace('…', '')} (${folderIds.length})…`);
 
     let done = 0;
     for (const folderId of folderIds) {
@@ -1592,7 +1606,7 @@ const App = (() => {
 
     _libRescanRunning = false;
     if (btn)  { btn.disabled = false; btn.classList.remove('spinning'); }
-    UI.showToast(`Rescan completado — ${done} álbum${done > 1 ? 'es' : ''}`);
+    UI.showToast(`${UI.t('toast_rescan_done')} (${done})`);
 
     // Refresh albums grid so new data / covers appear immediately
     _loadAlbums();
@@ -1609,7 +1623,7 @@ const App = (() => {
     if (btn)  btn.disabled = true;
     if (icon) icon.style.animation = 'spin 1s linear infinite';
     try {
-      UI.showToast('Rescaneando carpeta…');
+      UI.showToast(UI.t('toast_rescan_folder'));
 
       // ── Purge orphans: remove DB records for files no longer in Drive ──
       // _browseFiles is always refreshed from Drive before this point,
@@ -1641,7 +1655,7 @@ const App = (() => {
         Sync.push('metadata');
       }
       _lfmThumbLibrary().catch(() => {});
-      UI.showToast('Rescan completado');
+      UI.showToast(UI.t('toast_rescan_done'));
       // Refresh Albums/Artists grid so the newly enriched folder appears there
       if (!_libInDetail) {
         if (_currentLibTab === 'albums')  _loadAlbums();
@@ -1897,6 +1911,8 @@ const App = (() => {
         try {
           const blob = await DB.getCachedBlob(song.id);
           if (!blob) continue;
+          const m = await DB.getMeta(song.id).catch(() => null);
+          if ((m?.manualAt || 0) > 0) continue; // user has manual cover — skip
           const meta = await Meta.parse(song.id, blob);
           if (meta?.coverUrl) {
             _updateHomeCardThumbnail(song.id, meta.coverUrl);
@@ -1954,6 +1970,8 @@ const App = (() => {
         try {
           const blob = await DB.getCachedBlob(item.id);
           if (!blob) continue;
+          const m = await DB.getMeta(item.id).catch(() => null);
+          if ((m?.manualAt || 0) > 0) continue; // user has manual cover — skip
           const meta = await Meta.parse(item.id, blob);
           if (meta?.coverUrl) {
             _updateTopListThumb(item.id, meta.coverUrl, true);  // ID3 embedded
@@ -2069,8 +2087,10 @@ const App = (() => {
       while (queue.length > 0) {
         const item = queue.shift();
         try {
+          const dtMeta   = await DB.getMeta(item.id).catch(() => null);
+          const dtManual = (dtMeta?.manualAt || 0) > 0;
           // ── Pass A: download ID3 header → parse embedded cover art ──────
-          if (typeof Meta !== 'undefined') {
+          if (!dtManual && typeof Meta !== 'undefined') {
             const headBlob = await Drive.downloadFileHead(item.id).catch(() => null);
             if (headBlob) {
               const meta = await Meta.parse(item.id, headBlob).catch(() => null);
@@ -2085,11 +2105,13 @@ const App = (() => {
             }
           }
           // ── Pass B: Drive file metadata thumbnailLink (rarely set for audio) ──
-          const info = await Drive.getFileInfo(item.id).catch(() => null);
-          const url  = info?.thumbnailUrl || null;
-          if (url) {
-            updateFn(item.id, url);
-            DB.setMeta(item.id, { thumbnailUrl: url }).catch(() => {});
+          if (!dtManual) {
+            const info = await Drive.getFileInfo(item.id).catch(() => null);
+            const url  = info?.thumbnailUrl || null;
+            if (url) {
+              updateFn(item.id, url);
+              DB.setMeta(item.id, { thumbnailUrl: url }).catch(() => {});
+            }
           }
         } catch (_) { /* non-fatal */ }
       }
@@ -2558,10 +2580,15 @@ const App = (() => {
    */
   function _cacheItem(item) {
     _itemCache.set(item.id, item);
-    // Persist thumbnailUrl to DB so playlists/favorites can show covers across sessions
+    // Persist Drive thumbnailLink to DB so playlists/favorites can show covers across sessions.
+    // Skip if the user has manually set a custom cover (manualAt > 0) — we must not overwrite it.
     const thumb = item.thumbnailLink || item.thumbnailUrl;
     if (thumb && !thumb.startsWith('blob:')) {
-      DB.setMeta(item.id, { thumbnailUrl: thumb }).catch(() => {});
+      DB.getMeta(item.id).then(m => {
+        if (!((m?.manualAt || 0) > 0)) {
+          DB.setMeta(item.id, { thumbnailUrl: thumb }).catch(() => {});
+        }
+      }).catch(() => {});
     }
   }
 
@@ -2584,8 +2611,8 @@ const App = (() => {
 
   async function onTogglePin(item) {
     const isNowPinned = await DB.togglePin(item);
-    const label = item.type === 'folder' || item.isFolder ? 'Carpeta' : 'Canción';
-    UI.showToast(isNowPinned ? `${label} fijada en Inicio` : `${label} quitada de Inicio`, 'default');
+    const label = item.type === 'folder' || item.isFolder ? UI.t('item_type_folder') : UI.t('item_type_song');
+    UI.showToast(`${label} ${isNowPinned ? UI.t('toast_pinned') : UI.t('toast_unpinned')}`, 'default');
     _loadHomeData();
     Sync.push('pinned');
   }
@@ -2822,7 +2849,7 @@ const App = (() => {
     const activeChip = document.querySelector('[data-filter].active');
     const filter = activeChip?.dataset.filter || 'all';
 
-    container.innerHTML = '<div class="empty-state"><p>Buscando…</p></div>';
+    container.innerHTML = `<div class="empty-state"><p>${UI.t('searching')}</p></div>`;
     UI.updateSearchChipCounts(null); // clear counts while loading
     if (!Auth.isAuthenticated()) { UI.showTokenBanner(); return; }
 
@@ -2841,7 +2868,7 @@ const App = (() => {
     } catch (err) {
       console.error('[App] Search error:', err);
       if (err.name === 'AuthError') { UI.showTokenBanner(); return; }
-      container.innerHTML = '<div class="empty-state"><p>Error al buscar. Inténtalo de nuevo.</p></div>';
+      container.innerHTML = `<div class="empty-state"><p>${UI.t('search_error')}</p></div>`;
     }
   }
 
@@ -3010,8 +3037,12 @@ const App = (() => {
 
           const meta = await Meta.parse(sid, blob);
           if (meta?.coverUrl) {
-            // Persist coverBlob so next session is instant
-            if (meta.coverBlob) DB.setMeta(sid, { coverBlob: meta.coverBlob }).catch(() => {});
+            // Persist coverBlob so next session is instant (skip if user set manual cover)
+            if (meta.coverBlob) {
+              DB.getMeta(sid).then(sm => {
+                if (!((sm?.manualAt || 0) > 0)) DB.setMeta(sid, { coverBlob: meta.coverBlob }).catch(() => {});
+              }).catch(() => {});
+            }
             _updatePlaylistSidebarCover(pl.id, meta.coverUrl);
             found = true;
           }
@@ -3795,7 +3826,7 @@ const App = (() => {
     strip.innerHTML = '';
     const allLines = _dsSession.log || [];
     if (allLines.length === 0) {
-      strip.innerHTML = '<div class="ds-log-entry ds-log-placeholder">Inicia un escaneo para ver el registro aquí…</div>';
+      strip.innerHTML = `<div class="ds-log-entry ds-log-placeholder">${UI.t('scan_log_empty')}</div>`;
       return;
     }
     // Restore pinned folder: find last 📁 line
@@ -3850,16 +3881,16 @@ const App = (() => {
     startBtn.style.display = scanning ? 'none' : '';
     startBtn.disabled = false;
     // Label reflects what pressing it will do
-    if (done)                    startBtn.innerHTML = iconPlay + ' Iniciar';   // restart from scratch
-    else if (stopped || crashed) startBtn.innerHTML = iconPlay + ' Iniciar';   // resumes internally
-    else                         startBtn.innerHTML = iconPlay + ' Iniciar';
+    if (done)                    startBtn.innerHTML = iconPlay + ' ' + UI.t('scan_btn_start');
+    else if (stopped || crashed) startBtn.innerHTML = iconPlay + ' ' + UI.t('scan_btn_start');
+    else                         startBtn.innerHTML = iconPlay + ' ' + UI.t('scan_btn_start');
 
     // ── Pause button: visible only while scanning ─────────────
     // When paused it becomes "Continuar"; click handler toggles via _dsPaused state
     pauseBtn.style.display = scanning ? '' : 'none';
     pauseBtn.disabled = false;
-    if (paused) { pauseBtn.innerHTML = iconPlay  + ' Continuar'; }
-    else        { pauseBtn.innerHTML = iconPause + ' Pausar';    }
+    if (paused) { pauseBtn.innerHTML = iconPlay  + ' ' + UI.t('scan_btn_resume'); }
+    else        { pauseBtn.innerHTML = iconPause + ' ' + UI.t('scan_btn_pause');  }
 
     // ── Stop button: visible only while scanning ──────────────
     stopBtn.style.display = scanning ? '' : 'none';
@@ -3869,14 +3900,15 @@ const App = (() => {
     if (restartBtn) restartBtn.style.display = 'none';
 
     if (statusEl) {
-      if (done)          statusEl.textContent = `Completado · ${_dsSession.scannedFolders} carpetas`;
-      else if (paused)   statusEl.textContent = 'En pausa';
-      else if (running)  statusEl.textContent = `Escaneando… (${_dsSession.scannedFolders})`;
-      else if (stopped)  statusEl.textContent = `Detenido · ${_dsSession.scannedFolders} carpetas`;
-      else if (crashed)  statusEl.textContent = `Interrumpido · ${_dsSession.scannedFolders} carpetas`;
-      else if (_dsSession.scannedFolders > 0)
-                         statusEl.textContent = `${_dsSession.scannedFolders} carpetas escaneadas`;
-      else               statusEl.textContent = 'Listo';
+      const n   = _dsSession.scannedFolders;
+      const lbl = n === 1 ? UI.t('lbl_folder_s') : UI.t('lbl_folders_s');
+      if (done)        statusEl.textContent = `${UI.t('scan_status_done')} · ${n} ${lbl}`;
+      else if (paused) statusEl.textContent = UI.t('scan_status_paused');
+      else if (running)statusEl.textContent = `${UI.t('scan_status_scanning')} (${n})`;
+      else if (stopped)statusEl.textContent = `${UI.t('scan_status_stopped')} · ${n} ${lbl}`;
+      else if (crashed)statusEl.textContent = `${UI.t('scan_status_crashed')} · ${n} ${lbl}`;
+      else if (n > 0)  statusEl.textContent = `${n} ${lbl}`;
+      else             statusEl.textContent = UI.t('scan_status_ready');
     }
 
     _dsUpdateLED();
@@ -3996,7 +4028,7 @@ const App = (() => {
   async function _dsLoadModalFolder(folderId) {
     const listEl = document.getElementById('ds-modal-list');
     if (!listEl) return;
-    listEl.innerHTML = '<div class="ds-attention-empty">Cargando…</div>';
+    listEl.innerHTML = `<div class="ds-attention-empty">${UI.t('loading')}</div>`;
     _dsRenderModalBreadcrumb();
 
     try {
@@ -4004,7 +4036,7 @@ const App = (() => {
       listEl.innerHTML = '';
 
       if (page.folders.length === 0) {
-        listEl.innerHTML = '<div class="ds-attention-empty">Sin subcarpetas</div>';
+        listEl.innerHTML = `<div class="ds-attention-empty">${UI.t('scan_no_subfolders')}</div>`;
         return;
       }
 
@@ -4499,7 +4531,7 @@ const App = (() => {
       .filter(f => f.status !== 'ignored' || true);   // show all (including ignored)
     list.innerHTML = '';
     if (folders.length === 0) {
-      list.innerHTML = '<div class="ds-attention-empty">Sin carpetas para mostrar aún.</div>';
+      list.innerHTML = `<div class="ds-attention-empty">${UI.t('scan_no_folders')}</div>`;
       return;
     }
     for (const folder of folders) list.appendChild(_dsBuildFolderRow(folder));
@@ -4511,7 +4543,7 @@ const App = (() => {
     const folders = Object.values(_dsSession?.completedList || {});
     list.innerHTML = '';
     if (folders.length === 0) {
-      list.innerHTML = '<div class="ds-attention-empty">Ninguna carpeta completamente etiquetada aún.</div>';
+      list.innerHTML = `<div class="ds-attention-empty">${UI.t('scan_none_complete')}</div>`;
       return;
     }
     for (const folder of folders) {
@@ -4557,7 +4589,7 @@ const App = (() => {
     const folders = Object.values(_dsSession?.skippedList || {});
     list.innerHTML = '';
     if (folders.length === 0) {
-      list.innerHTML = '<div class="ds-attention-empty">Ninguna carpeta saltada aún.</div>';
+      list.innerHTML = `<div class="ds-attention-empty">${UI.t('scan_none_skipped')}</div>`;
       return;
     }
     for (const folder of folders) list.appendChild(_dsBuildSimpleRow(folder, 'yellow'));
@@ -4572,7 +4604,7 @@ const App = (() => {
     const doneFolders    = Object.values(_dsSession?.completedList || {});
     const skippedFolders = Object.values(_dsSession?.skippedList   || {});
     if (attnFolders.length === 0 && doneFolders.length === 0 && skippedFolders.length === 0) {
-      list.innerHTML = '<div class="ds-attention-empty">Sin carpetas para mostrar aún.</div>';
+      list.innerHTML = `<div class="ds-attention-empty">${UI.t('scan_no_folders')}</div>`;
       return;
     }
     for (const folder of attnFolders)    list.appendChild(_dsBuildFolderRow(folder));
@@ -4812,7 +4844,7 @@ const App = (() => {
     const folder  = _dsSession.folders[folderId];
     if (!folder) return;
     const saveBtn = rowEl.querySelector('.ds-save-btn');
-    if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Guardando…'; }
+    if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = UI.t('saving'); }
     try {
       const tableRows = rowEl.querySelectorAll('.ds-table tbody tr');
       let saved = 0;
@@ -4878,12 +4910,12 @@ const App = (() => {
       _dsUpdateCounters();
       await _dsSaveSession();
       if (typeof Sync !== 'undefined') Sync.push('metadata');
-      if (saveBtn) { saveBtn.textContent = '✓ Guardado'; setTimeout(() => { if(saveBtn){saveBtn.disabled=false;saveBtn.textContent='Guardar';} }, 1800); }
-      UI.showToast(`${saved} canciones actualizadas`);
+      if (saveBtn) { saveBtn.textContent = UI.t('saved_ok'); setTimeout(() => { if(saveBtn){saveBtn.disabled=false;saveBtn.textContent=UI.t('save_btn');} }, 1800); }
+      UI.showToast(`${saved} ${UI.t('lbl_songs_updated')}`);
     } catch (err) {
       console.error('[DeepScan] Save error:', err);
-      if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Guardar'; }
-      UI.showToast('Error al guardar', 'error');
+      if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = UI.t('save_btn'); }
+      UI.showToast(UI.t('toast_save_error'), 'error');
     }
   }
 
@@ -4906,7 +4938,7 @@ const App = (() => {
     _dsArtistsLoaded = true;
     const grid = document.getElementById('ds-artists-grid');
     if (!grid) return;
-    grid.innerHTML = '<div class="ds-attention-empty" style="grid-column:1/-1">Cargando artistas…</div>';
+    grid.innerHTML = `<div class="ds-attention-empty" style="grid-column:1/-1">${UI.t('ds_loading_artists')}</div>`;
 
     try {
       // Extract unique artists from metadata.
@@ -4922,7 +4954,7 @@ const App = (() => {
       }
 
       if (artistMap.size === 0) {
-        grid.innerHTML = '<div class="ds-attention-empty" style="grid-column:1/-1">No hay artistas en la biblioteca aún.</div>';
+        grid.innerHTML = `<div class="ds-attention-empty" style="grid-column:1/-1">${UI.t('ds_no_artists')}</div>`;
         return;
       }
 
@@ -4946,7 +4978,7 @@ const App = (() => {
       _dsRenderArtists(artists, photoMap);
     } catch (err) {
       console.error('[DS Artists]', err);
-      if (grid) grid.innerHTML = '<div class="ds-attention-empty" style="grid-column:1/-1">Error al cargar artistas.</div>';
+      if (grid) grid.innerHTML = `<div class="ds-attention-empty" style="grid-column:1/-1">${UI.t('ds_error_artists')}</div>`;
     }
   }
 
@@ -4966,7 +4998,7 @@ const App = (() => {
     const filtered = _dsOnlyNoPhoto ? withoutPhoto : artists;
 
     if (filtered.length === 0) {
-      grid.innerHTML = '<div class="ds-attention-empty" style="grid-column:1/-1">Todos los artistas tienen foto.</div>';
+      grid.innerHTML = `<div class="ds-attention-empty" style="grid-column:1/-1">${UI.t('ds_all_have_photo')}</div>`;
       return;
     }
 
@@ -5026,10 +5058,10 @@ const App = (() => {
           _dsSetCounter('ds-art-sin',   total - withPhoto);
           _dsSetCounter('ds-art-total', total);
 
-          UI.showToast(newUrl ? 'Foto guardada' : 'Foto eliminada');
+          UI.showToast(newUrl ? UI.t('toast_photo_saved') : UI.t('toast_photo_deleted'));
         } catch (err) {
           console.error('[DS] Save artist photo error:', err);
-          UI.showToast('Error al guardar', 'error');
+          UI.showToast(UI.t('toast_save_error'), 'error');
         }
         btn.disabled = false;
       });
@@ -5188,9 +5220,14 @@ const App = (() => {
           const url = await Lastfm.fetchCover(artist, album);
           if (repId) DB.setMeta(repId, { lfmThumbTried: true }).catch(() => {});
           if (!url) continue;
-          await Promise.all(songIds.map(id =>
-            DB.setMeta(id, { thumbnailUrl: url }).catch(() => {})
-          ));
+          // Only write to songs that don't have a manually-set cover
+          await Promise.all(songIds.map(async id => {
+            try {
+              const sm = await DB.getMeta(id);
+              if ((sm?.manualAt || 0) > 0) return; // respect manual cover
+              await DB.setMeta(id, { thumbnailUrl: url });
+            } catch (_) {}
+          }));
           fetched++;
         } catch (_) {}
         await new Promise(r => setTimeout(r, 150));
@@ -6570,7 +6607,7 @@ const App = (() => {
         });
         document.querySelectorAll('.eq-preset-chip').forEach(c => c.classList.remove('active'));
         _drawEQCurve();
-        UI.showToast(`Preset "${preset.name}" cargado`);
+        UI.showToast(`"${preset.name}" ${UI.t('toast_preset_loaded')}`);
       });
       card.querySelector('[data-action="del"]').addEventListener('click', (e) => {
         e.stopPropagation();
@@ -6739,14 +6776,14 @@ const App = (() => {
     document.getElementById('btn-pexp-shuffle')?.addEventListener('click', (e) => {
       const isOn = Player.toggleShuffle();
       e.currentTarget.classList.toggle('active', isOn);
-      UI.showToast(isOn ? 'Aleatorio activado' : 'Aleatorio desactivado');
+      UI.showToast(isOn ? UI.t('toast_shuffle_on') : UI.t('toast_shuffle_off'));
     });
     document.getElementById('btn-pexp-repeat')?.addEventListener('click', (e) => {
       const mode = Player.cycleRepeat();
       const btn  = e.currentTarget;
       btn.classList.toggle('active', mode !== 'off');
       // Update aria-label and title to reflect current mode
-      const labels = { off: 'Sin repetición', all: 'Repetir todo', one: 'Repetir esta canción' };
+      const labels = { off: UI.t('repeat_off'), all: UI.t('repeat_all'), one: UI.t('repeat_one') };
       btn.setAttribute('aria-label', labels[mode]);
       btn.setAttribute('title', labels[mode]);
       // Show '1' overlay for repeat-one mode
@@ -7003,7 +7040,7 @@ const App = (() => {
       if (!bytes) return;
       await DB.setState('cacheLimit', bytes);
       _refreshCacheBar();
-      UI.showToast(`Límite de caché: ${formatBytes(bytes)}`, 'success');
+      UI.showToast(`${UI.t('settings_cache_limit')}: ${formatBytes(bytes)}`, 'success');
     });
 
     // Tempo slider

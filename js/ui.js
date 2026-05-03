@@ -172,6 +172,97 @@ const UI = (() => {
       prompt_eq_preset_default: 'Mi preset',
       prompt_playlist_name:     'Nombre de la playlist:',
       prompt_playlist_default:  'Nueva playlist',
+      // ── Button states ──────────────────────────────────────
+      save_btn:             'Guardar',
+      saving:               'Guardando…',
+      saved_ok:             '✓ Guardado',
+      cancel_btn:           'Cancelar',
+      confirm_btn:          'Confirmar',
+      // ── Inline counts (lowercase) ──────────────────────────
+      lbl_song:             'canción',
+      lbl_songs:            'canciones',
+      lbl_folder_s:         'carpeta',
+      lbl_folders_s:        'carpetas',
+      lbl_songs_updated:    'canciones actualizadas',
+      // ── Edit controls ──────────────────────────────────────
+      edit_tracks_btn:      '✎ Editar canciones',
+      edit_tracks_done:     '✓ Listo',
+      // ── Search states ──────────────────────────────────────
+      searching:            'Buscando…',
+      search_error:         'Error al buscar. Inténtalo de nuevo.',
+      // ── Deep scan controls ─────────────────────────────────
+      scan_btn_start:       'Iniciar',
+      scan_btn_pause:       'Pausar',
+      scan_btn_resume:      'Continuar',
+      scan_status_ready:    'Listo',
+      scan_status_paused:   'En pausa',
+      scan_status_done:     'Completado',
+      scan_status_scanning: 'Escaneando…',
+      scan_status_stopped:  'Detenido',
+      scan_status_crashed:  'Interrumpido',
+      scan_log_empty:       'Inicia un escaneo para ver el registro aquí…',
+      scan_no_subfolders:   'Sin subcarpetas',
+      scan_no_folders:      'Sin carpetas para mostrar aún.',
+      scan_none_complete:   'Ninguna carpeta completamente etiquetada aún.',
+      scan_none_skipped:    'Ninguna carpeta saltada aún.',
+      scan_lbl_scanned:     'Escaneadas',
+      scan_lbl_complete:    'Completas',
+      scan_lbl_missing:     'Sin datos',
+      scan_lbl_remaining:   'Restantes',
+      scan_lbl_estimated:   'Estimado',
+      // ── Deep scan — artists ────────────────────────────────
+      ds_loading_artists:   'Cargando artistas…',
+      ds_no_artists:        'No hay artistas en la biblioteca aún.',
+      ds_error_artists:     'Error al cargar artistas.',
+      ds_all_have_photo:    'Todos los artistas tienen foto.',
+      // ── Repeat mode ────────────────────────────────────────
+      repeat_off:           'Sin repetición',
+      repeat_all:           'Repetir todo',
+      repeat_one:           'Repetir esta canción',
+      // ── Pinning ────────────────────────────────────────────
+      item_type_folder:     'Carpeta',
+      item_type_song:       'Canción',
+      toast_pinned:         'fijada en Inicio',
+      toast_unpinned:       'quitada de Inicio',
+      // ── Toasts ─────────────────────────────────────────────
+      toast_rescan_start:   'Rescaneando álbum…',
+      toast_rescan_folder:  'Rescaneando carpeta…',
+      toast_rescan_done:    'Rescan completado',
+      toast_rescan_none:    'Sin álbumes visibles para rescanear',
+      toast_shuffle_on:     'Aleatorio activado',
+      toast_shuffle_off:    'Aleatorio desactivado',
+      toast_photo_saved:    'Foto guardada',
+      toast_photo_deleted:  'Foto eliminada',
+      toast_save_error:     'Error al guardar',
+      toast_preset_loaded:  'cargado',
+      rescan_confirm_msg:   'álbumes serán rescaneados. Este proceso puede tardar varios minutos. ¿Deseas continuar?',
+      // ── Deep scan HTML labels ──────────────────────────────
+      ds_folder_label:      'Carpeta:',
+      ds_change_btn:        'Cambiar',
+      ds_all_btn:           'Todas',
+      ds_with_photo:        'con foto',
+      ds_without_photo:     'sin foto',
+      ds_total_lbl:         'total',
+      ds_only_no_photo:     'Solo sin foto',
+      ds_open_artists:      'Abre este panel para cargar artistas…',
+      ds_select_folder:     'Seleccionar carpeta',
+      ds_select_btn:        'Seleccionar esta carpeta',
+      ds_scan_skipped:      'Saltadas',
+      // ── Sleep timer ────────────────────────────────────────
+      sleep_timer_title:    'Sleep Timer',
+      sleep_custom:         'Personalizado',
+      sleep_off:            'Desactivar',
+      // ── Boot loading ───────────────────────────────────────
+      boot_loading:         'Cargando datos de la nube…',
+      // ── Rescan modals ──────────────────────────────────────
+      ds_rescan_title:      'Rescanear álbumes',
+      ds_rescan_skip_lbl:   'Ignorar ya escaneadas',
+      ds_rescan_skip_desc:  'Solo procesa carpetas nuevas o no visitadas',
+      ds_rescan_all_lbl:    'Volver a escanear todo',
+      ds_rescan_all_desc:   'Incluye carpetas previamente escaneadas',
+      ds_already_scanned:   'Carpeta ya escaneada',
+      ds_rescan_prompt:     'Esta carpeta contiene subcarpetas escaneadas anteriormente. ¿Qué deseas hacer?',
+      rescan_btn:           'Rescanear',
     },
     en: {
       // ── Navigation ─────────────────────────────────────────
@@ -322,6 +413,97 @@ const UI = (() => {
       prompt_eq_preset_default: 'My preset',
       prompt_playlist_name:     'Playlist name:',
       prompt_playlist_default:  'New playlist',
+      // ── Button states ──────────────────────────────────────
+      save_btn:             'Save',
+      saving:               'Saving…',
+      saved_ok:             '✓ Saved',
+      cancel_btn:           'Cancel',
+      confirm_btn:          'Confirm',
+      // ── Inline counts (lowercase) ──────────────────────────
+      lbl_song:             'song',
+      lbl_songs:            'songs',
+      lbl_folder_s:         'folder',
+      lbl_folders_s:        'folders',
+      lbl_songs_updated:    'songs updated',
+      // ── Edit controls ──────────────────────────────────────
+      edit_tracks_btn:      '✎ Edit songs',
+      edit_tracks_done:     '✓ Done',
+      // ── Search states ──────────────────────────────────────
+      searching:            'Searching…',
+      search_error:         'Search error. Please try again.',
+      // ── Deep scan controls ─────────────────────────────────
+      scan_btn_start:       'Start',
+      scan_btn_pause:       'Pause',
+      scan_btn_resume:      'Resume',
+      scan_status_ready:    'Ready',
+      scan_status_paused:   'Paused',
+      scan_status_done:     'Done',
+      scan_status_scanning: 'Scanning…',
+      scan_status_stopped:  'Stopped',
+      scan_status_crashed:  'Interrupted',
+      scan_log_empty:       'Start a scan to see the log here…',
+      scan_no_subfolders:   'No subfolders',
+      scan_no_folders:      'No folders to show yet.',
+      scan_none_complete:   'No fully tagged folders yet.',
+      scan_none_skipped:    'No folders skipped yet.',
+      scan_lbl_scanned:     'Scanned',
+      scan_lbl_complete:    'Complete',
+      scan_lbl_missing:     'Missing data',
+      scan_lbl_remaining:   'Remaining',
+      scan_lbl_estimated:   'Estimated',
+      // ── Deep scan — artists ────────────────────────────────
+      ds_loading_artists:   'Loading artists…',
+      ds_no_artists:        'No artists in library yet.',
+      ds_error_artists:     'Error loading artists.',
+      ds_all_have_photo:    'All artists have a photo.',
+      // ── Repeat mode ────────────────────────────────────────
+      repeat_off:           'No repeat',
+      repeat_all:           'Repeat all',
+      repeat_one:           'Repeat this song',
+      // ── Pinning ────────────────────────────────────────────
+      item_type_folder:     'Folder',
+      item_type_song:       'Song',
+      toast_pinned:         'pinned to Home',
+      toast_unpinned:       'removed from Home',
+      // ── Toasts ─────────────────────────────────────────────
+      toast_rescan_start:   'Rescanning album…',
+      toast_rescan_folder:  'Rescanning folder…',
+      toast_rescan_done:    'Rescan complete',
+      toast_rescan_none:    'No visible albums to rescan',
+      toast_shuffle_on:     'Shuffle on',
+      toast_shuffle_off:    'Shuffle off',
+      toast_photo_saved:    'Photo saved',
+      toast_photo_deleted:  'Photo deleted',
+      toast_save_error:     'Error saving',
+      toast_preset_loaded:  'loaded',
+      rescan_confirm_msg:   'albums will be rescanned. This may take several minutes. Continue?',
+      // ── Deep scan HTML labels ──────────────────────────────
+      ds_folder_label:      'Folder:',
+      ds_change_btn:        'Change',
+      ds_all_btn:           'All',
+      ds_with_photo:        'with photo',
+      ds_without_photo:     'without photo',
+      ds_total_lbl:         'total',
+      ds_only_no_photo:     'Without photo only',
+      ds_open_artists:      'Open this panel to load artists…',
+      ds_select_folder:     'Select folder',
+      ds_select_btn:        'Select this folder',
+      ds_scan_skipped:      'Skipped',
+      // ── Sleep timer ────────────────────────────────────────
+      sleep_timer_title:    'Sleep Timer',
+      sleep_custom:         'Custom',
+      sleep_off:            'Off',
+      // ── Boot loading ───────────────────────────────────────
+      boot_loading:         'Loading data from cloud…',
+      // ── Rescan modals ──────────────────────────────────────
+      ds_rescan_title:      'Rescan albums',
+      ds_rescan_skip_lbl:   'Skip already scanned',
+      ds_rescan_skip_desc:  'Only processes new or unvisited folders',
+      ds_rescan_all_lbl:    'Rescan everything',
+      ds_rescan_all_desc:   'Includes previously scanned folders',
+      ds_already_scanned:   'Folder already scanned',
+      ds_rescan_prompt:     'This folder contains previously scanned subfolders. What do you want to do?',
+      rescan_btn:           'Rescan',
     },
   };
 
@@ -2345,24 +2527,24 @@ const UI = (() => {
       const albumVal = editPanel.querySelector('[data-field="album"]').value.trim();
       const year     = editPanel.querySelector('[data-field="year"]').value.trim();
       const coverUrl = editPanel.querySelector('[data-field="coverUrl"]').value.trim();
-      btn.disabled = true; btn.textContent = 'Guardando…';
+      btn.disabled = true; btn.textContent = t('saving');
       try {
         await App.onAlbumEdit?.(folderId, { artist, album: albumVal, year, coverUrl }, songs.map(s => s.id));
-        btn.textContent = '✓ Guardado';
+        btn.textContent = t('saved_ok');
         // Update the header display immediately
         const nameEl = entity.querySelector('.lib-detail-entity-name');
         const subEl  = entity.querySelector('.lib-detail-entity-sub');
         const yearEl = entity.querySelector('.lib-detail-entity-year');
         if (nameEl && albumVal)  nameEl.textContent = albumVal;
-        if (subEl)               subEl.textContent  = [artist, songs.length + ' canciones'].filter(Boolean).join(' · ');
+        if (subEl)               subEl.textContent  = [artist, `${songs.length} ${t('lbl_songs')}`].filter(Boolean).join(' · ');
         if (yearEl && year)      yearEl.textContent  = `(${year})`;
         setTimeout(() => {
-          btn.disabled = false; btn.textContent = 'Guardar';
+          btn.disabled = false; btn.textContent = t('save_btn');
           editPanel.classList.remove('open');
           entity.classList.remove('album-editing');
         }, 1500);
       } catch {
-        btn.disabled = false; btn.textContent = 'Guardar';
+        btn.disabled = false; btn.textContent = t('save_btn');
       }
     });
 
@@ -2372,7 +2554,7 @@ const UI = (() => {
       if (!topList) return;
       const btn       = editPanel.querySelector('.album-edit-track-btn');
       const isEditing = topList.classList.toggle('track-editing');
-      btn.textContent = isEditing ? '✓ Listo' : '✎ Editar canciones';
+      btn.textContent = isEditing ? t('edit_tracks_done') : t('edit_tracks_btn');
       btn.classList.toggle('album-edit-track-btn--active', isEditing);
 
       topList.querySelectorAll('.top-list-item').forEach(row => {
@@ -2595,9 +2777,7 @@ const UI = (() => {
 
       const thumbHtml = _buildMosaicThumb(pl.coverUrls || [], pl.name);
       const songCount = pl.songIds?.length || 0;
-      const songNoun  = songCount === 1
-        ? (_currentLang === 'es' ? 'canción' : 'song')
-        : (_currentLang === 'es' ? 'canciones' : 'songs');
+      const songNoun  = songCount === 1 ? t('lbl_song') : t('lbl_songs');
 
       item.innerHTML = `
         <div class="lib-pl-thumb">${thumbHtml}</div>
@@ -2735,8 +2915,8 @@ const UI = (() => {
         bar.style.display = 'none';
       } else {
         const parts = [];
-        if (nSongs   > 0) parts.push(`${nSongs} ${nSongs   === 1 ? 'canción' : 'canciones'}`);
-        if (nFolders > 0) parts.push(`${nFolders} ${nFolders === 1 ? 'carpeta' : 'carpetas'}`);
+        if (nSongs   > 0) parts.push(`${nSongs} ${nSongs   === 1 ? t('lbl_song') : t('lbl_songs')}`);
+        if (nFolders > 0) parts.push(`${nFolders} ${nFolders === 1 ? t('lbl_folder_s') : t('lbl_folders_s')}`);
         bar.textContent = parts.join(' · ');
         bar.style.display = 'block';
       }
