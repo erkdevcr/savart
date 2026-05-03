@@ -23,6 +23,7 @@ const Auth = (() => {
   let _initialized      = false;
   let _isSilentRenew    = false;  // true while a background token renewal is in flight
   let _renewTimeoutId   = null;   // safety timeout for silent renewal
+  let _renewOnGesture   = false;  // renewal queued — fire on next user tap/click
 
   /* ── LocalStorage keys ─────────────────────────────────── */
   const LS_EXPIRY  = 'savart_token_expiry';
@@ -50,6 +51,7 @@ const Auth = (() => {
     // it will be created lazily when requestToken() is called or
     // when onGISLoad() fires via the script's onload attribute.
     _tryCreateClient();
+    _setupGestureRenewal();
     console.log('[Auth] Initialized.');
   }
 
@@ -167,53 +169,83 @@ const Auth = (() => {
     if (_warnTimer) clearTimeout(_warnTimer);
     const warnIn = expiresInMs - CONFIG.TOKEN_WARN_BEFORE_EXPIRY_MS;
     if (warnIn > 0) {
-      _warnTimer = setTimeout(_attemptSilentRenew, warnIn);
+      _warnTimer = setTimeout(_queueGestureRenewal, warnIn);
     } else {
-      _attemptSilentRenew();
+      _queueGestureRenewal();
     }
   }
 
   /**
-   * Tries to silently renew the access token using prompt:'none'.
-   * Succeeds as long as the user's Google session is active in the browser.
-   * If it fails (or if GIS gives no response within 12 s — e.g. popup blocked
-   * on mobile), falls back to showing the manual renewal banner.
+   * Called when the token is close to expiry.
+   * Sets a flag so the next user tap/click will renew the token silently —
+   * mobile browsers only allow GIS popups from a real user gesture, so we
+   * piggyback on whichever interaction the user makes next (play, scroll, etc.).
+   * If the token fully expires before any gesture, we fall back to the banner.
    */
-  function _attemptSilentRenew() {
+  function _queueGestureRenewal() {
     _tryCreateClient();
     if (!_tokenClient) {
-      console.warn('[Auth] Silent renewal: GIS not ready, showing banner');
+      console.warn('[Auth] GIS not ready — showing renewal banner');
       _onExpiring();
       return;
     }
 
-    console.log('[Auth] Token expiring — attempting silent renewal (prompt:none)…');
-    _isSilentRenew = true;
+    console.log('[Auth] Token expiring — renewal queued for next user gesture');
+    _renewOnGesture = true;
 
-    // Safety net: mobile browsers often block the hidden popup and fire no
-    // callback at all. After 12 s with no response, treat it as failure.
+    // Hard fallback: show banner when token actually expires (no gesture came in time)
+    const msUntilExpiry = Math.max(0, _expiresAt - Date.now());
     if (_renewTimeoutId) clearTimeout(_renewTimeoutId);
     _renewTimeoutId = setTimeout(() => {
       _renewTimeoutId = null;
-      if (_isSilentRenew) {
-        _isSilentRenew    = false;
-        _onAutoLoginFail  = null;
-        console.warn('[Auth] Silent renewal timed out (no GIS response) — showing banner');
+      if (_renewOnGesture) {
+        _renewOnGesture = false;
+        console.warn('[Auth] Token expired before a user gesture — showing banner');
         _onExpiring();
       }
-    }, 12_000);
+    }, msUntilExpiry);
+  }
 
-    _onAutoLoginFail = (err) => {
-      // GIS explicitly rejected the silent renewal → show banner
-      console.warn('[Auth] Silent renewal failed:', err, '— showing banner');
-      _onAutoLoginFail = null;
-      _isSilentRenew   = false;
-      _onExpiring();
+  /**
+   * Wires global tap/click listeners.
+   * When _renewOnGesture is true, the next interaction triggers a silent
+   * requestAccessToken({ prompt:'' }) — GIS can open and close the popup
+   * instantly because it's called from a real user gesture.
+   * Called once from init().
+   */
+  function _setupGestureRenewal() {
+    const _attemptRenewal = () => {
+      if (!_renewOnGesture || !_tokenClient || _isSilentRenew) return;
+      _renewOnGesture = false;
+      if (_renewTimeoutId) { clearTimeout(_renewTimeoutId); _renewTimeoutId = null; }
+
+      console.log('[Auth] Renewing token on user gesture (prompt:\'\')…');
+      _isSilentRenew = true;
+
+      // Safety net: if GIS returns no callback within 12 s, show banner
+      _renewTimeoutId = setTimeout(() => {
+        _renewTimeoutId = null;
+        if (_isSilentRenew) {
+          _isSilentRenew = false;
+          console.warn('[Auth] Gesture renewal timed out — showing banner');
+          _onExpiring();
+        }
+      }, 12_000);
+
+      _onAutoLoginFail = (err) => {
+        _onAutoLoginFail = null;
+        _isSilentRenew   = false;
+        console.warn('[Auth] Gesture renewal failed:', err, '— showing banner');
+        _onExpiring();
+      };
+
+      // prompt:'' = no consent screen if already granted; GIS closes the popup
+      // instantly when the Google session is still active.
+      _tokenClient.requestAccessToken({ prompt: '' });
     };
 
-    _tokenClient.requestAccessToken({ prompt: 'none' });
-    // On success: _handleTokenResponse fires → clears timeout → _saveToken →
-    // _scheduleExpiryWarning resets the 55-min timer. No banner is ever shown.
+    document.addEventListener('click',      _attemptRenewal, { passive: true, capture: true });
+    document.addEventListener('touchstart', _attemptRenewal, { passive: true, capture: true });
   }
 
   /* ── Public API ─────────────────────────────────────────── */
@@ -342,9 +374,10 @@ const Auth = (() => {
         console.log('[Auth] Token revoked.');
       });
     }
-    _accessToken   = null;
-    _expiresAt     = 0;
-    _isSilentRenew = false;
+    _accessToken    = null;
+    _expiresAt      = 0;
+    _isSilentRenew  = false;
+    _renewOnGesture = false;
     if (_warnTimer)      { clearTimeout(_warnTimer);      _warnTimer      = null; }
     if (_renewTimeoutId) { clearTimeout(_renewTimeoutId); _renewTimeoutId = null; }
     try {

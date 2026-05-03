@@ -2275,6 +2275,9 @@ const UI = (() => {
     const editPanel = document.createElement('div');
     editPanel.className = 'album-edit-panel'; // starts hidden (no .open class)
     editPanel.innerHTML = `
+      <div class="album-edit-actions">
+        <button class="album-edit-save-btn">Guardar</button>
+      </div>
       <div class="album-edit-row">
         <label class="album-edit-label">Artista</label>
         <input class="album-edit-input" data-field="artist" value="${escHtml(album.artist || '')}" placeholder="Artista">
@@ -2292,15 +2295,13 @@ const UI = (() => {
       <div class="album-edit-row">
         <label class="album-edit-label">Cover URL</label>
         <input class="album-edit-input" data-field="coverUrl" value="${escHtml(album.coverUrl && !album.coverUrl.startsWith('blob:') ? album.coverUrl : '')}" placeholder="https://…">
-      </div>
-      <div class="album-edit-actions">
-        <button class="album-edit-save-btn">Guardar</button>
       </div>`;
 
-    // Toggle edit panel on ⋮ click
+    // Toggle edit panel on ⋮ click — mark entity while open, unmark on close
     entity.querySelector('.lib-detail-entity-more').addEventListener('click', e => {
       e.stopPropagation();
       const isOpen = editPanel.classList.toggle('open');
+      entity.classList.toggle('album-editing', isOpen);
       if (isOpen) editPanel.querySelector('[data-field="artist"]').focus();
     });
 
@@ -2351,7 +2352,11 @@ const UI = (() => {
         if (nameEl && albumVal)  nameEl.textContent = albumVal;
         if (subEl)               subEl.textContent  = [artist, songs.length + ' canciones'].filter(Boolean).join(' · ');
         if (yearEl && year)      yearEl.textContent  = `(${year})`;
-        setTimeout(() => { btn.disabled = false; btn.textContent = 'Guardar'; editPanel.classList.remove('open'); }, 1500);
+        setTimeout(() => {
+          btn.disabled = false; btn.textContent = 'Guardar';
+          editPanel.classList.remove('open');
+          entity.classList.remove('album-editing');
+        }, 1500);
       } catch {
         btn.disabled = false; btn.textContent = 'Guardar';
       }

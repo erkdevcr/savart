@@ -415,6 +415,17 @@ const Sync = (() => {
         if (toWrite.length > 0) {
           await DB.bulkWriteMeta(toWrite);
           if (type === 'hot') console.log(`[Sync] Applied hot delta: ${toWrite.length} songs updated`);
+
+          // For any record that arrived with a new thumbnailUrl, download and cache
+          // the image as a local blob so it's available offline on this device.
+          // force=true because the remote edit is newer (manualAt / remoteManualAt won).
+          if (typeof App !== 'undefined' && App.cacheExternalCover) {
+            for (const rec of toWrite) {
+              if (rec.thumbnailUrl && !rec.thumbnailUrl.startsWith('blob:')) {
+                App.cacheExternalCover(rec.id, rec.thumbnailUrl, true).catch(() => {});
+              }
+            }
+          }
         }
         break;
       }
@@ -848,6 +859,15 @@ const Sync = (() => {
         if (toWrite.length > 0) {
           await DB.bulkWriteMeta(toWrite);
           console.log(`[Sync] Merged metadata: ${toWrite.length} songs updated from remote`);
+
+          // Cache cover blobs locally for any record that arrived with a thumbnailUrl
+          if (typeof App !== 'undefined' && App.cacheExternalCover) {
+            for (const rec of toWrite) {
+              if (rec.thumbnailUrl && !rec.thumbnailUrl.startsWith('blob:')) {
+                App.cacheExternalCover(rec.id, rec.thumbnailUrl, true).catch(() => {});
+              }
+            }
+          }
         }
       });
 

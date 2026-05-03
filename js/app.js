@@ -3157,6 +3157,29 @@ const App = (() => {
    * @param {string|null} storedUrl - value from DB (may be stale blob:)
    * @returns {Promise<string|null>}
    */
+  /**
+   * Downloads an external cover URL and persists it as coverBlob in IndexedDB.
+   * Called fire-and-forget so it never blocks the UI.
+   * Skips if: already has a blob, URL is a blob/data URI, or no network.
+   * @param {string} id   — track/file ID
+   * @param {string} url  — external image URL (Last.fm, MusicBrainz, manual, etc.)
+   * @param {boolean} [force=false] — overwrite existing coverBlob (use on manual edits)
+   */
+  async function _cacheExternalCover(id, url, force = false) {
+    if (!url || url.startsWith('blob:') || url.startsWith('data:')) return;
+    try {
+      if (!force) {
+        const m = await DB.getMeta(id).catch(() => null);
+        if (m?.coverBlob) return; // already cached locally
+      }
+      const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
+      if (!res.ok) return;
+      const blob = await res.blob();
+      if (!blob || !blob.type.startsWith('image/') || blob.size < 500) return;
+      await DB.setMeta(id, { coverBlob: blob });
+    } catch (_) { /* network error / timeout — silent */ }
+  }
+
   async function _resolveCoverUrl(id, storedUrl) {
     // Priority: ID3 embedded art > external persisted URL
     // 1. In-memory Meta cache: song was parsed this session (fastest, no DB round-trip)
@@ -3170,10 +3193,16 @@ const App = (() => {
     }
     // 3. Stored web URL (non-blob, from Last.fm / AudD / Drive thumbnailLink)
     const ext = dbMeta?.thumbnailUrl || storedUrl || null;
-    if (ext && !ext.startsWith('blob:')) return ext;
+    if (ext && !ext.startsWith('blob:')) {
+      // Cache the image locally so it loads offline next time (fire-and-forget)
+      _cacheExternalCover(id, ext).catch(() => {});
+      return ext;
+    }
     // 4. Drive thumbnail from item cache (rarely set for audio)
     const cached = _itemCache.get(id);
-    return cached?.thumbnailLink || cached?.thumbnailUrl || null;
+    const driveUrl = cached?.thumbnailLink || cached?.thumbnailUrl || null;
+    if (driveUrl) _cacheExternalCover(id, driveUrl).catch(() => {});
+    return driveUrl;
   }
 
   async function _loadStarred() {
@@ -3442,8 +3471,9 @@ const App = (() => {
        • Artistas tab: 3-col grid, per-artist photo URL editor
   ─────────────────────────────────────────────────────────── */
 
-  let _dsRunning       = false;
-  let _dsPaused        = false;
+  let _dsRunning          = false;
+  let _dsPaused           = false;
+  let _dsPausedForToken   = false;  // true when auto-paused due to expired token
   let _dsStopFlag      = false;
   let _dsSession       = null;
   let _dsListMode      = 'attn';     // 'attn' | 'done' | 'skipped' | 'all'
@@ -4122,9 +4152,29 @@ const App = (() => {
     const startMs  = Date.now();
 
     while (queue.length > 0) {
-      // Pause spin
-      while (_dsPaused && !_dsStopFlag) await new Promise(r => setTimeout(r, 200));
+      // Pause spin — if paused due to token expiry, auto-resume when token is valid again
+      while (_dsPaused && !_dsStopFlag) {
+        await new Promise(r => setTimeout(r, 500));
+        if (_dsPausedForToken && Auth.isAuthenticated()) {
+          _dsPausedForToken = false;
+          _dsPaused         = false;
+          _dsLogLine('▶ Token renovado — continuando scan…', 'info');
+          _dsUpdateControls();
+        }
+      }
       if (_dsStopFlag) break;
+
+      // Proactive token check before Drive API call — pause if expired
+      if (!Auth.isAuthenticated()) {
+        if (!_dsPaused) {
+          _dsPaused         = true;
+          _dsPausedForToken = true;
+          _dsLogLine('⚠ Sesión expirada — scan pausado. Renueva el token para continuar.', 'warn');
+          _dsUpdateControls();
+          UI.showToast('Sesión expirada — renueva para continuar el scan', 'warn');
+        }
+        continue; // loop back into the pause spin
+      }
 
       const { id, name, path } = queue.shift();
       if (visitedSet.has(id)) continue;
@@ -4147,10 +4197,16 @@ const App = (() => {
       try {
         page = await Drive.listFolderScan(id);
       } catch (err) {
-        if (err instanceof Drive.AuthError || err?.name === 'AuthError') {
-          _dsLogLine('⚠ Sin autenticación — deteniendo.', 'warn');
-          _dsStopFlag = true;
-          break;
+        if (err instanceof Drive.AuthError || err?.name === 'AuthError' || err?.status === 401) {
+          // Token expired mid-call — put the folder back and pause until renewed
+          queue.unshift({ id, name, path });
+          visitedSet.delete(id);
+          _dsPaused         = true;
+          _dsPausedForToken = true;
+          _dsLogLine('⚠ Sesión expirada — scan pausado. Renueva el token para continuar.', 'warn');
+          _dsUpdateControls();
+          UI.showToast('Sesión expirada — renueva para continuar el scan', 'warn');
+          continue; // loop back into the pause spin
         }
         _dsLogLine(`⚠ Error en "${name}": ${err?.message || err}`, 'warn');
         continue;
@@ -4297,8 +4353,9 @@ const App = (() => {
     }
 
     // Finished
-    _dsRunning = false;
-    _dsPaused  = false;
+    _dsRunning        = false;
+    _dsPaused         = false;
+    _dsPausedForToken = false;
 
     if (_dsStopFlag) {
       _dsStopFlag = false;
@@ -4691,6 +4748,10 @@ const App = (() => {
           if (album)    tr.querySelector('[data-field="album"]')?.classList.remove('missing');
           if (year)     tr.querySelector('[data-field="year"]')?.classList.remove('missing');
           if (coverUrl) tr.querySelector('[data-field="coverUrl"]')?.classList.remove('missing');
+          // Cache the cover as a local blob so it's available offline
+          if (coverUrl && !coverUrl.startsWith('blob:')) {
+            _cacheExternalCover(songId, coverUrl, true).catch(() => {});
+          }
 
           // Update the in-memory session so re-renders show the saved values
           // (folder.songs is the source of truth for EP row rendering)
@@ -5685,15 +5746,24 @@ const App = (() => {
     const songs = all.filter(m => m.folderId === folderId);
     if (songs.length === 0) throw new Error('No songs found for folder');
 
-    const manualAt = Date.now();
+    const manualAt  = Date.now();
+    const newCoverUrl = (patch.coverUrl && !patch.coverUrl.startsWith('blob:')) ? patch.coverUrl : null;
+
     for (const m of songs) {
       const update = { folderId, manualAt };
-      if (patch.artist)   update.artist       = patch.artist;
-      if (patch.album)    update.album        = patch.album;
-      if (patch.year)     update.year         = patch.year;
-      if (patch.coverUrl && !patch.coverUrl.startsWith('blob:'))
-        update.thumbnailUrl = patch.coverUrl;
+      if (patch.artist)  update.artist       = patch.artist;
+      if (patch.album)   update.album        = patch.album;
+      if (patch.year)    update.year         = patch.year;
+      if (newCoverUrl)   update.thumbnailUrl = newCoverUrl;
       await DB.setMeta(m.id, update);
+    }
+
+    // If a new cover URL was set manually, fetch & cache it as a blob for offline use.
+    // force=true overwrites any previously cached blob (user chose a new image).
+    if (newCoverUrl) {
+      for (const m of songs) {
+        _cacheExternalCover(m.id, newCoverUrl, true).catch(() => {});
+      }
     }
 
     if (typeof Sync !== 'undefined') Sync.push('metadata');
@@ -6998,6 +7068,7 @@ const App = (() => {
     onQueueItemClick,
     onQueueItemRemove,
     // Internal (exposed for UI / inline scripts)
+    cacheExternalCover: _cacheExternalCover,
     _cacheItem,
     _resolveItemById,
     _doSearch,
