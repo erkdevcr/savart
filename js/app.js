@@ -3844,8 +3844,9 @@ const App = (() => {
   }
 
   function _dsUpdateModalSelectBtn() {
+    // Always enabled — confirm falls back to deepest breadcrumb folder if nothing is highlighted
     const btn = document.getElementById('btn-ds-modal-select');
-    if (btn) btn.disabled = !_dsModalSel;
+    if (btn) btn.disabled = false;
   }
 
   function _dsRenderModalBreadcrumb() {
@@ -3929,11 +3930,16 @@ const App = (() => {
 
   /* Called when user clicks "Seleccionar esta carpeta" */
   async function _dsConfirmFolderSelect() {
-    if (!_dsModalSel) return;
-    const { id, name } = _dsModalSel;
+    // Use explicitly highlighted folder; fall back to deepest folder in the breadcrumb
+    const sel = _dsModalSel || _dsModalPath[_dsModalPath.length - 1];
+    if (!sel) return;
+    const { id, name } = sel;
 
-    // Build full path label from breadcrumb
-    const fullPath = [..._dsModalPath.map(c => c.name), name].join(' › ');
+    // Build full path — avoid duplicating the name when it's already the last breadcrumb entry
+    const pathNames = _dsModalPath.map(c => c.name);
+    const alreadyInPath = _dsModalPath[_dsModalPath.length - 1]?.id === id;
+    if (!alreadyInPath) pathNames.push(name);
+    const fullPath = pathNames.join(' › ');
 
     _dsCloseModal('ds-folder-modal');
 
@@ -3952,20 +3958,20 @@ const App = (() => {
     if (nameEl) nameEl.textContent = fullPath;
     _dsFitFolderName();
 
-    // Folder changed — any saved pending queue belongs to the OLD folder.
-    // Reset to idle so the start button shows "Iniciar" (not "Continuar").
-    if (_dsSession.status === 'stopped' || (_dsSession.pendingQueue && _dsSession.pendingQueue.length > 0)) {
-      _dsSession.pendingQueue   = [];
-      _dsSession.visited        = [];
-      _dsSession.status         = 'idle';
-      _dsSession.scannedFolders = 0;
-      _dsSession.totalFolders   = 0;
-      _dsSession.folders        = {};
-      _dsSession.completedList  = {};
-      _dsSession.skippedList    = {};
-      _dsSession.log            = [];
-      _dsUpdateControls();
-    }
+    // Folder changed — reset progress so "Iniciar" always starts fresh from new folder
+    _dsSession.pendingQueue   = [];
+    _dsSession.visited        = [];
+    _dsSession.status         = 'idle';
+    _dsSession.scannedFolders = 0;
+    _dsSession.totalFolders   = 0;
+    _dsSession.folders        = {};
+    _dsSession.completedList  = {};
+    _dsSession.skippedList    = {};
+    _dsSession.log            = [];
+    _dsUpdateControls();
+    _dsUpdateProgress();
+    _dsUpdateCounters(0);
+    await _dsSaveSession();
 
     // Check if this folder (or its ancestors) was previously scanned
     await _dsCheckRescan(id, fullPath);
