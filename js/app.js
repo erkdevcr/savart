@@ -1098,12 +1098,12 @@ const App = (() => {
             const meta = await Meta.parse(file.id, blob);
             if (!meta) continue;
             const textPatch = {};
-            if (meta.title)  textPatch.displayName = meta.title;
             // Respect manual edits: if the user has manually set these fields
             // (manualAt > 0), ID3 tags from the audio file must NOT overwrite them.
             // The user explicitly chose different values — trust that decision.
             const existingForForce = await DB.getMeta(file.id).catch(() => null);
             const isManuallyEdited = (existingForForce?.manualAt || 0) > 0;
+            if (meta.title  && !isManuallyEdited) textPatch.displayName = meta.title;
             if (meta.artist && !isManuallyEdited) textPatch.artist = meta.artist;
             if (meta.album  && !isManuallyEdited) textPatch.album  = meta.album;
             if (meta.year   && !isManuallyEdited) textPatch.year   = meta.year;
@@ -1221,14 +1221,15 @@ const App = (() => {
             if (!meta) continue;
 
             // Fill-only: MB is authoritative (it already ran in Pass 2).
-            // displayName always comes from ID3 regardless.
+            // Respect manual edits (manualAt > 0): never overwrite user-renamed fields with ID3.
             const existingMeta = await DB.getMeta(file.id).catch(() => null);
+            const isManual = (existingMeta?.manualAt || 0) > 0;
             const textPatch = {};
-            if (meta.title)                        textPatch.displayName = meta.title;
-            if (meta.artist && !existingMeta?.artist) textPatch.artist   = meta.artist;
-            if (meta.album  && !existingMeta?.album)  textPatch.album    = meta.album;
-            if (meta.year   && !existingMeta?.year)   textPatch.year     = meta.year;
-            if (meta.track  && !existingMeta?.track)  textPatch.track    = meta.track;
+            if (meta.title  && !isManual)              textPatch.displayName = meta.title;
+            if (meta.artist && !existingMeta?.artist)  textPatch.artist      = meta.artist;
+            if (meta.album  && !existingMeta?.album)   textPatch.album       = meta.album;
+            if (meta.year   && !existingMeta?.year)    textPatch.year        = meta.year;
+            if (meta.track  && !existingMeta?.track)   textPatch.track       = meta.track;
             if (Object.keys(textPatch).length > 0) {
               DB.setMeta(file.id, textPatch).catch(() => {});
               _patchMetaText(file.id, {
