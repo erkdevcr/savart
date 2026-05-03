@@ -3830,7 +3830,7 @@ const App = (() => {
   async function _dsOpenFolderBrowser(callback) {
     const modal = document.getElementById('ds-folder-modal');
     if (!modal) return;
-    _dsFolderCallback = callback || null;
+    _dsFolderCallback = (typeof callback === 'function') ? callback : null;
     modal.style.display = 'flex';
     _dsModalPath = [{ id: CONFIG.ROOT_FOLDER_ID, name: CONFIG.ROOT_FOLDER_NAME }];
     _dsModalSel  = null;
@@ -6684,7 +6684,7 @@ const App = (() => {
     });
 
     // Deep Scan: folder picker
-    document.getElementById('btn-ds-change-folder')?.addEventListener('click', _dsOpenFolderBrowser);
+    document.getElementById('btn-ds-change-folder')?.addEventListener('click', () => _dsOpenFolderBrowser());
     document.getElementById('btn-ds-modal-close')?.addEventListener('click',   () => _dsCloseModal('ds-folder-modal'));
     document.getElementById('ds-folder-modal-backdrop')?.addEventListener('click', () => _dsCloseModal('ds-folder-modal'));
     document.getElementById('btn-ds-modal-select')?.addEventListener('click',  _dsConfirmFolderSelect);
