@@ -987,11 +987,13 @@ const App = (() => {
           const ap = file.appProperties;
           if (ap?.s_cover) {
             _updateRowThumbnail(file.id, ap.s_cover);
+            const apDbMeta  = await DB.getMeta(file.id).catch(() => null);
+            const apManual  = (apDbMeta?.manualAt || 0) > 0;
             const save = { thumbnailUrl: ap.s_cover };
-            if (ap.s_title)  save.displayName = ap.s_title;
-            if (ap.s_artist) save.artist      = ap.s_artist;
-            if (ap.s_album)  save.album       = ap.s_album;
-            if (ap.s_year)   save.year        = ap.s_year;
+            if (ap.s_title)                   save.displayName = ap.s_title;
+            if (ap.s_artist && !apManual)     save.artist      = ap.s_artist;
+            if (ap.s_album  && !apManual)     save.album       = ap.s_album;
+            if (ap.s_year   && !apManual)     save.year        = ap.s_year;
             DB.setMeta(file.id, save).catch(() => {});
             return;
           }
@@ -1088,13 +1090,15 @@ const App = (() => {
           if (!result) continue;
 
           const patch = {};
-          // MB always wins for artist/album/year — it is the canonical metadata source.
-          // Track is fill-only: MB numbering may differ from physical disc order.
-          if (result.track   && !m.track)  patch.track         = result.track;
-          if (result.artist)               patch.artist        = result.artist;
-          if (result.album)                patch.album         = result.album;
-          if (result.year)                 patch.year          = result.year;
-          if (result.releaseMbid)          patch.mbReleaseMbid = result.releaseMbid;
+          // MB is the canonical metadata source and normally wins for artist/album/year.
+          // Exception: if the user manually edited these fields (manualAt > 0), their
+          // choice takes priority over what MB found — the file tags may be wrong/missing.
+          const mbManualGuard = (m.manualAt || 0) > 0;
+          if (result.track   && !m.track)               patch.track         = result.track;
+          if (result.artist  && !mbManualGuard)          patch.artist        = result.artist;
+          if (result.album   && !mbManualGuard)          patch.album         = result.album;
+          if (result.year    && !mbManualGuard)          patch.year          = result.year;
+          if (result.releaseMbid)                        patch.mbReleaseMbid = result.releaseMbid;
 
           if (Object.keys(patch).filter(k => k !== 'mbReleaseMbid').length > 0 || patch.mbReleaseMbid) {
             // Derive a stable CAA cover URL from the MBID and store locally
