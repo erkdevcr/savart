@@ -567,11 +567,14 @@ const App = (() => {
     if (!meta) return track;
     return {
       ...track,
-      displayName:   meta.title        || track.displayName,
-      artist:        meta.artist       || track.artist    || '',
-      albumName:     meta.album        || track.albumName || '',
-      year:          meta.year         || track.year      || '',
-      thumbnailUrl:  meta.coverUrl     || track.thumbnailUrl,
+      // DB-stored values (track.*) take precedence over the ID3 in-memory cache
+      // because the user may have manually corrected them. ID3 cache is used only
+      // as a fallback when the queue item has no value (e.g. raw Drive listing item).
+      displayName:   track.displayName  || meta.title        || track.name,
+      artist:        track.artist       || meta.artist        || '',
+      albumName:     track.albumName    || meta.album         || '',
+      year:          track.year         || meta.year          || '',
+      thumbnailUrl:  track.thumbnailUrl || meta.coverUrl      || null,
       bitrate:       meta.bitrate      ?? track.bitrate      ?? null,
       sampleRate:    meta.sampleRate   ?? track.sampleRate   ?? null,
       bitsPerSample: meta.bitsPerSample ?? track.bitsPerSample ?? null,
@@ -2184,14 +2187,17 @@ const App = (() => {
         DB.getPlaylists(),
       ]);
 
-      // Load metadata store records for all song recents (for name/cover backfill)
-      const metaRecords = await Promise.all(
-        recents.filter(r => r.type === 'song').map(r => DB.getMeta(r.id).catch(() => null))
-      );
-      const metaMap = new Map();
-      recents.filter(r => r.type === 'song').forEach((r, i) => {
-        if (metaRecords[i]) metaMap.set(r.id, metaRecords[i]);
-      });
+      // Load metadata store records for all song recents AND topPlayed items.
+      // Using a unified map keyed by file ID so both sections get fresh DB values —
+      // topPlayed items not in recents would otherwise be enriched with stale data.
+      const songIdsSet = new Set([
+        ...recents.filter(r => r.type === 'song').map(r => r.id),
+        ...topPlayedRaw.map(t => t.id),
+      ]);
+      const songIdsList   = [...songIdsSet];
+      const metaRecords   = await Promise.all(songIdsList.map(id => DB.getMeta(id).catch(() => null)));
+      const metaMap       = new Map();
+      songIdsList.forEach((id, i) => { if (metaRecords[i]) metaMap.set(id, metaRecords[i]); });
 
       // Enrich pinned songs with artist, displayName, thumbnailUrl from metadata store
       // (togglePin only saves id/name/displayName/type/thumbnailUrl — no artist)
@@ -2208,11 +2214,13 @@ const App = (() => {
         if (p.type === 'folder' || p.isFolder) return p;
         const dbMeta = pinnedMetaMap.get(p.id);
         const inMem  = (typeof Meta !== 'undefined') ? Meta.getCached(p.id) : null;
+        // DB values (dbMeta) take priority over ID3 in-memory cache (inMem) —
+        // manual edits live in the DB and must override any stale embedded tags.
         return {
           ...p,
-          displayName:  _pick(inMem?.title,   p.displayName,  dbMeta?.displayName, p.name, dbMeta?.name),
-          artist:       _pick(inMem?.artist,  p.artist,       dbMeta?.artist),
-          thumbnailUrl: _pick(inMem?.coverUrl, p.thumbnailUrl, dbMeta?.thumbnailUrl, dbMeta?.coverUrl),
+          displayName:  _pick(dbMeta?.displayName, dbMeta?.name, inMem?.title,   p.displayName,  p.name),
+          artist:       _pick(dbMeta?.artist,       inMem?.artist,  p.artist),
+          thumbnailUrl: _pick(dbMeta?.thumbnailUrl, dbMeta?.coverUrl, inMem?.coverUrl, p.thumbnailUrl),
         };
       });
 
@@ -2223,27 +2231,27 @@ const App = (() => {
         const inMem  = (typeof Meta !== 'undefined') ? Meta.getCached(r.id) : null;
         return {
           ...r,
-          displayName:  _pick(inMem?.title, r.displayName, dbMeta?.displayName, r.name, dbMeta?.name),
-          name:         _pick(r.name, dbMeta?.name),
-          thumbnailUrl: _pick(inMem?.coverUrl, r.thumbnailUrl, dbMeta?.thumbnailUrl, dbMeta?.coverUrl),
-          artist:       _pick(inMem?.artist,   r.artist,      dbMeta?.artist),
+          displayName:  _pick(dbMeta?.displayName, dbMeta?.name, inMem?.title,   r.displayName,  r.name),
+          name:         _pick(dbMeta?.name,          r.name),
+          thumbnailUrl: _pick(dbMeta?.thumbnailUrl,  dbMeta?.coverUrl, inMem?.coverUrl, r.thumbnailUrl),
+          artist:       _pick(dbMeta?.artist,        inMem?.artist,   r.artist),
         };
       });
 
       // Enrich topPlayed with recents + metadata store + in-memory Meta cache
       const recentMap = new Map(enrichedRecents.map(r => [r.id, r]));
       const topPlayed = topPlayedRaw.map(item => {
-        const r     = recentMap.get(item.id);
+        const r      = recentMap.get(item.id);
         const dbMeta = metaMap.get(item.id);
         const inMem  = (typeof Meta !== 'undefined') ? Meta.getCached(item.id) : null;
         return {
           ...item,
-          displayName:  _pick(inMem?.title,   item.displayName, r?.displayName, dbMeta?.displayName, r?.name, item.name, dbMeta?.name),
-          name:         _pick(item.name,       r?.name,          dbMeta?.name),
-          thumbnailUrl: _pick(inMem?.coverUrl, item.thumbnailUrl, item.coverUrl, r?.thumbnailUrl, dbMeta?.thumbnailUrl, dbMeta?.coverUrl),
-          artist:       _pick(inMem?.artist,   item.artist,      r?.artist,      dbMeta?.artist),
-          albumName:    _pick(inMem?.album,    item.albumName,   item.album,     r?.albumName,    dbMeta?.album),
-          year:         _pick(inMem?.year,     item.year,        r?.year,        dbMeta?.year),
+          displayName:  _pick(dbMeta?.displayName,  dbMeta?.name,     inMem?.title,    item.displayName,  r?.displayName, r?.name, item.name),
+          name:         _pick(dbMeta?.name,          item.name,        r?.name),
+          thumbnailUrl: _pick(dbMeta?.thumbnailUrl,  dbMeta?.coverUrl, inMem?.coverUrl, item.thumbnailUrl,  item.coverUrl,  r?.thumbnailUrl),
+          artist:       _pick(dbMeta?.artist,        inMem?.artist,    item.artist,     r?.artist),
+          albumName:    _pick(dbMeta?.album,         inMem?.album,     item.albumName,  item.album,         r?.albumName),
+          year:         _pick(dbMeta?.year,          inMem?.year,      item.year,       r?.year),
         };
       });
 
@@ -5806,15 +5814,35 @@ const App = (() => {
 
   /**
    * Save manual album-level edits from the detail view header.
-   * Writes artist / album / year / thumbnailUrl to every track in the folder.
-   * @param {string} folderId
+   * Writes artist / album / year / thumbnailUrl to every track in the album.
+   *
+   * @param {string}   folderId — canonical folder ID for the album
    * @param {{artist:string, album:string, year:string, coverUrl:string}} patch
+   * @param {string[]} [songIds] — explicit list of song IDs shown in the album view.
+   *   When provided, ALL these IDs are updated regardless of their stored folderId.
+   *   This is essential because some tracks may have a null or different folderId in
+   *   the DB (e.g. added before Deep Scan ran), and a pure folderId filter would miss them.
+   *   Falls back to folderId-only filter when songIds is not passed (legacy callers).
    */
-  async function onAlbumEdit(folderId, patch) {
-    if (!folderId) throw new Error('folderId missing');
-    const all   = await DB.getAllMeta();
-    const songs = all.filter(m => m.folderId === folderId);
-    if (songs.length === 0) throw new Error('No songs found for folder');
+  async function onAlbumEdit(folderId, patch, songIds = null) {
+    if (!folderId && !songIds?.length) throw new Error('folderId or songIds required');
+    const all  = await DB.getAllMeta();
+    let songs;
+    if (songIds?.length) {
+      // Prefer the explicit ID list — covers every track currently visible in the album,
+      // even those whose DB record lacks folderId.
+      const idSet = new Set(songIds);
+      songs = all.filter(m => idSet.has(m.id));
+      // Also pick up any additional tracks in the same folder that somehow weren't in
+      // the view (e.g. added mid-session) so the folder stays consistent.
+      if (folderId) {
+        const extra = all.filter(m => m.folderId === folderId && !idSet.has(m.id));
+        songs = [...songs, ...extra];
+      }
+    } else {
+      songs = all.filter(m => m.folderId === folderId);
+    }
+    if (songs.length === 0) throw new Error('No songs found for album');
 
     const manualAt  = Date.now();
     const newCoverUrl = (patch.coverUrl && !patch.coverUrl.startsWith('blob:')) ? patch.coverUrl : null;

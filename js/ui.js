@@ -2316,7 +2316,7 @@ const UI = (() => {
         const orig = btn.textContent;
         btn.textContent = '…';
         try {
-          await App.onAlbumEdit?.(folderId, { [field]: value });
+          await App.onAlbumEdit?.(folderId, { [field]: value }, songs.map(s => s.id));
           btn.textContent = '✓';
           // also refresh header display for artist sub-line
           if (field === 'artist') {
@@ -2343,7 +2343,7 @@ const UI = (() => {
       const coverUrl = editPanel.querySelector('[data-field="coverUrl"]').value.trim();
       btn.disabled = true; btn.textContent = 'Guardando…';
       try {
-        await App.onAlbumEdit?.(folderId, { artist, album: albumVal, year, coverUrl });
+        await App.onAlbumEdit?.(folderId, { artist, album: albumVal, year, coverUrl }, songs.map(s => s.id));
         btn.textContent = '✓ Guardado';
         // Update the header display immediately
         const nameEl = entity.querySelector('.lib-detail-entity-name');
