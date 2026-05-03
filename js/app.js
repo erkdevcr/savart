@@ -581,6 +581,67 @@ const App = (() => {
   }
 
   /**
+   * Propagate a manual DB write to every in-memory layer so the miniplayer
+   * and expanded player reflect the change immediately — no track reload needed.
+   *
+   * This is the single chokepoint that keeps Drive DB (IndexedDB) as the
+   * source of truth: any time we write metadata to DB, we call this so
+   * live UI state stays consistent.
+   *
+   * Field name mapping:
+   *   DB/patch field  →  Meta cache field  →  Player queue field
+   *   artist          →  artist            →  artist
+   *   album           →  album             →  albumName
+   *   year            →  year              →  year
+   *   thumbnailUrl    →  coverUrl          →  thumbnailUrl
+   *
+   * @param {string[]} editedIds  — file IDs whose DB records were updated
+   * @param {Object}   dbPatch    — same patch object used in DB.setMeta calls
+   */
+  function _liveMetaUpdate(editedIds, dbPatch) {
+    if (!editedIds?.length || !dbPatch) return;
+
+    // Build Meta-cache-compatible patch (ID3 field names)
+    const metaPatch = {};
+    if (dbPatch.artist)       metaPatch.artist   = dbPatch.artist;
+    if (dbPatch.album)        metaPatch.album    = dbPatch.album;
+    if (dbPatch.year)         metaPatch.year     = dbPatch.year;
+    if (dbPatch.thumbnailUrl) metaPatch.coverUrl = dbPatch.thumbnailUrl;
+
+    // Build Player-queue-compatible patch (DriveItem field names)
+    const queuePatch = {};
+    if (dbPatch.artist)       queuePatch.artist       = dbPatch.artist;
+    if (dbPatch.album)        queuePatch.albumName    = dbPatch.album;
+    if (dbPatch.year)         queuePatch.year         = dbPatch.year;
+    if (dbPatch.thumbnailUrl) queuePatch.thumbnailUrl = dbPatch.thumbnailUrl;
+
+    const hasMeta  = Object.keys(metaPatch).length  > 0;
+    const hasQueue = Object.keys(queuePatch).length > 0;
+    if (!hasMeta && !hasQueue) return;
+
+    let currentAffected = false;
+    for (const id of editedIds) {
+      if (hasMeta)  Meta.forcePatch(id, metaPatch);
+      if (hasQueue && Player.patchQueueItem(id, queuePatch)) {
+        currentAffected = true;
+      }
+    }
+
+    // If the currently-playing track was edited, refresh the player UI
+    // directly (no blob reload, no side-effect callbacks).
+    if (currentAffected) {
+      const current = Player.getCurrentTrack();
+      if (current) {
+        const enriched = _enrichTrack(current);
+        UI.updateMiniPlayer(enriched, Player.isPlaying());
+        if (UI.isExpandedPlayerVisible()) {
+          UI.updateExpandedPlayer(enriched, Player.isPlaying());
+        }
+      }
+    }
+  }
+
+  /**
    * Called by Player once the blob is ready (cache hit or fresh download).
    * Parses ID3/FLAC tags and applies cover art + text metadata to UI.
    * @param {DriveItem} item
@@ -4566,17 +4627,18 @@ const App = (() => {
         <svg class="ds-chevron" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
       </div>
       <div class="ds-folder-detail">
-        ${_dsBuildTable(folder)}
         <div class="ds-table-actions">
-          <button class="ds-apply-all-btn">Aplicar fila 1 a todas</button>
           <button class="ds-save-btn">Guardar</button>
+          <button class="ds-apply-all-btn">Aplicar fila 1 a todas</button>
         </div>
+        ${_dsBuildTable(folder)}
       </div>`;
 
     row.querySelector('.ds-folder-header').addEventListener('click', async (e) => {
       if (e.target.closest('.ds-ignore-btn')) return;
       const opening = !row.classList.contains('ds-open');
       row.classList.toggle('ds-open');
+      row.classList.toggle('ds-editing', opening); // highlight while editing, clear on close
       // On first expand, refresh song values from DB so columns reflect current state
       if (opening && folder.songs?.length) {
         const tbody = row.querySelector('.ds-table tbody');
@@ -4766,6 +4828,14 @@ const App = (() => {
               sessionSong.missingCover  = false;
             }
           }
+
+          // Propagate to Meta cache + Player queue → miniplayer updates instantly
+          const livePatch = {};
+          if (artist)                                livePatch.artist       = artist;
+          if (album)                                 livePatch.album        = album;
+          if (year)                                  livePatch.year         = year;
+          if (coverUrl && !coverUrl.startsWith('blob:')) livePatch.thumbnailUrl = coverUrl;
+          if (Object.keys(livePatch).length) _liveMetaUpdate([songId], livePatch);
         }
       }
       folder.attended = true;
@@ -5765,6 +5835,14 @@ const App = (() => {
         _cacheExternalCover(m.id, newCoverUrl, true).catch(() => {});
       }
     }
+
+    // Propagate edits to in-memory caches → miniplayer reflects changes instantly
+    const liveDbPatch = {};
+    if (patch.artist)  liveDbPatch.artist       = patch.artist;
+    if (patch.album)   liveDbPatch.album        = patch.album;
+    if (patch.year)    liveDbPatch.year         = patch.year;
+    if (newCoverUrl)   liveDbPatch.thumbnailUrl = newCoverUrl;
+    _liveMetaUpdate(songs.map(m => m.id), liveDbPatch);
 
     if (typeof Sync !== 'undefined') Sync.push('metadata');
     UI.showToast(`${songs.length} canciones actualizadas`);
@@ -7068,6 +7146,7 @@ const App = (() => {
     onQueueItemClick,
     onQueueItemRemove,
     // Internal (exposed for UI / inline scripts)
+    liveMetaUpdate: _liveMetaUpdate,
     cacheExternalCover: _cacheExternalCover,
     _cacheItem,
     _resolveItemById,

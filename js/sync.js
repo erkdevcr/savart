@@ -426,6 +426,21 @@ const Sync = (() => {
               }
             }
           }
+
+          // Propagate remote metadata to in-memory caches so the miniplayer
+          // updates immediately without a track reload (Drive DB = single source of truth).
+          if (typeof App !== 'undefined' && App.liveMetaUpdate) {
+            for (const rec of toWrite) {
+              const patch = {};
+              if (rec.artist)       patch.artist       = rec.artist;
+              if (rec.album)        patch.album        = rec.album;
+              if (rec.year)         patch.year         = rec.year;
+              if (rec.thumbnailUrl) patch.thumbnailUrl = rec.thumbnailUrl;
+              if (Object.keys(patch).length) {
+                App.liveMetaUpdate([rec.id], patch);
+              }
+            }
+          }
         }
         break;
       }
@@ -865,6 +880,20 @@ const Sync = (() => {
             for (const rec of toWrite) {
               if (rec.thumbnailUrl && !rec.thumbnailUrl.startsWith('blob:')) {
                 App.cacheExternalCover(rec.id, rec.thumbnailUrl, true).catch(() => {});
+              }
+            }
+          }
+
+          // Propagate merged metadata to in-memory caches (Drive DB = single source of truth)
+          if (typeof App !== 'undefined' && App.liveMetaUpdate) {
+            for (const rec of toWrite) {
+              const patch = {};
+              if (rec.artist)       patch.artist       = rec.artist;
+              if (rec.album)        patch.album        = rec.album;
+              if (rec.year)         patch.year         = rec.year;
+              if (rec.thumbnailUrl) patch.thumbnailUrl = rec.thumbnailUrl;
+              if (Object.keys(patch).length) {
+                App.liveMetaUpdate([rec.id], patch);
               }
             }
           }

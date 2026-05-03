@@ -5000,6 +5000,11 @@ img { display: block; }
 }
 .ds-folder-header:hover { background: var(--bg-hover); }
 .ds-folder-row.ds-ignored .ds-folder-header { opacity: 0.5; }
+.ds-folder-row.ds-editing {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
 
 /* Status dot */
 .ds-status-dot {
@@ -5160,7 +5165,7 @@ img { display: block; }
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: 8px;
+  margin-bottom: 8px;
   flex-wrap: wrap;
 }
 .ds-apply-all-btn {

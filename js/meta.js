@@ -449,6 +449,27 @@ const Meta = (() => {
     _cache.set(fileId, { ...existing, ...patch });
   }
 
+  /**
+   * Overwrite cached metadata fields unconditionally (used after manual edits).
+   * Unlike patchCached(), this replaces existing values so the miniplayer
+   * reflects manual changes immediately without a track reload.
+   * Only non-empty values are applied to avoid blanking fields the user
+   * did not touch.
+   * @param {string} fileId
+   * @param {Object} fields — partial meta object
+   */
+  function forcePatch(fileId, fields) {
+    const existing = _cache.get(fileId) || {};
+    const next = { ...existing };
+    for (const [k, v] of Object.entries(fields)) {
+      if (v !== null && v !== undefined && v !== '') next[k] = v;
+    }
+    if (next.coverUrl && next.coverUrl !== existing.coverUrl) {
+      _objectUrls.add(next.coverUrl);
+    }
+    _cache.set(fileId, next);
+  }
+
   /* ── Expose ─────────────────────────────────────────────── */
-  return { parse, getCached, patchCached, revoke, injectCover };
+  return { parse, getCached, patchCached, forcePatch, revoke, injectCover };
 })();

@@ -528,6 +528,26 @@ const Player = (() => {
       : null;
   }
 
+  /**
+   * Silently patch metadata fields on every matching queue item.
+   * Does NOT trigger any playback callbacks — purely a data update so that
+   * subsequent calls to getCurrentTrack() return the fresh values.
+   * Returns true if the currently-playing track was among the patched items.
+   * @param {string} fileId
+   * @param {Object} patch
+   * @returns {boolean}
+   */
+  function patchQueueItem(fileId, patch) {
+    let currentPatched = false;
+    for (let i = 0; i < _queue.length; i++) {
+      if (_queue[i].id === fileId) {
+        _queue[i] = { ..._queue[i], ...patch };
+        if (i === _queueIndex) currentPatched = true;
+      }
+    }
+    return currentPatched;
+  }
+
   /* ── Utils ──────────────────────────────────────────────── */
 
   function _shuffleArray(arr) {
@@ -577,5 +597,6 @@ const Player = (() => {
     getCurrentTime,
     getDuration,
     getCurrentTrack,
+    patchQueueItem,
   };
 })();
