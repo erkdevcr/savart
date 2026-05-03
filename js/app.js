@@ -3705,28 +3705,38 @@ const App = (() => {
     const statusEl   = document.getElementById('ds-status-text');
     if (!startBtn || !_dsSession) return;
 
-    const running = _dsRunning && !_dsPaused;
-    const paused  = _dsRunning &&  _dsPaused;
-    const done    = !_dsRunning && _dsSession.status === 'done';
-    const stopped = !_dsRunning && _dsSession.status === 'stopped';
-    // crashed: app reloaded / tab closed while scan was in progress
-    const crashed = !_dsRunning && _dsSession.status === 'running';
+    const running  = _dsRunning && !_dsPaused;
+    const paused   = _dsRunning &&  _dsPaused;
+    const done     = !_dsRunning && _dsSession.status === 'done';
+    const stopped  = !_dsRunning && _dsSession.status === 'stopped';
+    const crashed  = !_dsRunning && _dsSession.status === 'running';
+    // scan is "alive" in memory — controls show Pausar/Detener
+    const scanning = running || paused;
 
-    const iconPlay    = `<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>`;
-    const iconRestart = `<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-8 3.58-8 8s3.58 8 8 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>`;
+    const iconPlay  = `<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>`;
+    const iconPause = `<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>`;
 
-    // Start button: Reiniciar (done) | Reanudar (paused) | Continuar (stopped|crashed) | Iniciar (idle)
-    if (done)                    { startBtn.innerHTML = iconRestart + ' Reiniciar';   startBtn.disabled = false; }
-    else if (paused)             { startBtn.innerHTML = iconPlay    + ' Reanudar';    startBtn.disabled = false; }
-    else if (running)            { startBtn.innerHTML = iconPlay    + ' Escaneando…'; startBtn.disabled = true;  }
-    else if (stopped || crashed) { startBtn.innerHTML = iconPlay    + ' Continuar';   startBtn.disabled = false; }
-    else                         { startBtn.innerHTML = iconPlay    + ' Iniciar';     startBtn.disabled = false; }
+    // ── Start button: visible only when NOT scanning ──────────
+    startBtn.style.display = scanning ? 'none' : '';
+    startBtn.disabled = false;
+    // Label reflects what pressing it will do
+    if (done)                    startBtn.innerHTML = iconPlay + ' Iniciar';   // restart from scratch
+    else if (stopped || crashed) startBtn.innerHTML = iconPlay + ' Iniciar';   // resumes internally
+    else                         startBtn.innerHTML = iconPlay + ' Iniciar';
 
-    // Restart button: visible when stopped or crashed (offers full reset alongside Continue)
-    if (restartBtn) restartBtn.style.display = (stopped || crashed) ? '' : 'none';
+    // ── Pause button: visible only while scanning ─────────────
+    // When paused it becomes "Continuar"; click handler toggles via _dsPaused state
+    pauseBtn.style.display = scanning ? '' : 'none';
+    pauseBtn.disabled = false;
+    if (paused) { pauseBtn.innerHTML = iconPlay  + ' Continuar'; }
+    else        { pauseBtn.innerHTML = iconPause + ' Pausar';    }
 
-    pauseBtn.disabled = !running;
-    stopBtn.disabled  = !_dsRunning;
+    // ── Stop button: visible only while scanning ──────────────
+    stopBtn.style.display = scanning ? '' : 'none';
+    stopBtn.disabled = false;
+
+    // ── Restart button: always hidden (simplified flow) ───────
+    if (restartBtn) restartBtn.style.display = 'none';
 
     if (statusEl) {
       if (done)          statusEl.textContent = `Completado · ${_dsSession.scannedFolders} carpetas`;
@@ -3997,30 +4007,20 @@ const App = (() => {
     }
     if (_dsRunning && !_dsPaused) return;
 
-    // Restart if done
-    if (_dsSession.status === 'done') {
-      _dsSession.startedAt      = new Date().toISOString();
-      _dsSession.status         = 'running';
-      _dsSession.scannedFolders = 0;
-      _dsSession.totalFolders   = 0;
-      _dsSession.visited        = [];
-      _dsSession.pendingQueue   = [];
-      _dsSession.folders        = {};
-      _dsSession.completedList  = {};
-      _dsSession.skippedList    = {};
-      _dsSession.log            = [];
-      _dsRestoreLog();
-      _dsRenderAttentionList();
-      _dsLogLine('Iniciando nuevo escaneo…', 'info');
-    } else {
-      if (!_dsSession.startedAt) _dsSession.startedAt = new Date().toISOString();
-      _dsSession.status = 'running';
-      if ((_dsSession.visited || []).length > 0) {
-        _dsLogLine(`▶ Continuando (${_dsSession.visited.length} ya visitadas)…`, 'info');
-      } else {
-        _dsLogLine(`Iniciando escaneo en "${_dsSession.selectedFolderName}"…`, 'info');
-      }
-    }
+    // Always start fresh from the configured folder — the only resume path is Pausar/Continuar
+    _dsSession.startedAt      = new Date().toISOString();
+    _dsSession.status         = 'running';
+    _dsSession.scannedFolders = 0;
+    _dsSession.totalFolders   = 0;
+    _dsSession.visited        = [];
+    _dsSession.pendingQueue   = [];
+    _dsSession.folders        = {};
+    _dsSession.completedList  = {};
+    _dsSession.skippedList    = {};
+    _dsSession.log            = [];
+    _dsRestoreLog();
+    _dsRenderAttentionList();
+    _dsLogLine(`Iniciando escaneo en "${_dsSession.selectedFolderName || _dsSession.selectedFolderLabel || 'carpeta raíz'}"…`, 'info');
 
     _dsRunning  = true;
     _dsPaused   = false;
@@ -6651,7 +6651,10 @@ const App = (() => {
     // Deep Scan: playback controls
     document.getElementById('btn-ds-start')?.addEventListener('click', _startDeepScan);
     document.getElementById('btn-ds-restart')?.addEventListener('click', _restartDeepScan);
-    document.getElementById('btn-ds-pause')?.addEventListener('click', _pauseDeepScan);
+    // Pause button toggles: Pausar ↔ Continuar depending on current _dsPaused state
+    document.getElementById('btn-ds-pause')?.addEventListener('click', () => {
+      if (_dsPaused) _startDeepScan(); else _pauseDeepScan();
+    });
     document.getElementById('btn-ds-stop')?.addEventListener('click',  _stopDeepScan);
 
     // Deep Scan: open in new tab
