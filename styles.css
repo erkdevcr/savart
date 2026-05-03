@@ -1631,12 +1631,15 @@ img { display: block; }
 
 /* ── Album inline edit panel ─────────────────────────────── */
 .album-edit-panel {
+  display: none; /* shown via .open class */
   padding: 12px 14px 14px;
   border-bottom: 1px solid var(--bg-hover);
   background: var(--bg-card);
-  display: flex;
   flex-direction: column;
   gap: 8px;
+}
+.album-edit-panel.open {
+  display: flex;
 }
 .album-edit-row {
   display: flex;

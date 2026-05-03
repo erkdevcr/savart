@@ -2273,8 +2273,7 @@ const UI = (() => {
 
     // ── Edit panel (initially hidden) ──
     const editPanel = document.createElement('div');
-    editPanel.className = 'album-edit-panel';
-    editPanel.hidden = true;
+    editPanel.className = 'album-edit-panel'; // starts hidden (no .open class)
     editPanel.innerHTML = `
       <div class="album-edit-row">
         <label class="album-edit-label">Artista</label>
@@ -2299,8 +2298,8 @@ const UI = (() => {
     // Toggle edit panel on ⋮ click
     entity.querySelector('.lib-detail-entity-more').addEventListener('click', e => {
       e.stopPropagation();
-      editPanel.hidden = !editPanel.hidden;
-      if (!editPanel.hidden) editPanel.querySelector('[data-field="artist"]').focus();
+      const isOpen = editPanel.classList.toggle('open');
+      if (isOpen) editPanel.querySelector('[data-field="artist"]').focus();
     });
 
     // Save → write to DB via App
@@ -2321,7 +2320,7 @@ const UI = (() => {
         if (nameEl && albumVal)  nameEl.textContent = albumVal;
         if (subEl)               subEl.textContent  = [artist, songs.length + ' canciones'].filter(Boolean).join(' · ');
         if (yearEl && year)      yearEl.textContent  = `(${year})`;
-        setTimeout(() => { btn.disabled = false; btn.textContent = 'Guardar'; editPanel.hidden = true; }, 1500);
+        setTimeout(() => { btn.disabled = false; btn.textContent = 'Guardar'; editPanel.classList.remove('open'); }, 1500);
       } catch {
         btn.disabled = false; btn.textContent = 'Guardar';
       }
