@@ -5647,3 +5647,23 @@ img { display: block; }
   /* Hide list when detail is visible */
   #lib-pl-two-col.detail-open #lib-pl-list-pane { display: none; }
 }
+
+/* ── Artist avatar: −15 % on desktop  (v1.6.66) ─────────── */
+@media (min-width: 768px) {
+  /* Library Artistas grid */
+  .lib-artist-grid {
+    grid-template-columns: repeat(auto-fill, minmax(136px, 1fr));
+  }
+  .lib-artist-avatar {
+    width: 116px;
+    height: 116px;
+    font-size: 31px;
+  }
+
+  /* Deep Scan artists grid */
+  .ds-artist-avatar {
+    width: 82px;
+    height: 82px;
+    font-size: 26px;
+  }
+}
