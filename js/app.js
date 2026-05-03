@@ -1031,10 +1031,15 @@ const App = (() => {
             if (!meta) continue;
             const textPatch = {};
             if (meta.title)  textPatch.displayName = meta.title;
-            if (meta.artist) textPatch.artist       = meta.artist;  // force: overwrite always
-            if (meta.album)  textPatch.album        = meta.album;
-            if (meta.year)   textPatch.year         = meta.year;
-            if (meta.track)  textPatch.track        = meta.track;
+            // Respect manual edits: if the user has manually set these fields
+            // (manualAt > 0), ID3 tags from the audio file must NOT overwrite them.
+            // The user explicitly chose different values — trust that decision.
+            const existingForForce = await DB.getMeta(file.id).catch(() => null);
+            const isManuallyEdited = (existingForForce?.manualAt || 0) > 0;
+            if (meta.artist && !isManuallyEdited) textPatch.artist = meta.artist;
+            if (meta.album  && !isManuallyEdited) textPatch.album  = meta.album;
+            if (meta.year   && !isManuallyEdited) textPatch.year   = meta.year;
+            if (meta.track)  textPatch.track = meta.track; // track# is safe to always update
             if (Object.keys(textPatch).length > 0) {
               await DB.setMeta(file.id, textPatch).catch(() => {});
               _patchMetaText(file.id, {
@@ -4793,11 +4798,13 @@ const App = (() => {
         const patch = {};
         // _mbEnrichLibrary runs standalone (no ID3 pass after it), so keep guards
         // to avoid overwriting ID3-sourced values already in DB.
-        if (result.track       && !m.track)  patch.track        = result.track;
-        if (result.artist      && !m.artist) patch.artist       = result.artist;
-        if (result.album       && !m.album)  patch.album        = result.album;
-        if (result.year        && !m.year)   patch.year         = result.year;
-        if (result.releaseMbid)              patch.mbReleaseMbid = result.releaseMbid;
+        // Also respect manualAt: never overwrite fields the user manually edited.
+        const mbManual = (m.manualAt || 0) > 0;
+        if (result.track       && !m.track)              patch.track         = result.track;
+        if (result.artist      && !m.artist && !mbManual) patch.artist       = result.artist;
+        if (result.album       && !m.album  && !mbManual) patch.album        = result.album;
+        if (result.year        && !m.year   && !mbManual) patch.year         = result.year;
+        if (result.releaseMbid)                           patch.mbReleaseMbid = result.releaseMbid;
 
         const textFields = Object.keys(patch).filter(k => k !== 'mbReleaseMbid');
         if (textFields.length === 0 && !patch.mbReleaseMbid) continue;
@@ -4972,9 +4979,11 @@ const App = (() => {
       const existing = await DB.getMeta(file.id).catch(() => null);
 
       const patch = {};
-      // Never overwrite values that were already enriched (ID3 / Last.fm / AudD)
-      if (!existing?.album  && albumName)       patch.album       = albumName;
-      if (!existing?.artist && inferredArtist)  patch.artist      = inferredArtist;
+      // Never overwrite values that were already enriched (ID3 / Last.fm / AudD),
+      // and never overwrite fields the user manually edited (manualAt guard).
+      const inferManual = (existing?.manualAt || 0) > 0;
+      if (!existing?.album  && albumName      && !inferManual) patch.album  = albumName;
+      if (!existing?.artist && inferredArtist && !inferManual) patch.artist = inferredArtist;
       // Only persist STABLE external URLs (MB, Last.fm, AudD, CAA…).
       // Drive thumbnailLinks (lh*.googleusercontent.com) expire in hours and are
       // worthless on other devices — storing them would block _lfmThumbLibrary from
