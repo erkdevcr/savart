@@ -3365,6 +3365,72 @@ const App = (() => {
     }
   }
 
+  /**
+   * Scan a specific folder subtree (BFS from the given root).
+   * Like _fullLibraryRefresh but scoped — no global orphan purge.
+   * Triggered from Settings via the folder picker.
+   */
+  async function _scanSpecificFolder(folderId, folderLabel) {
+    const btn  = document.getElementById('btn-settings-folder-scan');
+    const icon = btn?.querySelector('svg');
+    if (btn)  btn.disabled = true;
+    if (icon) icon.style.animation = 'spin 1s linear infinite';
+
+    try {
+      UI.showToast(`Escaneando ${folderLabel}…`);
+
+      const queue   = [{ id: folderId, name: folderLabel, parentName: '' }];
+      const visited = new Set();
+      let   foldersScanned = 0;
+
+      while (queue.length > 0) {
+        const { id, name: folderName, parentName } = queue.shift();
+        if (visited.has(id)) continue;
+        visited.add(id);
+        foldersScanned++;
+
+        let page;
+        try {
+          page = await Drive.listFolderScan(id);
+        } catch (err) {
+          if (err instanceof Drive.AuthError || err?.name === 'AuthError') break;
+          console.warn('[FolderScan] Error:', folderName, err);
+          continue;
+        }
+
+        for (const f of page.folders) {
+          queue.push({ id: f.id, name: f.name, parentName: folderName });
+        }
+
+        if (page.audioFiles.length >= 2) {
+          await _inferAlbumMeta(folderName, parentName, page.audioFiles, page.imageFiles);
+        }
+
+        if (foldersScanned % 10 === 0) {
+          UI.showToast(`Escaneando ${folderLabel}… ${foldersScanned} carpetas`);
+        }
+
+        await new Promise(r => setTimeout(r, 60));
+      }
+
+      _libScanDone = false;
+      if (typeof Sync !== 'undefined') Sync.push('metadata');
+
+      if (!_libInDetail) {
+        if (_currentLibTab === 'albums')  _loadAlbums();
+        if (_currentLibTab === 'artists') _loadArtists();
+      }
+
+      UI.showToast(`✓ ${folderLabel} — ${foldersScanned} carpetas escaneadas`);
+    } catch (err) {
+      console.error('[FolderScan] Error:', err);
+      UI.showToast('Error al escanear la carpeta');
+    } finally {
+      if (btn)  btn.disabled = false;
+      if (icon) icon.style.animation = '';
+    }
+  }
+
   /* ── Deep Scan tool  (v1.6.24) ─────────────────────────────
      BFS scan with:
        • Selectable root folder
@@ -3732,12 +3798,19 @@ const App = (() => {
   /* ── Folder picker ──────────────────────────────────────── */
 
   // State for the folder browser modal
-  let _dsModalPath   = [];  // [{id, name}] breadcrumb
-  let _dsModalSel    = null; // currently highlighted {id, name}
+  let _dsModalPath      = [];   // [{id, name}] breadcrumb
+  let _dsModalSel       = null; // currently highlighted {id, name}
+  let _dsFolderCallback = null; // optional override: called instead of _dsConfirmFolderSelect
 
-  async function _dsOpenFolderBrowser() {
+  /**
+   * Open the folder browser modal.
+   * @param {function({id, name, fullPath}): void} [callback]
+   *   If provided, called on confirm instead of the default EP handler.
+   */
+  async function _dsOpenFolderBrowser(callback) {
     const modal = document.getElementById('ds-folder-modal');
     if (!modal) return;
+    _dsFolderCallback = callback || null;
     modal.style.display = 'flex';
     _dsModalPath = [{ id: CONFIG.ROOT_FOLDER_ID, name: CONFIG.ROOT_FOLDER_NAME }];
     _dsModalSel  = null;
@@ -3843,6 +3916,14 @@ const App = (() => {
     const fullPath = [..._dsModalPath.map(c => c.name), name].join(' › ');
 
     _dsCloseModal('ds-folder-modal');
+
+    // If a custom callback was set (e.g. from Settings folder scan), use it and return
+    if (_dsFolderCallback) {
+      const cb = _dsFolderCallback;
+      _dsFolderCallback = null;
+      cb({ id, name, fullPath });
+      return;
+    }
 
     // Update session
     _dsSession.selectedFolderId   = id;
@@ -6544,6 +6625,13 @@ const App = (() => {
 
     // Settings: full library refresh (scan all Drive, purge orphans)
     document.getElementById('btn-library-refresh')?.addEventListener('click', _fullLibraryRefresh);
+
+    // Settings: scan a specific folder chosen by the user
+    document.getElementById('btn-settings-folder-scan')?.addEventListener('click', () => {
+      _dsOpenFolderBrowser(({ id, name, fullPath }) => {
+        _scanSpecificFolder(id, fullPath || name);
+      });
+    });
 
     // Settings: open deep scan tool
     document.getElementById('btn-open-deep-scan')?.addEventListener('click', _openDeepScan);
