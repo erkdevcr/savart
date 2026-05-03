@@ -4307,10 +4307,16 @@ const App = (() => {
 
     if (_dsStopFlag) {
       _dsStopFlag = false;
-      _dsSession.status = 'stopped';
-      // Persist remaining queue so "Continuar" picks up exactly where we left off
-      _dsSession.pendingQueue = [...queue];
-      _dsLogLine('⏹ Detenido — progreso guardado.', 'info');
+      // Full reset — no queue saved. Next "Iniciar" starts fresh from the configured folder.
+      _dsSession.status         = 'idle';
+      _dsSession.pendingQueue   = [];
+      _dsSession.visited        = [];
+      _dsSession.scannedFolders = 0;
+      _dsSession.totalFolders   = 0;
+      _dsSession.folders        = {};
+      _dsSession.completedList  = {};
+      _dsSession.skippedList    = {};
+      _dsLogLine('⏹ Detenido.', 'info');
     } else {
       _dsSession.pendingQueue = [];  // clean slate on normal finish
       _dsSession.status = 'done';
