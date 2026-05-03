@@ -5512,3 +5512,59 @@ img { display: block; }
   .ds-table-filename { font-size: 10px; }
   /* #screen-deep-scan is position:fixed so bottom-nav padding is irrelevant */
 }
+
+/* ══════════════════════════════════════════════════════════
+   Library: desktop horizontal tab row  (v1.6.65)
+   ── Overrides the vertical sidebar layout on ≥768px.
+   ── Tabs become a single horizontal row between the
+      screen header and the search bar / detail pane.
+   ══════════════════════════════════════════════════════════ */
+@media (min-width: 768px) {
+  /* Stack: tabs on top, detail pane below */
+  .lib-layout {
+    flex-direction: column;
+  }
+
+  /* Sidebar → horizontal scrollable tab bar */
+  .lib-sidebar {
+    width: 100%;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: row;
+    border-right: none;
+    border-bottom: 1px solid var(--bg-hover);
+    padding: 0 8px;
+    overflow-x: auto;
+    overflow-y: visible;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .lib-sidebar::-webkit-scrollbar { display: none; }
+
+  /* Each tab: horizontal, underline-indicator style */
+  .lib-tab {
+    flex-shrink: 0;
+    flex-direction: row;
+    padding: 11px 18px;
+    gap: 8px;
+    font-size: 13px;
+    border-radius: 0;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px; /* overlap the sidebar's border-bottom */
+  }
+
+  /* Active tab: accent underline, no filled background */
+  .lib-tab.active {
+    background: transparent;
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+  .lib-tab.active svg { opacity: 1; }
+
+  /* Detail pane fills remaining height and scrolls independently */
+  .lib-detail {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+  }
+}
