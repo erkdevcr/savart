@@ -2755,6 +2755,16 @@ const App = (() => {
   let _currentLibTab  = 'albums'; // persists tab across sync refreshes
   let _libInDetail    = false;       // true while showing an artist/album drill-down
 
+  // ── Library pagination ────────────────────────────────────
+  const LIB_PAGE_SIZE     = 40;
+  let _libAllArtists      = [];   // full sorted list (source of truth)
+  let _libAllAlbums       = [];
+  let _libArtistOffset    = 0;    // how many cards already rendered
+  let _libAlbumOffset     = 0;
+  let _libArtistObserver  = null; // IntersectionObserver for sentinel
+  let _libAlbumObserver   = null;
+  let _libSearchDebounce  = null; // timer for search input debounce
+
   const LIB_TAB_PLACEHOLDERS = {
     favorites: 'Buscar en Favoritos…',
     artists:   'Buscar artista…',
@@ -2774,6 +2784,11 @@ const App = (() => {
   function _setLibTab(tab) {
     _currentLibTab = tab;
     _libInDetail   = false; // leaving any drill-down view
+
+    // Disconnect any active pagination observers when switching tabs
+    _libArtistObserver?.disconnect(); _libArtistObserver = null;
+    _libAlbumObserver?.disconnect();  _libAlbumObserver  = null;
+    clearTimeout(_libSearchDebounce);
 
     // Show search bar (hidden while inside a drill-down)
     _setLibSearchBarVisible(true);
@@ -2826,20 +2841,10 @@ const App = (() => {
 
   /** Filter visible items in #lib-detail-content by search text. */
   function _onLibSearch(query) {
-    const q = query.trim().toLowerCase();
-    const container = document.getElementById('lib-detail-content');
-    if (!container) return;
-
-    container.querySelectorAll('[data-search-key]').forEach(el => {
-      const match = !q || el.dataset.searchKey.includes(q);
-      el.style.display = match ? '' : 'none';
-    });
-
-    // Show/hide the batch-rescan button: only on albums tab with an active query
-    const rescanBtn = document.getElementById('btn-lib-rescan');
-    if (rescanBtn) {
-      rescanBtn.style.display = (_currentLibTab === 'albums' && q) ? '' : 'none';
-    }
+    if (_libInDetail) return;
+    // Re-render the active tab from offset 0 with the new query applied
+    if (_currentLibTab === 'artists') _renderArtistPage(true);
+    if (_currentLibTab === 'albums')  _renderAlbumPage(true);
   }
 
   async function _loadPlaylists() {
@@ -5068,6 +5073,109 @@ const App = (() => {
    * Aggregate all metadata into artists map.
    * Groups by artist name, counts albums and songs.
    */
+
+  /* ── Paginated render helpers ─────────────────────────────── */
+
+  /**
+   * Render or extend the artist grid.
+   * @param {boolean} reset – true = start from scratch (new data or new query)
+   */
+  function _renderArtistPage(reset = false) {
+    if (_libInDetail) return;
+    if (reset) {
+      _libArtistObserver?.disconnect();
+      _libArtistObserver = null;
+      _libArtistOffset   = 0;
+    }
+    const q = (document.getElementById('lib-search-input')?.value || '').trim().toLowerCase();
+    const filtered = q
+      ? _libAllArtists.filter(a => (a.name || '').toLowerCase().includes(q))
+      : _libAllArtists;
+
+    const batch = filtered.slice(_libArtistOffset, _libArtistOffset + LIB_PAGE_SIZE);
+    _libArtistOffset += batch.length;
+
+    if (reset) {
+      UI.renderArtists(batch);
+      _setLibTabCount('artists', filtered.length);
+    } else {
+      UI.appendArtists(batch);
+    }
+
+    // If more items remain, attach an IntersectionObserver sentinel
+    if (_libArtistOffset < filtered.length) {
+      _libArtistObserver?.disconnect();
+      const grid = document.querySelector('#lib-detail-content .lib-artist-grid');
+      if (grid) {
+        const sentinel = document.createElement('div');
+        sentinel.className = 'lib-scroll-sentinel';
+        grid.appendChild(sentinel);
+        _libArtistObserver = new IntersectionObserver(entries => {
+          if (entries[0].isIntersecting) {
+            _libArtistObserver.disconnect();
+            _libArtistObserver = null;
+            sentinel.remove();
+            _renderArtistPage(false);
+          }
+        }, { rootMargin: '200px' });
+        _libArtistObserver.observe(sentinel);
+      }
+    }
+  }
+
+  /**
+   * Render or extend the album grid.
+   * @param {boolean} reset – true = start from scratch (new data or new query)
+   */
+  function _renderAlbumPage(reset = false) {
+    if (_libInDetail) return;
+    if (reset) {
+      _libAlbumObserver?.disconnect();
+      _libAlbumObserver = null;
+      _libAlbumOffset   = 0;
+    }
+    const q = (document.getElementById('lib-search-input')?.value || '').trim().toLowerCase();
+    const filtered = q
+      ? _libAllAlbums.filter(a =>
+          (a.name + ' ' + (a.artist || '')).toLowerCase().includes(q))
+      : _libAllAlbums;
+
+    const batch = filtered.slice(_libAlbumOffset, _libAlbumOffset + LIB_PAGE_SIZE);
+    _libAlbumOffset += batch.length;
+
+    if (reset) {
+      UI.renderLibraryAlbums(batch);
+      _setLibTabCount('albums', filtered.length);
+    } else {
+      UI.appendAlbums(batch);
+    }
+
+    // If more items remain, attach an IntersectionObserver sentinel
+    if (_libAlbumOffset < filtered.length) {
+      _libAlbumObserver?.disconnect();
+      const grid = document.querySelector('#lib-detail-content .lib-album-grid');
+      if (grid) {
+        const sentinel = document.createElement('div');
+        sentinel.className = 'lib-scroll-sentinel';
+        grid.style.position = 'relative'; // ensure sentinel is visible
+        grid.appendChild(sentinel);
+        _libAlbumObserver = new IntersectionObserver(entries => {
+          if (entries[0].isIntersecting) {
+            _libAlbumObserver.disconnect();
+            _libAlbumObserver = null;
+            sentinel.remove();
+            _renderAlbumPage(false);
+          }
+        }, { rootMargin: '200px' });
+        _libAlbumObserver.observe(sentinel);
+      }
+    }
+
+    // Show/hide batch-rescan button
+    const rescanBtn = document.getElementById('btn-lib-rescan');
+    if (rescanBtn) rescanBtn.style.display = (_currentLibTab === 'albums' && q) ? '' : 'none';
+  }
+
   async function _loadArtists() {
     if (_libInDetail) return; // don't replace a drill-down view
     try {
@@ -5099,12 +5207,9 @@ const App = (() => {
         }))
         .sort((a, b) => a.name.localeCompare(b.name));
 
-      UI.renderArtists(artists);
-      _setLibTabCount('artists', artists.length);
-
-      // Re-apply any active search filter (persisted from before a drill-down)
-      const q = document.getElementById('lib-search-input')?.value || '';
-      if (q) _onLibSearch(q);
+      // Store full list and render first page
+      _libAllArtists = artists;
+      _renderArtistPage(true);
 
       // Fetch missing artist photos in background (non-blocking)
       _enrichArtistImages(artists, storedImages).catch(() => {});
@@ -5288,11 +5393,9 @@ const App = (() => {
         })
         .sort((a, b) => a.name.localeCompare(b.name));
 
-      UI.renderLibraryAlbums(albums);
-      _setLibTabCount('albums', albums.length);
-      // Re-apply any active search filter (persisted from before a drill-down)
-      const q = document.getElementById('lib-search-input')?.value || '';
-      if (q) _onLibSearch(q);
+      // Store full list and render first page
+      _libAllAlbums = albums;
+      _renderAlbumPage(true);
     } catch (err) {
       console.error('[App] Load albums error:', err);
     }
@@ -6680,9 +6783,10 @@ const App = (() => {
       el.addEventListener('click', () => _setLibTab(el.dataset.tab));
     });
 
-    // Library: search input
-    document.getElementById('lib-search-input')?.addEventListener('input', e => {
-      _onLibSearch(e.target.value);
+    // Library: search input (debounced — re-renders paginated list after 400ms idle)
+    document.getElementById('lib-search-input')?.addEventListener('input', () => {
+      clearTimeout(_libSearchDebounce);
+      _libSearchDebounce = setTimeout(() => _onLibSearch(), 400);
     });
 
     // Library: batch rescan visible album search results

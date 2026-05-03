@@ -1707,6 +1707,14 @@ img { display: block; }
   padding: 14px;
 }
 
+/* Invisible sentinel used by IntersectionObserver for infinite scroll */
+.lib-scroll-sentinel {
+  grid-column: 1 / -1; /* span all columns so it sits below the last row */
+  height: 1px;
+  visibility: hidden;
+  pointer-events: none;
+}
+
 /* ── Library: new playlist button row ───────────────────── */
 .lib-new-pl-btn {
   display: flex;

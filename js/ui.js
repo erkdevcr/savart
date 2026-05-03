@@ -2097,6 +2097,50 @@ const UI = (() => {
   }
 
   /**
+   * Append a batch of artist cards to the existing .lib-artist-grid.
+   * Called by the pagination system when the user scrolls near the bottom.
+   * @param {Object[]} artists
+   */
+  function appendArtists(artists) {
+    const grid = document.querySelector('#lib-detail-content .lib-artist-grid');
+    if (!grid || !artists.length) return;
+
+    const AVATAR_COLORS = [
+      { bg: '#1A1635', fg: '#7A6FE0' }, { bg: '#0D2A1E', fg: '#3ECF7A' },
+      { bg: '#2A150D', fg: '#E07755' }, { bg: '#1A1220', fg: '#C47ABF' },
+      { bg: '#0D1F35', fg: '#4A88F5' }, { bg: '#1A2A10', fg: '#7FC45B' },
+      { bg: '#2A1A10', fg: '#E0A055' },
+    ];
+
+    artists.forEach(artist => {
+      const card = document.createElement('div');
+      card.className = 'lib-artist-card';
+      card.dataset.searchKey = (artist.name || '').toLowerCase();
+
+      const hash   = [...(artist.name || '')].reduce((a, c) => a + c.charCodeAt(0), 0);
+      const colors = AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+      const parts    = (artist.name || '').trim().split(/\s+/);
+      const initials = parts.length >= 2
+        ? (parts[0][0] + parts[1][0]).toUpperCase()
+        : (artist.name || '?').substring(0, 2).toUpperCase();
+      const albumLabel = artist.albumCount === 1 ? '1 álbum' : `${artist.albumCount} álbumes`;
+      const artistKey  = (artist.name || '').toLowerCase();
+      const avatarStyle = artist.imageUrl ? '' : `background:${colors.bg};color:${colors.fg}`;
+      const avatarInner = artist.imageUrl ? `<img src="${artist.imageUrl}" alt="" loading="lazy">` : initials;
+
+      card.innerHTML = `
+        <div class="lib-artist-avatar" style="${avatarStyle}" data-artist-key="${escHtml(artistKey)}">${avatarInner}</div>
+        <div class="lib-artist-name">${escHtml(artist.name)}</div>
+        <div class="lib-artist-sub">${albumLabel}</div>
+      `;
+      card.addEventListener('click', () => {
+        if (typeof App !== 'undefined') App.onArtistClick?.(artist);
+      });
+      grid.appendChild(card);
+    });
+  }
+
+  /**
    * Render artist detail: back button + artist info + their albums grid.
    * @param {Object}   artist       - { name, albumCount }
    * @param {Object[]} albums       - [{ name, songCount, coverUrls[] }]
@@ -2304,6 +2348,22 @@ const UI = (() => {
     });
 
     container.appendChild(grid);
+  }
+
+  /**
+   * Append a batch of album cards to the existing .lib-album-grid.
+   * Called by the pagination system when the user scrolls near the bottom.
+   * @param {Object[]} albums
+   */
+  function appendAlbums(albums) {
+    const grid = document.querySelector('#lib-detail-content .lib-album-grid');
+    if (!grid || !albums.length) return;
+    albums.forEach(album => {
+      const card = _buildAlbumCard(album);
+      card.dataset.searchKey = (album.name + ' ' + (album.artist || '')).toLowerCase();
+      if (album.folderId) card.dataset.folderId = album.folderId;
+      grid.appendChild(card);
+    });
   }
 
   /** Build a single home-card-style album card. */
@@ -2713,7 +2773,9 @@ const UI = (() => {
     renderStarredSongs,
     renderPlaylistDetail,
     renderArtists,
+    appendArtists,
     renderLibraryAlbums,
+    appendAlbums,
     renderLibraryArtistDetail,
     renderLibraryAlbumDetail,
     renderPlaylists,
