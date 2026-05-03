@@ -61,8 +61,8 @@ const UI = (() => {
       format_unsupported: 'Formato no compatible',
       // ── Context menu ───────────────────────────────────────
       ctx_play:           'Reproducir',
-      ctx_go_to_album:    'Ir al álbum',
-      ctx_go_to_folder:   'Ir a carpeta',
+      ctx_go_to_album:    'Ir a carpeta de Drive',
+      ctx_go_to_folder:   'Ir a carpeta de Drive',
       ctx_add_fav_folder: 'Añadir a favoritos',
       ctx_pin_to_home:    'Agregar a inicio',
       ctx_unpin_from_home:'Eliminar de inicio',
@@ -211,8 +211,8 @@ const UI = (() => {
       format_unsupported: 'Unsupported format',
       // ── Context menu ───────────────────────────────────────
       ctx_play:           'Play',
-      ctx_go_to_album:    'Go to album',
-      ctx_go_to_folder:   'Go to folder',
+      ctx_go_to_album:    'Go to Drive folder',
+      ctx_go_to_folder:   'Go to Drive folder',
       ctx_add_fav_folder: 'Add to favorites',
       ctx_pin_to_home:    'Add to home',
       ctx_unpin_from_home:'Remove from home',
