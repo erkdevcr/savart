@@ -2989,9 +2989,8 @@ const App = (() => {
       el.classList.toggle('active', el.dataset.tab === tab);
     });
 
-    // Clear search input and hide rescan button
-    const searchInput = document.getElementById('lib-search-input');
-    if (searchInput) searchInput.value = '';
+    // Persist search text across tab switches — loaders re-apply it automatically.
+    // Only hide the rescan button (albums-only feature); don't clear the input.
     const rescanBtn = document.getElementById('btn-lib-rescan');
     if (rescanBtn) rescanBtn.style.display = 'none';
 
@@ -3034,8 +3033,26 @@ const App = (() => {
   function _onLibSearch(query) {
     if (_libInDetail) return;
     // Re-render the active tab from offset 0 with the new query applied
-    if (_currentLibTab === 'artists') _renderArtistPage(true);
-    if (_currentLibTab === 'albums')  _renderAlbumPage(true);
+    if (_currentLibTab === 'artists')  _renderArtistPage(true);
+    if (_currentLibTab === 'albums')   _renderAlbumPage(true);
+    // DOM-based filter for tabs that render all items at once
+    if (_currentLibTab === 'favorites' || _currentLibTab === 'playlists') _domFilterLibItems();
+  }
+
+  /**
+   * Show/hide rendered items in the active library pane based on the current
+   * search input. Reads dataset.searchKey (pre-normalized with norm()) on each item.
+   * Used for Favorites and Playlists tabs where all items are rendered upfront.
+   */
+  function _domFilterLibItems() {
+    const q = norm((document.getElementById('lib-search-input')?.value || '').trim());
+    // Playlists use #lib-pl-list-pane; Favorites use #lib-detail-content
+    const pane = document.getElementById('lib-pl-list-pane')
+              || document.getElementById('lib-detail-content');
+    if (!pane) return;
+    pane.querySelectorAll('[data-search-key]').forEach(el => {
+      el.style.display = (!q || el.dataset.searchKey.includes(q)) ? '' : 'none';
+    });
   }
 
   async function _loadPlaylists() {
@@ -3061,6 +3078,7 @@ const App = (() => {
       }
       UI.renderPlaylists(enriched);
       _setLibTabCount('playlists', enriched.length);
+      _domFilterLibItems();
       // Background: resolve covers for playlists that still have none
       // (happens when songs were never played — no coverBlob in DB yet)
       _prefetchPlaylistCovers(enriched).catch(() => {});
@@ -3407,6 +3425,7 @@ const App = (() => {
       }));
       UI.renderStarredSongs(enriched);
       _setLibTabCount('fav', enriched.length);
+      _domFilterLibItems();
       _driveThumbFallback(
         enriched.filter(s => !s.thumbnailUrl),
         _songRowHasCover,
