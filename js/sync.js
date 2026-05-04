@@ -212,7 +212,15 @@ const Sync = (() => {
   }
 
   function _mergePinned(localMeta, remoteMeta) {
-    return { ...remoteMeta, ...localMeta };
+    // Remote is the authoritative base — remote deletions are respected.
+    // Only add local-only items (pinned offline while remote was stale).
+    // OLD: { ...remoteMeta, ...localMeta } let local override remote,
+    // meaning pins deleted on device A would re-appear after device B synced.
+    const merged = { ...remoteMeta };
+    for (const [id, item] of Object.entries(localMeta)) {
+      if (!merged[id]) merged[id] = item; // offline addition — not yet in remote
+    }
+    return merged;
   }
 
   function _mergeRecents(local, remote) {
@@ -848,12 +856,15 @@ const Sync = (() => {
       await _mergeStep('pinned', async () => {
         if (!remotePinned || typeof remotePinned !== 'object') return;
         const localMeta = (await DB.getState('pinnedMeta')) || {};
-        const localIds  = (await DB.getState('pinned'))     || [];
-        const merged    = _mergePinned(localMeta, remotePinned);
-        const newIds    = Object.keys(remotePinned).filter(id => !localIds.includes(id));
+        // _mergePinned: remote is base (deletions respected), local-only items appended
+        const merged  = _mergePinned(localMeta, remotePinned);
+        const mergedIds = Object.keys(merged);
         await DB.setState('pinnedMeta', merged);
-        await DB.setState('pinned', [...localIds, ...newIds]);
-        if (newIds.length) console.log(`[Sync] Merged ${newIds.length} remote pinned`);
+        // Order: remote order first, then any local-only additions at the end
+        const remoteOrder  = Object.keys(remotePinned);
+        const localOnlyIds = mergedIds.filter(id => !remotePinned[id]);
+        await DB.setState('pinned', [...remoteOrder, ...localOnlyIds]);
+        console.log(`[Sync] Merged pinned: ${mergedIds.length} items (remote: ${remoteOrder.length}, local-only: ${localOnlyIds.length})`);
       });
 
       // ── Merge recents ─────────────────────────────────────
