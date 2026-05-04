@@ -5685,3 +5685,10 @@ img { display: block; }
     height: 17px;             /* 13 × 1.3 */
   }
 }
+
+/* ── Sidebar logo: Baskervville (v1.6.68) ─────────────────── */
+#sidebar .sidebar-logo {
+  font-family: 'Baskervville', Georgia, serif;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+}
