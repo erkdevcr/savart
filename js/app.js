@@ -5482,9 +5482,9 @@ const App = (() => {
       _libArtistObserver = null;
       _libArtistOffset   = 0;
     }
-    const q = (document.getElementById('lib-search-input')?.value || '').trim().toLowerCase();
+    const q = norm((document.getElementById('lib-search-input')?.value || '').trim());
     const filtered = q
-      ? _libAllArtists.filter(a => (a.name || '').toLowerCase().includes(q))
+      ? _libAllArtists.filter(a => norm(a.name).includes(q))
       : _libAllArtists;
 
     const batch = filtered.slice(_libArtistOffset, _libArtistOffset + LIB_PAGE_SIZE);
@@ -5529,10 +5529,10 @@ const App = (() => {
       _libAlbumObserver = null;
       _libAlbumOffset   = 0;
     }
-    const q = (document.getElementById('lib-search-input')?.value || '').trim().toLowerCase();
+    const q = norm((document.getElementById('lib-search-input')?.value || '').trim());
     const filtered = q
       ? _libAllAlbums.filter(a =>
-          (a.name + ' ' + (a.artist || '')).toLowerCase().includes(q))
+          norm(a.name + ' ' + (a.artist || '')).includes(q))
       : _libAllAlbums;
 
     const batch = filtered.slice(_libAlbumOffset, _libAlbumOffset + LIB_PAGE_SIZE);

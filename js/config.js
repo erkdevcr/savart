@@ -103,7 +103,7 @@ const CONFIG = {
 
   // ── App metadata ──────────────────────────────────────────
   APP_NAME: 'Savart',
-  VERSION:  '1.6.73',
+  VERSION:  '1.6.74',
 };
 
 /* ── Audio format detection helpers ───────────────────────── */
@@ -176,4 +176,14 @@ function formatTime(seconds) {
  */
 function cleanTitle(filename) {
   return filename.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
+}
+
+/**
+ * Normalize a string for accent-insensitive search.
+ * Strips diacritics (tildes, diéresis, cedilla, etc.) and lowercases.
+ * "Música" → "musica" · "niño" → "nino" · "Häagen" → "haagen"
+ * @param {string} s
+ */
+function norm(s) {
+  return (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 }

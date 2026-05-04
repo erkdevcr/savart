@@ -1649,9 +1649,9 @@ const UI = (() => {
 
     // Search input → filter list in real-time
     document.getElementById('pl-picker-input')?.addEventListener('input', (e) => {
-      const term = e.target.value.trim().toLowerCase();
+      const term = norm(e.target.value.trim());
       const filtered = term
-        ? _plPickerAllPlaylists.filter(pl => pl.name.toLowerCase().includes(term))
+        ? _plPickerAllPlaylists.filter(pl => norm(pl.name).includes(term))
         : _plPickerAllPlaylists;
       _renderPickerList(filtered);
     });
@@ -2117,8 +2117,7 @@ const UI = (() => {
       const row = document.createElement('div');
       row.className = 'top-list-item';
       row.dataset.id = song.id;
-      row.dataset.searchKey = (song.displayName || song.name || '').toLowerCase()
-        + ' ' + (song.artist || '').toLowerCase();
+      row.dataset.searchKey = norm((song.displayName || song.name || '') + ' ' + (song.artist || ''));
 
       const _artist = song.artist || '';
       const _album  = song.albumName || song.album || '';
@@ -2314,7 +2313,7 @@ const UI = (() => {
     artists.forEach(artist => {
       const card = document.createElement('div');
       card.className = 'lib-artist-card';
-      card.dataset.searchKey = (artist.name || '').toLowerCase();
+      card.dataset.searchKey = norm(artist.name || '');
 
       const hash   = [...(artist.name || '')].reduce((a, c) => a + c.charCodeAt(0), 0);
       const colors = AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
@@ -2328,7 +2327,7 @@ const UI = (() => {
         ? '1 álbum'
         : `${artist.albumCount} álbumes`;
 
-      const artistKey = (artist.name || '').toLowerCase();
+      const artistKey = norm(artist.name || '');
 
       // Avatar: photo if available, else coloured initials
       const avatarStyle = artist.imageUrl
@@ -2373,7 +2372,7 @@ const UI = (() => {
     artists.forEach(artist => {
       const card = document.createElement('div');
       card.className = 'lib-artist-card';
-      card.dataset.searchKey = (artist.name || '').toLowerCase();
+      card.dataset.searchKey = norm(artist.name || '');
 
       const hash   = [...(artist.name || '')].reduce((a, c) => a + c.charCodeAt(0), 0);
       const colors = AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
@@ -2382,7 +2381,7 @@ const UI = (() => {
         ? (parts[0][0] + parts[1][0]).toUpperCase()
         : (artist.name || '?').substring(0, 2).toUpperCase();
       const albumLabel = artist.albumCount === 1 ? '1 álbum' : `${artist.albumCount} álbumes`;
-      const artistKey  = (artist.name || '').toLowerCase();
+      const artistKey  = norm(artist.name || '');
       const avatarStyle = artist.imageUrl ? '' : `background:${colors.bg};color:${colors.fg}`;
       const avatarInner = artist.imageUrl ? `<img src="${artist.imageUrl}" alt="" loading="lazy">` : initials;
 
@@ -2689,7 +2688,7 @@ const UI = (() => {
       const row = document.createElement('div');
       row.className = 'top-list-item';
       row.dataset.id = song.id;
-      row.dataset.searchKey = (song.displayName || song.name || '').toLowerCase();
+      row.dataset.searchKey = norm((song.displayName || song.name || ''));
 
       row.innerHTML = `
         <div class="top-list-rank">${i + 1}</div>
@@ -2749,7 +2748,7 @@ const UI = (() => {
 
     albums.forEach(album => {
       const card = _buildAlbumCard(album);
-      card.dataset.searchKey = (album.name + ' ' + (album.artist || '')).toLowerCase();
+      card.dataset.searchKey = norm(album.name + ' ' + (album.artist || ''));
       if (album.folderId) card.dataset.folderId = album.folderId;
       grid.appendChild(card);
     });
@@ -2767,7 +2766,7 @@ const UI = (() => {
     if (!grid || !albums.length) return;
     albums.forEach(album => {
       const card = _buildAlbumCard(album);
-      card.dataset.searchKey = (album.name + ' ' + (album.artist || '')).toLowerCase();
+      card.dataset.searchKey = norm(album.name + ' ' + (album.artist || ''));
       if (album.folderId) card.dataset.folderId = album.folderId;
       grid.appendChild(card);
     });
@@ -2782,7 +2781,7 @@ const UI = (() => {
     const card = document.createElement('div');
     card.className = 'home-card';
     card.style.cursor = 'pointer';
-    card.dataset.searchKey = (album.name + ' ' + (album.artist || '')).toLowerCase();
+    card.dataset.searchKey = norm(album.name + ' ' + (album.artist || ''));
 
     const songLabel = album.songCount === 1 ? '1 canción' : `${album.songCount} canciones`;
 
@@ -2866,7 +2865,7 @@ const UI = (() => {
       item.dataset.plId      = pl.id;
       item.dataset.coverUrls = JSON.stringify(pl.coverUrls || []);
       item.dataset.plName    = pl.name;
-      item.dataset.searchKey = pl.name.toLowerCase();
+      item.dataset.searchKey = norm(pl.name);
 
       const thumbHtml = _buildMosaicThumb(pl.coverUrls || [], pl.name);
       const songCount = pl.songIds?.length || 0;
