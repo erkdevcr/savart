@@ -2809,11 +2809,11 @@ const UI = (() => {
           : `<svg width="38" height="38" viewBox="0 0 24 24" fill="currentColor" style="color:var(--text-muted)"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 14.5c-2.49 0-4.5-2.01-4.5-4.5S9.51 7.5 12 7.5s4.5 2.01 4.5 4.5-2.01 4.5-4.5 4.5zm0-5.5c-.55 0-1 .45-1 1s.45 1 1 1 1-.45 1-1-.45-1-1-1z"/></svg>`
         }
       </div>
+      <button class="home-card-more album-card-more" aria-label="Más opciones">${iconDots(14)}</button>
       ${(album.year || album.format) ? `<div class="home-card-year">${[album.year ? `(${escHtml(album.year)})` : '', album.format ? `<span class="album-format-badge">${escHtml(album.format)}</span>` : ''].filter(Boolean).join(' ')}</div>` : ''}
       <div class="home-card-name">${escHtml(album.name)}</div>
       ${album.artist ? `<div class="home-card-sub">${escHtml(album.artist)}</div>` : ''}
       <div class="home-card-count">${escHtml(songLabel)}</div>
-      <button class="btn-more home-card-more album-card-more" aria-label="Más opciones">${iconDots(14)}</button>
     `;
 
     // Art area → drill into album detail

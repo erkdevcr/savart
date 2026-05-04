@@ -1555,6 +1555,11 @@ img { display: block; }
 @keyframes lib-rescan-spin { to { transform: rotate(360deg); } }
 .lib-rescan-btn.spinning #lib-rescan-icon { animation: lib-rescan-spin 1s linear infinite; }
 
+/* ── Library album card 3-dot: always fully visible ─────────── */
+.album-card-more {
+  opacity: 1 !important;
+}
+
 /* ── Rescan "already scanned" green dot ──────────────────────── */
 .rescan-done-dot {
   display: inline-block;
