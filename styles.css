@@ -5681,8 +5681,8 @@ img { display: block; }
     padding: 22px 16px 18px;
   }
   #sidebar .sidebar-logo svg {
-    width: 26px;              /* 20 × 1.3 */
-    height: 17px;             /* 13 × 1.3 */
+    width: 34px;              /* un poco más grande */
+    height: 22px;
   }
 }
 
