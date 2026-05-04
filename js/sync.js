@@ -24,6 +24,8 @@
      savart_recents.json     → recently played
      savart_playcounts.json  → play counts per song
      savart_settings.json    → EQ state + tempo
+     savart_home.json        → home snapshot (pinned+recents+playcounts+playlists+history)
+                               read first on boot for instant cross-device home state
    ============================================================ */
 
 const Sync = (() => {
@@ -43,11 +45,16 @@ const Sync = (() => {
     history:    'savart_history.json',
     metadata:   'savart_metadata.json',
     hot:        'savart_hot.json',   // delta: only the most recent rescan batch (~5–50 songs)
+    home:       'savart_home.json',  // home snapshot — read at boot via readHome(), not merged in init()
   };
 
   // Types that should not be pushed or merged during init().
   // 'hot' is a transient delta — the full metadata.json covers initial sync.
-  const SKIP_ON_INIT = new Set(['hot']);
+  // 'home' is handled separately via readHome() + a post-init push.
+  const SKIP_ON_INIT = new Set(['hot', 'home']);
+
+  // Types whose changes should also trigger a home snapshot push
+  const HOME_TYPES = new Set(['pinned', 'recents', 'playcounts', 'playlists', 'history', 'favorites']);
 
   /* ── Private state ─────────────────────────────────────── */
   let _fileIds          = {};   // filename → Drive fileId
@@ -347,6 +354,49 @@ const Sync = (() => {
         break;
       }
 
+      case 'home': {
+        // Atomic home snapshot: restore all home-relevant state from a single file.
+        // LWW: the manifest guarantees this file is newer, so we overwrite local state.
+        const { pinned, pinnedOrder, recents, playcounts, playlists, history } = data || {};
+
+        if (pinned && typeof pinned === 'object') {
+          await DB.setState('pinnedMeta', pinned);
+          await DB.setState('pinned', Array.isArray(pinnedOrder) ? pinnedOrder : Object.keys(pinned));
+        }
+
+        if (Array.isArray(recents) && recents.length) {
+          const valid = recents.filter(r => r && r.id);
+          await DB.clearRecents();
+          if (valid.length) await DB.bulkPutRecents(valid);
+        }
+
+        if (Array.isArray(playcounts) && playcounts.length) {
+          const valid = playcounts.filter(m => m && m.id);
+          if (valid.length) await DB.bulkPutMeta(valid);
+        }
+
+        if (Array.isArray(playlists) && playlists.length) {
+          // Per-playlist LWW using updatedAt; deletions follow remote as authoritative
+          const local    = await DB.getPlaylists();
+          const localMap = new Map(local.map(p => [p.id, p]));
+          const remoteIds = new Set(playlists.map(p => p.id));
+          for (const pl of local) {
+            if (!remoteIds.has(pl.id)) await DB.deletePlaylist(pl.id);
+          }
+          for (const pl of playlists) {
+            const loc = localMap.get(pl.id);
+            if (!loc || (pl.updatedAt || 0) >= (loc.updatedAt || 0)) await DB.putPlaylist(pl);
+          }
+        }
+
+        if (Array.isArray(history) && history.length) {
+          const valid = history.filter(r => r && r.id);
+          await DB.clearHistory();
+          if (valid.length) await DB.bulkPutHistory(valid);
+        }
+        break;
+      }
+
       case 'metadata':
       case 'hot': {
         // Shared merge logic for both metadata (full library) and hot (rescan delta).
@@ -582,6 +632,51 @@ const Sync = (() => {
     console.log(`[Sync] Pushed hot delta (${toSync.length} songs)`);
   }
 
+  /**
+   * Push a single atomic home snapshot to Drive.
+   * Bundles pinned + recents + playcounts + playlists + history into one file
+   * so boot reads can restore the entire home screen in a single API call.
+   */
+  async function _pushHome() {
+    const isExternal = u => u && !u.startsWith('blob:')
+      && !u.includes('googleusercontent.com') && !u.includes('googleapis.com');
+    const cleanUrl = u => isExternal(u) ? u : null;
+
+    const [pinnedMeta, pinnedOrder, recents, playcounts, playlists, history] = await Promise.all([
+      DB.getState('pinnedMeta'),
+      DB.getState('pinned'),
+      DB.getRecents(CONFIG.RECENTS_MAX),
+      DB.getTopPlayed(CONFIG.TOP_PLAYED_MAX),
+      DB.getPlaylists(),
+      DB.getHistory(CONFIG.HISTORY_MAX),
+    ]);
+
+    const payload = {
+      ts:          Date.now(),
+      pinned:      pinnedMeta  || {},
+      pinnedOrder: pinnedOrder || [],
+      recents: (recents || []).map(r => ({
+        id: r.id, name: r.name || null, displayName: r.displayName || r.name || null,
+        type: r.type || 'song', folderId: r.folderId || null, mimeType: r.mimeType || null,
+        thumbnailUrl: cleanUrl(r.thumbnailUrl), accessedAt: r.accessedAt ?? Date.now(),
+      })),
+      playcounts: (playcounts || []).map(m => ({
+        id: m.id, name: m.name || null, displayName: m.displayName || m.name || null,
+        artist: m.artist || null, folderId: m.folderId || null, playCount: m.playCount || 0,
+        thumbnailUrl: cleanUrl(m.thumbnailUrl),
+      })),
+      playlists: (playlists || []),
+      history: (history || []).map(h => ({
+        id: h.id, name: h.name || null, displayName: h.displayName || h.name || null,
+        artist: h.artist || null, folderId: h.folderId || null,
+        thumbnailUrl: cleanUrl(h.thumbnailUrl), playedAt: h.playedAt ?? Date.now(),
+      })),
+    };
+
+    await _writeFile(FILENAMES.home, payload);
+    console.log('[Sync] Pushed home snapshot');
+  }
+
   const _pushFns = {
     favorites:  _pushFavorites,
     playlists:  _pushPlaylists,
@@ -592,6 +687,7 @@ const Sync = (() => {
     history:    _pushHistory,
     metadata:   _pushMetadata,
     hot:        () => Promise.resolve(), // no-op — hot is pushed only via pushHot(), not init
+    home:       _pushHome,
   };
 
   /* ── Live polling ────────────────────────────────────────── */
@@ -910,6 +1006,16 @@ const Sync = (() => {
       if (safeToPush.length) await _bumpManifest(safeToPush);
       if (_failedTypes.size) console.warn('[Sync] Skipped push for failed types:', [..._failedTypes]);
 
+      // Push home snapshot last — after all individual types are merged and pushed,
+      // so the snapshot reflects the fully-merged state (not stale pre-merge data).
+      try {
+        await _pushHome();
+        const homeTs = Date.now();
+        _localTs.home  = homeTs;
+        _remoteTs.home = homeTs;
+        await _bumpManifest(['home']);
+      } catch (_) {}
+
       console.log('[Sync] Init complete ✓');
     } catch (err) {
       if (err.isScope) {
@@ -940,6 +1046,21 @@ const Sync = (() => {
         console.warn(`[Sync] push(${type}) failed:`, err.message);
       }
     }, 2000);
+
+    // Any change to a home-relevant type also triggers a home snapshot push.
+    // Slightly longer delay (3 s) so the individual push completes first.
+    if (HOME_TYPES.has(type)) {
+      if (_timers._home) clearTimeout(_timers._home);
+      _timers._home = setTimeout(async () => {
+        try {
+          await _pushHome();
+          await _bumpManifest(['home']);
+        } catch (err) {
+          if (err.isScope) return;
+          console.warn('[Sync] push(home) failed:', err.message);
+        }
+      }, 3000);
+    }
   }
 
   /**
@@ -967,7 +1088,39 @@ const Sync = (() => {
     }
   }
 
+  /**
+   * Fast boot read: pulls savart_home.json from Drive and applies it to local DB.
+   * ─────────────────────────────────────────────────────────────────────────────
+   * Call this immediately after auth (before Sync.init()) so the home screen
+   * renders with fresh cross-device data in ~300 ms instead of waiting for the
+   * full init() merge cycle. Sync.init() runs in parallel and overwrites with
+   * fully-merged data once complete.
+   *
+   * Returns the raw snapshot payload, or null if unavailable / on error.
+   */
+  async function readHome() {
+    try {
+      await _refreshFileList();
+      const data = await _readFile(FILENAMES.home).catch(() => null);
+      if (!data) return null;
+
+      await _applyRemote('home', data);
+
+      // Seed timestamps so init()/polling don't re-apply this same snapshot
+      const ts = data.ts || Date.now();
+      _localTs.home  = ts;
+      _remoteTs.home = ts;
+
+      console.log('[Sync] readHome() applied ✓');
+      return data;
+    } catch (err) {
+      if (err.isScope) return null;
+      console.warn('[Sync] readHome() failed (non-fatal):', err.message);
+      return null;
+    }
+  }
+
   /* ── Expose ─────────────────────────────────────────────── */
-  return { init, push, pushHot, startLiveSync, stopLiveSync };
+  return { init, push, pushHot, readHome, startLiveSync, stopLiveSync };
 
 })();

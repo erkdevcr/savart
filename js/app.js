@@ -265,7 +265,7 @@ const App = (() => {
 
     UI.hideTokenBanner();
     UI.showView('home');
-    _loadHomeData();
+    _loadHomeData();  // Instant render from local DB (may be empty/stale on new device)
     // Fetch real user info and update Settings panel
     Auth.fetchUserInfo().then(info => {
       if (!info) return;
@@ -278,8 +278,15 @@ const App = (() => {
     _restoreUserInfo();
     // Restore EQ + tempo from DB before first render
     _restoreSettings();
-    // Sync in background — when it finishes, refresh the UI so data from Drive
-    // appears immediately on the second device (local DB was empty before sync).
+
+    // Fast path: read home snapshot from Drive (~1 API call, ~300 ms).
+    // Re-renders home with cross-device state before the full init() merge finishes.
+    Sync.readHome().then(data => {
+      if (data) _loadHomeData();
+    }).catch(() => {});
+
+    // Full sync in background — merges all types, pushes merged state back.
+    // When complete, refresh UI so any data that wasn't in the home snapshot appears.
     Sync.init().then(() => {
       _restoreSettings();
       _loadHomeData();
@@ -306,7 +313,7 @@ const App = (() => {
     console.log('[App] Live sync applied:', types);
     const view = UI.getCurrentView();
 
-    const needsHome = types.some(t => ['recents', 'pinned', 'playcounts', 'favorites'].includes(t));
+    const needsHome = types.some(t => ['recents', 'pinned', 'playcounts', 'favorites', 'playlists', 'home'].includes(t));
     if (needsHome) _loadHomeData();
 
     if (view === 'library' && types.some(t => ['playlists', 'favorites'].includes(t))) {
