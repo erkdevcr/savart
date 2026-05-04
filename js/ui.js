@@ -1541,6 +1541,17 @@ const UI = (() => {
       _addCtxItem(menu, iconPin(14),  t('ctx_pin_to_home'), () => { App.onTogglePin(item); hideContextMenu(); });
     }
 
+    if (type === 'lib_album') {
+      _addCtxItem(menu, iconPlay(14),  t('ctx_play'),         () => { App.onAlbumPlay?.(item);              hideContextMenu(); });
+      _addCtxDivider(menu);
+      _addCtxItem(menu, _iconNext,     t('play_next'),         () => { App.onAlbumQueue?.(item, 'next');     hideContextMenu(); });
+      _addCtxItem(menu, _iconQueue,    t('play_after'),        () => { App.onAlbumQueue?.(item, 'end');      hideContextMenu(); });
+      _addCtxDivider(menu);
+      _addCtxItem(menu, _iconFolder,   t('ctx_go_to_folder'), () => { App.onAlbumGoToFolder?.(item);        hideContextMenu(); });
+      _addCtxDivider(menu);
+      _addCtxItem(menu, iconPlus(14),  t('add_to_pl'),       (e) => { hideContextMenu(); App.onAlbumShowPlaylistPicker?.(e, item); });
+    }
+
     if (type === 'playlist') {
       _addCtxItem(menu, iconPlay(14),  t('ctx_play'),     () => { App.onPlaylistPlay?.(item);        hideContextMenu(); });
       _addCtxDivider(menu);
@@ -2802,10 +2813,25 @@ const UI = (() => {
       <div class="home-card-name">${escHtml(album.name)}</div>
       ${album.artist ? `<div class="home-card-sub">${escHtml(album.artist)}</div>` : ''}
       <div class="home-card-count">${escHtml(songLabel)}</div>
+      <button class="btn-more home-card-more album-card-more" aria-label="Más opciones">${iconDots(14)}</button>
     `;
 
-    card.addEventListener('click', () => {
+    // Art area → drill into album detail
+    card.querySelector('.home-card-art').addEventListener('click', (e) => {
+      e.stopPropagation();
       if (typeof App !== 'undefined') App.onAlbumClick?.(album);
+    });
+
+    // Text area → also drill in (clicking anywhere except the 3-dot)
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('.album-card-more')) return;
+      if (typeof App !== 'undefined') App.onAlbumClick?.(album);
+    });
+
+    // 3-dot → context menu
+    card.querySelector('.album-card-more').addEventListener('click', (e) => {
+      e.stopPropagation();
+      showContextMenu(e, 'lib_album', album);
     });
 
     return card;

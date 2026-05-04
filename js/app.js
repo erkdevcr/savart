@@ -2813,9 +2813,16 @@ const App = (() => {
       if (!playlistId) return;
       const playlists = await DB.getPlaylists();
       const pl = playlists.find(p => p.id === playlistId);
-      await DB.addToPlaylist(playlistId, item.id);
-      await _saveItemMeta(item);
-      UI.showToast(`${UI.t('toast_added_to_pl')} "${pl?.name || 'playlist'}"`);
+      if (item._isAlbum && item._album) {
+        // Album bulk-add: resolve all songs then add each one
+        const songs = await _resolveAlbumSongs(item._album);
+        await Promise.all(songs.map(s => DB.addToPlaylist(playlistId, s.id)));
+        UI.showToast(`${songs.length} ${UI.t('songs').toLowerCase()} → "${pl?.name || 'playlist'}"`);
+      } else {
+        await DB.addToPlaylist(playlistId, item.id);
+        await _saveItemMeta(item);
+        UI.showToast(`${UI.t('toast_added_to_pl')} "${pl?.name || 'playlist'}"`);
+      }
       Sync.push('playlists');
     } catch (err) {
       UI.showToast(UI.t('toast_pl_add_error'), 'error');
@@ -2831,8 +2838,13 @@ const App = (() => {
   async function onCreateAndAddPlaylist(item, name) {
     try {
       const pl = await DB.createPlaylist(name);
-      await DB.addToPlaylist(pl.id, item.id);
-      await _saveItemMeta(item);
+      if (item._isAlbum && item._album) {
+        const songs = await _resolveAlbumSongs(item._album);
+        await Promise.all(songs.map(s => DB.addToPlaylist(pl.id, s.id)));
+      } else {
+        await DB.addToPlaylist(pl.id, item.id);
+        await _saveItemMeta(item);
+      }
       UI.showToast(`"${name}" — ${UI.t('toast_pl_created')}`);
       _loadPlaylists(); // refresh Library if open
       Sync.push('playlists');
@@ -6362,6 +6374,91 @@ const App = (() => {
     }
   }
 
+  /* ── Album context-menu actions (Library) ───────────────── */
+
+  /**
+   * Resolve album songs from DB (by folderId), sorted by track then name.
+   * @param {Object} album — { folderId, name, artist }
+   * @returns {Promise<Object[]>} playable song items
+   */
+  async function _resolveAlbumSongs(album) {
+    const all = await DB.getAllMeta();
+    const songs = album.folderId
+      ? all.filter(m => m.folderId === album.folderId)
+      : all.filter(m => (m.album || '').toLowerCase() === (album.name || '').toLowerCase());
+    return songs
+      .map(m => ({
+        id:          m.id,
+        name:        m.name        || m.id,
+        displayName: m.displayName || m.name || m.id,
+        artist:      m.artist      || '',
+        album:       m.album       || album.name || '',
+        year:        m.year        || '',
+        track:       m.track       || '',
+        thumbnailUrl:m.thumbnailUrl || null,
+        folderId:    m.folderId    || null,
+      }))
+      .sort((a, b) => {
+        const ta = parseInt(a.track, 10), tb = parseInt(b.track, 10);
+        if (!isNaN(ta) && !isNaN(tb)) return ta - tb;
+        if (!isNaN(ta)) return -1;
+        if (!isNaN(tb)) return  1;
+        return (a.displayName || a.name).localeCompare(b.displayName || b.name);
+      });
+  }
+
+  /** Play all songs in an album immediately. */
+  async function onAlbumPlay(album) {
+    try {
+      const songs = await _resolveAlbumSongs(album);
+      if (!songs.length) { UI.showToast(UI.t('toast_folder_no_songs'), 'error'); return; }
+      _resetRadio();
+      songs.forEach(s => _cacheItem(s));
+      Player.setQueue(songs, 0);
+      UI.showToast(`▶ ${album.name} · ${songs.length} ${UI.t('songs').toLowerCase()}`);
+    } catch (err) {
+      UI.showToast(UI.t('toast_folder_error'), 'error');
+    }
+  }
+
+  /** Insert/append album songs in the queue. mode = 'next' | 'end' */
+  async function onAlbumQueue(album, mode) {
+    try {
+      const songs = await _resolveAlbumSongs(album);
+      if (!songs.length) { UI.showToast(UI.t('toast_folder_no_songs'), 'error'); return; }
+      songs.forEach(s => _cacheItem(s));
+      if (mode === 'next') Player.insertNext(songs);
+      else                 Player.appendToQueue(songs);
+      UI.showToast(mode === 'next'
+        ? `${songs.length} ${UI.t('songs').toLowerCase()} — ${UI.t('play_next').toLowerCase()}`
+        : `${songs.length} ${UI.t('songs').toLowerCase()} — ${UI.t('play_after').toLowerCase()}`
+      );
+    } catch (err) {
+      UI.showToast(UI.t('toast_folder_error'), 'error');
+    }
+  }
+
+  /** Navigate Browse to the Drive folder of the album. */
+  function onAlbumGoToFolder(album) {
+    if (!album.folderId) return;
+    onGoToFolder({ id: album.folderId, name: album.name, isFolder: true });
+  }
+
+  /**
+   * Show the playlist picker for an album.
+   * Uses a special _isAlbum marker so onAddToPlaylist adds ALL songs.
+   */
+  async function onAlbumShowPlaylistPicker(e, album) {
+    try {
+      const playlists = await DB.getPlaylists();
+      // Pass a synthetic item with _isAlbum flag so onAddToPlaylist bulk-adds
+      const item = { id: album.folderId || album.name, name: album.name, _isAlbum: true, _album: album };
+      UI.showPlaylistPicker(e, item, playlists);
+    } catch (err) {
+      UI.showToast(UI.t('toast_pl_load_error'), 'error');
+    }
+  }
+
   /* ── Browse sort ─────────────────────────────────────────── */
 
   const SORT_LABELS = { name_asc: 'A–Z', name_desc: 'Z–A', size_desc: 'Tamaño' };
@@ -7415,6 +7512,10 @@ const App = (() => {
     onAlbumClick,
     onAlbumRescan,
     onAlbumEdit,
+    onAlbumPlay,
+    onAlbumQueue,
+    onAlbumGoToFolder,
+    onAlbumShowPlaylistPicker,
     onTrackRename,
     onBrowseRescan,
     checkRescanDot,
