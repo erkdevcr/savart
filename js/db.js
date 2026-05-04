@@ -380,9 +380,17 @@ const DB = (() => {
       tx.oncomplete = resolve;
       tx.onerror    = () => reject(tx.error);
       tx.onabort    = () => reject(tx.error);
-      // Fire ALL puts synchronously — no await between them → transaction stays open
+      // Fire all get()s synchronously so the transaction stays open,
+      // then merge+put inside each onsuccess — preserves thumbnailUrl when remote sends null
       for (const item of valid) {
-        store.put({ ...item, accessedAt: item.accessedAt ?? Date.now() });
+        const clean = Object.fromEntries(
+          Object.entries(item).filter(([, v]) => v !== undefined && v !== null)
+        );
+        const req = store.get(item.id);
+        req.onsuccess = () => {
+          const existing = req.result || {};
+          store.put({ ...existing, ...clean, id: item.id, accessedAt: clean.accessedAt ?? existing.accessedAt ?? Date.now() });
+        };
       }
     });
     await _trimRecents();
@@ -405,13 +413,17 @@ const DB = (() => {
       tx.oncomplete = resolve;
       tx.onerror    = () => reject(tx.error);
       tx.onabort    = () => reject(tx.error);
+      // Fire all get()s synchronously so the transaction stays open,
+      // then merge+put inside each onsuccess — preserves coverBlob, thumbnailUrl, etc.
       for (const item of valid) {
-        // Strip null/undefined to avoid clobbering existing valid fields
         const clean = Object.fromEntries(
           Object.entries(item).filter(([, v]) => v !== undefined && v !== null)
         );
-        // Provide defaults for required fields so the record is always complete
-        store.put({ playCount: 0, starred: false, ...clean, id: item.id });
+        const req = store.get(item.id);
+        req.onsuccess = () => {
+          const existing = req.result || { playCount: 0, starred: false };
+          store.put({ ...existing, ...clean, id: item.id });
+        };
       }
     });
   }

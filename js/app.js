@@ -3378,6 +3378,9 @@ const App = (() => {
    */
   async function _cacheExternalCover(id, url, force = false) {
     if (!url || url.startsWith('blob:') || url.startsWith('data:')) return;
+    // Drive thumbnail URLs (lh3.googleusercontent.com/drive-storage/…) are CORS-blocked.
+    // They work fine as <img src> but cannot be fetch()ed cross-origin — skip caching them.
+    if (url.includes('lh3.googleusercontent.com') || url.includes('drive-storage')) return;
     try {
       if (!force) {
         const m = await DB.getMeta(id).catch(() => null);
