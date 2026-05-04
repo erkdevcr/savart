@@ -1510,6 +1510,8 @@ const App = (() => {
       Sync.push('metadata');
     }
     _lfmThumbLibrary().catch(() => {});
+    // Mark folder as rescanned so the green dot shows next time
+    if (folderId) DB.setMeta(folderId, { rescannedAt: Date.now() }).catch(() => {});
     UI.showToast(UI.t('toast_rescan_done'));
   }
 
@@ -1538,6 +1540,33 @@ const App = (() => {
    */
   async function _clearManualForFiles(files) {
     await Promise.all(files.map(f => DB.clearManualOverrides(f.id).catch(() => {})));
+  }
+
+  /**
+   * Show/hide the green dot on #browse-rescan-dot based on whether folderId has rescannedAt.
+   * @param {string} folderId
+   */
+  async function _updateBrowseRescanDot(folderId) {
+    const dot = document.getElementById('browse-rescan-dot');
+    if (!dot || !folderId) return;
+    try {
+      const m = await DB.getMeta(folderId);
+      dot.style.display = (m?.rescannedAt) ? '' : 'none';
+    } catch (_) { dot.style.display = 'none'; }
+  }
+
+  /**
+   * Exposed to ui.js — async-updates a dot element for the given folderId.
+   * Called when rendering the library album detail back-header rescan button.
+   * @param {string}      folderId
+   * @param {HTMLElement} dotEl
+   */
+  async function checkRescanDot(folderId, dotEl) {
+    if (!dotEl || !folderId) return;
+    try {
+      const m = await DB.getMeta(folderId);
+      dotEl.style.display = (m?.rescannedAt) ? '' : 'none';
+    } catch (_) { dotEl.style.display = 'none'; }
   }
 
   /**
@@ -1724,6 +1753,12 @@ const App = (() => {
         Sync.push('metadata');
       }
       _lfmThumbLibrary().catch(() => {});
+      // Mark folder as rescanned → show green dot
+      if (_browseFolderId) {
+        DB.setMeta(_browseFolderId, { rescannedAt: Date.now() }).catch(() => {});
+        const dot = document.getElementById('browse-rescan-dot');
+        if (dot) dot.style.display = '';
+      }
       UI.showToast(UI.t('toast_rescan_done'));
       // Refresh Albums/Artists grid so the newly enriched folder appears there
       if (!_libInDetail) {
@@ -2504,6 +2539,8 @@ const App = (() => {
       // Track current browse folder for rescan
       _browseFolderId = folder.id;
       _browseFiles    = result.files;
+      // Update the rescan dot: show green if this folder was previously scanned
+      _updateBrowseRescanDot(folder.id);
 
       // Cache all items for queue resolution
       result.files.forEach(f => _cacheItem(f));
@@ -3776,8 +3813,11 @@ const App = (() => {
   async function _dsRecordScanned(folderIdSet, nameMap) {
     const hist = await _dsLoadHistory();
     const now  = new Date().toISOString();
+    const ts   = Date.now();
     for (const id of folderIdSet) {
       hist.folders[id] = { name: nameMap[id] || '', scannedAt: now };
+      // Also persist in IDB metadata so the rescan dot lights up in browse/library views
+      DB.setMeta(id, { rescannedAt: ts }).catch(() => {});
     }
     await _dsSaveHistory();
   }
@@ -7377,6 +7417,7 @@ const App = (() => {
     onAlbumEdit,
     onTrackRename,
     onBrowseRescan,
+    checkRescanDot,
     onPlaylistClick,
     onPlaylistPlay,
     onPlaylistQueue,

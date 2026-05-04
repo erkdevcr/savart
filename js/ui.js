@@ -2484,6 +2484,7 @@ const UI = (() => {
       <button class="lib-rescan-btn" title="Rescan con MusicBrainz" aria-label="Rescan con MusicBrainz">
         <svg class="lib-rescan-icon" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
         Rescan
+        <span class="lib-rescan-dot rescan-done-dot" style="display:none"></span>
       </button>`;
     backRow.querySelector('.lib-back-btn').addEventListener('click', () => {
       if (typeof App !== 'undefined') {
@@ -2492,7 +2493,10 @@ const UI = (() => {
       }
     });
     const rescanBtn = backRow.querySelector('.lib-rescan-btn');
+    const rescanDot = rescanBtn.querySelector('.lib-rescan-dot');
     const folderId  = songs.find(s => s.folderId)?.folderId || null;
+    // Check if already scanned (async — updates dot once result is known)
+    if (folderId && typeof App !== 'undefined') App.checkRescanDot?.(folderId, rescanDot);
     rescanBtn.addEventListener('click', () => {
       if (typeof App === 'undefined') return;
       const icon = rescanBtn.querySelector('.lib-rescan-icon');
@@ -2501,6 +2505,8 @@ const UI = (() => {
       App.onAlbumRescan(songs, folderId).finally(() => {
         rescanBtn.disabled = false;
         icon.style.animation = '';
+        // Show the dot — rescan just completed
+        if (rescanDot) rescanDot.style.display = '';
       });
     });
     container.appendChild(backRow);

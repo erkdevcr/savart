@@ -1555,6 +1555,19 @@ img { display: block; }
 @keyframes lib-rescan-spin { to { transform: rotate(360deg); } }
 .lib-rescan-btn.spinning #lib-rescan-icon { animation: lib-rescan-spin 1s linear infinite; }
 
+/* ── Rescan "already scanned" green dot ──────────────────────── */
+.rescan-done-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #4caf50;
+  margin-left: 5px;
+  vertical-align: middle;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 2px rgba(76,175,80,0.25);
+}
+
 /* ── Boot loading toast ──────────────────────────────────────── */
 #boot-toast {
   position: fixed;
