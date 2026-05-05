@@ -222,18 +222,78 @@ const App = (() => {
   }
 
   /**
-   * Prevent browser back gesture from reloading the page (and dropping
-   * the in-memory auth token). Pushes a dummy history state and re-pushes
-   * on every popstate so the stack never empties.
-   * Skipped in standalone PWA mode — Android handles it natively there.
+   * Intercept the Android/browser back button to navigate within the app
+   * instead of exiting. Works in both browser tab and standalone PWA mode.
+   *
+   * Strategy: keep a "floor" entry + one "current" entry in the history stack.
+   * Every popstate = user pressed back → _handleBack() decides what to dismiss/go back to,
+   * then re-pushes a new entry so the stack never empties below the floor.
    */
   function _initBackGuard() {
-    if (window.matchMedia('(display-mode: standalone)').matches) return;
-    history.replaceState({ savart: true }, '', location.href);
-    history.pushState({ savart: true }, '', location.href);
+    history.replaceState({ savart: 'base' }, '');
+    history.pushState({ savart: 'step' }, '');
     window.addEventListener('popstate', () => {
-      history.pushState({ savart: true }, '', location.href);
+      _handleBack();
+      // Re-push so there's always one entry above the floor
+      history.pushState({ savart: 'step' }, '');
     });
+  }
+
+  /**
+   * Handle a back-button press. Dismisses overlays and navigates up the
+   * stack in order of visual "depth" (most-modal first).
+   */
+  function _handleBack() {
+    // 1. Context menu open?
+    const ctxMenu = document.getElementById('context-menu');
+    if (ctxMenu?.classList.contains('visible')) {
+      if (typeof UI !== 'undefined') UI.hideContextMenu?.();
+      return;
+    }
+
+    // 2. Expanded player visible on mobile?
+    if (typeof UI !== 'undefined' && UI.isExpandedPlayerVisible?.() &&
+        !window.matchMedia('(min-width: 768px)').matches) {
+      UI.setExpandedPlayerVisible(false);
+      return;
+    }
+
+    // 3. Library drill-down (artist or album detail)?
+    if (typeof UI !== 'undefined' && UI.getCurrentView() === 'library' && _libInDetail) {
+      // Go back to whichever parent tab triggered the detail
+      _libGoBack(_currentLibTab === 'artists' ? 'artists' : 'albums');
+      return;
+    }
+
+    // 4. Browse search active?
+    const searchInp = document.getElementById('search-input');
+    if (searchInp?.value) {
+      searchInp.value = '';
+      document.getElementById('btn-search-clear')?.click();
+      return;
+    }
+
+    // 5. Inside a subfolder in Browse?
+    if (typeof UI !== 'undefined' && UI.getCurrentView() === 'browse' && _breadcrumb.length > 0) {
+      if (_breadcrumb.length === 1) {
+        // At top-level folder → go to root
+        _breadcrumb = [];
+        UI.renderBreadcrumb([]);
+        _openFolder({ id: _rootFolderId, name: 'Drive' }, false).catch(() => {});
+      } else {
+        const parent = _breadcrumb[_breadcrumb.length - 2];
+        onBreadcrumbClick(parent, _breadcrumb.length - 2);
+      }
+      return;
+    }
+
+    // 6. On any view other than Home → go Home
+    if (typeof UI !== 'undefined' && UI.getCurrentView() !== 'home') {
+      onNavClick('home');
+      return;
+    }
+
+    // 7. Already on Home — nothing to do (prevents exit, stack refill handles it)
   }
 
   /* ── Auth events ─────────────────────────────────────────── */
