@@ -432,6 +432,11 @@ const Sync = (() => {
           if (item.mbTried)   merged.mbTried   = true;
           if (item.auddTried) merged.auddTried = true;
 
+          // rescannedAt: take the most recent timestamp (folder rescan status)
+          if (item.rescannedAt && (item.rescannedAt > (merged.rescannedAt || 0))) {
+            merged.rescannedAt = item.rescannedAt;
+          }
+
           for (const f of FILL_ONLY) {
             if (!item[f]) continue;
             if (!merged[f]) merged[f] = item[f];
@@ -586,6 +591,7 @@ const Sync = (() => {
       'artist', 'album', 'year',                    // enriched text
       'mbTried', 'auddTried', 'mbReleaseMbid',      // enrichment flags / IDs
       'manualAt',                                   // LWW guard: timestamp of last manual edit
+      'rescannedAt',                                // folder rescan timestamp (folder records)
     ];
     const isExternalUrl = u => u && !u.startsWith('blob:')
       && !u.includes('googleusercontent.com') && !u.includes('googleapis.com');
@@ -595,7 +601,8 @@ const Sync = (() => {
       // Include every song that has been scanned into any folder OR has any enrichment.
       // Songs with only a folderId carry name/displayName/folderId so other devices can
       // build the Library; enrichment flags prevent redundant lookups on the remote device.
-      .filter(m => m.folderId || m.mbTried || m.auddTried || m.artist || m.album || m.year)
+      // Also include folder records (id === folderId) that carry rescannedAt.
+      .filter(m => m.folderId || m.mbTried || m.auddTried || m.artist || m.album || m.year || m.rescannedAt)
       .map(m => {
         const rec = { id: m.id };
         for (const f of SYNC_FIELDS) {
@@ -622,7 +629,7 @@ const Sync = (() => {
       'name', 'displayName', 'folderId',
       'artist', 'album', 'year',
       'mbTried', 'auddTried', 'mbReleaseMbid',
-      'manualAt',
+      'manualAt', 'rescannedAt',
     ];
     const isExternalUrl = u => u && !u.startsWith('blob:')
       && !u.includes('googleusercontent.com') && !u.includes('googleapis.com');
@@ -955,6 +962,11 @@ const Sync = (() => {
 
           if (item.mbTried)   merged.mbTried   = true;
           if (item.auddTried) merged.auddTried = true;
+
+          // rescannedAt: take the most recent timestamp (folder rescan status)
+          if (item.rescannedAt && (item.rescannedAt > (merged.rescannedAt || 0))) {
+            merged.rescannedAt = item.rescannedAt;
+          }
 
           for (const f of FILL_ONLY) {
             if (!item[f]) continue;

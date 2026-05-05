@@ -1621,13 +1621,14 @@ const App = (() => {
     if (folderId) _folderCoverCache.delete(folderId);
     await _prefetchAndApplyFolderCovers(folderId, songs, true); // force=true
     await _patchAlbumDetailHeader(songs);
+    // Mark folder as rescanned BEFORE pushHot so the dot syncs in the hot delta
+    if (folderId) await DB.setMeta(folderId, { rescannedAt: Date.now() }).catch(() => {});
     if (typeof Sync !== 'undefined') {
-      Sync.pushHot(songs).catch(() => {});
+      const hotItems = folderId ? [...songs, { id: folderId }] : songs;
+      Sync.pushHot(hotItems).catch(() => {});
       Sync.push('metadata');
     }
     _lfmThumbLibrary().catch(() => {});
-    // Mark folder as rescanned so the green dot shows next time
-    if (folderId) DB.setMeta(folderId, { rescannedAt: Date.now() }).catch(() => {});
     UI.showToast(UI.t('toast_rescan_done'));
   }
 
@@ -1805,9 +1806,9 @@ const App = (() => {
         _folderCoverCache.delete(folderId);
 
         await _prefetchAndApplyFolderCovers(folderId, songs, true);
-
+        await DB.setMeta(folderId, { rescannedAt: Date.now() }).catch(() => {});
         if (typeof Sync !== 'undefined') {
-          Sync.pushHot(songs).catch(() => {});
+          Sync.pushHot([...songs, { id: folderId }]).catch(() => {});
         }
         done++;
       } catch (err) {
@@ -1879,19 +1880,21 @@ const App = (() => {
       }));
       if (_browseFolderId) _folderCoverCache.delete(_browseFolderId);
       await _prefetchAndApplyFolderCovers(_browseFolderId, _browseFiles, true); // force=true
+      // Mark folder as rescanned BEFORE pushHot so the dot syncs in the hot delta
+      if (_browseFolderId) {
+        await DB.setMeta(_browseFolderId, { rescannedAt: Date.now() }).catch(() => {});
+        const dot = document.getElementById('browse-rescan-dot');
+        if (dot) dot.style.display = '';
+      }
       if (typeof Sync !== 'undefined') {
         // Hot push: immediate small delta so Device B sees changes within 3 s
-        Sync.pushHot(_browseFiles).catch(() => {});
+        // Include the folder record so rescannedAt dot syncs in ~3 s on other devices
+        const hotItems = _browseFolderId ? [..._browseFiles, { id: _browseFolderId }] : _browseFiles;
+        Sync.pushHot(hotItems).catch(() => {});
         // Full metadata push: background, for initial-setup on new devices (debounced 2 s)
         Sync.push('metadata');
       }
       _lfmThumbLibrary().catch(() => {});
-      // Mark folder as rescanned → show green dot
-      if (_browseFolderId) {
-        DB.setMeta(_browseFolderId, { rescannedAt: Date.now() }).catch(() => {});
-        const dot = document.getElementById('browse-rescan-dot');
-        if (dot) dot.style.display = '';
-      }
       UI.showToast(UI.t('toast_rescan_done'));
       // Refresh Albums/Artists grid so the newly enriched folder appears there
       if (!_libInDetail) {
