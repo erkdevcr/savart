@@ -1660,20 +1660,35 @@ const App = (() => {
   }
 
   /**
-   * After rendering folder rows, async-patch each row with the rescan dot
-   * if that folder has been rescanned (has rescannedAt in DB).
+   * After rendering folder rows, async-patch each row with the green rescan dot
+   * and/or blue manual-edits dot based on DB state.
+   * Uses a single getAllMeta() call to avoid N round-trips for large folder lists.
    * @param {Object[]} folders  — array of folder objects with .id
    */
-  async function _patchFolderRescanDots(folders) {
-    for (const folder of folders) {
-      try {
-        const m = await DB.getMeta(folder.id);
-        if (!m?.rescannedAt) continue;
+  async function _patchFolderDots(folders) {
+    if (!folders.length) return;
+    try {
+      const all = await DB.getAllMeta();
+      // Rescan: folder records carry rescannedAt (id === folderId)
+      const rescannedIds = new Set(all.filter(m => m.rescannedAt).map(m => m.id));
+      // Manual: any song with manualAt > 0 marks its folder
+      const manualFolderIds = new Set();
+      for (const m of all) {
+        if (m.folderId && (m.manualAt || 0) > 0) manualFolderIds.add(m.folderId);
+      }
+      for (const folder of folders) {
         const row = document.querySelector(`.folder-row[data-id="${CSS.escape(folder.id)}"]`);
-        const dot = row?.querySelector('.folder-rescan-dot');
-        if (dot) dot.style.display = '';
-      } catch (_) { /* non-fatal */ }
-    }
+        if (!row) continue;
+        if (rescannedIds.has(folder.id)) {
+          const d = row.querySelector('.folder-rescan-dot');
+          if (d) d.style.display = '';
+        }
+        if (manualFolderIds.has(folder.id)) {
+          const d = row.querySelector('.folder-manual-dot');
+          if (d) d.style.display = '';
+        }
+      }
+    } catch (_) { /* non-fatal */ }
   }
 
   /**
@@ -2682,7 +2697,7 @@ const App = (() => {
       _sortItems(result.folders, result.files);
       const activeSong = Player.getCurrentTrack();
       UI.renderFolderContents(result.folders, result.files, activeSong?.id);
-      if (result.folders.length > 0) _patchFolderRescanDots(result.folders).catch(() => {});
+      if (result.folders.length > 0) _patchFolderDots(result.folders).catch(() => {});
 
       // Update item count badge
       const total = result.folders.length + result.files.length;
@@ -6029,6 +6044,7 @@ const App = (() => {
             blobId:          null,      // first song id with coverBlob (fallback)
             blobData:        null,
             taggedCount:     0,
+            hasManual:       false,
           });
         }
         const f = folderMap.get(m.folderId);
@@ -6045,6 +6061,8 @@ const App = (() => {
         if (_isStableCoverUrl(m.thumbnailUrl)) f.coverUrlCounts.set(m.thumbnailUrl, (f.coverUrlCounts.get(m.thumbnailUrl) || 0) + 1);
         // Blob fallback: keep first found; embedded art is usually identical across tracks.
         if (!f.blobId && m.coverBlob) { f.blobId = m.id; f.blobData = m.coverBlob; }
+        // Manual edits flag: any song with manualAt > 0 marks the whole album
+        if ((m.manualAt || 0) > 0) f.hasManual = true;
       });
 
       const _top = map => map.size > 0
@@ -6065,7 +6083,7 @@ const App = (() => {
                 ? Meta.injectCover(f.blobId, f.blobData)
                 : null);
           const rescannedAt = rescannedMap.get(f.folderId) || null;
-          return { name, artist, artists, songCount, coverUrl, year, format, folderId: f.folderId, rescannedAt };
+          return { name, artist, artists, songCount, coverUrl, year, format, folderId: f.folderId, rescannedAt, hasManual: f.hasManual };
         })
         .sort((a, b) => a.name.localeCompare(b.name));
 
@@ -6107,6 +6125,7 @@ const App = (() => {
             coverUrl:     null,
             hasBlobCover: false,
             taggedCount:  0,
+            hasManual:    false,
           });
         }
         const f = folderMap.get(m.folderId);
@@ -6123,6 +6142,7 @@ const App = (() => {
             f.coverUrl = m.thumbnailUrl;
           }
         }
+        if ((m.manualAt || 0) > 0) f.hasManual = true;
       });
 
       const _top = map => map.size > 0
@@ -6136,7 +6156,7 @@ const App = (() => {
           const format    = _top(f.formatCounts) || null;
           const songCount = Math.max(f.taggedCount, folderSongCount.get(f.folderId) || 0);
           const rescannedAt = rescannedMap.get(f.folderId) || null;
-          return { name, artist: artist.name, songCount, coverUrl: f.coverUrl, year, format, folderId: f.folderId, rescannedAt };
+          return { name, artist: artist.name, songCount, coverUrl: f.coverUrl, year, format, folderId: f.folderId, rescannedAt, hasManual: f.hasManual };
         })
         .sort((a, b) => a.name.localeCompare(b.name));
 
