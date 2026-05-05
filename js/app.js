@@ -6716,6 +6716,19 @@ const App = (() => {
    * be resolved.
    * @param {DriveItem} song
    */
+  /**
+   * Navigate to the Library screen WITHOUT triggering _setLibTab(_currentLibTab),
+   * which would kick off an async load of the current tab and race with the
+   * tab we're about to set immediately after (albums / artists).
+   */
+  function _navToLibrary() {
+    if (!window.matchMedia('(min-width: 768px)').matches) {
+      UI.setExpandedPlayerVisible(false);
+    }
+    UI.showView('library');
+    UI.updateSearchChipCounts(null);
+  }
+
   async function onGoToAlbum(song) {
     // Resolve the album folder ID using the same priority chain as onGoToFolder
     let folderId = song.parents?.[0] || song.folderId;
@@ -6746,7 +6759,9 @@ const App = (() => {
     };
 
     // Navigate to Library → Albums tab and drill into the album detail
-    onNavClick('library');
+    // Use _navToLibrary() instead of onNavClick() to avoid the race where
+    // onNavClick re-loads the previously active tab before _setLibTab('albums') runs.
+    _navToLibrary();
     _setLibTab('albums');
     onAlbumClick(album, null).catch(err => console.warn('[App] onGoToAlbum:', err));
   }
@@ -6760,7 +6775,7 @@ const App = (() => {
   async function onGoToArtist(song) {
     const rawArtist = (song.artist || '').split(';')[0].trim();
     if (!rawArtist) {
-      onNavClick('library');
+      _navToLibrary();
       _setLibTab('artists');
       return;
     }
@@ -6784,12 +6799,12 @@ const App = (() => {
         albumCount: albumSet.size || 1,
         imageUrl:   storedImages[artistKey] || null,
       };
-      onNavClick('library');
+      _navToLibrary();
       _setLibTab('artists');
       onArtistClick(artist).catch(err => console.warn('[App] onGoToArtist:', err));
     } catch (err) {
       console.warn('[App] onGoToArtist:', err);
-      onNavClick('library');
+      _navToLibrary();
       _setLibTab('artists');
     }
   }

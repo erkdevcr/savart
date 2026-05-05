@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '1.7.13';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.13 — Spacebar play/pause global shortcut
+const APP_VERSION  = '1.7.14';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.14 — Fix go-to-album/artist race with active tab
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
