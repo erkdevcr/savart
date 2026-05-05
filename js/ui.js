@@ -62,7 +62,10 @@ const UI = (() => {
       // ── Context menu ───────────────────────────────────────
       ctx_play:           'Reproducir',
       ctx_go_to_album:    'Ir al álbum',
-      ctx_go_to_folder:   'Ir a carpeta de Drive',
+      ctx_go_to_folder:    'Ir a carpeta de Drive',
+      ctx_send_to_scan:    'Enviar a escáner',
+      ds_send_scan_title:  'Escaneo en curso',
+      ds_send_stop_and_send: 'Detener y enviar',
       ctx_add_fav_folder: 'Añadir a favoritos',
       ctx_pin_to_home:    'Agregar a inicio',
       ctx_unpin_from_home:'Eliminar de inicio',
@@ -330,7 +333,10 @@ const UI = (() => {
       // ── Context menu ───────────────────────────────────────
       ctx_play:           'Play',
       ctx_go_to_album:    'Go to album',
-      ctx_go_to_folder:   'Go to Drive folder',
+      ctx_go_to_folder:      'Go to Drive folder',
+      ctx_send_to_scan:      'Send to scan',
+      ds_send_scan_title:    'Scan in progress',
+      ds_send_stop_and_send: 'Stop and send',
       ctx_add_fav_folder: 'Add to favorites',
       ctx_pin_to_home:    'Add to home',
       ctx_unpin_from_home:'Remove from home',
@@ -1501,6 +1507,7 @@ const UI = (() => {
     const _iconQueue  = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg>`;
     const _iconFolder = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>`;
     const _iconEdit   = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zm18.71-10.8a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>`;
+    const _iconScan   = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M9.5 6.5v3h-3v-3h3M11 5H5v6h6V5zm-1.5 9.5v3h-3v-3h3M11 13H5v6h6v-6zm6.5-6.5v3h-3v-3h3M19 5h-6v6h6V5zm-6 8h1.5v1.5H13V13zm1.5 1.5H16V16h-1.5v-1.5zM16 13h1.5v1.5H16V13zm-3 3h1.5v1.5H13V16zm1.5 1.5H16V19h-1.5v-1.5zM16 16h1.5v1.5H16V16zm1.5-1.5H19V16h-1.5v-1.5zm0 3H19V19h-1.5v-1.5zM22 7h-2V4h-3V2h5v5zm0 15v-5h-2v3h-3v2h5zM2 22h5v-2H4v-3H2v5zM2 2v5h2V4h3V2H2z"/></svg>`;
 
     if (type === 'song') {
       _addCtxItem(menu, iconPlay(14),  t('ctx_play'),    () => { App.onSongClick(item);         hideContextMenu(); });
@@ -1526,6 +1533,7 @@ const UI = (() => {
       _addCtxItem(menu, _iconQueue,     t('play_after'),         () => { App.onFolderQueue(item, 'end');       hideContextMenu(); });
       _addCtxDivider(menu);
       _addCtxItem(menu, _iconFolder,    t('ctx_go_to_folder'),   () => { App.onGoToFolder(item);              hideContextMenu(); });
+      _addCtxItem(menu, _iconScan,      t('ctx_send_to_scan'),   () => { App.onSendToScan?.(item);            hideContextMenu(); });
       _addCtxDivider(menu);
       _addCtxItem(menu, iconStar(14),   t('ctx_add_fav_folder'), () => { App.onToggleStar(item);              hideContextMenu(); });
       _addCtxItem(menu, iconPin(14),    t('ctx_pin_to_home'),    () => { App.onTogglePin(item);               hideContextMenu(); });
@@ -1545,6 +1553,7 @@ const UI = (() => {
         () => { isFolder ? App.onGoToFolder(item) : App.onGoToAlbum?.(item); hideContextMenu(); }
       );
       if (!isFolder) _addCtxItem(menu, _iconFolder, t('ctx_go_to_folder'), () => { App.onGoToFolder(item); hideContextMenu(); });
+      if (isFolder)  _addCtxItem(menu, _iconScan,   t('ctx_send_to_scan'), () => { App.onSendToScan?.(item); hideContextMenu(); });
       _addCtxDivider(menu);
       _addCtxItem(menu, iconPin(14), t('ctx_unpin_from_home'), () => {
         App.onTogglePin(item);
@@ -1568,6 +1577,7 @@ const UI = (() => {
         () => { isFolder ? App.onGoToFolder(item) : App.onGoToAlbum?.(item); hideContextMenu(); }
       );
       if (!isFolder) _addCtxItem(menu, _iconFolder, t('ctx_go_to_folder'), () => { App.onGoToFolder(item); hideContextMenu(); });
+      if (isFolder)  _addCtxItem(menu, _iconScan,   t('ctx_send_to_scan'), () => { App.onSendToScan?.(item); hideContextMenu(); });
       _addCtxDivider(menu);
       _addCtxItem(menu, iconStar(14), isFolder ? t('ctx_add_fav_folder') : t('add_fav'),
         () => { App.onToggleStar(item); hideContextMenu(); }
@@ -1583,6 +1593,7 @@ const UI = (() => {
       _addCtxItem(menu, _iconQueue,    t('play_after'),        () => { App.onAlbumQueue?.(item, 'end');      hideContextMenu(); });
       _addCtxDivider(menu);
       _addCtxItem(menu, _iconFolder,   t('ctx_go_to_folder'), () => { App.onAlbumGoToFolder?.(item);        hideContextMenu(); });
+      _addCtxItem(menu, _iconScan,     t('ctx_send_to_scan'), () => { App.onSendToScan?.({ id: item.folderId, name: item.name }); hideContextMenu(); });
       _addCtxDivider(menu);
       _addCtxItem(menu, iconPlus(14),  t('add_to_pl'),       (e) => { hideContextMenu(); App.onAlbumShowPlaylistPicker?.(e, item); });
     }
@@ -1621,6 +1632,7 @@ const UI = (() => {
       _addCtxItem(menu, _iconQueue,    t('play_after'),         () => { App.onFolderQueue(item, 'end');  hideContextMenu(); });
       _addCtxDivider(menu);
       _addCtxItem(menu, _iconFolder,   t('ctx_go_to_folder'),   () => { App.onGoToFolder(item);          hideContextMenu(); });
+      _addCtxItem(menu, _iconScan,     t('ctx_send_to_scan'),   () => { App.onSendToScan?.(item);        hideContextMenu(); });
       _addCtxDivider(menu);
       _addCtxItem(menu, iconPin(14),   t('ctx_pin_to_home'),    () => { App.onTogglePin(item);           hideContextMenu(); });
       _addCtxItem(menu, iconTrash(14), t('ctx_remove_history'), () => { App.onRemoveFromHistory(item);   hideContextMenu(); });

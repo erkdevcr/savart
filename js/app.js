@@ -6616,6 +6616,69 @@ const App = (() => {
     onAlbumClick(album, null).catch(err => console.warn('[App] onGoToAlbum:', err));
   }
 
+  /* ── Send to Deep Scan ──────────────────────────────────────
+   * Loads a folder directly into the Deep Scan as its target.
+   * If the scan is currently running or paused, shows a warning
+   * dialog asking the user to confirm stopping before proceeding.
+   * ──────────────────────────────────────────────────────────── */
+
+  let _dsSendTarget = null; // folder pending confirmation
+
+  /**
+   * Public entry point — called from all folder context menus.
+   * @param {{ id: string, name: string }} folder
+   */
+  function onSendToScan(folder) {
+    if (!folder?.id) return;
+
+    if (_dsRunning) {
+      // Scan is active (running or paused) — ask for confirmation
+      _dsSendTarget = folder;
+      const state   = _dsPaused ? 'pausado' : 'en curso';
+      const descEl  = document.getElementById('ds-send-scan-desc');
+      if (descEl) descEl.textContent =
+        `El escaneo está ${state}. ¿Deseas detenerlo y enviar "${folder.name}" al escáner?`;
+      document.getElementById('ds-send-scan-dialog').style.display = 'flex';
+    } else {
+      _dsSendFolderToScan(folder);
+    }
+  }
+
+  /** Actually loads the folder into Deep Scan and navigates there. */
+  async function _dsSendFolderToScan(folder) {
+    // Ensure session is loaded
+    if (!_dsSession) await _dsLoadSession();
+
+    // Stop any running scan first
+    if (_dsRunning) _stopDeepScan();
+
+    // Set target folder and reset all progress
+    _dsSession.selectedFolderId   = folder.id;
+    _dsSession.selectedFolderName = folder.name;
+    _dsSession.pendingQueue       = [];
+    _dsSession.visited            = [];
+    _dsSession.status             = 'idle';
+    _dsSession.scannedFolders     = 0;
+    _dsSession.totalFolders       = 0;
+    _dsSession.folders            = {};
+    _dsSession.completedList      = {};
+    _dsSession.skippedList        = {};
+    _dsSession.log                = [];
+
+    // Update the folder-name label in the Deep Scan UI
+    const nameEl = document.getElementById('ds-folder-name');
+    if (nameEl) nameEl.textContent = folder.name;
+    _dsFitFolderName?.();
+
+    await _dsSaveSession();
+    _dsUpdateControls?.();
+    _dsUpdateProgress?.();
+    _dsUpdateCounters?.();
+
+    // Navigate to Deep Scan tab
+    _openDeepScan();
+  }
+
   /** Navigate Browse to the Drive folder of the album. */
   function onAlbumGoToFolder(album) {
     if (!album.folderId) return;
@@ -7379,6 +7442,19 @@ const App = (() => {
     document.getElementById('ds-folder-modal-backdrop')?.addEventListener('click', () => _dsCloseModal('ds-folder-modal'));
     document.getElementById('btn-ds-modal-select')?.addEventListener('click',  _dsConfirmFolderSelect);
 
+    // Deep Scan: send-to-scan warning dialog
+    const _closeSendScanDialog = () => {
+      _dsCloseModal('ds-send-scan-dialog');
+      _dsSendTarget = null;
+    };
+    document.getElementById('ds-send-scan-backdrop')?.addEventListener('click', _closeSendScanDialog);
+    document.getElementById('btn-ds-send-scan-cancel')?.addEventListener('click', _closeSendScanDialog);
+    document.getElementById('btn-ds-send-scan-confirm')?.addEventListener('click', () => {
+      const target = _dsSendTarget;
+      _closeSendScanDialog();
+      if (target) _dsSendFolderToScan(target);
+    });
+
     // Deep Scan: rescan dialog
     document.getElementById('ds-rescan-backdrop')?.addEventListener('click', () => _dsCloseModal('ds-rescan-dialog'));
     document.getElementById('btn-ds-rescan-cancel')?.addEventListener('click', () => _dsCloseModal('ds-rescan-dialog'));
@@ -7667,6 +7743,7 @@ const App = (() => {
     onFolderClick,
     onGoToFolder,
     onGoToAlbum,
+    onSendToScan,
     onFolderPlay,
     onBreadcrumbClick,
     onSongClick,
