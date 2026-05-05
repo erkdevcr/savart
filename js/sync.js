@@ -602,7 +602,7 @@ const Sync = (() => {
       // Songs with only a folderId carry name/displayName/folderId so other devices can
       // build the Library; enrichment flags prevent redundant lookups on the remote device.
       // Also include folder records (id === folderId) that carry rescannedAt.
-      .filter(m => m.folderId || m.mbTried || m.auddTried || m.artist || m.album || m.year || m.rescannedAt)
+      .filter(m => m.folderId || m.mbTried || m.auddTried || m.artist || m.album || m.year || m.rescannedAt || m.manualAt)
       .map(m => {
         const rec = { id: m.id };
         for (const f of SYNC_FIELDS) {
@@ -968,6 +968,12 @@ const Sync = (() => {
             merged.rescannedAt = item.rescannedAt;
           }
 
+          // manualAt: take the most recent timestamp (manual-edit indicator / blue dot)
+          const localManualAt  = ex.manualAt   || 0;
+          const remoteManualAt = item.manualAt  || 0;
+          if (remoteManualAt > localManualAt) merged.manualAt = remoteManualAt;
+          const localManualWins = localManualAt > remoteManualAt;
+
           for (const f of FILL_ONLY) {
             if (!item[f]) continue;
             if (!merged[f]) merged[f] = item[f];
@@ -976,10 +982,12 @@ const Sync = (() => {
           const remoteIsEnriched = item.mbTried || item.auddTried;
           for (const f of ENRICH_FIELDS) {
             if (!item[f]) continue;
+            if (localManualWins) continue;   // local was manually edited more recently — keep it
             if (remoteIsEnriched || !merged[f]) merged[f] = item[f];
           }
 
-          if (item.thumbnailUrl) merged.thumbnailUrl = item.thumbnailUrl;
+          // thumbnailUrl — remote wins unless local was manually edited more recently
+          if (item.thumbnailUrl && !localManualWins) merged.thumbnailUrl = item.thumbnailUrl;
 
           if (merged.mbReleaseMbid && !merged.thumbnailUrl) {
             merged.thumbnailUrl = `https://coverartarchive.org/release/${merged.mbReleaseMbid}/front-250`;

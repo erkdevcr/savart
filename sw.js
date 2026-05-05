@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '1.7.7';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.7 — Fix DS context menu: raise z-index above DS screen overlay
+const APP_VERSION  = '1.7.8';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.8 — Fix manualAt sync: propagate in init() merge + add to filter
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
