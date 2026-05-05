@@ -556,14 +556,13 @@
 
       <!-- Folder picker bar -->
       <div class="ds-folder-bar">
-        <div class="ds-folder-chip-icon">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>
-        </div>
-        <div class="ds-folder-bar-info">
-          <span class="ds-folder-bar-label" data-i18n="ds_folder_label">Carpeta activa</span>
-          <span class="ds-folder-bar-name" id="ds-folder-name">MSK</span>
-        </div>
-        <button id="btn-ds-change-folder" class="ds-change-btn" data-i18n="ds_change_btn">Cambiar</button>
+        <button id="btn-ds-change-folder" class="ds-folder-chip-btn" title="Cambiar carpeta">
+          <div class="ds-folder-chip-icon">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>
+          </div>
+          <span class="ds-folder-chip-label" data-i18n="ds_folder_label">Folder</span>
+        </button>
+        <span class="ds-folder-bar-name" id="ds-folder-name">MSK</span>
       </div>
 
       <!-- Controls bar: LED + status + buttons -->
