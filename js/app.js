@@ -7609,11 +7609,11 @@ const App = (() => {
       _saveSettings();
     });
 
-    // Expanded player: ⋮ more options → context menu for current track
-    document.getElementById('btn-pexp-more')?.addEventListener('click', (e) => {
+    // Expanded player: ⋮ more options (desktop header) → same menu as mobile topbar
+    document.getElementById('btn-pexp-more-hdr')?.addEventListener('click', (e) => {
+      e.stopPropagation();
       const track = Player.getCurrentTrack();
-      if (!track) return;
-      UI.showContextMenu(e, 'song', track);
+      if (track) UI.showContextMenu(e, 'player_song', track);
     });
 
     // Expanded player: Cola button → open queue panel
