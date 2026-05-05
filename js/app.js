@@ -7967,6 +7967,7 @@ const App = (() => {
     });
 
     // Keyboard: Escape — close queue panel first, then expanded player
+    // Spacebar — play/pause (unless focus is inside an input/textarea/select/contenteditable)
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
         if (UI.isQueuePanelVisible()) {
@@ -7974,6 +7975,14 @@ const App = (() => {
         } else if (UI.isExpandedPlayerVisible()) {
           _closeExpandedPlayer();
         }
+      }
+
+      if (e.key === ' ') {
+        const tag = document.activeElement?.tagName?.toLowerCase();
+        const editable = document.activeElement?.isContentEditable;
+        if (tag === 'input' || tag === 'textarea' || tag === 'select' || editable) return;
+        e.preventDefault();
+        Player.togglePlayPause();
       }
     });
 
