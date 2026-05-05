@@ -7310,8 +7310,22 @@ const App = (() => {
     // Expanded player: close button (mobile)
     document.getElementById('btn-pexp-close')?.addEventListener('click', _closeExpandedPlayer);
 
-    // Expanded player: "Mostrar álbum" → navigate Browse to current track's folder
-    document.getElementById('btn-pexp-show-album')?.addEventListener('click', goToCurrentTrackFolder);
+    // Expanded player: "Mostrar álbum" → navigate to Library album
+    const _goToCurrentTrackAlbum = () => {
+      const track = Player.getCurrentTrack();
+      if (track) onGoToAlbum(track);
+    };
+    document.getElementById('btn-pexp-show-album')?.addEventListener('click', _goToCurrentTrackAlbum);
+
+    // Expanded player: album name text → same action
+    document.getElementById('pexp-album')?.addEventListener('click', _goToCurrentTrackAlbum);
+
+    // Mini player: artist name → navigate to Library album
+    document.querySelector('#mini-player .mini-artist')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const track = Player.getCurrentTrack();
+      if (track) onGoToAlbum(track);
+    });
 
     // Expanded player: playback controls
     document.getElementById('btn-pexp-prev')?.addEventListener('click', () => Player.prev());

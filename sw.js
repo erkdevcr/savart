@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '1.6.94';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.6.94 — EP Artists: search bar + URL via modal instead of inline input
+const APP_VERSION  = '1.6.95';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.6.95 — Show album → Library album (not Drive folder); pexp-album + mini-artist clickeable
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
