@@ -1880,6 +1880,47 @@ img { display: block; }
   color: var(--text-secondary);
   flex-shrink: 0;
   overflow: hidden; /* clips the photo to the circle */
+  position: relative;
+}
+.artist-radio-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.55);
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  opacity: 0.35;
+  transition: opacity 0.15s, background 0.15s, transform 0.1s;
+  flex-shrink: 0;
+  z-index: 2;
+}
+.lib-artist-card:hover .artist-radio-btn { opacity: 1; }
+.artist-radio-btn:hover {
+  background: var(--accent, #7A6FE0);
+  opacity: 1;
+  transform: scale(1.1);
+}
+.artist-radio-btn:active { transform: scale(0.95); }
+
+/* Radio btn en vista de detalle del artista */
+.lib-detail-entity-art { position: relative; }
+.artist-radio-btn--detail {
+  top: 4px;
+  right: 4px;
+  width: 28px;
+  height: 28px;
+  opacity: 0.7;
+}
+.artist-radio-btn--detail:hover {
+  opacity: 1;
+  background: var(--accent, #7A6FE0);
 }
 .lib-artist-avatar img {
   width: 100%;

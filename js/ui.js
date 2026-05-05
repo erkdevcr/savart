@@ -2460,10 +2460,20 @@ const UI = (() => {
         : initials;
 
       card.innerHTML = `
-        <div class="lib-artist-avatar" style="${avatarStyle}" data-artist-key="${escHtml(artistKey)}">${avatarInner}</div>
+        <div class="lib-artist-avatar" style="${avatarStyle}" data-artist-key="${escHtml(artistKey)}">
+          ${avatarInner}
+          <button class="artist-radio-btn" title="Radio artista" aria-label="Radio artista">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M3.24 6.15C2.51 6.43 2 7.17 2 8v12c0 1.1.89 2 2 2h16c1.11 0 2-.9 2-2V8c0-1.11-.89-2-2-2H6.3l8.26-3.34L13.65 1 3.24 6.15zM13 18c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
+          </button>
+        </div>
         <div class="lib-artist-name">${escHtml(artist.name)}</div>
         <div class="lib-artist-sub">${albumLabel}</div>
       `;
+
+      card.querySelector('.artist-radio-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (typeof App !== 'undefined') App.onArtistRadio?.({ artist: artist.name });
+      });
 
       card.addEventListener('click', () => {
         if (typeof App !== 'undefined') App.onArtistClick?.(artist);
@@ -2508,10 +2518,19 @@ const UI = (() => {
       const avatarInner = artist.imageUrl ? `<img src="${artist.imageUrl}" alt="" loading="lazy">` : initials;
 
       card.innerHTML = `
-        <div class="lib-artist-avatar" style="${avatarStyle}" data-artist-key="${escHtml(artistKey)}">${avatarInner}</div>
+        <div class="lib-artist-avatar" style="${avatarStyle}" data-artist-key="${escHtml(artistKey)}">
+          ${avatarInner}
+          <button class="artist-radio-btn" title="Radio artista" aria-label="Radio artista">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M3.24 6.15C2.51 6.43 2 7.17 2 8v12c0 1.1.89 2 2 2h16c1.11 0 2-.9 2-2V8c0-1.11-.89-2-2-2H6.3l8.26-3.34L13.65 1 3.24 6.15zM13 18c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
+          </button>
+        </div>
         <div class="lib-artist-name">${escHtml(artist.name)}</div>
         <div class="lib-artist-sub">${albumLabel}</div>
       `;
+      card.querySelector('.artist-radio-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (typeof App !== 'undefined') App.onArtistRadio?.({ artist: artist.name });
+      });
       card.addEventListener('click', () => {
         if (typeof App !== 'undefined') App.onArtistClick?.(artist);
       });
@@ -2564,11 +2583,20 @@ const UI = (() => {
     const entity = document.createElement('div');
     entity.className = 'lib-detail-entity';
     entity.innerHTML = `
-      <div class="lib-detail-entity-art circle" style="${avatarStyle}">${avatarInner}</div>
+      <div class="lib-detail-entity-art circle" style="${avatarStyle}" style="position:relative">
+        ${avatarInner}
+        <button class="artist-radio-btn artist-radio-btn--detail" title="Radio artista" aria-label="Radio artista">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M3.24 6.15C2.51 6.43 2 7.17 2 8v12c0 1.1.89 2 2 2h16c1.11 0 2-.9 2-2V8c0-1.11-.89-2-2-2H6.3l8.26-3.34L13.65 1 3.24 6.15zM13 18c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
+        </button>
+      </div>
       <div>
         <div class="lib-detail-entity-name">${escHtml(artist.name)}</div>
         <div class="lib-detail-entity-sub">${artist.albumCount} álbumes · ${artist.songCount} canciones</div>
       </div>`;
+    entity.querySelector('.artist-radio-btn--detail').addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (typeof App !== 'undefined') App.onArtistRadio?.({ artist: artist.name });
+    });
     container.appendChild(entity);
 
     if (albums.length === 0) {
