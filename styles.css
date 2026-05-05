@@ -1027,6 +1027,7 @@ img { display: block; }
 .folder-row:active { background: var(--bg-hover); }
 
 .folder-icon {
+  position: relative;
   width: 42px;
   height: 42px;
   border-radius: var(--radius-md);
@@ -1041,6 +1042,17 @@ img { display: block; }
   width: 22px;
   height: 22px;
   color: var(--accent);
+}
+
+.folder-rescan-dot {
+  position: absolute;
+  bottom: 3px;
+  right: 3px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #4caf50;
+  border: 1.5px solid var(--bg-card, #1a1a2e);
 }
 
 .folder-row-info {

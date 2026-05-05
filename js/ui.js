@@ -1394,7 +1394,10 @@ const UI = (() => {
       : '';
 
     row.innerHTML = `
-      <div class="folder-icon">${iconFolder(22)}</div>
+      <div class="folder-icon">
+        ${iconFolder(22)}
+        <span class="folder-rescan-dot" style="display:none"></span>
+      </div>
       <div class="folder-row-info">
         <div class="folder-row-name">${escHtml(folder.name)}</div>
         ${subHtml}

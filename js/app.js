@@ -1659,6 +1659,23 @@ const App = (() => {
   }
 
   /**
+   * After rendering folder rows, async-patch each row with the rescan dot
+   * if that folder has been rescanned (has rescannedAt in DB).
+   * @param {Object[]} folders  — array of folder objects with .id
+   */
+  async function _patchFolderRescanDots(folders) {
+    for (const folder of folders) {
+      try {
+        const m = await DB.getMeta(folder.id);
+        if (!m?.rescannedAt) continue;
+        const row = document.querySelector(`.folder-row[data-id="${CSS.escape(folder.id)}"]`);
+        const dot = row?.querySelector('.folder-rescan-dot');
+        if (dot) dot.style.display = '';
+      } catch (_) { /* non-fatal */ }
+    }
+  }
+
+  /**
    * Show/hide the green dot on #browse-rescan-dot based on whether folderId has rescannedAt.
    * @param {string} folderId
    */
@@ -2662,6 +2679,7 @@ const App = (() => {
       _sortItems(result.folders, result.files);
       const activeSong = Player.getCurrentTrack();
       UI.renderFolderContents(result.folders, result.files, activeSong?.id);
+      if (result.folders.length > 0) _patchFolderRescanDots(result.folders).catch(() => {});
 
       // Update item count badge
       const total = result.folders.length + result.files.length;
@@ -6067,6 +6085,10 @@ const App = (() => {
       const folderSongCount = new Map();
       all.forEach(m => { if (m.folderId) folderSongCount.set(m.folderId, (folderSongCount.get(m.folderId) || 0) + 1); });
 
+      // rescannedAt per folder (folder's own DB record where id === folderId)
+      const rescannedMap = new Map();
+      all.forEach(m => { if (m.rescannedAt) rescannedMap.set(m.id, m.rescannedAt); });
+
       // Group by folderId — same rule as _loadAlbums, but scoped to this artist
       const folderMap = new Map();
       all.forEach(m => {
@@ -6110,7 +6132,8 @@ const App = (() => {
           const year      = _top(f.yearCounts);
           const format    = _top(f.formatCounts) || null;
           const songCount = Math.max(f.taggedCount, folderSongCount.get(f.folderId) || 0);
-          return { name, artist: artist.name, songCount, coverUrl: f.coverUrl, year, format, folderId: f.folderId };
+          const rescannedAt = rescannedMap.get(f.folderId) || null;
+          return { name, artist: artist.name, songCount, coverUrl: f.coverUrl, year, format, folderId: f.folderId, rescannedAt };
         })
         .sort((a, b) => a.name.localeCompare(b.name));
 
