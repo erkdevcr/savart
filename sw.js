@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '1.6.93';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.6.93 — Send to scan: also warns when scan done with unresolved missing-data rows
+const APP_VERSION  = '1.6.94';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.6.94 — EP Artists: search bar + URL via modal instead of inline input
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

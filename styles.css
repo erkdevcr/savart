@@ -5358,13 +5358,18 @@ body.queue-open #mini-player { z-index: 65; }
 /* ── Artistas tab ────────────────────────────────────────────── */
 .ds-artists-header {
   display: flex;
+  flex-direction: column;
+  gap: 0;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  background: var(--bg-surface);
+}
+.ds-artists-top-row {
+  display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   padding: 8px 16px;
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-  background: var(--bg-surface);
 }
 .ds-artists-counters {
   display: flex;
@@ -5385,6 +5390,25 @@ body.queue-open #mini-player { z-index: 65; }
   cursor: pointer;
   user-select: none;
 }
+.ds-artists-search-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px 8px;
+  border-top: 1px solid var(--border);
+}
+.ds-artists-search-icon { color: var(--text-disabled); flex-shrink: 0; }
+.ds-artists-search-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: 13px;
+  color: var(--text-primary);
+  padding: 2px 0;
+}
+.ds-artists-search-input::placeholder { color: var(--text-disabled); }
+.ds-artists-search-input::-webkit-search-cancel-button { cursor: pointer; }
 .ds-artists-grid {
   flex: 1;
   overflow-y: auto;
@@ -5435,41 +5459,47 @@ body.queue-open #mini-player { z-index: 65; }
   width: 100%;
   line-height: 1.35;
 }
-.ds-artist-url-row {
+/* URL button on artist card */
+.ds-artist-url-btn {
   display: flex;
-  width: 100%;
-  flex-direction: column;
-  gap: 4px;
-}
-.ds-artist-url-input {
-  width: 100%;
-  box-sizing: border-box;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
   background: transparent;
-  border: none;
-  border-bottom: 1px solid var(--border);
-  padding: 3px 2px;
-  font-size: 11px;
-  color: var(--text-secondary);
-  outline: none;
-  transition: border-color 0.12s;
+  cursor: pointer;
+  color: var(--text-disabled);
+  transition: border-color 0.12s, color 0.12s, background 0.12s;
+  flex-shrink: 0;
+}
+.ds-artist-url-btn:hover { border-color: var(--accent); color: var(--accent); }
+.ds-artist-url-btn.has-url { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.ds-artist-url-btn.has-url:hover { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+
+/* Artist photo URL modal input */
+.ds-artist-url-modal-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 10px;
   text-align: center;
 }
-.ds-artist-url-input::placeholder { color: var(--text-disabled); }
-.ds-artist-url-input:focus { border-bottom-color: var(--accent); color: var(--text-primary); }
-.ds-artist-save-btn {
-  align-self: center;
-  font-size: 10px;
-  padding: 3px 12px;
-  background: transparent;
+.ds-artist-url-modal-input {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--bg-elevated);
   border: 1px solid var(--border);
-  border-radius: 20px;
-  cursor: pointer;
-  color: var(--text-muted);
-  font-weight: 500;
-  transition: border-color 0.12s, color 0.12s;
-  letter-spacing: 0.3px;
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font-size: 13px;
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color 0.12s;
 }
-.ds-artist-save-btn:hover { border-color: var(--accent); color: var(--accent); }
+.ds-artist-url-modal-input::placeholder { color: var(--text-disabled); }
+.ds-artist-url-modal-input:focus { border-color: var(--accent); }
 
 /* ── Drive folder browser modal ──────────────────────────────── */
 .ds-modal {

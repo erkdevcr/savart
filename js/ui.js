@@ -249,6 +249,10 @@ const UI = (() => {
       ds_no_artists:        'No hay artistas en la biblioteca aún.',
       ds_error_artists:     'Error al cargar artistas.',
       ds_all_have_photo:    'Todos los artistas tienen foto.',
+      ds_add_artist_url:    'Agregar URL de foto',
+      ds_edit_artist_url:   'Editar URL de foto',
+      ds_artist_url_title:  'URL de foto del artista',
+      ds_artists_search:    'Buscar artista…',
       // ── Repeat mode ────────────────────────────────────────
       repeat_off:           'Sin repetición',
       repeat_all:           'Repetir todo',
@@ -526,6 +530,10 @@ const UI = (() => {
       ds_no_artists:        'No artists in library yet.',
       ds_error_artists:     'Error loading artists.',
       ds_all_have_photo:    'All artists have a photo.',
+      ds_add_artist_url:    'Add photo URL',
+      ds_edit_artist_url:   'Edit photo URL',
+      ds_artist_url_title:  'Artist photo URL',
+      ds_artists_search:    'Search artist…',
       // ── Repeat mode ────────────────────────────────────────
       repeat_off:           'No repeat',
       repeat_all:           'Repeat all',

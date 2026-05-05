@@ -656,23 +656,29 @@
     <!-- ── ARTISTAS TAB ──────────────────────────────── -->
     <div class="ds-tab-content" id="ds-tab-artists">
       <div class="ds-artists-header">
-        <div class="ds-artists-counters">
-          <span class="ds-artist-stat">
-            <span class="ds-artist-stat-val" id="ds-art-con">0</span> <span data-i18n="ds_with_photo">con foto</span>
-          </span>
-          <span class="ds-artist-stat-sep">·</span>
-          <span class="ds-artist-stat ds-artist-stat--missing">
-            <span class="ds-artist-stat-val" id="ds-art-sin">0</span> <span data-i18n="ds_without_photo">sin foto</span>
-          </span>
-          <span class="ds-artist-stat-sep">·</span>
-          <span class="ds-artist-stat">
-            <span class="ds-artist-stat-val" id="ds-art-total">0</span> <span data-i18n="ds_total_lbl">total</span>
-          </span>
+        <div class="ds-artists-top-row">
+          <div class="ds-artists-counters">
+            <span class="ds-artist-stat">
+              <span class="ds-artist-stat-val" id="ds-art-con">0</span> <span data-i18n="ds_with_photo">con foto</span>
+            </span>
+            <span class="ds-artist-stat-sep">·</span>
+            <span class="ds-artist-stat ds-artist-stat--missing">
+              <span class="ds-artist-stat-val" id="ds-art-sin">0</span> <span data-i18n="ds_without_photo">sin foto</span>
+            </span>
+            <span class="ds-artist-stat-sep">·</span>
+            <span class="ds-artist-stat">
+              <span class="ds-artist-stat-val" id="ds-art-total">0</span> <span data-i18n="ds_total_lbl">total</span>
+            </span>
+          </div>
+          <label class="ds-artists-toggle-wrap">
+            <div class="toggle" id="ds-toggle-no-photo"></div>
+            <span data-i18n="ds_only_no_photo">Solo sin foto</span>
+          </label>
         </div>
-        <label class="ds-artists-toggle-wrap">
-          <div class="toggle" id="ds-toggle-no-photo"></div>
-          <span data-i18n="ds_only_no_photo">Solo sin foto</span>
-        </label>
+        <div class="ds-artists-search-row">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" class="ds-artists-search-icon"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+          <input id="ds-artists-search" class="ds-artists-search-input" type="search" data-i18n-placeholder="ds_artists_search" placeholder="Buscar artista…">
+        </div>
       </div>
       <div class="ds-artists-grid" id="ds-artists-grid">
         <div class="ds-attention-empty" style="grid-column:1/-1" data-i18n="ds_open_artists">Abre este panel para cargar artistas…</div>
@@ -680,6 +686,24 @@
     </div><!-- /#ds-tab-artists -->
 
   </div><!-- /#screen-deep-scan -->
+
+  <!-- Artist photo URL modal -->
+  <div id="ds-artist-url-modal" class="ds-modal" style="display:none">
+    <div class="ds-modal-backdrop" id="ds-artist-url-backdrop"></div>
+    <div class="ds-modal-card ds-modal-card--sm">
+      <div class="ds-modal-header">
+        <span class="ds-modal-title" id="ds-artist-url-modal-title" data-i18n="ds_artist_url_title">URL de foto del artista</span>
+      </div>
+      <div class="ds-rescan-body">
+        <p class="ds-artist-url-modal-name" id="ds-artist-url-modal-name"></p>
+        <input id="ds-artist-url-input" class="ds-artist-url-modal-input" type="url" placeholder="https://…">
+      </div>
+      <div class="ds-modal-footer">
+        <button id="btn-ds-artist-url-cancel" class="btn-sort-toggle" data-i18n="cancel_btn">Cancelar</button>
+        <button id="btn-ds-artist-url-save" class="btn-primary" data-i18n="confirm_btn">Guardar</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Drive folder browser modal -->
   <div id="ds-folder-modal" class="ds-modal" style="display:none">

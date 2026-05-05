@@ -5278,6 +5278,20 @@ const App = (() => {
       return;
     }
 
+    // Wire search input (once — idempotent via data attribute)
+    const searchInput = document.getElementById('ds-artists-search');
+    if (searchInput && !searchInput.dataset.wired) {
+      searchInput.dataset.wired = '1';
+      searchInput.addEventListener('input', () => {
+        const q = norm(searchInput.value);
+        grid.querySelectorAll('.ds-artist-card').forEach(c => {
+          c.style.display = (!q || c.dataset.artistKey.includes(q)) ? '' : 'none';
+        });
+      });
+    }
+    // Clear any previous search when artists are re-rendered
+    if (searchInput) searchInput.value = '';
+
     for (const [key, name] of filtered) {
       const url = photoMap[key] || '';
       const initials = name.split(/\s+/).map(w => w[0]).join('').slice(0,2).toUpperCase();
@@ -5285,65 +5299,103 @@ const App = (() => {
       const card = document.createElement('div');
       card.className = 'ds-artist-card';
       card.dataset.artistKey = key;
+      card.dataset.currentUrl = url;
+
       // Avatar: show image if available, always keep initials as fallback
       const avatarInner = url
         ? `<img src="${_escHtml(url)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display=''"><span style="display:none">${_escHtml(initials)}</span>`
         : `<span>${_escHtml(initials)}</span>`;
 
+      const urlBtnTitle = url ? UI.t('ds_edit_artist_url') : UI.t('ds_add_artist_url');
       card.innerHTML = `
         <div class="ds-artist-avatar">${avatarInner}</div>
         <span class="ds-artist-name" title="${_escHtml(name)}">${_escHtml(name)}</span>
-        <div class="ds-artist-url-row">
-          <input class="ds-artist-url-input" type="url" placeholder="URL de foto…" value="${_escHtml(url)}">
-          <button class="ds-artist-save-btn">Guardar</button>
-        </div>`;
+        <button class="ds-artist-url-btn${url ? ' has-url' : ''}" title="${_escHtml(urlBtnTitle)}">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/></svg>
+        </button>`;
 
-      // Save
-      card.querySelector('.ds-artist-save-btn').addEventListener('click', async (e) => {
+      card.querySelector('.ds-artist-url-btn').addEventListener('click', (e) => {
         e.stopPropagation();
-        const newUrl = card.querySelector('.ds-artist-url-input').value.trim();
-        const btn    = card.querySelector('.ds-artist-save-btn');
-        btn.disabled = true;
-        try {
-          // Save to manual overrides (ds_artistPhotos)
-          const manual = await DB.getState('ds_artistPhotos').catch(() => ({})) || {};
-          if (newUrl) { manual[key] = newUrl; } else { delete manual[key]; }
-          await DB.setState('ds_artistPhotos', manual);
-
-          // Also write into artistImages so the Library tab picks it up immediately
-          const auto = await DB.getState('artistImages').catch(() => ({})) || {};
-          if (newUrl) { auto[key] = newUrl; } else if (key in auto) { auto[key] = null; }
-          await DB.setState('artistImages', auto);
-
-          // Update avatar immediately
-          const avatar = card.querySelector('.ds-artist-avatar');
-          if (avatar) {
-            avatar.innerHTML = newUrl
-              ? `<img src="${_escHtml(newUrl)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display=''"><span style="display:none">${_escHtml(initials)}</span>`
-              : `<span>${_escHtml(initials)}</span>`;
-          }
-
-          // Recount by checking which cards have a visible img src
-          const allCards  = [...grid.querySelectorAll('.ds-artist-card')];
-          const withPhoto = allCards.filter(c => {
-            const img = c.querySelector('.ds-artist-avatar img');
-            return img && img.src && img.style.display !== 'none';
-          }).length;
-          const total = allCards.length;
-          _dsSetCounter('ds-art-con',   withPhoto);
-          _dsSetCounter('ds-art-sin',   total - withPhoto);
-          _dsSetCounter('ds-art-total', total);
-
-          UI.showToast(newUrl ? UI.t('toast_photo_saved') : UI.t('toast_photo_deleted'));
-        } catch (err) {
-          console.error('[DS] Save artist photo error:', err);
-          UI.showToast(UI.t('toast_save_error'), 'error');
-        }
-        btn.disabled = false;
+        _dsOpenArtistUrlModal(key, name, card.dataset.currentUrl);
       });
 
       grid.appendChild(card);
     }
+  }
+
+  /* ── Artist URL modal ────────────────────────────────────── */
+
+  let _dsArtistUrlKey  = null;
+  let _dsArtistUrlName = null;
+
+  function _dsOpenArtistUrlModal(key, name, currentUrl) {
+    _dsArtistUrlKey  = key;
+    _dsArtistUrlName = name;
+    const titleEl = document.getElementById('ds-artist-url-modal-title');
+    const nameEl  = document.getElementById('ds-artist-url-modal-name');
+    const input   = document.getElementById('ds-artist-url-input');
+    if (titleEl) titleEl.textContent = UI.t('ds_artist_url_title');
+    if (nameEl)  nameEl.textContent  = name;
+    if (input)   input.value         = currentUrl || '';
+    document.getElementById('ds-artist-url-modal').style.display = 'flex';
+    setTimeout(() => input?.select(), 60);
+  }
+
+  async function _dsSaveArtistUrl() {
+    const key    = _dsArtistUrlKey;
+    const name   = _dsArtistUrlName;
+    if (!key) return;
+    const input   = document.getElementById('ds-artist-url-input');
+    const newUrl  = (input?.value || '').trim();
+    const saveBtn = document.getElementById('btn-ds-artist-url-save');
+    if (saveBtn) saveBtn.disabled = true;
+    try {
+      const manual = await DB.getState('ds_artistPhotos').catch(() => ({})) || {};
+      if (newUrl) { manual[key] = newUrl; } else { delete manual[key]; }
+      await DB.setState('ds_artistPhotos', manual);
+
+      const auto = await DB.getState('artistImages').catch(() => ({})) || {};
+      if (newUrl) { auto[key] = newUrl; } else if (key in auto) { auto[key] = null; }
+      await DB.setState('artistImages', auto);
+
+      // Update the card avatar + button state in the grid
+      const grid = document.getElementById('ds-artists-grid');
+      const card = grid?.querySelector(`.ds-artist-card[data-artist-key="${CSS.escape(key)}"]`);
+      if (card) {
+        card.dataset.currentUrl = newUrl;
+        const initials = name.split(/\s+/).map(w => w[0]).join('').slice(0,2).toUpperCase();
+        const avatar = card.querySelector('.ds-artist-avatar');
+        if (avatar) {
+          avatar.innerHTML = newUrl
+            ? `<img src="${_escHtml(newUrl)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display=''"><span style="display:none">${_escHtml(initials)}</span>`
+            : `<span>${_escHtml(initials)}</span>`;
+        }
+        const urlBtn = card.querySelector('.ds-artist-url-btn');
+        if (urlBtn) {
+          urlBtn.classList.toggle('has-url', !!newUrl);
+          urlBtn.title = newUrl ? UI.t('ds_edit_artist_url') : UI.t('ds_add_artist_url');
+        }
+      }
+
+      // Recount
+      const allCards = [...(grid?.querySelectorAll('.ds-artist-card') || [])];
+      const withPhotoCount = allCards.filter(c => {
+        const img = c.querySelector('.ds-artist-avatar img');
+        return img && img.src && img.style.display !== 'none';
+      }).length;
+      _dsSetCounter('ds-art-con',   withPhotoCount);
+      _dsSetCounter('ds-art-sin',   allCards.length - withPhotoCount);
+      _dsSetCounter('ds-art-total', allCards.length);
+
+      UI.showToast(newUrl ? UI.t('toast_photo_saved') : UI.t('toast_photo_deleted'));
+      _dsCloseModal('ds-artist-url-modal');
+      _dsArtistUrlKey  = null;
+      _dsArtistUrlName = null;
+    } catch (err) {
+      console.error('[DS] Save artist photo error:', err);
+      UI.showToast(UI.t('toast_save_error'), 'error');
+    }
+    if (saveBtn) saveBtn.disabled = false;
   }
 
   /**
@@ -7463,6 +7515,20 @@ const App = (() => {
     document.getElementById('btn-ds-modal-close')?.addEventListener('click',   () => _dsCloseModal('ds-folder-modal'));
     document.getElementById('ds-folder-modal-backdrop')?.addEventListener('click', () => _dsCloseModal('ds-folder-modal'));
     document.getElementById('btn-ds-modal-select')?.addEventListener('click',  _dsConfirmFolderSelect);
+
+    // Deep Scan: artist photo URL modal
+    const _closeArtistUrlModal = () => {
+      _dsCloseModal('ds-artist-url-modal');
+      _dsArtistUrlKey  = null;
+      _dsArtistUrlName = null;
+    };
+    document.getElementById('ds-artist-url-backdrop')?.addEventListener('click', _closeArtistUrlModal);
+    document.getElementById('btn-ds-artist-url-cancel')?.addEventListener('click', _closeArtistUrlModal);
+    document.getElementById('btn-ds-artist-url-save')?.addEventListener('click', _dsSaveArtistUrl);
+    document.getElementById('ds-artist-url-input')?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') _dsSaveArtistUrl();
+      if (e.key === 'Escape') _closeArtistUrlModal();
+    });
 
     // Deep Scan: send-to-scan warning dialog
     const _closeSendScanDialog = () => {
