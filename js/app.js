@@ -261,6 +261,12 @@ const App = (() => {
     // 2. Expanded player visible on mobile?
     if (typeof UI !== 'undefined' && UI.isExpandedPlayerVisible?.() &&
         !window.matchMedia('(min-width: 768px)').matches) {
+      // 2a. Queue open → close queue first, stay in expanded player (now-playing)
+      if (UI.isQueuePanelVisible?.()) {
+        UI.showQueuePanel(false);
+        return;
+      }
+      // 2b. Otherwise collapse the expanded player entirely
       UI.setExpandedPlayerVisible(false);
       return;
     }
@@ -7203,9 +7209,19 @@ const App = (() => {
       UI.showQueuePanel(false);
     });
 
-    // Desktop micro player: click → close queue and return to now-playing view
-    document.getElementById('desk-micro-player')?.addEventListener('click', () => {
+    // Desktop micro player: click left side (thumb/info) → close queue
+    document.querySelector('#desk-micro-player .dmp-left')?.addEventListener('click', () => {
       UI.showQueuePanel(false);
+    });
+    // Desktop micro player: playback buttons
+    document.getElementById('dmp-btn-prev')?.addEventListener('click', (e) => {
+      e.stopPropagation(); Player.prev();
+    });
+    document.getElementById('dmp-btn-play')?.addEventListener('click', (e) => {
+      e.stopPropagation(); Player.togglePlayPause();
+    });
+    document.getElementById('dmp-btn-next')?.addEventListener('click', (e) => {
+      e.stopPropagation(); Player.next();
     });
 
     // Lyrics panel: open/close

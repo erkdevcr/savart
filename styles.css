@@ -2561,20 +2561,29 @@ img { display: block; }
   display: none;          /* hidden by default; CSS shows it below */
   flex-shrink: 0;
   align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
+  gap: 0;
+  padding: 0 6px 0 12px;
   height: 56px;
-  cursor: pointer;
   background: var(--bg-surface);
   border-top: 1px solid var(--bg-hover);
-  transition: background 0.12s;
   user-select: none;
 }
-#desk-micro-player:hover { background: var(--bg-elevated); }
+
+/* Left side: thumb + info — clickable to close queue */
+.dmp-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+  padding-right: 8px;
+}
+.dmp-left:hover .dmp-title   { color: var(--accent); }
 
 .dmp-thumb {
-  width: 40px;
-  height: 40px;
+  width: 38px;
+  height: 38px;
   border-radius: var(--radius-sm);
   background: var(--bg-elevated);
   flex-shrink: 0;
@@ -2590,10 +2599,7 @@ img { display: block; }
   object-fit: cover;
   display: block;
 }
-.dmp-info {
-  flex: 1;
-  min-width: 0;
-}
+.dmp-info { min-width: 0; }
 .dmp-title {
   font-size: 12px;
   font-weight: 500;
@@ -2601,6 +2607,7 @@ img { display: block; }
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  transition: color 0.12s;
 }
 .dmp-artist {
   font-size: 11px;
@@ -2608,9 +2615,38 @@ img { display: block; }
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  margin-top: 2px;
+  margin-top: 1px;
 }
-.dmp-chevron { color: var(--text-muted); flex-shrink: 0; }
+
+/* Controls: prev · play · next */
+.dmp-controls {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  flex-shrink: 0;
+}
+.dmp-btn {
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: var(--radius-circle);
+  transition: color 0.12s, background 0.12s;
+}
+.dmp-btn:hover { color: var(--text-primary); background: var(--bg-hover); }
+.dmp-btn-play {
+  width: 38px;
+  height: 38px;
+  color: var(--text-primary);
+}
+
+/* Mobile: raise mini-player above queue overlay */
+body.queue-open #mini-player { z-index: 65; }
 
 @media (min-width: 768px) {
   /* Show micro player when queue is open on desktop */

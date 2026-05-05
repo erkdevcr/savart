@@ -669,11 +669,11 @@ const UI = (() => {
     if (btnPlayDesk) btnPlayDesk.innerHTML = isPlaying ? iconPause(18) : iconPlay(18);
 
     // Sync desk micro player
-    _updateDeskMicroPlayer(track);
+    _updateDeskMicroPlayer(track, isPlaying);
   }
 
-  /** Populate #desk-micro-player fields with current track info. */
-  function _updateDeskMicroPlayer(track) {
+  /** Populate #desk-micro-player fields with current track info and play state. */
+  function _updateDeskMicroPlayer(track, isPlaying) {
     const titleEl  = document.getElementById('dmp-title');
     const artistEl = document.getElementById('dmp-artist');
     const img      = document.getElementById('dmp-thumb-img');
@@ -685,15 +685,19 @@ const UI = (() => {
 
     if (img && icon) {
       if (track?.thumbnailUrl) {
-        img.src          = track.thumbnailUrl;
+        img.src            = track.thumbnailUrl;
         img.style.display  = '';
         icon.style.display = 'none';
       } else {
-        img.src           = '';
+        img.src            = '';
         img.style.display  = 'none';
         icon.style.display = '';
       }
     }
+
+    // Update play/pause icon
+    const playBtn = document.getElementById('dmp-btn-play');
+    if (playBtn) playBtn.innerHTML = isPlaying ? iconPause(18) : iconPlay(18);
   }
 
   /* ── Expanded player ────────────────────────────────────── */
@@ -2020,6 +2024,8 @@ const UI = (() => {
     if (!el) return;
     el.classList.toggle('showing-queue', open);
     if (open) el.classList.remove('showing-lyrics');  // mutual exclusion
+    // Mobile: lift mini-player above the queue overlay
+    if (!_isDesktop()) document.body.classList.toggle('queue-open', open);
   }
 
   function isQueuePanelVisible() {

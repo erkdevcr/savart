@@ -893,17 +893,31 @@
   </div><!-- /.pexp-queue-view -->
 
   <!-- Micro player: shown at the bottom of the queue panel on desktop.
-       Click it to return to the now-playing view and close the queue. -->
-  <div id="desk-micro-player" aria-label="Ver reproduciendo ahora">
-    <div class="dmp-thumb">
-      <img id="dmp-thumb-img" src="" alt="" style="display:none">
-      <svg id="dmp-thumb-icon" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 14.5c-2.49 0-4.5-2.01-4.5-4.5S9.51 7.5 12 7.5s4.5 2.01 4.5 4.5-2.01 4.5-4.5 4.5zm0-5.5c-.55 0-1 .45-1 1s.45 1 1 1 1-.45 1-1-.45-1-1-1z"/></svg>
+       Click the left side (thumb/info) to return to now-playing; right side has controls. -->
+  <div id="desk-micro-player">
+    <!-- Clickable area → closes queue, goes back to now-playing -->
+    <div class="dmp-left" aria-label="Ver reproduciendo ahora">
+      <div class="dmp-thumb">
+        <img id="dmp-thumb-img" src="" alt="" style="display:none">
+        <svg id="dmp-thumb-icon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z"/></svg>
+      </div>
+      <div class="dmp-info">
+        <div class="dmp-title" id="dmp-title">—</div>
+        <div class="dmp-artist" id="dmp-artist"></div>
+      </div>
     </div>
-    <div class="dmp-info">
-      <div class="dmp-title" id="dmp-title">—</div>
-      <div class="dmp-artist" id="dmp-artist"></div>
+    <!-- Playback controls -->
+    <div class="dmp-controls">
+      <button class="dmp-btn" id="dmp-btn-prev" aria-label="Anterior">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>
+      </button>
+      <button class="dmp-btn dmp-btn-play" id="dmp-btn-play" aria-label="Play/Pausa">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+      </button>
+      <button class="dmp-btn" id="dmp-btn-next" aria-label="Siguiente">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M16 6h2v12h-2zM6 6v12l8.5-6z"/></svg>
+      </button>
     </div>
-    <svg class="dmp-chevron" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z"/></svg>
   </div>
 
 </div><!-- /#player-expanded -->

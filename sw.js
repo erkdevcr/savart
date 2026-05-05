@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '1.6.85';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.6.85 — Android back: double-buffer prevents app exit from home screen
+const APP_VERSION  = '1.6.86';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.6.86 — Mobile mini-player above queue; desktop micro player prev/play/next
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
