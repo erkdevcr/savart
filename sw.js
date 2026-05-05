@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '1.6.96';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.6.96 — Lyrics: add lrclib as fallback (get + fuzzy search) after lyrics.ovh
+const APP_VERSION  = '1.6.97';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.6.97 — DS rows: 3-dot menu with "Go to album" + "Go to Drive folder"
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

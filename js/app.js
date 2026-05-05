@@ -4822,22 +4822,7 @@ const App = (() => {
       list.innerHTML = `<div class="ds-attention-empty">${UI.t('scan_none_complete')}</div>`;
       return;
     }
-    for (const folder of folders) {
-      const row = document.createElement('div');
-      row.className = 'ds-folder-row';
-      const pathParts = folder.path.split(' › ');
-      const leaf      = pathParts.pop();
-      const parentStr = pathParts.length ? pathParts.join(' › ') + ' › ' : '';
-      row.innerHTML = `
-        <div class="ds-folder-header" style="cursor:default">
-          <div class="ds-status-dot green"></div>
-          <div class="ds-folder-path">
-            <span class="ds-folder-parent">${_escHtml(parentStr)}</span><span class="ds-folder-leaf">${_escHtml(leaf)}</span>
-          </div>
-          <span style="font-size:10px;color:var(--text-disabled);flex-shrink:0">${folder.count} arch.</span>
-        </div>`;
-      list.appendChild(row);
-    }
+    for (const folder of folders) list.appendChild(_dsBuildSimpleRow(folder, 'green'));
   }
 
   /** Build a simple (non-expandable) folder row for completed/skipped entries. */
@@ -4850,12 +4835,17 @@ const App = (() => {
     const parentStr = pathParts.length ? pathParts.join(' › ') + ' › ' : '';
     row.innerHTML = `
       <div class="ds-folder-header" style="cursor:default">
+        <button class="ds-row-menu-btn" title="Más opciones"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg></button>
         <div class="ds-status-dot ${dotClass}"></div>
         <div class="ds-folder-path">
           <span class="ds-folder-parent">${_escHtml(parentStr)}</span><span class="ds-folder-leaf">${_escHtml(leaf)}</span>
         </div>
         <span style="font-size:10px;color:var(--text-disabled);flex-shrink:0">${folder.count} arch.</span>
       </div>`;
+    row.querySelector('.ds-row-menu-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      UI.showContextMenu(e, 'ds_folder', { id: folder.id, folderId: folder.id, name: leaf, isFolder: true });
+    });
     return row;
   }
 
@@ -4958,6 +4948,7 @@ const App = (() => {
 
     row.innerHTML = `
       <div class="ds-folder-header">
+        <button class="ds-row-menu-btn" title="Más opciones"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg></button>
         <div class="ds-status-dot ${dotCls}"></div>
         <div class="ds-folder-path">
           <span class="ds-folder-parent">${_escHtml(parentStr)}</span><span class="ds-folder-leaf">${_escHtml(leaf)}</span>
@@ -4974,8 +4965,13 @@ const App = (() => {
         ${_dsBuildTable(folder)}
       </div>`;
 
+    row.querySelector('.ds-row-menu-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      UI.showContextMenu(e, 'ds_folder', { id: folder.id, folderId: folder.id, name: leaf, isFolder: true });
+    });
+
     row.querySelector('.ds-folder-header').addEventListener('click', async (e) => {
-      if (e.target.closest('.ds-ignore-btn')) return;
+      if (e.target.closest('.ds-ignore-btn') || e.target.closest('.ds-row-menu-btn')) return;
       const opening = !row.classList.contains('ds-open');
       row.classList.toggle('ds-open');
       row.classList.toggle('ds-editing', opening); // highlight while editing, clear on close

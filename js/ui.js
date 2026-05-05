@@ -1675,6 +1675,13 @@ const UI = (() => {
       _addCtxItem(menu, iconTrash(14), t('ctx_remove_history'), () => { App.onRemoveFromHistoryItem(item); hideContextMenu(); });
     }
 
+    // ── Deep Scan folder rows ────────────────────────────────────
+
+    if (type === 'ds_folder') {
+      _addCtxItem(menu, _iconFolder, t('ctx_go_to_album'),  () => { App.onGoToAlbum?.(item);        hideContextMenu(); });
+      _addCtxItem(menu, _iconFolder, t('ctx_go_to_folder'), () => { App.onGoToFolder?.(item);        hideContextMenu(); });
+    }
+
     // Position menu near cursor — measure actual rendered size to avoid overflow
     // Use visualViewport when available: on Android it excludes the system navigation
     // bar, whereas window.innerHeight includes the area behind it.

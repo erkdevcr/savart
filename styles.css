@@ -5174,6 +5174,24 @@ body.queue-open #mini-player { z-index: 65; }
   background: color-mix(in srgb, var(--accent) 6%, transparent);
 }
 
+/* Row 3-dot menu button */
+.ds-row-menu-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-disabled);
+  border-radius: 4px;
+  padding: 0;
+  transition: color 0.12s, background 0.12s;
+}
+.ds-row-menu-btn:hover { color: var(--text-secondary); background: var(--bg-hover); }
+
 /* Status dot */
 .ds-status-dot {
   width: 7px;
