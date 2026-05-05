@@ -1,6 +1,8 @@
 /* ============================================================
    Savart — Lyrics module
-   Fetches song lyrics via lyrics.ovh (free, no API key needed).
+   Fetches song lyrics via a chain of free, CORS-enabled APIs:
+     1. lyrics.ovh   — fast, no auth, plain lyrics
+     2. lrclib       — no auth, plain + synced (LRC) lyrics
    ============================================================
    Design decisions:
    - Lazy fetch: only called after all recognition passes are done
@@ -12,14 +14,93 @@
 
 const Lyrics = (() => {
 
-  const API_BASE = 'https://api.lyrics.ovh/v1';
-
   // "artist::title" → string (lyrics) | null (not found)
   // undefined (not in map) = not yet fetched
   const _cache = new Map();
 
+  /* ── helpers ─────────────────────────────────────────────── */
+
+  function _key(artist, title) {
+    return `${artist.trim().toLowerCase()}::${title.trim().toLowerCase()}`;
+  }
+
+  /**
+   * Strip LRC timestamps so synced lyrics can be used as plain text.
+   * "[01:23.45] Line text" → "Line text"
+   */
+  function _stripLrc(synced) {
+    if (!synced) return null;
+    const plain = synced
+      .split('\n')
+      .map(l => l.replace(/^\[[\d:.]+\]\s*/, ''))
+      .filter(l => l.trim())
+      .join('\n')
+      .trim();
+    return plain || null;
+  }
+
+  /* ── provider 1: lyrics.ovh ──────────────────────────────── */
+
+  async function _fetchOvh(artist, title) {
+    try {
+      const url = `https://api.lyrics.ovh/v1/${encodeURIComponent(artist.trim())}/${encodeURIComponent(title.trim())}`;
+      const res = await window.fetch(url, { signal: AbortSignal.timeout(7000) });
+      if (!res.ok) return null;
+      const data = await res.json();
+      return data.lyrics?.trim() || null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /* ── provider 2: lrclib ──────────────────────────────────── */
+
+  /**
+   * lrclib direct-get endpoint — exact match by track_name + artist_name.
+   * Returns lyrics string or null.
+   */
+  async function _fetchLrclibGet(artist, title) {
+    try {
+      const url = `https://lrclib.net/api/get?track_name=${encodeURIComponent(title.trim())}&artist_name=${encodeURIComponent(artist.trim())}`;
+      const res = await window.fetch(url, {
+        signal: AbortSignal.timeout(7000),
+        headers: { 'User-Agent': 'Savart/1.0 (https://erkdevcr.github.io/savart)' },
+      });
+      if (!res.ok) return null;
+      const data = await res.json();
+      const plain  = data.plainLyrics?.trim()  || null;
+      const synced = data.syncedLyrics?.trim() || null;
+      return plain || _stripLrc(synced);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /**
+   * lrclib search endpoint — fuzzy match, takes first result.
+   * Used as fallback when the direct get returns nothing.
+   */
+  async function _fetchLrclibSearch(artist, title) {
+    try {
+      const url = `https://lrclib.net/api/search?track_name=${encodeURIComponent(title.trim())}&artist_name=${encodeURIComponent(artist.trim())}&limit=1`;
+      const res = await window.fetch(url, {
+        signal: AbortSignal.timeout(7000),
+        headers: { 'User-Agent': 'Savart/1.0 (https://erkdevcr.github.io/savart)' },
+      });
+      if (!res.ok) return null;
+      const results = await res.json();
+      if (!Array.isArray(results) || results.length === 0) return null;
+      const hit    = results[0];
+      const plain  = hit.plainLyrics?.trim()  || null;
+      const synced = hit.syncedLyrics?.trim() || null;
+      return plain || _stripLrc(synced);
+    } catch (_) {
+      return null;
+    }
+  }
+
   /* ── fetch ──────────────────────────────────────────────────
-   * Fetch lyrics for a song. Caches the result.
+   * Fetch lyrics for a song, trying each provider in order.
    * @param {string} artist
    * @param {string} title
    * @returns {Promise<string|null>}
@@ -27,22 +108,22 @@ const Lyrics = (() => {
   async function fetch(artist, title) {
     if (!artist?.trim() || !title?.trim()) return null;
 
-    const key = `${artist.trim().toLowerCase()}::${title.trim().toLowerCase()}`;
+    const key = _key(artist, title);
     if (_cache.has(key)) return _cache.get(key);
 
-    try {
-      const url = `${API_BASE}/${encodeURIComponent(artist.trim())}/${encodeURIComponent(title.trim())}`;
-      const res = await window.fetch(url);
-      if (!res.ok) { _cache.set(key, null); return null; }
+    let lyrics = null;
 
-      const data = await res.json();
-      const lyrics = data.lyrics?.trim() || null;
-      _cache.set(key, lyrics);
-      return lyrics;
-    } catch (_) {
-      _cache.set(key, null);
-      return null;
-    }
+    // 1. lyrics.ovh
+    lyrics = await _fetchOvh(artist, title);
+
+    // 2. lrclib — direct match
+    if (!lyrics) lyrics = await _fetchLrclibGet(artist, title);
+
+    // 3. lrclib — fuzzy search (handles slight spelling differences)
+    if (!lyrics) lyrics = await _fetchLrclibSearch(artist, title);
+
+    _cache.set(key, lyrics);
+    return lyrics;
   }
 
   /* ── getCached ──────────────────────────────────────────────
@@ -54,7 +135,7 @@ const Lyrics = (() => {
    */
   function getCached(artist, title) {
     if (!artist || !title) return undefined;
-    const key = `${artist.trim().toLowerCase()}::${title.trim().toLowerCase()}`;
+    const key = _key(artist, title);
     return _cache.has(key) ? _cache.get(key) : undefined;
   }
 
