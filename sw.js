@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '1.7.11';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.11 — Artist radio in all song menus
+const APP_VERSION  = '1.7.12';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.12 — Remove text nav in players
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
