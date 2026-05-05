@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '1.7.6';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.6 — Fix sync merge: always set id on merged record so folder records write correctly to DB
+const APP_VERSION  = '1.7.7';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.7 — Fix DS context menu: raise z-index above DS screen overlay
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
