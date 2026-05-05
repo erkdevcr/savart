@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '1.6.87';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.6.87 — Radio: accent-sensitive artist match; songs matched by artist tag only (not filename)
+const APP_VERSION  = '1.6.88';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.6.88 — Mini/micro player play button blue; mini-player tap opens expanded player
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

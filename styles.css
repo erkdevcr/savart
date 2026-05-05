@@ -323,8 +323,11 @@ img { display: block; }
 }
 
 #mini-player .btn-play-mini {
-  color: var(--text-primary) !important;
+  background: var(--accent);
+  color: #fff !important;
+  border-radius: var(--radius-circle);
 }
+#mini-player .btn-play-mini:hover { background: #5a96ff; }
 
 /* Progress bar (anchored to bottom of mini-player) */
 #mini-player .mini-progress {
@@ -2642,8 +2645,11 @@ img { display: block; }
 .dmp-btn-play {
   width: 38px;
   height: 38px;
-  color: var(--text-primary);
+  background: var(--accent);
+  color: #fff !important;
+  border-radius: var(--radius-circle);
 }
+.dmp-btn-play:hover { background: #5a96ff !important; }
 
 /* Mobile: raise mini-player above queue overlay */
 body.queue-open #mini-player { z-index: 65; }

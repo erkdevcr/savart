@@ -6366,7 +6366,12 @@ const App = (() => {
     if (e.target.closest('button')) return;
     const track = Player.getCurrentTrack();
     if (!track) return;
-    // Open expanded player — enrich with cached ID3 metadata if available
+    // Queue open (mobile)? → close it to reveal the now-playing view
+    if (UI.isQueuePanelVisible?.() && !window.matchMedia('(min-width: 768px)').matches) {
+      UI.showQueuePanel(false);
+      return;
+    }
+    // Open / refresh expanded player with current track info
     UI.updateExpandedPlayer(_enrichTrack(track), Player.isPlaying());
     const dur = Player.getDuration();
     const cur = Player.getCurrentTime?.() || 0;
