@@ -61,7 +61,7 @@ const UI = (() => {
       format_unsupported: 'Formato no compatible',
       // ── Context menu ───────────────────────────────────────
       ctx_play:           'Reproducir',
-      ctx_go_to_album:    'Ir a carpeta de Drive',
+      ctx_go_to_album:    'Ir al álbum',
       ctx_go_to_folder:   'Ir a carpeta de Drive',
       ctx_add_fav_folder: 'Añadir a favoritos',
       ctx_pin_to_home:    'Agregar a inicio',
@@ -329,7 +329,7 @@ const UI = (() => {
       format_unsupported: 'Unsupported format',
       // ── Context menu ───────────────────────────────────────
       ctx_play:           'Play',
-      ctx_go_to_album:    'Go to Drive folder',
+      ctx_go_to_album:    'Go to album',
       ctx_go_to_folder:   'Go to Drive folder',
       ctx_add_fav_folder: 'Add to favorites',
       ctx_pin_to_home:    'Add to home',
@@ -1508,7 +1508,7 @@ const UI = (() => {
       _addCtxItem(menu, _iconNext,     t('play_next'),   () => { Player.insertNext(item);        hideContextMenu(); });
       _addCtxItem(menu, _iconQueue,    t('play_after'),  () => { Player.appendToQueue(item);     hideContextMenu(); });
       _addCtxDivider(menu);
-      _addCtxItem(menu, _iconFolder,   t('ctx_go_to_album'), () => { App.onGoToFolder(item);    hideContextMenu(); });
+      _addCtxItem(menu, _iconFolder,   t('ctx_go_to_album'), () => { App.onGoToAlbum?.(item);   hideContextMenu(); });
       _addCtxDivider(menu);
       _addCtxItem(menu, iconStar(14),  t('add_fav'),     () => { App.onToggleStar(item);         hideContextMenu(); });
       _addCtxItem(menu, iconPlus(14),  t('add_to_pl'),  (e) => { hideContextMenu(); App.onShowPlaylistPicker(e, item); });
@@ -1541,7 +1541,7 @@ const UI = (() => {
       _addCtxDivider(menu);
       _addCtxItem(menu, _iconFolder,
         isFolder ? t('ctx_go_to_folder') : t('ctx_go_to_album'),
-        () => { App.onGoToFolder(item); hideContextMenu(); }
+        () => { isFolder ? App.onGoToFolder(item) : App.onGoToAlbum?.(item); hideContextMenu(); }
       );
       _addCtxDivider(menu);
       _addCtxItem(menu, iconPin(14), t('ctx_unpin_from_home'), () => {
@@ -1563,7 +1563,7 @@ const UI = (() => {
       _addCtxDivider(menu);
       _addCtxItem(menu, _iconFolder,
         isFolder ? t('ctx_go_to_folder') : t('ctx_go_to_album'),
-        () => { App.onGoToFolder(item); hideContextMenu(); }
+        () => { isFolder ? App.onGoToFolder(item) : App.onGoToAlbum?.(item); hideContextMenu(); }
       );
       _addCtxDivider(menu);
       _addCtxItem(menu, iconStar(14), isFolder ? t('ctx_add_fav_folder') : t('add_fav'),
@@ -1602,7 +1602,7 @@ const UI = (() => {
       _addCtxItem(menu, _iconNext,     t('play_next'),          () => { Player.insertNext(item);      hideContextMenu(); });
       _addCtxItem(menu, _iconQueue,    t('play_after'),         () => { Player.appendToQueue(item);   hideContextMenu(); });
       _addCtxDivider(menu);
-      _addCtxItem(menu, _iconFolder,   t('ctx_go_to_album'),    () => { App.onGoToFolder(item);       hideContextMenu(); });
+      _addCtxItem(menu, _iconFolder,   t('ctx_go_to_album'),    () => { App.onGoToAlbum?.(item);      hideContextMenu(); });
       _addCtxDivider(menu);
       _addCtxItem(menu, iconStar(14),  t('ctx_mark_fav'),       () => { App.onToggleStar(item);       hideContextMenu(); });
       _addCtxItem(menu, iconPlus(14),  t('add_to_pl'),         (e) => { hideContextMenu(); App.onShowPlaylistPicker(e, item); });
@@ -1630,7 +1630,7 @@ const UI = (() => {
       _addCtxItem(menu, _iconNext,     t('play_next'),       () => { Player.insertNext(item);      hideContextMenu(); });
       _addCtxItem(menu, _iconQueue,    t('play_after'),      () => { Player.appendToQueue(item);   hideContextMenu(); });
       _addCtxDivider(menu);
-      _addCtxItem(menu, _iconFolder,   t('ctx_go_to_album'), () => { App.onGoToFolder(item);       hideContextMenu(); });
+      _addCtxItem(menu, _iconFolder,   t('ctx_go_to_album'), () => { App.onGoToAlbum?.(item);      hideContextMenu(); });
       _addCtxDivider(menu);
       _addCtxItem(menu, iconStar(14),  t('add_fav'),         () => { App.onToggleStar(item);       hideContextMenu(); });
       _addCtxItem(menu, iconPlus(14),  t('add_to_pl'),      (e) => { hideContextMenu(); App.onShowPlaylistPicker(e, item); });

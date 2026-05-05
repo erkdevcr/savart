@@ -6575,6 +6575,47 @@ const App = (() => {
     }
   }
 
+  /**
+   * "Ir al álbum" — navigate to Library → Albums and open the album detail
+   * that contains the given song. Falls back to a toast if the folder cannot
+   * be resolved.
+   * @param {DriveItem} song
+   */
+  async function onGoToAlbum(song) {
+    // Resolve the album folder ID using the same priority chain as onGoToFolder
+    let folderId = song.parents?.[0] || song.folderId;
+
+    if (!folderId) {
+      const dbMeta = await DB.getMeta(song.id).catch(() => null);
+      folderId = dbMeta?.folderId;
+    }
+
+    if (!folderId) {
+      try {
+        const fileInfo = await Drive.getFileInfo(song.id);
+        folderId = fileInfo.parents?.[0];
+      } catch (_) {}
+    }
+
+    if (!folderId) {
+      UI.showToast(UI.t('toast_folder_unavailable'), 'error');
+      return;
+    }
+
+    // Build a minimal album descriptor (folderId is the primary key in onAlbumClick)
+    const meta  = (typeof Meta !== 'undefined') ? Meta.getCached(song.id) : null;
+    const album = {
+      folderId,
+      name:   song.album  || meta?.album  || song.displayName || song.name || '',
+      artist: song.artist || meta?.artist || '',
+    };
+
+    // Navigate to Library → Albums tab and drill into the album detail
+    onNavClick('library');
+    _setLibTab('albums');
+    onAlbumClick(album, null).catch(err => console.warn('[App] onGoToAlbum:', err));
+  }
+
   /** Navigate Browse to the Drive folder of the album. */
   function onAlbumGoToFolder(album) {
     if (!album.folderId) return;
@@ -7625,6 +7666,7 @@ const App = (() => {
     onPlaylistDetailPlay,
     onFolderClick,
     onGoToFolder,
+    onGoToAlbum,
     onFolderPlay,
     onBreadcrumbClick,
     onSongClick,

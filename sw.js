@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '1.6.88';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.6.88 — Mini/micro player play button blue; mini-player tap opens expanded player
+const APP_VERSION  = '1.6.89';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.6.89 — "Go to album" in all song menus navigates to Library album detail
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
