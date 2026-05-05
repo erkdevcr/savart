@@ -1867,6 +1867,11 @@ img { display: block; }
   transition: background 0.12s;
 }
 .lib-artist-card:hover { background: var(--bg-hover); }
+.lib-artist-avatar-wrap {
+  position: relative;
+  flex-shrink: 0;
+  width: fit-content;
+}
 .lib-artist-avatar {
   width: 136px;
   height: 136px;
@@ -1880,12 +1885,11 @@ img { display: block; }
   color: var(--text-secondary);
   flex-shrink: 0;
   overflow: hidden; /* clips the photo to the circle */
-  position: relative;
 }
 .artist-radio-btn {
   position: absolute;
-  top: 6px;
-  right: 6px;
+  top: 4px;
+  right: 4px;
   width: 24px;
   height: 24px;
   border-radius: 50%;
