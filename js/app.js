@@ -230,11 +230,18 @@ const App = (() => {
    * then re-pushes a new entry so the stack never empties below the floor.
    */
   function _initBackGuard() {
+    // Seed the stack with a floor entry plus TWO buffer entries.
+    // Two buffers means a single back-press can never reach the floor, even
+    // with the slight timing gap between the popstate event and our re-push.
     history.replaceState({ savart: 'base' }, '');
     history.pushState({ savart: 'step' }, '');
+    history.pushState({ savart: 'step' }, '');   // extra buffer
+
     window.addEventListener('popstate', () => {
       _handleBack();
-      // Re-push so there's always one entry above the floor
+      // Replenish two buffer entries after every pop so the stack never drains,
+      // even when the user taps back rapidly multiple times in a row.
+      history.pushState({ savart: 'step' }, '');
       history.pushState({ savart: 'step' }, '');
     });
   }
