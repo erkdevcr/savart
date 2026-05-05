@@ -1638,14 +1638,18 @@ const UI = (() => {
     menu.style.left = `${x}px`;
     menu.style.top  = `${y}px`;
 
-    // Click outside to dismiss
+    // Click outside OR any scroll → dismiss
     requestAnimationFrame(() => {
-      document.addEventListener('click', hideContextMenu, { once: true });
+      document.addEventListener('click',  hideContextMenu, { once: true });
+      document.addEventListener('scroll', hideContextMenu, { once: true, capture: true, passive: true });
     });
   }
 
   function hideContextMenu() {
     document.getElementById('context-menu')?.classList.remove('visible');
+    // Remove both dismiss listeners (whichever didn't fire first)
+    document.removeEventListener('click',  hideContextMenu);
+    document.removeEventListener('scroll', hideContextMenu, { capture: true });
   }
 
   /* ── Playlist picker ─────────────────────────────────────── */
