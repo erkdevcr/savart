@@ -2897,7 +2897,7 @@ const UI = (() => {
         }
       </div>
       <button class="home-card-more album-card-more" aria-label="Más opciones">${iconDots(14)}</button>
-      ${(album.year || album.format) ? `<div class="home-card-year">${[album.year ? `(${escHtml(album.year)})` : '', album.format ? `<span class="album-format-badge">${escHtml(album.format)}</span>` : ''].filter(Boolean).join(' ')}</div>` : ''}
+      ${(album.rescannedAt || album.year || album.format) ? `<div class="home-card-year">${[album.rescannedAt ? '<span class="album-rescan-dot"></span>' : '', album.year ? `(${escHtml(album.year)})` : '', album.format ? `<span class="album-format-badge">${escHtml(album.format)}</span>` : ''].filter(Boolean).join(' ')}</div>` : ''}
       <div class="home-card-name">${escHtml(album.name)}</div>
       ${album.artist ? `<div class="home-card-sub">${escHtml(album.artist)}</div>` : ''}
       <div class="home-card-count">${escHtml(songLabel)}</div>

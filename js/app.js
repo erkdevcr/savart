@@ -5984,6 +5984,10 @@ const App = (() => {
       const folderSongCount = new Map();
       all.forEach(m => { if (m.folderId) folderSongCount.set(m.folderId, (folderSongCount.get(m.folderId) || 0) + 1); });
 
+      // rescannedAt per folder — stored on the folder's own DB record (id === folderId)
+      const rescannedMap = new Map();
+      all.forEach(m => { if (m.rescannedAt) rescannedMap.set(m.id, m.rescannedAt); });
+
       // ── Group by folderId first: one folder = one album ───────────────────────
       // Songs with different album tags but the same folder are merged (majority name wins).
       // Songs in different folders are always separate entries even if they share a name.
@@ -6039,7 +6043,8 @@ const App = (() => {
             || (f.blobId && f.blobData && typeof Meta !== 'undefined'
                 ? Meta.injectCover(f.blobId, f.blobData)
                 : null);
-          return { name, artist, artists, songCount, coverUrl, year, format, folderId: f.folderId };
+          const rescannedAt = rescannedMap.get(f.folderId) || null;
+          return { name, artist, artists, songCount, coverUrl, year, format, folderId: f.folderId, rescannedAt };
         })
         .sort((a, b) => a.name.localeCompare(b.name));
 
