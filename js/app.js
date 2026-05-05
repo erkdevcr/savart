@@ -7494,18 +7494,7 @@ const App = (() => {
       if (track) UI.showContextMenu(e, 'player_song', track);
     });
 
-    // Expanded player: album name text → go to album
-    document.getElementById('pexp-album')?.addEventListener('click', () => {
-      const track = Player.getCurrentTrack();
-      if (track) onGoToAlbum(track);
-    });
-
-    // Mini player: artist name → navigate to Library album
-    document.querySelector('#mini-player .mini-artist')?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const track = Player.getCurrentTrack();
-      if (track) onGoToAlbum(track);
-    });
+    // pexp-album and mini-artist clicks intentionally removed — no navigation on name tap
 
     // Expanded player: playback controls
     document.getElementById('btn-pexp-prev')?.addEventListener('click', () => Player.prev());
