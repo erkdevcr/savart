@@ -61,6 +61,7 @@ const UI = (() => {
       format_unsupported: 'Formato no compatible',
       // ── Context menu ───────────────────────────────────────
       ctx_play:           'Reproducir',
+      ctx_go_to_artist:   'Ir al artista',
       ctx_go_to_album:    'Ir al álbum',
       ctx_go_to_folder:    'Ir a carpeta de Drive',
       ctx_send_to_scan:      'Enviar a escáner',
@@ -342,6 +343,7 @@ const UI = (() => {
       format_unsupported: 'Unsupported format',
       // ── Context menu ───────────────────────────────────────
       ctx_play:           'Play',
+      ctx_go_to_artist:   'Go to artist',
       ctx_go_to_album:    'Go to album',
       ctx_go_to_folder:      'Go to Drive folder',
       ctx_send_to_scan:      'Send to scan',
@@ -1530,6 +1532,7 @@ const UI = (() => {
     const _iconNext   = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zM20 6v12h2V6h-2z"/></svg>`;
     const _iconQueue  = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg>`;
     const _iconFolder = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>`;
+    const _iconArtist = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>`;
     const _iconEdit   = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zm18.71-10.8a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>`;
     const _iconScan   = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M9.5 6.5v3h-3v-3h3M11 5H5v6h6V5zm-1.5 9.5v3h-3v-3h3M11 13H5v6h6v-6zm6.5-6.5v3h-3v-3h3M19 5h-6v6h6V5zm-6 8h1.5v1.5H13V13zm1.5 1.5H16V16h-1.5v-1.5zM16 13h1.5v1.5H16V13zm-3 3h1.5v1.5H13V16zm1.5 1.5H16V19h-1.5v-1.5zM16 16h1.5v1.5H16V16zm1.5-1.5H19V16h-1.5v-1.5zm0 3H19V19h-1.5v-1.5zM22 7h-2V4h-3V2h5v5zm0 15v-5h-2v3h-3v2h5zM2 22h5v-2H4v-3H2v5zM2 2v5h2V4h3V2H2z"/></svg>`;
 
@@ -1539,6 +1542,7 @@ const UI = (() => {
       _addCtxItem(menu, _iconNext,     t('play_next'),   () => { Player.insertNext(item);        hideContextMenu(); });
       _addCtxItem(menu, _iconQueue,    t('play_after'),  () => { Player.appendToQueue(item);     hideContextMenu(); });
       _addCtxDivider(menu);
+      if (item.artist) _addCtxItem(menu, _iconArtist, t('ctx_go_to_artist'), () => { App.onGoToArtist?.(item); hideContextMenu(); });
       _addCtxItem(menu, _iconFolder,   t('ctx_go_to_album'),  () => { App.onGoToAlbum?.(item);  hideContextMenu(); });
       _addCtxItem(menu, _iconFolder,   t('ctx_go_to_folder'), () => { App.onGoToFolder(item);    hideContextMenu(); });
       _addCtxDivider(menu);
@@ -1572,6 +1576,7 @@ const UI = (() => {
         hideContextMenu();
       });
       _addCtxDivider(menu);
+      if (!isFolder && item.artist) _addCtxItem(menu, _iconArtist, t('ctx_go_to_artist'), () => { App.onGoToArtist?.(item); hideContextMenu(); });
       _addCtxItem(menu, _iconFolder,
         isFolder ? t('ctx_go_to_folder') : t('ctx_go_to_album'),
         () => { isFolder ? App.onGoToFolder(item) : App.onGoToAlbum?.(item); hideContextMenu(); }
@@ -1596,6 +1601,7 @@ const UI = (() => {
       _addCtxItem(menu, _iconNext,  t('play_next'),  () => { isFolder ? App.onFolderQueue(item,'next') : Player.insertNext(item);     hideContextMenu(); });
       _addCtxItem(menu, _iconQueue, t('play_after'), () => { isFolder ? App.onFolderQueue(item,'end')  : Player.appendToQueue(item);  hideContextMenu(); });
       _addCtxDivider(menu);
+      if (!isFolder && item.artist) _addCtxItem(menu, _iconArtist, t('ctx_go_to_artist'), () => { App.onGoToArtist?.(item); hideContextMenu(); });
       _addCtxItem(menu, _iconFolder,
         isFolder ? t('ctx_go_to_folder') : t('ctx_go_to_album'),
         () => { isFolder ? App.onGoToFolder(item) : App.onGoToAlbum?.(item); hideContextMenu(); }
@@ -1640,6 +1646,7 @@ const UI = (() => {
       _addCtxItem(menu, _iconNext,     t('play_next'),          () => { Player.insertNext(item);      hideContextMenu(); });
       _addCtxItem(menu, _iconQueue,    t('play_after'),         () => { Player.appendToQueue(item);   hideContextMenu(); });
       _addCtxDivider(menu);
+      if (item.artist) _addCtxItem(menu, _iconArtist, t('ctx_go_to_artist'), () => { App.onGoToArtist?.(item); hideContextMenu(); });
       _addCtxItem(menu, _iconFolder,   t('ctx_go_to_album'),    () => { App.onGoToAlbum?.(item);      hideContextMenu(); });
       _addCtxItem(menu, _iconFolder,   t('ctx_go_to_folder'),   () => { App.onGoToFolder(item);       hideContextMenu(); });
       _addCtxDivider(menu);
@@ -1670,6 +1677,7 @@ const UI = (() => {
       _addCtxItem(menu, _iconNext,     t('play_next'),       () => { Player.insertNext(item);      hideContextMenu(); });
       _addCtxItem(menu, _iconQueue,    t('play_after'),      () => { Player.appendToQueue(item);   hideContextMenu(); });
       _addCtxDivider(menu);
+      if (item.artist) _addCtxItem(menu, _iconArtist, t('ctx_go_to_artist'), () => { App.onGoToArtist?.(item); hideContextMenu(); });
       _addCtxItem(menu, _iconFolder,   t('ctx_go_to_album'), () => { App.onGoToAlbum?.(item);      hideContextMenu(); });
       _addCtxItem(menu, _iconFolder,   t('ctx_go_to_folder'),() => { App.onGoToFolder(item);       hideContextMenu(); });
       _addCtxDivider(menu);
@@ -1677,6 +1685,14 @@ const UI = (() => {
       _addCtxItem(menu, iconPlus(14),  t('add_to_pl'),      (e) => { hideContextMenu(); App.onShowPlaylistPicker(e, item); });
       _addCtxDivider(menu);
       _addCtxItem(menu, iconTrash(14), t('ctx_remove_history'), () => { App.onRemoveFromHistoryItem(item); hideContextMenu(); });
+    }
+
+    // ── Player expanded 3-dot menu ───────────────────────────────
+
+    if (type === 'player_song') {
+      if (item.artist) _addCtxItem(menu, _iconArtist, t('ctx_go_to_artist'), () => { App.onGoToArtist?.(item); hideContextMenu(); });
+      _addCtxItem(menu, _iconFolder, t('ctx_go_to_album'),  () => { App.onGoToAlbum?.(item);  hideContextMenu(); });
+      _addCtxItem(menu, _iconFolder, t('ctx_go_to_folder'), () => { App.onGoToFolder?.(item); hideContextMenu(); });
     }
 
     // ── Deep Scan folder rows ────────────────────────────────────
@@ -1982,8 +1998,6 @@ const UI = (() => {
     if (pexpTimerSpan) pexpTimerSpan.textContent = t('player_timer');
     const pexpLyricsSpan = document.querySelector('#btn-pexp-lyrics span');
     if (pexpLyricsSpan) pexpLyricsSpan.textContent = t('player_lyrics');
-    const pexpShowAlbumSpan = document.querySelector('#btn-pexp-show-album span');
-    if (pexpShowAlbumSpan) pexpShowAlbumSpan.textContent = t('player_show_album');
 
     // Mini-player queue button (desktop label)
     const miniQueueLabel = document.querySelector('#btn-mini-queue span');

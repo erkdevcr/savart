@@ -2203,10 +2203,7 @@ img { display: block; }
   flex-shrink: 0;
 }
 
-/* Push "Mostrar Álbum" to the far right of the header row */
-#btn-pexp-show-album { margin-left: auto; }
-
-/* MOSTRAR ÁLBUM button — mobile + desktop */
+/* LETRA button (kept as before) */
 .pexp-show-album-btn {
   display: flex;
   align-items: center;
@@ -2218,11 +2215,29 @@ img { display: block; }
   font-weight: 700;
   letter-spacing: 0.10em;
   color: var(--accent);
-  padding: 4px 6px 4px 0;   /* flush left with track title */
+  padding: 4px 6px 4px 0;
   border-radius: var(--radius-sm);
   transition: background 0.15s, color 0.15s;
 }
 .pexp-show-album-btn:hover { background: var(--accent-soft); }
+
+/* 3-dot "more options" circle button — far right of player header */
+#btn-pexp-more {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+}
+#btn-pexp-more:hover { background: var(--bg-hover); color: var(--text-primary); }
 
 /* Track info + favorite */
 .pexp-track-row {

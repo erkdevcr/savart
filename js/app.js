@@ -6751,6 +6751,49 @@ const App = (() => {
     onAlbumClick(album, null).catch(err => console.warn('[App] onGoToAlbum:', err));
   }
 
+  /* ── Go to Artist ───────────────────────────────────────────
+   * Navigates to Library → Artists tab and drills into the artist.
+   * Builds the artist object directly from DB (like _loadArtists does)
+   * so it works from any context without waiting for the list to render.
+   * ──────────────────────────────────────────────────────────── */
+
+  async function onGoToArtist(song) {
+    const rawArtist = (song.artist || '').split(';')[0].trim();
+    if (!rawArtist) {
+      onNavClick('library');
+      _setLibTab('artists');
+      return;
+    }
+    try {
+      const artistKey = rawArtist.toLowerCase();
+      const all = await DB.getAllMeta();
+      let songCount = 0;
+      const albumSet = new Set();
+      for (const m of all) {
+        const name = (m.artist || '').split(';')[0].trim();
+        if (name.toLowerCase() === artistKey) {
+          songCount++;
+          const album = (m.album || '').trim();
+          if (album) albumSet.add(album.toLowerCase());
+        }
+      }
+      const storedImages = (await DB.getState('artistImages').catch(() => null)) || {};
+      const artist = {
+        name:       rawArtist,
+        songCount:  songCount || 1,
+        albumCount: albumSet.size || 1,
+        imageUrl:   storedImages[artistKey] || null,
+      };
+      onNavClick('library');
+      _setLibTab('artists');
+      onArtistClick(artist).catch(err => console.warn('[App] onGoToArtist:', err));
+    } catch (err) {
+      console.warn('[App] onGoToArtist:', err);
+      onNavClick('library');
+      _setLibTab('artists');
+    }
+  }
+
   /* ── Send to Deep Scan ──────────────────────────────────────
    * Loads a folder directly into the Deep Scan as its target.
    * If the scan is currently running or paused, shows a warning
@@ -7393,12 +7436,12 @@ const App = (() => {
     // Expanded player: close button (mobile)
     document.getElementById('btn-pexp-close')?.addEventListener('click', _closeExpandedPlayer);
 
-    // Expanded player: "Mostrar álbum" → navigate to Library album
-    const _goToCurrentTrackAlbum = () => {
+    // Expanded player: 3-dot button → context menu for current track
+    document.getElementById('btn-pexp-more')?.addEventListener('click', (e) => {
+      e.stopPropagation();
       const track = Player.getCurrentTrack();
-      if (track) onGoToAlbum(track);
-    };
-    document.getElementById('btn-pexp-show-album')?.addEventListener('click', _goToCurrentTrackAlbum);
+      if (track) UI.showContextMenu(e, 'player_song', track);
+    });
 
     // Expanded player: album name text → same action
     document.getElementById('pexp-album')?.addEventListener('click', _goToCurrentTrackAlbum);
@@ -7928,6 +7971,7 @@ const App = (() => {
     onFolderClick,
     onGoToFolder,
     onGoToAlbum,
+    onGoToArtist,
     onSendToScan,
     onFolderPlay,
     onBreadcrumbClick,
