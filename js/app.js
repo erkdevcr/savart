@@ -5786,7 +5786,7 @@ const App = (() => {
     const q = norm((document.getElementById('lib-search-input')?.value || '').trim());
     const filtered = q
       ? _libAllAlbums.filter(a =>
-          norm(a.name + ' ' + (a.artist || '') + ' ' + (a.artists || '')).includes(q))
+          norm(a.name + ' ' + (a.artist || '')).includes(q))
       : _libAllAlbums;
 
     const batch = filtered.slice(_libAlbumOffset, _libAlbumOffset + LIB_PAGE_SIZE);

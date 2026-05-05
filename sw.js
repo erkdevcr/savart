@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '1.6.99';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.6.99 — onAlbumClick: derive fresh header data from DB songs (fix stale album obj after Browse rescan)
+const APP_VERSION  = '1.7.1';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.1 — Artist detail header: show imageUrl when available instead of always showing initials
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

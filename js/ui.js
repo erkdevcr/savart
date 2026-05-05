@@ -2527,10 +2527,15 @@ const UI = (() => {
       ? (parts[0][0] + parts[1][0]).toUpperCase()
       : (artist.name || '?').substring(0, 2).toUpperCase();
 
+    const avatarStyle = artist.imageUrl ? '' : `background:${colors.bg};color:${colors.fg};font-size:16px;font-weight:500`;
+    const avatarInner = artist.imageUrl
+      ? `<img src="${escHtml(artist.imageUrl)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`
+      : initials;
+
     const entity = document.createElement('div');
     entity.className = 'lib-detail-entity';
     entity.innerHTML = `
-      <div class="lib-detail-entity-art circle" style="background:${colors.bg};color:${colors.fg};font-size:16px;font-weight:500">${initials}</div>
+      <div class="lib-detail-entity-art circle" style="${avatarStyle}">${avatarInner}</div>
       <div>
         <div class="lib-detail-entity-name">${escHtml(artist.name)}</div>
         <div class="lib-detail-entity-sub">${artist.albumCount} álbumes · ${artist.songCount} canciones</div>
@@ -2847,7 +2852,7 @@ const UI = (() => {
 
     albums.forEach(album => {
       const card = _buildAlbumCard(album);
-      card.dataset.searchKey = norm(album.name + ' ' + (album.artist || '') + ' ' + (album.artists || ''));
+      card.dataset.searchKey = norm(album.name + ' ' + (album.artist || ''));
       if (album.folderId) card.dataset.folderId = album.folderId;
       grid.appendChild(card);
     });
@@ -2865,7 +2870,7 @@ const UI = (() => {
     if (!grid || !albums.length) return;
     albums.forEach(album => {
       const card = _buildAlbumCard(album);
-      card.dataset.searchKey = norm(album.name + ' ' + (album.artist || '') + ' ' + (album.artists || ''));
+      card.dataset.searchKey = norm(album.name + ' ' + (album.artist || ''));
       if (album.folderId) card.dataset.folderId = album.folderId;
       grid.appendChild(card);
     });
@@ -2880,7 +2885,7 @@ const UI = (() => {
     const card = document.createElement('div');
     card.className = 'home-card';
     card.style.cursor = 'pointer';
-    card.dataset.searchKey = norm(album.name + ' ' + (album.artist || '') + ' ' + (album.artists || ''));
+    card.dataset.searchKey = norm(album.name + ' ' + (album.artist || ''));
 
     const songLabel = album.songCount === 1 ? '1 canción' : `${album.songCount} canciones`;
 
