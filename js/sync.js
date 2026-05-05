@@ -427,7 +427,7 @@ const Sync = (() => {
         for (const item of (data || [])) {
           if (!item?.id) continue;
           const ex     = localMap.get(item.id) || {};
-          const merged = { ...ex };   // start with full local record
+          const merged = { ...ex, id: item.id };   // start with full local record; id always set
 
           if (item.mbTried)   merged.mbTried   = true;
           if (item.auddTried) merged.auddTried = true;
@@ -958,7 +958,7 @@ const Sync = (() => {
         for (const item of remoteMetadata) {
           if (!item?.id) continue;
           const ex     = localMap.get(item.id) || {};
-          const merged = { ...ex };
+          const merged = { ...ex, id: item.id };   // id always set even for new records
 
           if (item.mbTried)   merged.mbTried   = true;
           if (item.auddTried) merged.auddTried = true;

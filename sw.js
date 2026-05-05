@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '1.7.5';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.5 — Blue manual-edits dot on album cards + browse folder rows
+const APP_VERSION  = '1.7.6';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.6 — Fix sync merge: always set id on merged record so folder records write correctly to DB
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
