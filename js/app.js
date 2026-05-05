@@ -7443,8 +7443,11 @@ const App = (() => {
       if (track) UI.showContextMenu(e, 'player_song', track);
     });
 
-    // Expanded player: album name text → same action
-    document.getElementById('pexp-album')?.addEventListener('click', _goToCurrentTrackAlbum);
+    // Expanded player: album name text → go to album
+    document.getElementById('pexp-album')?.addEventListener('click', () => {
+      const track = Player.getCurrentTrack();
+      if (track) onGoToAlbum(track);
+    });
 
     // Mini player: artist name → navigate to Library album
     document.querySelector('#mini-player .mini-artist')?.addEventListener('click', (e) => {
