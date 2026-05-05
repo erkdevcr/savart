@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '1.6.89';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.6.89 — "Go to album" in all song menus navigates to Library album detail
+const APP_VERSION  = '1.6.90';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.6.90 — Song menus: both "Go to album" (Library) and "Go to Drive folder" (Browse)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

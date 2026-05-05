@@ -1508,7 +1508,8 @@ const UI = (() => {
       _addCtxItem(menu, _iconNext,     t('play_next'),   () => { Player.insertNext(item);        hideContextMenu(); });
       _addCtxItem(menu, _iconQueue,    t('play_after'),  () => { Player.appendToQueue(item);     hideContextMenu(); });
       _addCtxDivider(menu);
-      _addCtxItem(menu, _iconFolder,   t('ctx_go_to_album'), () => { App.onGoToAlbum?.(item);   hideContextMenu(); });
+      _addCtxItem(menu, _iconFolder,   t('ctx_go_to_album'),  () => { App.onGoToAlbum?.(item);  hideContextMenu(); });
+      _addCtxItem(menu, _iconFolder,   t('ctx_go_to_folder'), () => { App.onGoToFolder(item);    hideContextMenu(); });
       _addCtxDivider(menu);
       _addCtxItem(menu, iconStar(14),  t('add_fav'),     () => { App.onToggleStar(item);         hideContextMenu(); });
       _addCtxItem(menu, iconPlus(14),  t('add_to_pl'),  (e) => { hideContextMenu(); App.onShowPlaylistPicker(e, item); });
@@ -1543,6 +1544,7 @@ const UI = (() => {
         isFolder ? t('ctx_go_to_folder') : t('ctx_go_to_album'),
         () => { isFolder ? App.onGoToFolder(item) : App.onGoToAlbum?.(item); hideContextMenu(); }
       );
+      if (!isFolder) _addCtxItem(menu, _iconFolder, t('ctx_go_to_folder'), () => { App.onGoToFolder(item); hideContextMenu(); });
       _addCtxDivider(menu);
       _addCtxItem(menu, iconPin(14), t('ctx_unpin_from_home'), () => {
         App.onTogglePin(item);
@@ -1565,6 +1567,7 @@ const UI = (() => {
         isFolder ? t('ctx_go_to_folder') : t('ctx_go_to_album'),
         () => { isFolder ? App.onGoToFolder(item) : App.onGoToAlbum?.(item); hideContextMenu(); }
       );
+      if (!isFolder) _addCtxItem(menu, _iconFolder, t('ctx_go_to_folder'), () => { App.onGoToFolder(item); hideContextMenu(); });
       _addCtxDivider(menu);
       _addCtxItem(menu, iconStar(14), isFolder ? t('ctx_add_fav_folder') : t('add_fav'),
         () => { App.onToggleStar(item); hideContextMenu(); }
@@ -1603,6 +1606,7 @@ const UI = (() => {
       _addCtxItem(menu, _iconQueue,    t('play_after'),         () => { Player.appendToQueue(item);   hideContextMenu(); });
       _addCtxDivider(menu);
       _addCtxItem(menu, _iconFolder,   t('ctx_go_to_album'),    () => { App.onGoToAlbum?.(item);      hideContextMenu(); });
+      _addCtxItem(menu, _iconFolder,   t('ctx_go_to_folder'),   () => { App.onGoToFolder(item);       hideContextMenu(); });
       _addCtxDivider(menu);
       _addCtxItem(menu, iconStar(14),  t('ctx_mark_fav'),       () => { App.onToggleStar(item);       hideContextMenu(); });
       _addCtxItem(menu, iconPlus(14),  t('add_to_pl'),         (e) => { hideContextMenu(); App.onShowPlaylistPicker(e, item); });
@@ -1631,6 +1635,7 @@ const UI = (() => {
       _addCtxItem(menu, _iconQueue,    t('play_after'),      () => { Player.appendToQueue(item);   hideContextMenu(); });
       _addCtxDivider(menu);
       _addCtxItem(menu, _iconFolder,   t('ctx_go_to_album'), () => { App.onGoToAlbum?.(item);      hideContextMenu(); });
+      _addCtxItem(menu, _iconFolder,   t('ctx_go_to_folder'),() => { App.onGoToFolder(item);       hideContextMenu(); });
       _addCtxDivider(menu);
       _addCtxItem(menu, iconStar(14),  t('add_fav'),         () => { App.onToggleStar(item);       hideContextMenu(); });
       _addCtxItem(menu, iconPlus(14),  t('add_to_pl'),      (e) => { hideContextMenu(); App.onShowPlaylistPicker(e, item); });
