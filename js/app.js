@@ -6794,6 +6794,57 @@ const App = (() => {
     }
   }
 
+  /* ── Artist Radio ───────────────────────────────────────────
+   * Loads all songs by the artist from DB, shuffles them, and starts playing.
+   * ──────────────────────────────────────────────────────────── */
+
+  async function onArtistRadio(song) {
+    const rawArtist = (song.artist || '').split(';')[0].trim();
+    if (!rawArtist) {
+      UI.showToast(UI.t('toast_folder_no_songs'), 'error');
+      return;
+    }
+    try {
+      const artistKey = rawArtist.toLowerCase();
+      const all = await DB.getAllMeta();
+      let songs = all
+        .filter(m => {
+          const name = (m.artist || '').split(';')[0].trim();
+          return name.toLowerCase() === artistKey && m.folderId;
+        })
+        .map(m => ({
+          id:          m.id,
+          name:        m.name         || m.id,
+          displayName: m.displayName  || m.name || m.id,
+          artist:      m.artist       || '',
+          album:       m.album        || '',
+          year:        m.year         || '',
+          track:       m.track        || '',
+          thumbnailUrl:m.thumbnailUrl || null,
+          folderId:    m.folderId     || null,
+        }));
+
+      if (songs.length === 0) {
+        UI.showToast(`${rawArtist} — ${UI.t('toast_folder_no_songs').toLowerCase()}`, 'error');
+        return;
+      }
+
+      // Fisher-Yates shuffle
+      for (let i = songs.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [songs[i], songs[j]] = [songs[j], songs[i]];
+      }
+
+      _resetRadio();
+      songs.forEach(s => _cacheItem(s));
+      Player.setQueue(songs, 0);
+      UI.showToast(`${rawArtist} · ${songs.length} ${UI.t('songs').toLowerCase()}`);
+    } catch (err) {
+      console.error('[App] onArtistRadio error:', err);
+      UI.showToast(UI.t('toast_folder_error'), 'error');
+    }
+  }
+
   /* ── Send to Deep Scan ──────────────────────────────────────
    * Loads a folder directly into the Deep Scan as its target.
    * If the scan is currently running or paused, shows a warning
@@ -7975,6 +8026,7 @@ const App = (() => {
     onGoToFolder,
     onGoToAlbum,
     onGoToArtist,
+    onArtistRadio,
     onSendToScan,
     onFolderPlay,
     onBreadcrumbClick,

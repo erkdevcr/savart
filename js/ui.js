@@ -62,6 +62,7 @@ const UI = (() => {
       // ── Context menu ───────────────────────────────────────
       ctx_play:           'Reproducir',
       ctx_go_to_artist:   'Ir al artista',
+      ctx_artist_radio:   'Radio artista',
       ctx_go_to_album:    'Ir al álbum',
       ctx_go_to_folder:    'Ir a carpeta de Drive',
       ctx_send_to_scan:      'Enviar a escáner',
@@ -344,6 +345,7 @@ const UI = (() => {
       // ── Context menu ───────────────────────────────────────
       ctx_play:           'Play',
       ctx_go_to_artist:   'Go to artist',
+      ctx_artist_radio:   'Artist radio',
       ctx_go_to_album:    'Go to album',
       ctx_go_to_folder:      'Go to Drive folder',
       ctx_send_to_scan:      'Send to scan',
@@ -1533,6 +1535,7 @@ const UI = (() => {
     const _iconQueue  = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg>`;
     const _iconFolder = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>`;
     const _iconArtist = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>`;
+    const _iconRadio  = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3.24 6.15C2.51 6.43 2 7.17 2 8v12c0 1.1.89 2 2 2h16c1.11 0 2-.9 2-2V8c0-1.11-.89-2-2-2H6.3l8.26-3.34L13.65 1 3.24 6.15zM13 18c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>`;
     const _iconEdit   = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zm18.71-10.8a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>`;
     const _iconScan   = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M9.5 6.5v3h-3v-3h3M11 5H5v6h6V5zm-1.5 9.5v3h-3v-3h3M11 13H5v6h6v-6zm6.5-6.5v3h-3v-3h3M19 5h-6v6h6V5zm-6 8h1.5v1.5H13V13zm1.5 1.5H16V16h-1.5v-1.5zM16 13h1.5v1.5H16V13zm-3 3h1.5v1.5H13V16zm1.5 1.5H16V19h-1.5v-1.5zM16 16h1.5v1.5H16V16zm1.5-1.5H19V16h-1.5v-1.5zm0 3H19V19h-1.5v-1.5zM22 7h-2V4h-3V2h5v5zm0 15v-5h-2v3h-3v2h5zM2 22h5v-2H4v-3H2v5zM2 2v5h2V4h3V2H2z"/></svg>`;
 
@@ -1541,6 +1544,7 @@ const UI = (() => {
       _addCtxDivider(menu);
       _addCtxItem(menu, _iconNext,     t('play_next'),   () => { Player.insertNext(item);        hideContextMenu(); });
       _addCtxItem(menu, _iconQueue,    t('play_after'),  () => { Player.appendToQueue(item);     hideContextMenu(); });
+      if (item.artist) _addCtxItem(menu, _iconRadio, t('ctx_artist_radio'), () => { App.onArtistRadio?.(item); hideContextMenu(); });
       _addCtxDivider(menu);
       if (item.artist) _addCtxItem(menu, _iconArtist, t('ctx_go_to_artist'), () => { App.onGoToArtist?.(item); hideContextMenu(); });
       _addCtxItem(menu, _iconFolder,   t('ctx_go_to_album'),  () => { App.onGoToAlbum?.(item);  hideContextMenu(); });
@@ -1600,6 +1604,7 @@ const UI = (() => {
       _addCtxDivider(menu);
       _addCtxItem(menu, _iconNext,  t('play_next'),  () => { isFolder ? App.onFolderQueue(item,'next') : Player.insertNext(item);     hideContextMenu(); });
       _addCtxItem(menu, _iconQueue, t('play_after'), () => { isFolder ? App.onFolderQueue(item,'end')  : Player.appendToQueue(item);  hideContextMenu(); });
+      if (!isFolder && item.artist) _addCtxItem(menu, _iconRadio, t('ctx_artist_radio'), () => { App.onArtistRadio?.(item); hideContextMenu(); });
       _addCtxDivider(menu);
       if (!isFolder && item.artist) _addCtxItem(menu, _iconArtist, t('ctx_go_to_artist'), () => { App.onGoToArtist?.(item); hideContextMenu(); });
       _addCtxItem(menu, _iconFolder,
@@ -1645,6 +1650,7 @@ const UI = (() => {
       _addCtxDivider(menu);
       _addCtxItem(menu, _iconNext,     t('play_next'),          () => { Player.insertNext(item);      hideContextMenu(); });
       _addCtxItem(menu, _iconQueue,    t('play_after'),         () => { Player.appendToQueue(item);   hideContextMenu(); });
+      if (item.artist) _addCtxItem(menu, _iconRadio, t('ctx_artist_radio'), () => { App.onArtistRadio?.(item); hideContextMenu(); });
       _addCtxDivider(menu);
       if (item.artist) _addCtxItem(menu, _iconArtist, t('ctx_go_to_artist'), () => { App.onGoToArtist?.(item); hideContextMenu(); });
       _addCtxItem(menu, _iconFolder,   t('ctx_go_to_album'),    () => { App.onGoToAlbum?.(item);      hideContextMenu(); });
@@ -1676,6 +1682,7 @@ const UI = (() => {
       _addCtxDivider(menu);
       _addCtxItem(menu, _iconNext,     t('play_next'),       () => { Player.insertNext(item);      hideContextMenu(); });
       _addCtxItem(menu, _iconQueue,    t('play_after'),      () => { Player.appendToQueue(item);   hideContextMenu(); });
+      if (item.artist) _addCtxItem(menu, _iconRadio, t('ctx_artist_radio'), () => { App.onArtistRadio?.(item); hideContextMenu(); });
       _addCtxDivider(menu);
       if (item.artist) _addCtxItem(menu, _iconArtist, t('ctx_go_to_artist'), () => { App.onGoToArtist?.(item); hideContextMenu(); });
       _addCtxItem(menu, _iconFolder,   t('ctx_go_to_album'), () => { App.onGoToAlbum?.(item);      hideContextMenu(); });
@@ -1693,6 +1700,10 @@ const UI = (() => {
       if (item.artist) _addCtxItem(menu, _iconArtist, t('ctx_go_to_artist'), () => { App.onGoToArtist?.(item); hideContextMenu(); });
       _addCtxItem(menu, _iconFolder, t('ctx_go_to_album'),  () => { App.onGoToAlbum?.(item);  hideContextMenu(); });
       _addCtxItem(menu, _iconFolder, t('ctx_go_to_folder'), () => { App.onGoToFolder?.(item); hideContextMenu(); });
+      if (item.artist) {
+        _addCtxDivider(menu);
+        _addCtxItem(menu, _iconRadio, t('ctx_artist_radio'), () => { App.onArtistRadio?.(item); hideContextMenu(); });
+      }
     }
 
     // ── Deep Scan folder rows ────────────────────────────────────
