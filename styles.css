@@ -298,10 +298,7 @@ img { display: block; }
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  cursor: pointer;
-  transition: color 0.12s;
 }
-#mini-player .mini-artist:hover { color: var(--accent); }
 
 #mini-player .mini-controls {
   display: flex;
