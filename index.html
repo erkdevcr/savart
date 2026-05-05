@@ -718,19 +718,19 @@
     </div>
   </div>
 
-  <!-- Send-to-scan warning: shown when scan is running or paused -->
+  <!-- Send-to-scan warning: shown when scan is running/paused OR done with pending items -->
   <div id="ds-send-scan-dialog" class="ds-modal" style="display:none">
     <div class="ds-modal-backdrop" id="ds-send-scan-backdrop"></div>
     <div class="ds-modal-card ds-modal-card--sm">
       <div class="ds-modal-header">
-        <span class="ds-modal-title" data-i18n="ds_send_scan_title">Escaneo en curso</span>
+        <span class="ds-modal-title" id="ds-send-scan-title">Escaneo en curso</span>
       </div>
       <div class="ds-rescan-body">
         <p class="ds-rescan-desc" id="ds-send-scan-desc"></p>
       </div>
       <div class="ds-modal-footer">
         <button id="btn-ds-send-scan-cancel" class="btn-sort-toggle" data-i18n="cancel_btn">Cancelar</button>
-        <button id="btn-ds-send-scan-confirm" class="btn-primary" data-i18n="ds_send_stop_and_send">Detener y enviar</button>
+        <button id="btn-ds-send-scan-confirm" class="btn-primary">Detener y enviar</button>
       </div>
     </div>
   </div>

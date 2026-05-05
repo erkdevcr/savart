@@ -6631,14 +6631,36 @@ const App = (() => {
   function onSendToScan(folder) {
     if (!folder?.id) return;
 
+    // Count unresolved attention items (not ignored, not attended)
+    const attnCount = _dsSession
+      ? Object.values(_dsSession.folders || {}).filter(f => f.status !== 'ignored' && !f.attended).length
+      : 0;
+
+    const titleEl   = document.getElementById('ds-send-scan-title');
+    const descEl    = document.getElementById('ds-send-scan-desc');
+    const confirmEl = document.getElementById('btn-ds-send-scan-confirm');
+
     if (_dsRunning) {
-      // Scan is active (running or paused) — ask for confirmation
+      // Scan is active (running or paused) — ask to stop first
       _dsSendTarget = folder;
-      const state   = _dsPaused ? 'pausado' : 'en curso';
-      const descEl  = document.getElementById('ds-send-scan-desc');
-      if (descEl) descEl.textContent =
-        `El escaneo está ${state}. ¿Deseas detenerlo y enviar "${folder.name}" al escáner?`;
+      const stateKey = _dsPaused ? 'ds_send_scan_paused' : 'ds_send_scan_running';
+      if (titleEl)   titleEl.textContent   = UI.t('ds_send_scan_title');
+      if (descEl)    descEl.textContent    = UI.t('ds_send_scan_desc')
+                                               .replace('{state}', UI.t(stateKey))
+                                               .replace('{name}', folder.name);
+      if (confirmEl) confirmEl.textContent = UI.t('ds_send_stop_and_send');
       document.getElementById('ds-send-scan-dialog').style.display = 'flex';
+
+    } else if (attnCount > 0) {
+      // Scan finished but has unresolved missing-data rows — warn before discarding
+      _dsSendTarget = folder;
+      if (titleEl)   titleEl.textContent   = UI.t('ds_send_scan_pending_title');
+      if (descEl)    descEl.textContent    = UI.t('ds_send_scan_pending_desc')
+                                               .replace('{count}', attnCount)
+                                               .replace('{name}', folder.name);
+      if (confirmEl) confirmEl.textContent = UI.t('ds_send_scan_discard_send');
+      document.getElementById('ds-send-scan-dialog').style.display = 'flex';
+
     } else {
       _dsSendFolderToScan(folder);
     }

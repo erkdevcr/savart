@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '1.6.91';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.6.91 — Send to scan: all folder menus load folder into Deep Scan; warning if scan active
+const APP_VERSION  = '1.6.93';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.6.93 — Send to scan: also warns when scan done with unresolved missing-data rows
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
