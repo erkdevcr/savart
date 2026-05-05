@@ -772,16 +772,53 @@ const App = (() => {
         : new Set(queue.map(q => q.id));
 
       // ── Artist name matcher ────────────────────────────────────
-      // Normalizes both strings (lowercase, no accents, no punctuation) then
-      // checks that the full artist name appears as a substring in the item name.
-      // "Christian Nodal" → folder "Christian Nodal - Discography" ✓
-      //                   → folder "Christian Castro"              ✗ (no "nodal")
-      // "Korn"            → folder "Korn"                          ✓
-      const _normStr = s => s.toLowerCase()
-        .normalize('NFD').replace(/[̀-ͯ]/g, '')  // strip accents
-        .replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+      // Normalizes to NFC (stable unicode composition) + lowercase + strip
+      // punctuation, but intentionally PRESERVES accents so that "Maná" and
+      // "Mana" remain distinct strings and don't cross-contaminate each other.
+      //
+      // Song files: matched by cached artist tag only (never by filename).
+      //   "Oye Mi Amor.mp3" does NOT match artist "Maná" by name — only
+      //   its ID3 artist field does. This prevents false positives like a
+      //   song titled "Homenaje a Maná" appearing in a Maná radio.
+      //
+      // Folders: matched when the artist name appears as a full token inside
+      //   the folder name (e.g. "Maná - Discography" ✓, "Ramana" ✗).
+      const _normStr = s => (s || '')
+        .normalize('NFC')                         // stable composition (é = é)
+        .toLowerCase()
+        .replace(/['''""".,/#!$%^&*;:{}=`~()[\]]/g, ' ')
+        .replace(/\s+/g, ' ').trim();
+
       const _normArtist = _normStr(artist);
-      const _matchesArtist = name => _normStr(name).includes(_normArtist);
+
+      // Folder name contains the artist as a whole token (word-boundary check).
+      // "Maná"            → "Maná - Greatest Hits" ✓  "Ramana" ✗
+      // "Christian Nodal" → "Christian Nodal Disco" ✓  "Christian Castro" ✗
+      const _folderMatchesArtist = folderName => {
+        const n = _normStr(folderName);
+        if (n === _normArtist) return true;
+        // Split on typical separators and check if any segment is the artist
+        const tokens = n.split(/[\s\-–—|,]+/).filter(Boolean);
+        // Also allow "ArtistName " at start or " ArtistName" anywhere
+        return n.startsWith(_normArtist + ' ') ||
+               n.startsWith(_normArtist + '-') ||
+               n.includes(' ' + _normArtist + ' ') ||
+               n.includes(' ' + _normArtist) ||
+               tokens.join(' ').startsWith(_normArtist) ||
+               tokens.join(' ') === _normArtist;
+      };
+
+      // Returns the known artist for a file (Meta in-memory cache → item cache).
+      // Returns null if we have no artist info for this file yet.
+      const _cachedArtistFor = f => {
+        const meta = (typeof Meta !== 'undefined') ? Meta.getCached(f.id) : null;
+        if (meta?.artist) return meta.artist;
+        const cached = _itemCache.get(f.id);
+        return cached?.artist || f.artist || null;
+      };
+
+      // Exact artist match (accent-sensitive, case-insensitive).
+      const _artistMatches = a => _normStr(a) === _normArtist;
 
       const candidates = [];
       const seen       = new Set();
@@ -793,13 +830,19 @@ const App = (() => {
         }
       };
 
-      // Direct audio files: only collect those whose name matches the full artist
-      results.files.filter(f => _matchesArtist(f.name)).forEach(_collect);
+      // Direct audio files: accept ONLY if the cached artist tag matches.
+      // Never match by filename — a song title may mention another artist's name.
+      results.files.forEach(f => {
+        if (!isPlayable(f.mimeType)) return;
+        const a = _cachedArtistFor(f);
+        if (a && _artistMatches(a)) _collect(f);
+        // If no artist in cache we cannot verify → skip (strict mode).
+      });
 
       // ── Step 2: expand artist-named folders (max 3) ───────────
-      // Filter folders to those whose name actually matches the artist.
-      // This prevents expanding "Cristian Castro" when searching "Cristian Nodal".
-      const artistFolders = results.folders.filter(f => _matchesArtist(f.name)).slice(0, 3);
+      // Only expand folders whose name genuinely matches the artist.
+      // Accent-sensitive: "Mana" folder won't open for "Maná" radio.
+      const artistFolders = results.folders.filter(f => _folderMatchesArtist(f.name)).slice(0, 3);
       const level1 = await Promise.allSettled(
         artistFolders.map(f => Drive.listFolderAll(f.id))
       );
