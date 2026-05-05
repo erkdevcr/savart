@@ -543,13 +543,7 @@
           </button>
           <h1 class="ds-title" data-i18n="settings_deep_scan">Escaneo y edición</h1>
         </div>
-        <div class="ds-header-right">
-          <span class="ds-autosave" id="ds-autosave"></span>
-          <button id="btn-ds-new-tab" class="ds-newtab-btn" title="Abrir en nueva pestaña">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/></svg>
-            <span data-i18n="btn_open_tab">Abrir en pestaña</span>
-          </button>
-        </div>
+        <span class="ds-autosave" id="ds-autosave"></span>
       </div>
       <div class="ds-tabs">
         <button class="ds-tab active" data-ds-tab="scan" data-i18n="ds_tab_scan">Escaneo</button>
@@ -562,9 +556,13 @@
 
       <!-- Folder picker bar -->
       <div class="ds-folder-bar">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="color:var(--text-muted);flex-shrink:0"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>
-        <span class="ds-folder-bar-label" data-i18n="ds_folder_label">Carpeta:</span>
-        <span class="ds-folder-bar-name" id="ds-folder-name">MSK</span>
+        <div class="ds-folder-chip-icon">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>
+        </div>
+        <div class="ds-folder-bar-info">
+          <span class="ds-folder-bar-label" data-i18n="ds_folder_label">Carpeta activa</span>
+          <span class="ds-folder-bar-name" id="ds-folder-name">MSK</span>
+        </div>
         <button id="btn-ds-change-folder" class="ds-change-btn" data-i18n="ds_change_btn">Cambiar</button>
       </div>
 
@@ -598,22 +596,18 @@
           <div class="ds-counter-val" id="ds-cnt-scanned">0</div>
           <div class="ds-counter-lbl" data-i18n="scan_lbl_scanned">Escaneadas</div>
         </div>
-        <div class="ds-counter-sep"></div>
         <div class="ds-counter">
           <div class="ds-counter-val" id="ds-cnt-complete">0</div>
           <div class="ds-counter-lbl" data-i18n="scan_lbl_complete">Completas</div>
         </div>
-        <div class="ds-counter-sep"></div>
         <div class="ds-counter ds-counter--attn">
           <div class="ds-counter-val" id="ds-cnt-attention">0</div>
           <div class="ds-counter-lbl" data-i18n="scan_lbl_missing">Sin datos</div>
         </div>
-        <div class="ds-counter-sep"></div>
         <div class="ds-counter">
           <div class="ds-counter-val" id="ds-cnt-remaining">—</div>
           <div class="ds-counter-lbl" data-i18n="scan_lbl_remaining">Restantes</div>
         </div>
-        <div class="ds-counter-sep"></div>
         <div class="ds-counter">
           <div class="ds-counter-val" id="ds-cnt-eta">—</div>
           <div class="ds-counter-lbl" data-i18n="scan_lbl_estimated">Estimado</div>
