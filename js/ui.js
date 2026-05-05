@@ -639,6 +639,7 @@ const UI = (() => {
 
     if (!track) {
       mp.classList.remove('visible', 'playing');
+      _updateDeskMicroPlayer(null);
       return;
     }
 
@@ -666,6 +667,33 @@ const UI = (() => {
     if (btnPlay) btnPlay.innerHTML = isPlaying ? iconPause() : iconPlay();
     const btnPlayDesk = mp.querySelector('.btn-play-mini-desk');
     if (btnPlayDesk) btnPlayDesk.innerHTML = isPlaying ? iconPause(18) : iconPlay(18);
+
+    // Sync desk micro player
+    _updateDeskMicroPlayer(track);
+  }
+
+  /** Populate #desk-micro-player fields with current track info. */
+  function _updateDeskMicroPlayer(track) {
+    const titleEl  = document.getElementById('dmp-title');
+    const artistEl = document.getElementById('dmp-artist');
+    const img      = document.getElementById('dmp-thumb-img');
+    const icon     = document.getElementById('dmp-thumb-icon');
+    if (!titleEl) return;
+
+    titleEl.textContent  = track ? (track.displayName || track.name || '—') : '—';
+    if (artistEl) artistEl.textContent = track?.artist || '';
+
+    if (img && icon) {
+      if (track?.thumbnailUrl) {
+        img.src          = track.thumbnailUrl;
+        img.style.display  = '';
+        icon.style.display = 'none';
+      } else {
+        img.src           = '';
+        img.style.display  = 'none';
+        icon.style.display = '';
+      }
+    }
   }
 
   /* ── Expanded player ────────────────────────────────────── */

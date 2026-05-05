@@ -7196,6 +7196,11 @@ const App = (() => {
       UI.showQueuePanel(false);
     });
 
+    // Desktop micro player: click → close queue and return to now-playing view
+    document.getElementById('desk-micro-player')?.addEventListener('click', () => {
+      UI.showQueuePanel(false);
+    });
+
     // Lyrics panel: open/close
     document.getElementById('btn-pexp-lyrics')?.addEventListener('click', _openLyricsView);
     document.getElementById('btn-lyrics-back')?.addEventListener('click', _closeLyricsView);
