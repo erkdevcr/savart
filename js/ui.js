@@ -2847,7 +2847,7 @@ const UI = (() => {
 
     albums.forEach(album => {
       const card = _buildAlbumCard(album);
-      card.dataset.searchKey = norm(album.name + ' ' + (album.artist || ''));
+      card.dataset.searchKey = norm(album.name + ' ' + (album.artist || '') + ' ' + (album.artists || ''));
       if (album.folderId) card.dataset.folderId = album.folderId;
       grid.appendChild(card);
     });
@@ -2865,7 +2865,7 @@ const UI = (() => {
     if (!grid || !albums.length) return;
     albums.forEach(album => {
       const card = _buildAlbumCard(album);
-      card.dataset.searchKey = norm(album.name + ' ' + (album.artist || ''));
+      card.dataset.searchKey = norm(album.name + ' ' + (album.artist || '') + ' ' + (album.artists || ''));
       if (album.folderId) card.dataset.folderId = album.folderId;
       grid.appendChild(card);
     });
@@ -2880,7 +2880,7 @@ const UI = (() => {
     const card = document.createElement('div');
     card.className = 'home-card';
     card.style.cursor = 'pointer';
-    card.dataset.searchKey = norm(album.name + ' ' + (album.artist || ''));
+    card.dataset.searchKey = norm(album.name + ' ' + (album.artist || '') + ' ' + (album.artists || ''));
 
     const songLabel = album.songCount === 1 ? '1 canción' : `${album.songCount} canciones`;
 

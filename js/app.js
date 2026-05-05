@@ -5786,7 +5786,7 @@ const App = (() => {
     const q = norm((document.getElementById('lib-search-input')?.value || '').trim());
     const filtered = q
       ? _libAllAlbums.filter(a =>
-          norm(a.name + ' ' + (a.artist || '')).includes(q))
+          norm(a.name + ' ' + (a.artist || '') + ' ' + (a.artists || '')).includes(q))
       : _libAllAlbums;
 
     const batch = filtered.slice(_libAlbumOffset, _libAlbumOffset + LIB_PAGE_SIZE);
@@ -6030,6 +6030,7 @@ const App = (() => {
         .map(f => {
           const name      = _top(f.albumCounts);
           const artist    = _top(f.artistCounts) || '';
+          const artists   = [...f.artistCounts.keys()].join(' ');
           const year      = _top(f.yearCounts);
           const format    = _top(f.formatCounts) || null;
           const songCount = Math.max(f.taggedCount, folderSongCount.get(f.folderId) || 0);
@@ -6038,7 +6039,7 @@ const App = (() => {
             || (f.blobId && f.blobData && typeof Meta !== 'undefined'
                 ? Meta.injectCover(f.blobId, f.blobData)
                 : null);
-          return { name, artist, songCount, coverUrl, year, format, folderId: f.folderId };
+          return { name, artist, artists, songCount, coverUrl, year, format, folderId: f.folderId };
         })
         .sort((a, b) => a.name.localeCompare(b.name));
 
@@ -6179,10 +6180,45 @@ const App = (() => {
         return url ? { ...s, thumbnailUrl: url } : s;
       }));
 
+      // ── Build a fresh album descriptor from the actual DB songs ──────────────
+      // The `album` object from _libAllAlbums may be stale (built before the most
+      // recent rescan). Reading directly from the loaded songs ensures the header
+      // always shows current name / artist / year / cover, regardless of whether
+      // _loadAlbums() was called after the last enrichment pass.
+      const _topEntry = map => map.size > 0
+        ? [...map.entries()].sort((a, b) => b[1] - a[1])[0][0]
+        : null;
+      const freshYearCounts   = new Map();
+      const freshAlbumCounts  = new Map();
+      const freshArtistCounts = new Map();
+      let freshCoverUrl = null;
+      for (const m of songs) {
+        if (m.year)   freshYearCounts.set(m.year,   (freshYearCounts.get(m.year)   || 0) + 1);
+        if (m.album)  freshAlbumCounts.set(m.album,  (freshAlbumCounts.get(m.album)  || 0) + 1);
+        if (m.artist) freshArtistCounts.set(m.artist, (freshArtistCounts.get(m.artist) || 0) + 1);
+        if (!freshCoverUrl && _isStableCoverUrl(m.thumbnailUrl)) freshCoverUrl = m.thumbnailUrl;
+        if (!freshCoverUrl && m.coverBlob && typeof Meta !== 'undefined') {
+          freshCoverUrl = Meta.injectCover(m.id, m.coverBlob) || null;
+        }
+      }
+      // Prefer resolved cover from enriched songs (already went through _resolveCoverUrl)
+      if (!freshCoverUrl) {
+        for (const s of enriched) {
+          if (s.thumbnailUrl) { freshCoverUrl = s.thumbnailUrl; break; }
+        }
+      }
+      const freshAlbum = {
+        ...album,
+        name:     _topEntry(freshAlbumCounts)  || album.name     || '',
+        artist:   _topEntry(freshArtistCounts) || album.artist   || '',
+        year:     _topEntry(freshYearCounts)   || album.year     || null,
+        coverUrl: freshCoverUrl                || album.coverUrl || null,
+      };
+
       const backTarget = fromArtist ? 'artist' : 'albums';
       _libInDetail = true;
       _setLibSearchBarVisible(false);
-      UI.renderLibraryAlbumDetail(album, enriched, backTarget, fromArtist || null);
+      UI.renderLibraryAlbumDetail(freshAlbum, enriched, backTarget, fromArtist || null);
 
       // Background cover + metadata enrichment for songs in this album.
       // Uses the same multi-pass pipeline as the browse folder view:

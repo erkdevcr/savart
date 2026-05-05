@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '1.6.97';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.6.97 — DS rows: 3-dot menu with "Go to album" + "Go to Drive folder"
+const APP_VERSION  = '1.6.99';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.6.99 — onAlbumClick: derive fresh header data from DB songs (fix stale album obj after Browse rescan)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
