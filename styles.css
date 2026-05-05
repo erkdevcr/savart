@@ -2318,10 +2318,7 @@ img { display: block; }
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  cursor: pointer;
-  transition: color 0.12s;
 }
-.pexp-album:hover { color: var(--accent); }
 
 .pexp-file {
   font-size: 11px;
@@ -2691,7 +2688,6 @@ img { display: block; }
   cursor: pointer;
   padding-right: 8px;
 }
-.dmp-left:hover .dmp-title   { color: var(--accent); }
 
 .dmp-thumb {
   width: 38px;
