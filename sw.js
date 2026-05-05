@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '1.6.81';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.6.81 — context menu closes on scroll
+const APP_VERSION  = '1.6.82';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.6.82 — fix browse search: folder click now clears search and navigates in
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

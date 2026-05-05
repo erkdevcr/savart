@@ -2495,6 +2495,22 @@ const App = (() => {
   async function _openFolder(folder, appendToBreadcrumb = true) {
     UI.showView('browse');
 
+    // If the browse search is active (user navigated from search results),
+    // clear it so the folder contents are not hidden behind #search-results.
+    const searchInp = document.getElementById('search-input');
+    if (searchInp?.value) {
+      searchInp.value = '';
+      const searchResults = document.getElementById('search-results');
+      const browseList    = document.querySelector('#screen-browse .item-list:not(#search-results)');
+      const filters       = document.querySelector('.browse-search-filters');
+      const clearBtn      = document.getElementById('btn-search-clear');
+      if (searchResults) { searchResults.style.display = 'none'; searchResults.innerHTML = ''; }
+      if (browseList)    browseList.style.display    = '';
+      if (filters)       filters.style.display       = 'none';
+      if (clearBtn)      clearBtn.style.display      = 'none';
+      UI.updateSearchChipCounts?.(null);
+    }
+
     // Detect "fresh navigation" — breadcrumb was reset before this call
     const freshNavigation = _breadcrumb.length === 0 && appendToBreadcrumb;
 
