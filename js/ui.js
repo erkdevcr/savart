@@ -3652,21 +3652,21 @@ const UI = (() => {
   function _applyMarquee(el, text) {
     if (!el) return;
 
-    // Clear previous marquee state
+    // Clear previous marquee state and restore ellipsis fallback
     el.innerHTML = '';
     el.style.removeProperty('--mo');
     el.style.removeProperty('--mo-dur');
+    el.style.removeProperty('text-overflow');
 
     const span = document.createElement('span');
     span.textContent = text;
     el.appendChild(span);
 
-    // Wait until the element has layout, then measure overflow.
     let retries = 0;
     function measure() {
       if (!el.isConnected) return;
 
-      const containerW = el.clientWidth;
+      const containerW = el.getBoundingClientRect().width;
 
       if (containerW === 0 && retries < 15) {
         retries++;
@@ -3674,28 +3674,22 @@ const UI = (() => {
         return;
       }
 
-      // Use a position:fixed probe to measure the natural text width.
-      // This is immune to:
-      //   • flex containers with min-width:0 clamping the child's layout width
-      //   • iOS Safari's scrollWidth bug for overflow:hidden elements in flex rows
-      //   • the container itself being recently made visible
-      const cs = window.getComputedStyle(el);
-      const probe = document.createElement('span');
-      probe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;white-space:nowrap;visibility:hidden;pointer-events:none';
-      probe.style.font          = cs.font;
-      probe.style.letterSpacing = cs.letterSpacing;
-      probe.textContent = text;
-      document.body.appendChild(probe);
-      const textW = probe.getBoundingClientRect().width;
-      probe.remove();
-
+      // getBoundingClientRect() on an inline <span> reports its FULL layout width
+      // even when the parent has overflow:hidden — the clipping is a paint operation
+      // that does not shrink the element's bounding box. This is reliable on
+      // Chrome Android and iOS Safari without any probe or scrollWidth tricks.
+      const textW = span.getBoundingClientRect().width;
       const overflow = Math.round(textW - containerW);
+
       if (overflow > 4) {
-        // Speed: ~55 px/s — comfortable reading pace
         const scrollSecs = Math.ceil(overflow / 55);
         // 18% start-pause + 54% scroll + 18% end-pause + 10% snap-back
         const total = Math.min(Math.max(Math.round(scrollSecs / 0.54), 6), 20);
         span.className = 'marquee-inner';
+        // Disable text-overflow:ellipsis while the marquee is running.
+        // On mobile Chrome the ellipsis interferes with translateX animation,
+        // causing the browser to draw '...' over the scrolling text.
+        el.style.textOverflow = 'clip';
         el.style.setProperty('--mo',     `-${overflow}px`);
         el.style.setProperty('--mo-dur', `${total}s`);
       }
