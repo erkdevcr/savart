@@ -217,6 +217,8 @@ const UI = (() => {
       // ── Inline counts (lowercase) ──────────────────────────
       lbl_song:             'canción',
       lbl_songs:            'canciones',
+      lbl_item:             'elemento',
+      lbl_items:            'elementos',
       lbl_folder_s:         'carpeta',
       lbl_folders_s:        'carpetas',
       lbl_songs_updated:    'canciones actualizadas',
@@ -513,6 +515,8 @@ const UI = (() => {
       // ── Inline counts (lowercase) ──────────────────────────
       lbl_song:             'song',
       lbl_songs:            'songs',
+      lbl_item:             'item',
+      lbl_items:            'items',
       lbl_folder_s:         'folder',
       lbl_folders_s:        'folders',
       lbl_songs_updated:    'songs updated',

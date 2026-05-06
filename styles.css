@@ -3551,13 +3551,15 @@ body.queue-open #mini-player { z-index: 65; }
 .lib-rescan-btn:disabled { opacity: 0.45; cursor: default; }
 .lib-rescan-btn svg { width: 14px; height: 14px; flex-shrink: 0; }
 
-/* Item count badge in browse action bar */
+/* Item count — sits below the breadcrumb path, above the action bar */
 .browse-item-count {
+  padding: 0 16px 6px;
   font-size: 11px;
   font-weight: 500;
   color: var(--text-tertiary);
   letter-spacing: 0.3px;
 }
+.browse-item-count:empty { display: none; }
 
 /* Sort button — margin-left now on #sort-wrap wrapper */
 #btn-browse-sort { margin-left: 0; }
@@ -6033,21 +6035,16 @@ body.queue-open #mini-player { z-index: 65; }
 .dot-legend-rescan { color: #4caf50; font-weight: 500; }
 .dot-legend-manual { color: #4a90e2; font-weight: 500; }
 
-/* ── Browse action bar: mobile overflow fix ─────────────────
-   On narrow screens (< 480px) tighten padding/gaps/font so that
-   3-digit counts, rescan btn, sort btn and dot-legend all fit.   */
+/* ── Browse action bar: mobile tighten ──────────────────────
+   Count is now above the bar, so just trim padding/font lightly
+   so rescan btn + sort btn + dot-legend fit on narrow screens.  */
 @media (max-width: 479px) {
   #browse-action-bar {
-    padding: 6px 10px;
-    gap: 6px;
-  }
-  .browse-item-count {
-    font-size: 10px;
-    flex-shrink: 0;
-    white-space: nowrap;
+    padding: 6px 12px;
+    gap: 7px;
   }
   .lib-rescan-btn {
-    padding: 5px 8px;
+    padding: 5px 9px;
     font-size: 11px;
     gap: 4px;
   }
@@ -6056,7 +6053,7 @@ body.queue-open #mini-player { z-index: 65; }
     height: 12px;
   }
   .btn-sort-toggle {
-    padding: 5px 8px;
+    padding: 5px 9px;
     font-size: 11px;
     gap: 4px;
   }

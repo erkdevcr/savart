@@ -2832,7 +2832,7 @@ const App = (() => {
       // Update item count badge
       const total = result.folders.length + result.files.length;
       const countEl = document.getElementById('browse-item-count');
-      if (countEl) countEl.textContent = total > 0 ? `${total} elemento${total !== 1 ? 's' : ''}` : '';
+      if (countEl) countEl.textContent = total > 0 ? `${total} ${total === 1 ? UI.t('lbl_item') : UI.t('lbl_items')}` : '';
 
       // Track current browse folder for rescan
       _browseFolderId = folder.id;
