@@ -305,6 +305,16 @@ const UI = (() => {
       rescan_btn:           'Rescanear',
       rescan_manual_warn:   'tienen datos editados manualmente que serán reemplazados al rescanear.',
       rescan_manual_warn_single: 'tiene datos editados manualmente que serán reemplazados al rescanear.',
+      // ── Collections / Albums ───────────────────────────────
+      ctx_move_to_albums:      'Mover a Álbumes',
+      ctx_move_to_collections: 'Mover a Colecciones',
+      ctx_edit_collection:     'Editar colección',
+      lbl_collection:          'Colección',
+      lbl_album_chip:          'Álbum',
+      lbl_name:                'Nombre',
+      lbl_apply_to_all:        'Aplicar a todas',
+      toast_moved_to_albums:      'Movido a Álbumes',
+      toast_moved_to_collections: 'Movido a Colecciones',
     },
     en: {
       // ── Navigation ─────────────────────────────────────────
@@ -588,6 +598,16 @@ const UI = (() => {
       rescan_btn:           'Rescan',
       rescan_manual_warn:   'have manually edited data that will be replaced on rescan.',
       rescan_manual_warn_single: 'has manually edited data that will be replaced on rescan.',
+      // ── Collections / Albums ───────────────────────────────
+      ctx_move_to_albums:      'Move to Albums',
+      ctx_move_to_collections: 'Move to Collections',
+      ctx_edit_collection:     'Edit collection',
+      lbl_collection:          'Collection',
+      lbl_album_chip:          'Album',
+      lbl_name:                'Name',
+      lbl_apply_to_all:        'Apply to all',
+      toast_moved_to_albums:      'Moved to Albums',
+      toast_moved_to_collections: 'Moved to Collections',
     },
   };
 
@@ -1394,9 +1414,9 @@ const UI = (() => {
 
     // Sub-label: song count + optional collection/album chip
     const typeChip = folder.folderType === 'collection'
-      ? `<span class="folder-type-chip folder-type-chip--collection">Colección</span>`
+      ? `<span class="folder-type-chip folder-type-chip--collection">${t('lbl_collection')}</span>`
       : folder.folderType === 'album'
-        ? `<span class="folder-type-chip folder-type-chip--album">Álbum</span>`
+        ? `<span class="folder-type-chip folder-type-chip--album">${t('lbl_album_chip')}</span>`
         : '';
     const subHtml = (folder.songCount || typeChip)
       ? `<div class="folder-row-sub">${folder.songCount ? `${folder.songCount} ${t('songs').toLowerCase()}` : ''}${typeChip}</div>`
@@ -1580,10 +1600,10 @@ const UI = (() => {
       // Show Move option only when the folder has a known classification
       if (item.folderType === 'collection') {
         _addCtxDivider(menu);
-        _addCtxItem(menu, _iconAlbum,   'Mover a Álbumes',       () => { App.onMoveToAlbums?.(item);          hideContextMenu(); });
+        _addCtxItem(menu, _iconAlbum,      t('ctx_move_to_albums'),      () => { App.onMoveToAlbums?.(item);      hideContextMenu(); });
       } else if (item.folderType === 'album') {
         _addCtxDivider(menu);
-        _addCtxItem(menu, _iconCollection, 'Mover a Colecciones',() => { App.onMoveToCollections?.(item);     hideContextMenu(); });
+        _addCtxItem(menu, _iconCollection, t('ctx_move_to_collections'), () => { App.onMoveToCollections?.(item); hideContextMenu(); });
       }
     }
 
@@ -1647,7 +1667,7 @@ const UI = (() => {
       _addCtxDivider(menu);
       _addCtxItem(menu, iconPlus(14),  t('add_to_pl'),       (e) => { hideContextMenu(); App.onAlbumShowPlaylistPicker?.(e, item); });
       _addCtxDivider(menu);
-      _addCtxItem(menu, _iconCollection, 'Mover a Colecciones', () => { App.onMoveToCollections?.(item); hideContextMenu(); });
+      _addCtxItem(menu, _iconCollection, t('ctx_move_to_collections'), () => { App.onMoveToCollections?.(item); hideContextMenu(); });
     }
 
     if (type === 'lib_collection') {
@@ -1659,9 +1679,9 @@ const UI = (() => {
       _addCtxItem(menu, _iconFolder,   t('ctx_go_to_folder'), () => { App.onAlbumGoToFolder?.({ folderId: item.folderId, name: item.name }); hideContextMenu(); });
       _addCtxItem(menu, _iconScan,     t('ctx_send_to_scan'), () => { App.onSendToScan?.({ id: item.folderId, name: item.name }); hideContextMenu(); });
       _addCtxDivider(menu);
-      _addCtxItem(menu, _iconEdit,     'Editar colección',    () => { App._openCollectionEditModal?.(item);  hideContextMenu(); });
+      _addCtxItem(menu, _iconEdit,     t('ctx_edit_collection'),    () => { App._openCollectionEditModal?.(item);  hideContextMenu(); });
       _addCtxDivider(menu);
-      _addCtxItem(menu, _iconAlbum,    'Mover a Álbumes',     () => { App.onMoveToAlbums?.(item);            hideContextMenu(); });
+      _addCtxItem(menu, _iconAlbum,    t('ctx_move_to_albums'),     () => { App.onMoveToAlbums?.(item);            hideContextMenu(); });
     }
 
     if (type === 'playlist') {
@@ -3178,7 +3198,7 @@ const UI = (() => {
         <div class="lib-detail-entity-name lib-col-detail-name">${escHtml(collection.name)}</div>
         <div class="lib-detail-entity-sub">${escHtml(`${collection.artistCount || ''} artistas · ${songs.length} canciones`)}</div>
       </div>
-      <button class="lib-detail-entity-more" title="Editar colección" aria-label="Editar colección">
+      <button class="lib-detail-entity-more" title="${t('ctx_edit_collection')}" aria-label="${t('ctx_edit_collection')}">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
       </button>`;
 
@@ -3187,16 +3207,16 @@ const UI = (() => {
     editPanel.className = 'album-edit-panel'; // reuses album panel CSS
     editPanel.innerHTML = `
       <div class="album-edit-actions">
-        <button class="album-edit-save-btn">Guardar</button>
+        <button class="album-edit-save-btn">${t('save_btn')}</button>
       </div>
       <div class="album-edit-row">
-        <label class="album-edit-label">Nombre</label>
-        <input class="album-edit-input" data-field="name" value="${escHtml(collection.name || '')}" placeholder="Nombre de la colección">
+        <label class="album-edit-label">${t('lbl_name')}</label>
+        <input class="album-edit-input" data-field="name" value="${escHtml(collection.name || '')}" placeholder="${t('lbl_name')}">
       </div>
       <div class="album-edit-row">
         <label class="album-edit-label">Cover URL</label>
         <input class="album-edit-input" data-field="coverUrl" value="${escHtml(collection.manualCoverUrl && !collection.manualCoverUrl.startsWith('blob:') ? collection.manualCoverUrl : '')}" placeholder="https://…">
-        <button class="album-edit-apply-btn" data-apply="coverUrl" title="Aplicar portada a todos los ítems sin portada propia">Aplicar a todas</button>
+        <button class="album-edit-apply-btn" data-apply="coverUrl" title="${t('lbl_apply_to_all')}">${t('lbl_apply_to_all')}</button>
       </div>`;
 
     // Toggle panel on ⋮ click
@@ -3232,13 +3252,13 @@ const UI = (() => {
       const btn      = editPanel.querySelector('.album-edit-save-btn');
       const name     = editPanel.querySelector('[data-field="name"]').value.trim();
       const coverUrl = editPanel.querySelector('[data-field="coverUrl"]').value.trim();
-      btn.disabled = true; btn.textContent = 'Guardando…';
+      btn.disabled = true; btn.textContent = t('saving');
       try {
         await DB.saveCollection(folderId, {
           ...(name     ? { name }     : {}),
           ...(coverUrl ? { coverUrl } : {}),
         });
-        btn.textContent = '✓ Guardado';
+        btn.textContent = t('saved_ok');
         // Update header display immediately
         const nameEl = entity.querySelector('.lib-col-detail-name');
         const artEl  = entity.querySelector('.lib-col-detail-art');
@@ -3247,11 +3267,11 @@ const UI = (() => {
           artEl.innerHTML = `<img src="${escHtml(coverUrl)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)">`;
         }
         setTimeout(() => {
-          btn.disabled = false; btn.textContent = 'Guardar';
+          btn.disabled = false; btn.textContent = t('save_btn');
           editPanel.classList.remove('open');
           entity.classList.remove('album-editing');
         }, 1500);
-      } catch { btn.disabled = false; btn.textContent = 'Guardar'; }
+      } catch { btn.disabled = false; btn.textContent = t('save_btn'); }
     });
 
     container.appendChild(entity);

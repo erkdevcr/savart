@@ -2699,9 +2699,15 @@ const App = (() => {
       // Tag each sub-folder as 'album' or 'collection' for the browse chip.
       // If the cache is not yet populated, trigger a background build.
       if (_collectionFolderIdsCache === null) _refreshCollectionCache().catch(() => {});
-      const colCache = _collectionFolderIdsCache || new Set();
+      const colCache      = _collectionFolderIdsCache || new Set();
+      const knownFolders  = _allKnownFolderIdsCache;   // null = not yet ready
       result.folders.forEach(f => {
-        f.folderType = colCache.has(f.id) ? 'collection' : 'album';
+        // Only show a chip when this folder actually has songs in the DB.
+        // Folders that only contain other folders get no chip.
+        if (knownFolders && knownFolders.has(f.id)) {
+          f.folderType = colCache.has(f.id) ? 'collection' : 'album';
+        }
+        // else: leave f.folderType undefined → no chip rendered
       });
 
       const activeSong = Player.getCurrentTrack();
@@ -6030,7 +6036,8 @@ const App = (() => {
    * null = not yet computed; populated by _loadCollections/_loadAlbums.
    * Used to tag browse folders with folderType without an extra DB round-trip.
    */
-  let _collectionFolderIdsCache = null;
+  let _collectionFolderIdsCache  = null;
+  let _allKnownFolderIdsCache    = null; // Set of all folderIds that have ≥1 song in DB
 
   /**
    * Determine whether a folder accumulator `f` is a collection, respecting
@@ -6107,10 +6114,11 @@ const App = (() => {
   /** Rebuild the in-memory cache of collection folder IDs (fire-and-forget). */
   async function _refreshCollectionCache() {
     try {
-      const { folderMap, savedColMap } = await _buildFolderMap();
+      const { folderMap, folderSongCount, savedColMap } = await _buildFolderMap();
       const ids = new Set();
       folderMap.forEach(f => { if (_isCollectionFolder(f, savedColMap)) ids.add(f.folderId); });
       _collectionFolderIdsCache = ids;
+      _allKnownFolderIdsCache   = new Set(folderSongCount.keys());
     } catch (_) {}
   }
 
@@ -6143,6 +6151,7 @@ const App = (() => {
 
       // Update global cache
       _collectionFolderIdsCache = colIds;
+      _allKnownFolderIdsCache   = new Set(folderSongCount.keys());
 
       collections.sort((a, b) => a.name.localeCompare(b.name));
       _setLibTabCount('collections', collections.length);
@@ -6225,7 +6234,7 @@ const App = (() => {
     _collectionFolderIdsCache = null; // invalidate cache
     if (_currentLibTab === 'collections') _loadCollections();
     if (_currentLibTab === 'albums')      _loadAlbums();
-    UI.showToast?.('Movido a Álbumes', 'success');
+    UI.showToast?.(UI.t('toast_moved_to_albums'), 'success');
   }
 
   /**
@@ -6239,7 +6248,7 @@ const App = (() => {
     _collectionFolderIdsCache = null; // invalidate cache
     if (_currentLibTab === 'collections') _loadCollections();
     if (_currentLibTab === 'albums')      _loadAlbums();
-    UI.showToast?.('Movido a Colecciones', 'success');
+    UI.showToast?.(UI.t('toast_moved_to_collections'), 'success');
   }
 
   /** Open the collection edit modal for a given collection. */
@@ -6273,6 +6282,7 @@ const App = (() => {
       const colIds = new Set();
       folderMap.forEach(f => { if (_isCollectionFolder(f, savedColMap)) colIds.add(f.folderId); });
       _collectionFolderIdsCache = colIds;
+      _allKnownFolderIdsCache   = new Set(folderSongCount.keys());
 
       const albums = Array.from(folderMap.values())
         .filter(f => !_isCollectionFolder(f, savedColMap)) // collections excluded
