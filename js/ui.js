@@ -2991,6 +2991,224 @@ const UI = (() => {
    * Render playlists into the Playlists tab.
    * @param {Object[]} playlists - array of { id, name, songs: [], coverUrls: [] }
    */
+  /* ── Library — Collections ─────────────────────────────────── */
+
+  /**
+   * Render collections grid (album-card style) into #lib-detail-content.
+   * @param {Object[]} collections
+   */
+  function renderCollections(collections) {
+    const container = document.getElementById('lib-detail-content');
+    if (!container) return;
+    container.innerHTML = '';
+
+    if (collections.length === 0) {
+      container.innerHTML = `
+        <div class="empty-state">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="currentColor"><path d="M20 6h-2.18c.07-.27.18-.52.18-.82C18 3.88 16.12 2 13.82 2c-1.19 0-2.32.47-3.18 1.32L10 3.96l-.64-.65C8.32 2.47 7.19 2 6 2 3.7 2 2 3.88 2 5.18c0 .3.11.55.18.82H0v14h24V6h-4zm-7.18-2.26C13.36 3.27 14.05 3 14.82 3c1.11 0 1.18.67 1.18 1.18 0 .52-.31 1.1-.82 1.62L12 8.93 8.82 5.8C8.31 5.28 8 4.7 8 4.18 8 3.67 8.07 3 9.18 3c.77 0 1.46.27 1.98.76L12 4.44l.82-.7z"/></svg>
+          <p>No hay colecciones en tu biblioteca.<br><span style="font-size:0.85em;color:var(--text-muted)">Los folders con más de 3 artistas distintos aparecen aquí.</span></p>
+        </div>`;
+      return;
+    }
+
+    const grid = document.createElement('div');
+    grid.className = 'lib-album-grid';
+
+    collections.forEach(col => {
+      const card = _buildCollectionCard(col);
+      grid.appendChild(card);
+    });
+
+    container.appendChild(grid);
+  }
+
+  /** Build a single collection card (album-card style, mosaic or single cover). */
+  function _buildCollectionCard(col) {
+    const COL_COLORS = ['#1A1635','#0D2A1E','#0D1F35','#2A150D','#1A1220','#1A2A10','#2A1A10'];
+    const hash   = [...(col.name || '')].reduce((a, c) => a + c.charCodeAt(0), 0);
+    const colBg  = COL_COLORS[Math.abs(hash) % COL_COLORS.length];
+
+    const card = document.createElement('div');
+    card.className = 'home-card';
+    card.style.cursor = 'pointer';
+    card.dataset.searchKey = norm(col.name);
+
+    // Cover: manual URL > mosaic > blob fallback > empty
+    let artHtml;
+    if (col.manualCoverUrl) {
+      artHtml = `<img src="${escHtml(col.manualCoverUrl)}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-md)">`;
+    } else if (col.mosaicUrls && col.mosaicUrls.length > 0) {
+      artHtml = _buildMosaicThumb(col.mosaicUrls, col.name);
+    } else if (col.blobUrl) {
+      artHtml = `<img src="${escHtml(col.blobUrl)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-md)">`;
+    } else {
+      artHtml = `<svg width="38" height="38" viewBox="0 0 24 24" fill="currentColor" style="color:var(--text-muted)"><path d="M20 6h-2.18c.07-.27.18-.52.18-.82C18 3.88 16.12 2 13.82 2c-1.19 0-2.32.47-3.18 1.32L10 3.96l-.64-.65C8.32 2.47 7.19 2 6 2 3.7 2 2 3.88 2 5.18c0 .3.11.55.18.82H0v14h24V6h-4zm-7.18-2.26C13.36 3.27 14.05 3 14.82 3c1.11 0 1.18.67 1.18 1.18 0 .52-.31 1.1-.82 1.62L12 8.93 8.82 5.8C8.31 5.28 8 4.7 8 4.18 8 3.67 8.07 3 9.18 3c.77 0 1.46.27 1.98.76L12 4.44l.82-.7z"/></svg>`;
+    }
+
+    const hasMeta = col.rescannedAt || col.format;
+    const metaHtml = hasMeta
+      ? `<div class="home-card-year">${[
+          col.rescannedAt ? '<span class="album-rescan-dot"></span>' : '',
+          col.format      ? `<span class="album-format-badge">${escHtml(col.format)}</span>` : '',
+        ].filter(Boolean).join(' ')}</div>`
+      : '';
+
+    const songLabel = col.songCount === 1 ? '1 canción' : `${col.songCount} canciones`;
+    const artistLabel = col.artistCount ? `${col.artistCount} artistas` : '';
+
+    card.innerHTML = `
+      <div class="home-card-art lib-collection-art" style="background:${colBg}">${artHtml}</div>
+      <button class="home-card-more collection-card-more" aria-label="Más opciones">${iconDots(14)}</button>
+      ${metaHtml}
+      <div class="home-card-name">${escHtml(col.name)}</div>
+      <div class="home-card-count">${[artistLabel, songLabel].filter(Boolean).join(' · ')}</div>
+    `;
+
+    card.querySelector('.home-card-art').addEventListener('click', e => {
+      e.stopPropagation();
+      if (typeof App !== 'undefined') App.onCollectionClick?.(col);
+    });
+    card.addEventListener('click', e => {
+      if (e.target.closest('.collection-card-more')) return;
+      if (typeof App !== 'undefined') App.onCollectionClick?.(col);
+    });
+    card.querySelector('.collection-card-more').addEventListener('click', e => {
+      e.stopPropagation();
+      if (typeof App !== 'undefined') App._openCollectionEditModal?.(col);
+    });
+
+    return card;
+  }
+
+  /**
+   * Render collection detail: back + header (editable) + song list.
+   * @param {Object}   collection  — { name, manualCoverUrl, mosaicUrls, songCount, folderId, ... }
+   * @param {Object[]} songs       — enriched song array
+   */
+  function renderLibraryCollectionDetail(collection, songs) {
+    const container = document.getElementById('lib-detail-content');
+    if (!container) return;
+    container.innerHTML = '';
+
+    // ── Back row (with rescan button) ──────────────────────────
+    const backRow = document.createElement('div');
+    backRow.className = 'lib-back-header';
+    backRow.innerHTML = `
+      <button class="lib-back-btn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+        Colecciones
+      </button>
+      <button class="lib-rescan-btn" title="Rescan ítems de esta colección" aria-label="Rescan">
+        <svg class="lib-rescan-icon" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+        Rescan
+        <span class="lib-rescan-dot rescan-done-dot" style="display:none"></span>
+      </button>`;
+    backRow.querySelector('.lib-back-btn').addEventListener('click', () => {
+      if (typeof App !== 'undefined') App._libGoBack('collections');
+    });
+    const rescanBtn = backRow.querySelector('.lib-rescan-btn');
+    const rescanDot = rescanBtn.querySelector('.lib-rescan-dot');
+    const folderId  = collection.folderId;
+    if (folderId && typeof App !== 'undefined') App.checkRescanDot?.(folderId, rescanDot);
+    rescanBtn.addEventListener('click', () => {
+      if (typeof App === 'undefined') return;
+      const icon = rescanBtn.querySelector('.lib-rescan-icon');
+      rescanBtn.disabled = true;
+      icon.style.animation = 'spin 1s linear infinite';
+      App.onAlbumRescan(songs, folderId).finally(() => {
+        rescanBtn.disabled = false;
+        icon.style.animation = '';
+        if (rescanDot) rescanDot.style.display = '';
+      });
+    });
+    container.appendChild(backRow);
+
+    // ── Collection header row ──────────────────────────────────
+    const COL_COLORS = ['#1A1635','#0D2A1E','#0D1F35','#2A150D','#1A1220','#1A2A10','#2A1A10'];
+    const hash  = [...(collection.name || '')].reduce((a, c) => a + c.charCodeAt(0), 0);
+    const colBg = COL_COLORS[Math.abs(hash) % COL_COLORS.length];
+
+    let artHtml;
+    if (collection.manualCoverUrl) {
+      artHtml = `<img src="${escHtml(collection.manualCoverUrl)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)">`;
+    } else if (collection.mosaicUrls && collection.mosaicUrls.length > 0) {
+      artHtml = _buildMosaicThumb(collection.mosaicUrls, collection.name);
+    } else {
+      artHtml = `<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" style="color:var(--text-secondary)"><path d="M20 6h-2.18c.07-.27.18-.52.18-.82C18 3.88 16.12 2 13.82 2c-1.19 0-2.32.47-3.18 1.32L10 3.96l-.64-.65C8.32 2.47 7.19 2 6 2 3.7 2 2 3.88 2 5.18c0 .3.11.55.18.82H0v14h24V6h-4z"/></svg>`;
+    }
+
+    const entity = document.createElement('div');
+    entity.id        = 'lib-collection-hdr';
+    entity.className = 'lib-detail-entity';
+    entity.innerHTML = `
+      <div class="lib-detail-entity-art lib-col-detail-art" style="background:${colBg}">${artHtml}</div>
+      <div class="lib-detail-entity-info">
+        ${collection.format ? `<div class="lib-detail-entity-year"><span class="album-format-badge">${escHtml(collection.format)}</span></div>` : ''}
+        <div class="lib-detail-entity-name lib-col-detail-name">${escHtml(collection.name)}</div>
+        <div class="lib-detail-entity-sub">${escHtml(`${collection.artistCount || ''} artistas · ${songs.length} canciones`)}</div>
+      </div>
+      <button class="lib-detail-entity-more" title="Editar colección" aria-label="Editar colección">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
+      </button>`;
+
+    entity.querySelector('.lib-detail-entity-more').addEventListener('click', e => {
+      e.stopPropagation();
+      if (typeof App !== 'undefined') App._openCollectionEditModal?.(collection);
+    });
+
+    container.appendChild(entity);
+
+    if (songs.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'empty-state';
+      empty.innerHTML = `<p>Sin canciones registradas</p>`;
+      container.appendChild(empty);
+      return;
+    }
+
+    // ── Song list ────────────────────────────────────────────────
+    const list = document.createElement('div');
+    list.className = 'top-list';
+
+    songs.forEach((song, i) => {
+      const row = document.createElement('div');
+      row.className = 'top-list-item';
+      row.dataset.id        = song.id;
+      row.dataset.searchKey = norm(song.displayName || song.name || '');
+
+      row.innerHTML = `
+        <div class="top-list-rank">${i + 1}</div>
+        <div class="top-list-thumb">
+          ${song.thumbnailUrl
+            ? `<img src="${song.thumbnailUrl}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)">`
+            : iconMusicNote(22)
+          }
+        </div>
+        <div class="top-list-info">
+          <div class="top-list-title">${escHtml(song.displayName || song.name || '')}</div>
+          <div class="top-list-artist">${escHtml([song.artist, song.album].filter(Boolean).join(' — '))}</div>
+        </div>
+        <button class="btn-more" aria-label="Más opciones">${iconDots()}</button>
+      `;
+
+      row.querySelector('.btn-more').addEventListener('click', e => {
+        e.stopPropagation();
+        showContextMenu(e, 'song', song);
+      });
+      row.addEventListener('click', e => {
+        if (e.target.closest('.btn-more')) return;
+        if (typeof App !== 'undefined') App.onSongClick(song, songs);
+      });
+
+      if (typeof App !== 'undefined') App._cacheItem?.(song);
+      list.appendChild(row);
+    });
+
+    container.appendChild(list);
+  }
+
+  /* ── Library — Playlists ─────────────────────────────────── */
+
   // Playlist sort state (persists between renders)
   let _plSortMode = 'recent'; // 'recent' | 'az' | 'za'
 
@@ -3380,6 +3598,8 @@ const UI = (() => {
     appendAlbums,
     renderLibraryArtistDetail,
     renderLibraryAlbumDetail,
+    renderCollections,
+    renderLibraryCollectionDetail,
     renderPlaylists,
     updatePlaylistSidebarCover,
     setLibSearchPlaceholder,

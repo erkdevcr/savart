@@ -222,6 +222,11 @@
             <span data-i18n="artists">Artistas</span>
             <span class="lib-tab-count" id="lib-count-artists"></span>
           </div>
+          <div class="lib-tab" id="lib-tab-collections" data-tab="collections">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M20 6h-2.18c.07-.27.18-.52.18-.82C18 3.88 16.12 2 13.82 2c-1.19 0-2.32.47-3.18 1.32L10 3.96l-.64-.65C8.32 2.47 7.19 2 6 2 3.7 2 2 3.88 2 5.18c0 .3.11.55.18.82H0v14h24V6h-4zm-7.18-2.26C13.36 3.27 14.05 3 14.82 3c1.11 0 1.18.67 1.18 1.18 0 .52-.31 1.1-.82 1.62L12 8.93 8.82 5.8C8.31 5.28 8 4.7 8 4.18 8 3.67 8.07 3 9.18 3c.77 0 1.46.27 1.98.76L12 4.44l.82-.7z"/></svg>
+            <span>Colecciones</span>
+            <span class="lib-tab-count" id="lib-count-collections"></span>
+          </div>
           <div class="lib-tab" id="lib-tab-playlists" data-tab="playlists">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zM17 6v8.18c-.31-.11-.65-.18-1-.18-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3V8h3V6h-5z"/></svg>
             <span data-i18n="playlists">Playlists</span>
@@ -714,6 +719,29 @@
       </div>
       <div class="ds-modal-footer">
         <button id="btn-ds-modal-select" class="btn-primary" disabled data-i18n="ds_select_btn">Seleccionar esta carpeta</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Collection edit modal (name + cover URL + apply-to-all) -->
+  <div id="collection-edit-modal" class="ds-modal" style="display:none">
+    <div class="ds-modal-backdrop" id="collection-edit-backdrop"></div>
+    <div class="ds-modal-card ds-modal-card--sm">
+      <div class="ds-modal-header">
+        <span class="ds-modal-title">Editar colección</span>
+      </div>
+      <div class="ds-modal-body" style="padding:0 var(--sp-4) var(--sp-3)">
+        <label class="ds-field-label" style="display:block;margin-bottom:var(--sp-2)">Nombre</label>
+        <input id="collection-edit-name" class="ds-artist-url-modal-input" type="text" placeholder="Nombre de la colección" style="margin-bottom:var(--sp-3)">
+        <label class="ds-field-label" style="display:block;margin-bottom:var(--sp-2)">URL de portada</label>
+        <div style="display:flex;gap:var(--sp-2);align-items:center">
+          <input id="collection-edit-cover" class="ds-artist-url-modal-input" type="url" placeholder="https://…" style="flex:1;margin-bottom:0">
+          <button id="btn-collection-apply-all" class="btn-sort-toggle" title="Aplicar portada a todos los ítems sin portada propia" style="white-space:nowrap;flex-shrink:0">Aplicar a todas</button>
+        </div>
+      </div>
+      <div class="ds-modal-footer">
+        <button id="btn-collection-edit-cancel" class="btn-sort-toggle">Cancelar</button>
+        <button id="btn-collection-edit-save" class="btn-primary">Guardar</button>
       </div>
     </div>
   </div>

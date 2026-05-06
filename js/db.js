@@ -83,6 +83,11 @@ const DB = (() => {
           historyStore.createIndex('playedAt', 'playedAt', { unique: false });
         }
 
+        // collections store (v5+) — { id (=folderId), name, coverUrl, updatedAt }
+        if (!db.objectStoreNames.contains('collections')) {
+          db.createObjectStore('collections', { keyPath: 'id' });
+        }
+
         console.log(`[DB] Upgraded from v${oldVersion} to v${CONFIG.DB_VERSION}`);
       };
 
@@ -863,6 +868,38 @@ const DB = (() => {
     return removed;
   }
 
+  /* ── Collections ────────────────────────────────────────── */
+
+  /**
+   * Get saved overrides for a collection (name, coverUrl).
+   * @param {string} folderId
+   * @returns {Promise<Object|null>}
+   */
+  async function getCollection(folderId) {
+    const store = _tx('collections');
+    return _promisify(store.get(folderId));
+  }
+
+  /**
+   * Save/update collection overrides (name, coverUrl).
+   * @param {string} folderId
+   * @param {Object} changes  — { name?, coverUrl? }
+   */
+  async function saveCollection(folderId, changes) {
+    const store    = _tx('collections', 'readwrite');
+    const existing = await _promisify(store.get(folderId)) || { id: folderId };
+    return _promisify(store.put({ ...existing, ...changes, id: folderId, updatedAt: Date.now() }));
+  }
+
+  /**
+   * Get all saved collection overrides.
+   * @returns {Promise<Object[]>}
+   */
+  async function getAllCollections() {
+    const store = _tx('collections');
+    return _promisify(store.getAll());
+  }
+
   /* ── Expose ─────────────────────────────────────────────── */
   return {
     open,
@@ -920,5 +957,9 @@ const DB = (() => {
     resetToVirgin,
     purgeOrphans,
     purgeAllOrphans,
+    // Collections
+    getCollection,
+    saveCollection,
+    getAllCollections,
   };
 })();

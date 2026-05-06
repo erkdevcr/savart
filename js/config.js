@@ -85,7 +85,7 @@ const CONFIG = {
 
   // ── IndexedDB ─────────────────────────────────────────────
   DB_NAME:    'savart_db',
-  DB_VERSION: 4,
+  DB_VERSION: 5,
 
   // ── Last.fm ───────────────────────────────────────────────
   // Used by lastfm.js to fetch album cover art.

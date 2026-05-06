@@ -3174,10 +3174,11 @@ const App = (() => {
   let _libSearchDebounce  = null; // timer for search input debounce
 
   const LIB_TAB_PLACEHOLDERS = {
-    favorites: 'Buscar en Favoritos…',
-    artists:   'Buscar artista…',
-    albums:    'Buscar álbum…',
-    playlists: 'Buscar playlist…',
+    favorites:   'Buscar en Favoritos…',
+    artists:     'Buscar artista…',
+    albums:      'Buscar álbum…',
+    collections: 'Buscar colección…',
+    playlists:   'Buscar playlist…',
   };
 
   /**
@@ -3215,10 +3216,11 @@ const App = (() => {
     UI.setLibSearchPlaceholder(LIB_TAB_PLACEHOLDERS[tab] || 'Buscar…');
 
     // Load data
-    if (tab === 'favorites') _loadStarred();
-    if (tab === 'artists')   { _loadArtists();  setTimeout(_scanLibraryBackground, 400); }
-    if (tab === 'albums')    { _loadAlbums();   setTimeout(_scanLibraryBackground, 400); }
-    if (tab === 'playlists') _loadPlaylists();
+    if (tab === 'favorites')   _loadStarred();
+    if (tab === 'artists')     { _loadArtists();     setTimeout(_scanLibraryBackground, 400); }
+    if (tab === 'albums')      { _loadAlbums();      setTimeout(_scanLibraryBackground, 400); }
+    if (tab === 'collections') _loadCollections();
+    if (tab === 'playlists')   _loadPlaylists();
   }
 
   /**
@@ -3241,9 +3243,10 @@ const App = (() => {
     UI.setLibSearchPlaceholder(LIB_TAB_PLACEHOLDERS[tab] || 'Buscar…');
 
     // Reload data — each loader re-applies the current search filter after render
-    if (tab === 'artists') { _loadArtists();  setTimeout(_scanLibraryBackground, 400); }
-    if (tab === 'albums')  { _loadAlbums();   setTimeout(_scanLibraryBackground, 400); }
-    if (tab === 'playlists') _loadPlaylists();
+    if (tab === 'artists')     { _loadArtists();     setTimeout(_scanLibraryBackground, 400); }
+    if (tab === 'albums')      { _loadAlbums();      setTimeout(_scanLibraryBackground, 400); }
+    if (tab === 'collections') _loadCollections();
+    if (tab === 'playlists')   _loadPlaylists();
   }
 
   /** Filter visible items in #lib-detail-content by search text. */
@@ -3253,7 +3256,7 @@ const App = (() => {
     if (_currentLibTab === 'artists')  _renderArtistPage(true);
     if (_currentLibTab === 'albums')   _renderAlbumPage(true);
     // DOM-based filter for tabs that render all items at once
-    if (_currentLibTab === 'favorites' || _currentLibTab === 'playlists') _domFilterLibItems();
+    if (_currentLibTab === 'favorites' || _currentLibTab === 'playlists' || _currentLibTab === 'collections') _domFilterLibItems();
   }
 
   /**
@@ -6011,6 +6014,179 @@ const App = (() => {
     return null;
   }
 
+  /* ── Collections ─────────────────────────────────────────── */
+
+  /**
+   * Build the folder accumulator map shared by _loadAlbums and _loadCollections.
+   * Returns a Map<folderId, accumulator> and the folderSongCount/rescannedMap helpers.
+   */
+  async function _buildFolderMap() {
+    const all = await DB.getAllMeta();
+
+    const folderSongCount = new Map();
+    all.forEach(m => { if (m.folderId) folderSongCount.set(m.folderId, (folderSongCount.get(m.folderId) || 0) + 1); });
+
+    const rescannedMap = new Map();
+    all.forEach(m => { if (m.rescannedAt) rescannedMap.set(m.id, m.rescannedAt); });
+
+    const folderMap = new Map();
+    all.forEach(m => {
+      const album  = (m.album  || '').trim();
+      const artist = (m.artist || '').split(';')[0].trim();
+      if (!album || !m.folderId) return;
+      if (!folderMap.has(m.folderId)) {
+        folderMap.set(m.folderId, {
+          folderId:       m.folderId,
+          albumCounts:    new Map(),
+          artistCounts:   new Map(),
+          yearCounts:     new Map(),
+          formatCounts:   new Map(),
+          coverUrlCounts: new Map(),
+          coverUrlList:   [], // ordered list of first-seen stable cover URLs (for mosaic)
+          blobId:         null,
+          blobData:       null,
+          taggedCount:    0,
+          hasManual:      false,
+        });
+      }
+      const f = folderMap.get(m.folderId);
+      f.taggedCount++;
+      f.albumCounts.set(album,   (f.albumCounts.get(album)   || 0) + 1);
+      if (artist) f.artistCounts.set(artist, (f.artistCounts.get(artist) || 0) + 1);
+      if (m.year) f.yearCounts.set(m.year,   (f.yearCounts.get(m.year)   || 0) + 1);
+      const fmt = _formatLabel(m.mimeType, m.name);
+      if (fmt) f.formatCounts.set(fmt, (f.formatCounts.get(fmt) || 0) + 1);
+      if (_isStableCoverUrl(m.thumbnailUrl)) {
+        f.coverUrlCounts.set(m.thumbnailUrl, (f.coverUrlCounts.get(m.thumbnailUrl) || 0) + 1);
+        if (!f.coverUrlList.includes(m.thumbnailUrl) && f.coverUrlList.length < 4) {
+          f.coverUrlList.push(m.thumbnailUrl);
+        }
+      }
+      if (!f.blobId && m.coverBlob) { f.blobId = m.id; f.blobData = m.coverBlob; }
+      if ((m.manualAt || 0) > 0) f.hasManual = true;
+    });
+
+    return { all, folderMap, folderSongCount, rescannedMap };
+  }
+
+  /** Detect collection folder IDs (folders with more than 3 distinct artists). */
+  async function _getCollectionFolderIds() {
+    const { folderMap } = await _buildFolderMap();
+    const ids = new Set();
+    folderMap.forEach((f, folderId) => {
+      if (f.artistCounts.size > 3) ids.add(folderId);
+    });
+    return ids;
+  }
+
+  async function _loadCollections() {
+    if (_libInDetail) return;
+    try {
+      const { folderMap, folderSongCount, rescannedMap } = await _buildFolderMap();
+
+      // Load DB overrides (manual name / cover per collection)
+      const savedCols   = await DB.getAllCollections().catch(() => []);
+      const savedColMap = new Map((savedCols || []).map(c => [c.id, c]));
+
+      const _top = map => map.size > 0
+        ? [...map.entries()].sort((a, b) => b[1] - a[1])[0][0]
+        : null;
+
+      const collections = [];
+      folderMap.forEach((f, folderId) => {
+        if (f.artistCounts.size <= 3) return; // not a collection
+        const saved     = savedColMap.get(folderId) || {};
+        const name      = saved.name   || _top(f.albumCounts) || folderId;
+        const format    = _top(f.formatCounts) || null;
+        const songCount = Math.max(f.taggedCount, folderSongCount.get(folderId) || 0);
+        const rescannedAt = rescannedMap.get(folderId) || null;
+
+        // Cover: saved manual URL → mosaic of top-4 covers from songs
+        const manualCoverUrl = saved.coverUrl || null;
+        const mosaicUrls = f.coverUrlList.slice(0, 4);
+        // Blob fallback as last-resort single cover
+        const blobUrl = (!manualCoverUrl && mosaicUrls.length === 0 && f.blobId && f.blobData && typeof Meta !== 'undefined')
+          ? (Meta.injectCover(f.blobId, f.blobData) || null) : null;
+
+        collections.push({
+          folderId,
+          name,
+          manualCoverUrl,
+          mosaicUrls,
+          blobUrl,
+          songCount,
+          format,
+          rescannedAt,
+          artistCount: f.artistCounts.size,
+        });
+      });
+
+      collections.sort((a, b) => a.name.localeCompare(b.name));
+      _setLibTabCount('collections', collections.length);
+      UI.renderCollections(collections);
+      _domFilterLibItems();
+    } catch (err) {
+      console.error('[App] Load collections error:', err);
+    }
+  }
+
+  /** Drill into a collection's detail view. */
+  async function onCollectionClick(collection) {
+    try {
+      const all = await DB.getAllMeta();
+      const songs = all.filter(m => m.folderId === collection.folderId);
+
+      const toMap = m => ({
+        id:           m.id,
+        name:         m.name        || m.id,
+        displayName:  m.displayName || m.name || m.id,
+        artist:       m.artist      || '',
+        album:        m.album       || '',
+        year:         m.year        || '',
+        track:        m.track       || '',
+        thumbnailUrl: m.thumbnailUrl || m.coverUrl || null,
+        folderId:     m.folderId    || null,
+      });
+
+      const sorted = songs.map(toMap).sort((a, b) =>
+        (a.displayName || a.name).localeCompare(b.displayName || b.name)
+      );
+
+      const enriched = await Promise.all(sorted.map(async s => {
+        const url = await _resolveCoverUrl(s.id, s.thumbnailUrl);
+        return url ? { ...s, thumbnailUrl: url } : s;
+      }));
+
+      _libInDetail = true;
+      _setLibSearchBarVisible(false);
+      UI.renderLibraryCollectionDetail(collection, enriched);
+
+      if (enriched.length > 0 && Auth.getValidToken()) {
+        _prefetchAndApplyFolderCovers(collection.folderId, enriched).catch(() => {});
+      }
+    } catch (err) {
+      console.error('[App] onCollectionClick error:', err);
+    }
+  }
+
+  /** Open the collection edit modal for a given collection. */
+  function _openCollectionEditModal(collection) {
+    const modal  = document.getElementById('collection-edit-modal');
+    const nameIn = document.getElementById('collection-edit-name');
+    const covIn  = document.getElementById('collection-edit-cover');
+    if (!modal || !nameIn || !covIn) return;
+    nameIn.value = collection.name        || '';
+    covIn.value  = collection.manualCoverUrl || '';
+    modal.dataset.folderId = collection.folderId;
+    modal.style.display = '';
+  }
+
+  /** Close the collection edit modal. */
+  function _closeCollectionEditModal() {
+    const modal = document.getElementById('collection-edit-modal');
+    if (modal) { modal.style.display = 'none'; modal.dataset.folderId = ''; }
+  }
+
   async function _loadAlbums() {
     if (_libInDetail) return; // don't replace a drill-down view
     try {
@@ -6070,6 +6246,7 @@ const App = (() => {
         : null;
 
       const albums = Array.from(folderMap.values())
+        .filter(f => f.artistCounts.size <= 3) // folders with >3 artists are Collections
         .map(f => {
           const name      = _top(f.albumCounts);
           const artist    = _top(f.artistCounts) || '';
@@ -7728,6 +7905,52 @@ const App = (() => {
       if (e.key === 'Escape') _closeArtistUrlModal();
     });
 
+    // Collection edit modal
+    document.getElementById('collection-edit-backdrop')?.addEventListener('click', _closeCollectionEditModal);
+    document.getElementById('btn-collection-edit-cancel')?.addEventListener('click', _closeCollectionEditModal);
+    document.getElementById('btn-collection-edit-save')?.addEventListener('click', async () => {
+      const modal    = document.getElementById('collection-edit-modal');
+      const folderId = modal?.dataset?.folderId;
+      if (!folderId) return;
+      const name     = document.getElementById('collection-edit-name')?.value.trim() || '';
+      const coverUrl = document.getElementById('collection-edit-cover')?.value.trim() || '';
+      await DB.saveCollection(folderId, { name: name || undefined, coverUrl: coverUrl || undefined });
+      _closeCollectionEditModal();
+      // Re-render the header inside the detail view with updated data
+      if (_libInDetail && _currentLibTab === 'collections') {
+        const savedCol = await DB.getCollection(folderId);
+        const header   = document.getElementById('lib-collection-hdr');
+        if (header && savedCol) {
+          // Update name label
+          const nameEl = header.querySelector('.lib-col-detail-name');
+          if (nameEl && savedCol.name) nameEl.textContent = savedCol.name;
+          // Update cover
+          const coverEl = header.querySelector('.lib-col-detail-art');
+          if (coverEl && savedCol.coverUrl) {
+            coverEl.innerHTML = `<img src="${savedCol.coverUrl}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-md)">`;
+          }
+        }
+      }
+    });
+    document.getElementById('btn-collection-apply-all')?.addEventListener('click', async () => {
+      const modal    = document.getElementById('collection-edit-modal');
+      const folderId = modal?.dataset?.folderId;
+      const coverUrl = document.getElementById('collection-edit-cover')?.value.trim();
+      if (!folderId || !coverUrl) return;
+      // Apply to all songs in the folder that have no cover of their own
+      const all   = await DB.getAllMeta();
+      const songs = all.filter(m => m.folderId === folderId);
+      let applied = 0;
+      for (const m of songs) {
+        const hasOwn = _isStableCoverUrl(m.thumbnailUrl) || m.coverBlob;
+        if (!hasOwn) {
+          await DB.setMeta(m.id, { thumbnailUrl: coverUrl });
+          applied++;
+        }
+      }
+      console.log(`[App] Applied cover to ${applied} songs in collection ${folderId}`);
+    });
+
     // Deep Scan: send-to-scan warning dialog
     const _closeSendScanDialog = () => {
       _dsCloseModal('ds-send-scan-dialog');
@@ -8070,6 +8293,7 @@ const App = (() => {
     _doSearch,
     _loadStarred,
     _loadPlaylists,
+    _loadCollections,
     _loadArtists,
     _loadAlbums,
     _setLibTab,
@@ -8078,6 +8302,8 @@ const App = (() => {
     _scanLibraryBackground,
     onArtistClick,
     onAlbumClick,
+    onCollectionClick,
+    _openCollectionEditModal,
     onAlbumRescan,
     onAlbumEdit,
     onAlbumPlay,

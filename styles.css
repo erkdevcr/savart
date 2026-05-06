@@ -5977,3 +5977,43 @@ body.queue-open #mini-player { z-index: 65; }
     height: 22px;
   }
 }
+
+/* ── Collections (v1.7.15) ───────────────────────────────────── */
+
+/* Collection card art: same size as album art but mosaic-aware */
+.lib-collection-art {
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+/* The mosaic inside a collection art fills the whole cell */
+.lib-collection-art > div {
+  border-radius: 0;
+}
+
+/* Collection detail header art — same as album detail entity art */
+.lib-col-detail-art {
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+/* Collection edit modal body spacing */
+#collection-edit-modal .ds-modal-body {
+  padding: var(--sp-3) var(--sp-4) var(--sp-3);
+}
+
+/* "Aplicar a todas" button — same look as sort toggles */
+#btn-collection-apply-all {
+  font-size: 0.78em;
+  padding: 5px 10px;
+  height: auto;
+  align-self: center;
+}
+
+/* Mosaic inside a card scales perfectly */
+.home-card-art .lib-collection-art,
+.home-card-art > div[style*="grid"] {
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
