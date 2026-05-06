@@ -6011,8 +6011,6 @@ body.queue-open #mini-player { z-index: 65; }
 /* In Browse the legend is pushed to the far right of the action bar */
 .dot-legend--browse {
   margin-left: auto;
-  padding-left: 10px;
-  border-left: 1px solid var(--bg-hover);
 }
 .dot-legend-item {
   display: flex;

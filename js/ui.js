@@ -3661,28 +3661,37 @@ const UI = (() => {
     span.textContent = text;
     el.appendChild(span);
 
-    // Wait until the element actually has layout (handles display:none → flex transition).
-    // We retry every rAF until clientWidth > 0, then measure.
+    // Wait until the element has layout, then measure overflow.
     let retries = 0;
     function measure() {
       if (!el.isConnected) return;
 
-      // scrollWidth is the full content width (including hidden overflow).
-      // clientWidth is the visible container width.
-      // Their difference is the hidden overflow — no need for the overflow:visible hack,
-      // which is unreliable inside nested flex/grid layouts.
       const containerW = el.clientWidth;
 
-      if (containerW === 0 && retries < 10) {
-        // Element not laid out yet — retry next frame
+      if (containerW === 0 && retries < 15) {
         retries++;
         requestAnimationFrame(measure);
         return;
       }
 
-      const overflow = Math.round(el.scrollWidth - containerW);
+      // Use a position:fixed probe to measure the natural text width.
+      // This is immune to:
+      //   • flex containers with min-width:0 clamping the child's layout width
+      //   • iOS Safari's scrollWidth bug for overflow:hidden elements in flex rows
+      //   • the container itself being recently made visible
+      const cs = window.getComputedStyle(el);
+      const probe = document.createElement('span');
+      probe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;white-space:nowrap;visibility:hidden;pointer-events:none';
+      probe.style.font          = cs.font;
+      probe.style.letterSpacing = cs.letterSpacing;
+      probe.textContent = text;
+      document.body.appendChild(probe);
+      const textW = probe.getBoundingClientRect().width;
+      probe.remove();
+
+      const overflow = Math.round(textW - containerW);
       if (overflow > 4) {
-        // Speed: ~55 px/s — comfortable reading while scrolling
+        // Speed: ~55 px/s — comfortable reading pace
         const scrollSecs = Math.ceil(overflow / 55);
         // 18% start-pause + 54% scroll + 18% end-pause + 10% snap-back
         const total = Math.min(Math.max(Math.round(scrollSecs / 0.54), 6), 20);
@@ -3692,8 +3701,8 @@ const UI = (() => {
       }
     }
 
-    // Two rAFs: first lets the browser apply any pending display changes,
-    // second reads layout from the now-visible element.
+    // Two rAFs: first lets the browser apply any pending display/class changes,
+    // second reads layout from the now-rendered element.
     requestAnimationFrame(() => requestAnimationFrame(measure));
   }
 
