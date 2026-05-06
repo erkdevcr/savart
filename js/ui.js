@@ -1421,6 +1421,10 @@ const UI = (() => {
     const row = screen.querySelector(`.folder-row[data-id="${CSS.escape(folderId)}"]`);
     if (!row) return;
 
+    // Keep the data attribute in sync so the next context menu open reads the new type
+    if (newType) row.dataset.folderType = newType;
+    else         delete row.dataset.folderType;
+
     // Remove any existing chip
     row.querySelectorAll('.folder-type-chip').forEach(el => el.remove());
 
@@ -1451,6 +1455,8 @@ const UI = (() => {
     const row = document.createElement('div');
     row.className = 'folder-row';
     row.dataset.id = folder.id;
+    // Keep folderType in a data attribute so context menu always reads the live value
+    if (folder.folderType) row.dataset.folderType = folder.folderType;
 
     // Sub-label: song count + optional collection/album chip
     const typeChip = folder.folderType === 'collection'
@@ -1483,13 +1489,13 @@ const UI = (() => {
 
     row.querySelector('.btn-more').addEventListener('click', (e) => {
       e.stopPropagation();
-      showContextMenu(e, 'folder', folder);
+      showContextMenu(e, 'folder', { ...folder, folderType: row.dataset.folderType || folder.folderType });
     });
 
     // Long-press or right-click for context menu
     row.addEventListener('contextmenu', (e) => {
       e.preventDefault();
-      showContextMenu(e, 'folder', folder);
+      showContextMenu(e, 'folder', { ...folder, folderType: row.dataset.folderType || folder.folderType });
     });
 
     return row;
