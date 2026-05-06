@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '1.7.42';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.42 — Marquee: force animation via inline style, bypasses prefers-reduced-motion
+const APP_VERSION  = '1.7.43';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.43 — Marquee: remove debug overlay
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

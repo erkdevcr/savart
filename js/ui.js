@@ -3702,23 +3702,6 @@ const UI = (() => {
         span.style.display = '';
       }
 
-      // ── TEMP DEBUG — remove after mobile diagnosis ─────────────────────────
-      requestAnimationFrame(() => {
-        let dbg = document.getElementById('_mq_dbg');
-        if (!dbg) {
-          dbg = document.createElement('div');
-          dbg.id = '_mq_dbg';
-          dbg.style.cssText = 'position:fixed;bottom:120px;left:0;right:0;z-index:9999;background:rgba(0,0,0,.85);color:#0f0;font-size:11px;padding:6px 10px;text-align:center;pointer-events:none;white-space:pre';
-          document.body.appendChild(dbg);
-        }
-        const cs = window.getComputedStyle(span);
-        const prm = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        dbg.textContent =
-          `ov=${overflow} cls=${span.className} mo=${el.style.getPropertyValue('--mo')||'—'}\n` +
-          `anim=${cs.animationName} dur=${cs.animationDuration}\n` +
-          `prm=${prm}`;
-      });
-      // ── END DEBUG ──────────────────────────────────────────────────────────
     }
 
     // Two rAFs: first lets the browser apply any pending display/class changes,
