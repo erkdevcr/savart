@@ -3686,6 +3686,20 @@ const UI = (() => {
 
       const overflow = Math.round(textW - containerW);
 
+      // ── TEMP DEBUG — remove after mobile diagnosis ─────────────────────────
+      {
+        let dbg = document.getElementById('_mq_dbg');
+        if (!dbg) {
+          dbg = document.createElement('div');
+          dbg.id = '_mq_dbg';
+          dbg.style.cssText = 'position:fixed;bottom:120px;left:0;right:0;z-index:9999;background:rgba(0,0,0,.85);color:#fff;font-size:11px;padding:6px 10px;text-align:center;pointer-events:none';
+          document.body.appendChild(dbg);
+        }
+        const hasCls = span.className === 'marquee-inner';
+        dbg.textContent = `cW=${Math.round(containerW)} tW=${Math.round(textW)} ov=${overflow} cls=${hasCls} mo=${el.style.getPropertyValue('--mo')||'—'}`;
+      }
+      // ── END DEBUG ──────────────────────────────────────────────────────────
+
       if (overflow > 4) {
         const scrollSecs = Math.ceil(overflow / 55);
         // 18% start-pause + 54% scroll + 18% end-pause + 10% snap-back
