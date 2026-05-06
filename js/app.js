@@ -1692,6 +1692,40 @@ const App = (() => {
   }
 
   /**
+   * Lightweight movement reconciliation for a Browse folder.
+   * Compares Drive's live file list against DB's stored folderId values and patches
+   * any mismatches — no metadata rescan, only folderId corrections.
+   * If any records changed, rebuilds the chip cache and patches visible folder chips.
+   *
+   * @param {string}   folderId   Drive folder ID just opened.
+   * @param {Object[]} liveFiles  Files currently in this folder from Drive.listFolderAll.
+   */
+  async function _reconcileBrowseFolder(folderId, liveFiles) {
+    const liveFileIds = liveFiles.map(f => f.id);
+    const changed = await DB.reconcileFolderContents(folderId, liveFileIds);
+    if (changed === 0) return; // nothing moved — skip expensive cache rebuild
+
+    // Some folderIds changed — rebuild caches so chips reflect the new DB state.
+    await _refreshCollectionCache().catch(() => {});
+
+    // Patch chips for any subfolder rows currently visible in Browse.
+    // (The current folder's own chip is rendered by its parent, not here.)
+    const screen = document.getElementById('screen-browse');
+    if (!screen) return;
+    const colCache     = _collectionFolderIdsCache || new Set();
+    const knownFolders = _allKnownFolderIdsCache;
+    if (!knownFolders) return;
+
+    screen.querySelectorAll('.folder-row[data-id]').forEach(row => {
+      const id = row.dataset.id;
+      const newType = knownFolders.has(id)
+        ? (colCache.has(id) ? 'collection' : 'album')
+        : undefined;
+      UI.updateBrowseFolderChip?.(id, newType);
+    });
+  }
+
+  /**
    * Show/hide the green dot on #browse-rescan-dot based on whether folderId has rescannedAt.
    * @param {string} folderId
    */
@@ -2714,6 +2748,11 @@ const App = (() => {
       const activeSong = Player.getCurrentTrack();
       UI.renderFolderContents(result.folders, result.files, activeSong?.id);
       if (result.folders.length > 0) _patchFolderDots(result.folders).catch(() => {});
+
+      // Lightweight movement reconciliation (fire-and-forget):
+      // Detects files moved in Drive (folderId mismatch) without a full rescan.
+      // If any records changed, rebuild the chip cache and patch visible folder rows.
+      _reconcileBrowseFolder(folder.id, result.files).catch(() => {});
 
       // Update item count badge
       const total = result.folders.length + result.files.length;

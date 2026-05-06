@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '1.7.26';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.26 — Browse chips always reflect current DB state
+const APP_VERSION  = '1.7.27';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.27 — Auto movement reconciliation on Browse navigation
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

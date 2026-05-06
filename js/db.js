@@ -851,6 +851,64 @@ const DB = (() => {
    * @param {string[]} liveIds   Array of file IDs currently present in Drive.
    * @returns {Promise<number>}  Number of orphan records deleted.
    */
+  /**
+   * Lightweight movement reconciliation — detects files moved in Drive without a full rescan.
+   * Called silently while the user navigates Browse; only touches the folderId field.
+   *
+   * Two cases handled:
+   *  A) Files DB has for this folder that Drive no longer lists → set folderId = null
+   *     (they were moved out; the next folder the user visits will pick them up via case B)
+   *  B) Files Drive lists for this folder that DB has with a different folderId → update folderId
+   *     (they were moved in from another folder)
+   *
+   * @param {string}   folderId    The Drive folder ID just opened.
+   * @param {string[]} liveFileIds Array of Drive file IDs currently in the folder.
+   * @returns {Promise<number>}    Total number of DB records updated (0 = no change needed).
+   */
+  async function reconcileFolderContents(folderId, liveFileIds) {
+    if (!folderId || !Array.isArray(liveFileIds)) return 0;
+    const liveSet = new Set(liveFileIds);
+    let changed = 0;
+
+    await new Promise((resolve, reject) => {
+      const tx    = _db.transaction('metadata', 'readwrite');
+      const store = tx.objectStore('metadata');
+      tx.oncomplete = resolve;
+      tx.onerror    = () => reject(tx.error);
+      tx.onabort    = () => reject(tx.error);
+
+      // Case A: records DB thinks belong here but Drive doesn't list → clear folderId
+      const req = store.index('folderId').getAll(IDBKeyRange.only(folderId));
+      req.onsuccess = () => {
+        for (const rec of req.result) {
+          if (!liveSet.has(rec.id)) {
+            store.put({ ...rec, folderId: null });
+            changed++;
+          }
+        }
+
+        // Case B: live files whose DB record has a wrong folderId → correct it
+        // Use a counter so we close the tx only after all gets complete
+        let pending = liveFileIds.length;
+        if (pending === 0) return; // tx will complete naturally
+
+        for (const fileId of liveFileIds) {
+          const gr = store.get(fileId);
+          gr.onsuccess = () => {
+            const rec = gr.result;
+            if (rec && rec.folderId && rec.folderId !== folderId) {
+              store.put({ ...rec, folderId });
+              changed++;
+            }
+            // last one — nothing special needed, tx auto-commits
+          };
+        }
+      };
+    });
+
+    return changed;
+  }
+
   async function purgeOrphans(folderId, liveIds) {
     if (!folderId || !Array.isArray(liveIds)) return 0;
     const liveSet = new Set(liveIds);
@@ -961,5 +1019,7 @@ const DB = (() => {
     getCollection,
     saveCollection,
     getAllCollections,
+    // Movement reconciliation
+    reconcileFolderContents,
   };
 })();
