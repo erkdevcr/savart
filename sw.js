@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '1.7.33';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.33 — Fix mobile marquee: getBoundingClientRect + disable ellipsis during animation
+const APP_VERSION  = '1.7.34';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.34 — Fix browse search AND semantics for multi-word queries
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

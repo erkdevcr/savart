@@ -3158,6 +3158,10 @@ const App = (() => {
         const s = _wordSim(qw, fw);
         if (s > best) best = s;
       }
+      // AND semantics: every query word must fuzzy-match at least one filename word.
+      // Without this gate, "los bukis" would accept "De Los Angeles" because
+      // "los"→1.0 and "bukis"→0 average to 0.5 ≥ MIN_SCORE.
+      if (best < 0.3) return 0;
       total += best;
     }
     return total / qWords.length;
