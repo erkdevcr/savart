@@ -6008,9 +6008,9 @@ body.queue-open #mini-player { z-index: 65; }
   flex-direction: column;
   gap: 2px;
 }
-/* In Browse the legend sits right after the sort button — no auto margin needed */
+/* In Browse the legend is pushed to the far right of the action bar */
 .dot-legend--browse {
-  margin-left: 8px;
+  margin-left: auto;
   padding-left: 10px;
   border-left: 1px solid var(--bg-hover);
 }
