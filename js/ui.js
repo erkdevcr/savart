@@ -3674,11 +3674,25 @@ const UI = (() => {
         return;
       }
 
-      // getBoundingClientRect() on an inline <span> reports its FULL layout width
-      // even when the parent has overflow:hidden — the clipping is a paint operation
-      // that does not shrink the element's bounding box. This is reliable on
-      // Chrome Android and iOS Safari without any probe or scrollWidth tricks.
-      const textW = span.getBoundingClientRect().width;
+      // Measure the true text width using a position:fixed probe placed outside
+      // all clipping contexts. This is necessary because getBoundingClientRect()
+      // on an inline element inside overflow:hidden returns the CLIPPED width on
+      // Chrome Android and iOS Safari — not the full rendered text width.
+      // We copy individual font properties (not the `font` shorthand, which can
+      // return an empty string on Chrome Android) from the span's computed style.
+      const cs = window.getComputedStyle(span);
+      const probe = document.createElement('span');
+      probe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;white-space:nowrap;visibility:hidden;pointer-events:none';
+      probe.style.fontSize      = cs.fontSize;
+      probe.style.fontFamily    = cs.fontFamily;
+      probe.style.fontWeight    = cs.fontWeight;
+      probe.style.fontStyle     = cs.fontStyle;
+      probe.style.letterSpacing = cs.letterSpacing;
+      probe.textContent = text;
+      document.body.appendChild(probe);
+      const textW = probe.getBoundingClientRect().width;
+      probe.remove();
+
       const overflow = Math.round(textW - containerW);
 
       if (overflow > 4) {
