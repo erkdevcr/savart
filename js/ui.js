@@ -1392,9 +1392,14 @@ const UI = (() => {
     row.className = 'folder-row';
     row.dataset.id = folder.id;
 
-    // Sub-label: song count if known, otherwise empty
-    const subHtml = folder.songCount
-      ? `<div class="folder-row-sub">${folder.songCount} ${t('songs').toLowerCase()}</div>`
+    // Sub-label: song count + optional collection/album chip
+    const typeChip = folder.folderType === 'collection'
+      ? `<span class="folder-type-chip folder-type-chip--collection">Colección</span>`
+      : folder.folderType === 'album'
+        ? `<span class="folder-type-chip folder-type-chip--album">Álbum</span>`
+        : '';
+    const subHtml = (folder.songCount || typeChip)
+      ? `<div class="folder-row-sub">${folder.songCount ? `${folder.songCount} ${t('songs').toLowerCase()}` : ''}${typeChip}</div>`
       : '';
 
     row.innerHTML = `
@@ -1531,13 +1536,15 @@ const UI = (() => {
     menu.innerHTML = '';
 
     // Shared SVG icons for context menus
-    const _iconNext   = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zM20 6v12h2V6h-2z"/></svg>`;
-    const _iconQueue  = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg>`;
-    const _iconFolder = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>`;
-    const _iconArtist = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>`;
-    const _iconRadio  = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3.24 6.15C2.51 6.43 2 7.17 2 8v12c0 1.1.89 2 2 2h16c1.11 0 2-.9 2-2V8c0-1.11-.89-2-2-2H6.3l8.26-3.34L13.65 1 3.24 6.15zM13 18c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>`;
-    const _iconEdit   = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zm18.71-10.8a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>`;
-    const _iconScan   = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M9.5 6.5v3h-3v-3h3M11 5H5v6h6V5zm-1.5 9.5v3h-3v-3h3M11 13H5v6h6v-6zm6.5-6.5v3h-3v-3h3M19 5h-6v6h6V5zm-6 8h1.5v1.5H13V13zm1.5 1.5H16V16h-1.5v-1.5zM16 13h1.5v1.5H16V13zm-3 3h1.5v1.5H13V16zm1.5 1.5H16V19h-1.5v-1.5zM16 16h1.5v1.5H16V16zm1.5-1.5H19V16h-1.5v-1.5zm0 3H19V19h-1.5v-1.5zM22 7h-2V4h-3V2h5v5zm0 15v-5h-2v3h-3v2h5zM2 22h5v-2H4v-3H2v5zM2 2v5h2V4h3V2H2z"/></svg>`;
+    const _iconNext       = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zM20 6v12h2V6h-2z"/></svg>`;
+    const _iconQueue      = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg>`;
+    const _iconFolder     = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>`;
+    const _iconArtist     = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>`;
+    const _iconRadio      = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3.24 6.15C2.51 6.43 2 7.17 2 8v12c0 1.1.89 2 2 2h16c1.11 0 2-.9 2-2V8c0-1.11-.89-2-2-2H6.3l8.26-3.34L13.65 1 3.24 6.15zM13 18c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>`;
+    const _iconEdit       = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zm18.71-10.8a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>`;
+    const _iconScan       = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M9.5 6.5v3h-3v-3h3M11 5H5v6h6V5zm-1.5 9.5v3h-3v-3h3M11 13H5v6h6v-6zm6.5-6.5v3h-3v-3h3M19 5h-6v6h6V5zm-6 8h1.5v1.5H13V13zm1.5 1.5H16V16h-1.5v-1.5zM16 13h1.5v1.5H16V13zm-3 3h1.5v1.5H13V16zm1.5 1.5H16V19h-1.5v-1.5zM16 16h1.5v1.5H16V16zm1.5-1.5H19V16h-1.5v-1.5zm0 3H19V19h-1.5v-1.5zM22 7h-2V4h-3V2h5v5zm0 15v-5h-2v3h-3v2h5zM2 22h5v-2H4v-3H2v5zM2 2v5h2V4h3V2H2z"/></svg>`;
+    const _iconAlbum      = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 14.5c-2.49 0-4.5-2.01-4.5-4.5S9.51 7.5 12 7.5s4.5 2.01 4.5 4.5-2.01 4.5-4.5 4.5zm0-5.5c-.55 0-1 .45-1 1s.45 1 1 1 1-.45 1-1-.45-1-1-1z"/></svg>`;
+    const _iconCollection = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M20 6h-2.18c.07-.27.18-.52.18-.82C18 3.88 16.12 2 13.82 2c-1.19 0-2.32.47-3.18 1.32L10 3.96l-.64-.65C8.32 2.47 7.19 2 6 2 3.7 2 2 3.88 2 5.18c0 .3.11.55.18.82H0v14h24V6h-4z"/></svg>`;
 
     if (type === 'song') {
       _addCtxItem(menu, iconPlay(14),  t('ctx_play'),    () => { App.onSongClick(item);         hideContextMenu(); });
@@ -1570,6 +1577,14 @@ const UI = (() => {
       _addCtxItem(menu, iconStar(14),   t('ctx_add_fav_folder'), () => { App.onToggleStar(item);              hideContextMenu(); });
       _addCtxItem(menu, iconPin(14),    t('ctx_pin_to_home'),    () => { App.onTogglePin(item);               hideContextMenu(); });
       _addCtxItem(menu, iconPlus(14),   t('add_to_pl'),         (e) => { hideContextMenu(); App.onShowPlaylistPicker(e, item); });
+      // Show Move option only when the folder has a known classification
+      if (item.folderType === 'collection') {
+        _addCtxDivider(menu);
+        _addCtxItem(menu, _iconAlbum,   'Mover a Álbumes',       () => { App.onMoveToAlbums?.(item);          hideContextMenu(); });
+      } else if (item.folderType === 'album') {
+        _addCtxDivider(menu);
+        _addCtxItem(menu, _iconCollection, 'Mover a Colecciones',() => { App.onMoveToCollections?.(item);     hideContextMenu(); });
+      }
     }
 
     if (type === 'pinned') {
@@ -1631,6 +1646,22 @@ const UI = (() => {
       _addCtxItem(menu, _iconScan,     t('ctx_send_to_scan'), () => { App.onSendToScan?.({ id: item.folderId, name: item.name }); hideContextMenu(); });
       _addCtxDivider(menu);
       _addCtxItem(menu, iconPlus(14),  t('add_to_pl'),       (e) => { hideContextMenu(); App.onAlbumShowPlaylistPicker?.(e, item); });
+      _addCtxDivider(menu);
+      _addCtxItem(menu, _iconCollection, 'Mover a Colecciones', () => { App.onMoveToCollections?.(item); hideContextMenu(); });
+    }
+
+    if (type === 'lib_collection') {
+      _addCtxItem(menu, iconPlay(14),  t('ctx_play'),         () => { App.onCollectionPlay?.(item);         hideContextMenu(); });
+      _addCtxDivider(menu);
+      _addCtxItem(menu, _iconNext,     t('play_next'),         () => { App.onCollectionQueue?.(item, 'next'); hideContextMenu(); });
+      _addCtxItem(menu, _iconQueue,    t('play_after'),        () => { App.onCollectionQueue?.(item, 'end');  hideContextMenu(); });
+      _addCtxDivider(menu);
+      _addCtxItem(menu, _iconFolder,   t('ctx_go_to_folder'), () => { App.onAlbumGoToFolder?.({ folderId: item.folderId, name: item.name }); hideContextMenu(); });
+      _addCtxItem(menu, _iconScan,     t('ctx_send_to_scan'), () => { App.onSendToScan?.({ id: item.folderId, name: item.name }); hideContextMenu(); });
+      _addCtxDivider(menu);
+      _addCtxItem(menu, _iconEdit,     'Editar colección',    () => { App._openCollectionEditModal?.(item);  hideContextMenu(); });
+      _addCtxDivider(menu);
+      _addCtxItem(menu, _iconAlbum,    'Mover a Álbumes',     () => { App.onMoveToAlbums?.(item);            hideContextMenu(); });
     }
 
     if (type === 'playlist') {
@@ -3074,7 +3105,7 @@ const UI = (() => {
     });
     card.querySelector('.collection-card-more').addEventListener('click', e => {
       e.stopPropagation();
-      if (typeof App !== 'undefined') App._openCollectionEditModal?.(col);
+      showContextMenu(e, 'lib_collection', col);
     });
 
     return card;

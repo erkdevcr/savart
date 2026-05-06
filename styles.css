@@ -5978,7 +5978,29 @@ body.queue-open #mini-player { z-index: 65; }
   }
 }
 
-/* ── Collections (v1.7.15) ───────────────────────────────────── */
+/* ── Collections (v1.7.15 / 1.7.17) ────────────────────────────── */
+
+/* Folder-row type chip: shown below folder name in Browse */
+.folder-type-chip {
+  display: inline-block;
+  font-size: 0.65em;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  border-radius: 3px;
+  margin-left: 5px;
+  vertical-align: middle;
+  line-height: 1.5;
+}
+.folder-type-chip--collection {
+  background: rgba(var(--accent-rgb, 74,136,245), 0.18);
+  color: var(--accent, #4a88f5);
+}
+.folder-type-chip--album {
+  background: rgba(255,255,255,0.07);
+  color: var(--text-muted);
+}
 
 /* Collection card art: same size as album art but mosaic-aware */
 .lib-collection-art {

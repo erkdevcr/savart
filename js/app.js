@@ -2695,6 +2695,15 @@ const App = (() => {
     try {
       const result = await Drive.listFolderAll(folder.id);
       _sortItems(result.folders, result.files);
+
+      // Tag each sub-folder as 'album' or 'collection' for the browse chip.
+      // If the cache is not yet populated, trigger a background build.
+      if (_collectionFolderIdsCache === null) _refreshCollectionCache().catch(() => {});
+      const colCache = _collectionFolderIdsCache || new Set();
+      result.folders.forEach(f => {
+        f.folderType = colCache.has(f.id) ? 'collection' : 'album';
+      });
+
       const activeSong = Player.getCurrentTrack();
       UI.renderFolderContents(result.folders, result.files, activeSong?.id);
       if (result.folders.length > 0) _patchFolderDots(result.folders).catch(() => {});
@@ -6017,17 +6026,43 @@ const App = (() => {
   /* ── Collections ─────────────────────────────────────────── */
 
   /**
+   * Cache of collection folder IDs (Set<string>).
+   * null = not yet computed; populated by _loadCollections/_loadAlbums.
+   * Used to tag browse folders with folderType without an extra DB round-trip.
+   */
+  let _collectionFolderIdsCache = null;
+
+  /**
+   * Determine whether a folder accumulator `f` is a collection, respecting
+   * the user's manual forceType override stored in the collections DB store.
+   * @param {{folderId:string, artistCounts:Map}} f
+   * @param {Map<string,Object>} savedColMap  — from DB.getAllCollections()
+   */
+  function _isCollectionFolder(f, savedColMap) {
+    const saved = savedColMap?.get(f.folderId);
+    if (saved?.forceType === 'album')      return false;
+    if (saved?.forceType === 'collection') return true;
+    return f.artistCounts.size > 3;
+  }
+
+  /**
    * Build the folder accumulator map shared by _loadAlbums and _loadCollections.
-   * Returns a Map<folderId, accumulator> and the folderSongCount/rescannedMap helpers.
+   * Also loads savedColMap (DB overrides) and returns it together with the map.
    */
   async function _buildFolderMap() {
-    const all = await DB.getAllMeta();
+    const [all, savedCols] = await Promise.all([
+      DB.getAllMeta(),
+      DB.getAllCollections().catch(() => []),
+    ]);
 
+    const savedColMap     = new Map((savedCols || []).map(c => [c.id, c]));
     const folderSongCount = new Map();
-    all.forEach(m => { if (m.folderId) folderSongCount.set(m.folderId, (folderSongCount.get(m.folderId) || 0) + 1); });
+    const rescannedMap    = new Map();
 
-    const rescannedMap = new Map();
-    all.forEach(m => { if (m.rescannedAt) rescannedMap.set(m.id, m.rescannedAt); });
+    all.forEach(m => {
+      if (m.folderId) folderSongCount.set(m.folderId, (folderSongCount.get(m.folderId) || 0) + 1);
+      if (m.rescannedAt) rescannedMap.set(m.id, m.rescannedAt);
+    });
 
     const folderMap = new Map();
     all.forEach(m => {
@@ -6042,7 +6077,7 @@ const App = (() => {
           yearCounts:     new Map(),
           formatCounts:   new Map(),
           coverUrlCounts: new Map(),
-          coverUrlList:   [], // ordered list of first-seen stable cover URLs (for mosaic)
+          coverUrlList:   [],
           blobId:         null,
           blobData:       null,
           taggedCount:    0,
@@ -6066,60 +6101,48 @@ const App = (() => {
       if ((m.manualAt || 0) > 0) f.hasManual = true;
     });
 
-    return { all, folderMap, folderSongCount, rescannedMap };
+    return { all, folderMap, folderSongCount, rescannedMap, savedColMap };
   }
 
-  /** Detect collection folder IDs (folders with more than 3 distinct artists). */
-  async function _getCollectionFolderIds() {
-    const { folderMap } = await _buildFolderMap();
-    const ids = new Set();
-    folderMap.forEach((f, folderId) => {
-      if (f.artistCounts.size > 3) ids.add(folderId);
-    });
-    return ids;
+  /** Rebuild the in-memory cache of collection folder IDs (fire-and-forget). */
+  async function _refreshCollectionCache() {
+    try {
+      const { folderMap, savedColMap } = await _buildFolderMap();
+      const ids = new Set();
+      folderMap.forEach(f => { if (_isCollectionFolder(f, savedColMap)) ids.add(f.folderId); });
+      _collectionFolderIdsCache = ids;
+    } catch (_) {}
   }
 
   async function _loadCollections() {
     if (_libInDetail) return;
     try {
-      const { folderMap, folderSongCount, rescannedMap } = await _buildFolderMap();
-
-      // Load DB overrides (manual name / cover per collection)
-      const savedCols   = await DB.getAllCollections().catch(() => []);
-      const savedColMap = new Map((savedCols || []).map(c => [c.id, c]));
+      const { folderMap, folderSongCount, rescannedMap, savedColMap } = await _buildFolderMap();
 
       const _top = map => map.size > 0
         ? [...map.entries()].sort((a, b) => b[1] - a[1])[0][0]
         : null;
 
+      const colIds     = new Set();
       const collections = [];
       folderMap.forEach((f, folderId) => {
-        if (f.artistCounts.size <= 3) return; // not a collection
-        const saved     = savedColMap.get(folderId) || {};
-        const name      = saved.name   || _top(f.albumCounts) || folderId;
-        const format    = _top(f.formatCounts) || null;
-        const songCount = Math.max(f.taggedCount, folderSongCount.get(folderId) || 0);
+        if (!_isCollectionFolder(f, savedColMap)) return;
+        colIds.add(folderId);
+        const saved   = savedColMap.get(folderId) || {};
+        const name    = saved.name || _top(f.albumCounts) || folderId;
+        const format  = _top(f.formatCounts) || null;
+        const songCount   = Math.max(f.taggedCount, folderSongCount.get(folderId) || 0);
         const rescannedAt = rescannedMap.get(folderId) || null;
-
-        // Cover: saved manual URL → mosaic of top-4 covers from songs
         const manualCoverUrl = saved.coverUrl || null;
-        const mosaicUrls = f.coverUrlList.slice(0, 4);
-        // Blob fallback as last-resort single cover
+        const mosaicUrls     = f.coverUrlList.slice(0, 4);
         const blobUrl = (!manualCoverUrl && mosaicUrls.length === 0 && f.blobId && f.blobData && typeof Meta !== 'undefined')
           ? (Meta.injectCover(f.blobId, f.blobData) || null) : null;
-
-        collections.push({
-          folderId,
-          name,
-          manualCoverUrl,
-          mosaicUrls,
-          blobUrl,
-          songCount,
-          format,
-          rescannedAt,
-          artistCount: f.artistCounts.size,
-        });
+        collections.push({ folderId, name, manualCoverUrl, mosaicUrls, blobUrl,
+          songCount, format, rescannedAt, artistCount: f.artistCounts.size });
       });
+
+      // Update global cache
+      _collectionFolderIdsCache = colIds;
 
       collections.sort((a, b) => a.name.localeCompare(b.name));
       _setLibTabCount('collections', collections.length);
@@ -6133,7 +6156,7 @@ const App = (() => {
   /** Drill into a collection's detail view. */
   async function onCollectionClick(collection) {
     try {
-      const all = await DB.getAllMeta();
+      const all   = await DB.getAllMeta();
       const songs = all.filter(m => m.folderId === collection.folderId);
 
       const toMap = m => ({
@@ -6151,7 +6174,6 @@ const App = (() => {
       const sorted = songs.map(toMap).sort((a, b) =>
         (a.displayName || a.name).localeCompare(b.displayName || b.name)
       );
-
       const enriched = await Promise.all(sorted.map(async s => {
         const url = await _resolveCoverUrl(s.id, s.thumbnailUrl);
         return url ? { ...s, thumbnailUrl: url } : s;
@@ -6160,7 +6182,6 @@ const App = (() => {
       _libInDetail = true;
       _setLibSearchBarVisible(false);
       UI.renderLibraryCollectionDetail(collection, enriched);
-
       if (enriched.length > 0 && Auth.getValidToken()) {
         _prefetchAndApplyFolderCovers(collection.folderId, enriched).catch(() => {});
       }
@@ -6169,13 +6190,65 @@ const App = (() => {
     }
   }
 
+  /** Play all songs in a collection (same mechanism as onAlbumPlay). */
+  async function onCollectionPlay(collection) {
+    try {
+      const all   = await DB.getAllMeta();
+      const songs = all.filter(m => m.folderId === collection.folderId)
+        .map(m => ({ id: m.id, name: m.name, displayName: m.displayName || m.name,
+          artist: m.artist || '', thumbnailUrl: m.thumbnailUrl || null, folderId: m.folderId }));
+      if (songs.length) Player.setQueue(songs, 0);
+    } catch (err) { console.error('[App] onCollectionPlay error:', err); }
+  }
+
+  /** Queue all songs in a collection (same mechanism as onAlbumQueue). */
+  async function onCollectionQueue(collection, mode = 'end') {
+    try {
+      const all   = await DB.getAllMeta();
+      const songs = all.filter(m => m.folderId === collection.folderId)
+        .map(m => ({ id: m.id, name: m.name, displayName: m.displayName || m.name,
+          artist: m.artist || '', thumbnailUrl: m.thumbnailUrl || null, folderId: m.folderId }));
+      if (!songs.length) return;
+      if (mode === 'next') songs.forEach(s => Player.insertNext(s));
+      else                 songs.forEach(s => Player.appendToQueue(s));
+    } catch (err) { console.error('[App] onCollectionQueue error:', err); }
+  }
+
+  /**
+   * Force-move a folder to albums (even if it has >3 artists).
+   * Saves forceType:'album' to the collections store and reloads both tabs.
+   */
+  async function onMoveToAlbums(item) {
+    const folderId = item.folderId || item.id;
+    if (!folderId) return;
+    await DB.saveCollection(folderId, { forceType: 'album' });
+    _collectionFolderIdsCache = null; // invalidate cache
+    if (_currentLibTab === 'collections') _loadCollections();
+    if (_currentLibTab === 'albums')      _loadAlbums();
+    UI.showToast?.('Movido a Álbumes', 'success');
+  }
+
+  /**
+   * Force-move a folder to collections (even if it has ≤3 artists).
+   * Saves forceType:'collection' to the collections store and reloads both tabs.
+   */
+  async function onMoveToCollections(item) {
+    const folderId = item.folderId || item.id;
+    if (!folderId) return;
+    await DB.saveCollection(folderId, { forceType: 'collection' });
+    _collectionFolderIdsCache = null; // invalidate cache
+    if (_currentLibTab === 'collections') _loadCollections();
+    if (_currentLibTab === 'albums')      _loadAlbums();
+    UI.showToast?.('Movido a Colecciones', 'success');
+  }
+
   /** Open the collection edit modal for a given collection. */
   function _openCollectionEditModal(collection) {
     const modal  = document.getElementById('collection-edit-modal');
     const nameIn = document.getElementById('collection-edit-name');
     const covIn  = document.getElementById('collection-edit-cover');
     if (!modal || !nameIn || !covIn) return;
-    nameIn.value = collection.name        || '';
+    nameIn.value = collection.name           || '';
     covIn.value  = collection.manualCoverUrl || '';
     modal.dataset.folderId = collection.folderId;
     modal.style.display = '';
@@ -6190,63 +6263,19 @@ const App = (() => {
   async function _loadAlbums() {
     if (_libInDetail) return; // don't replace a drill-down view
     try {
-      const all = await DB.getAllMeta();
-
-      // Total songs per folder (includes untagged — used for accurate song count)
-      const folderSongCount = new Map();
-      all.forEach(m => { if (m.folderId) folderSongCount.set(m.folderId, (folderSongCount.get(m.folderId) || 0) + 1); });
-
-      // rescannedAt per folder — stored on the folder's own DB record (id === folderId)
-      const rescannedMap = new Map();
-      all.forEach(m => { if (m.rescannedAt) rescannedMap.set(m.id, m.rescannedAt); });
-
-      // ── Group by folderId first: one folder = one album ───────────────────────
-      // Songs with different album tags but the same folder are merged (majority name wins).
-      // Songs in different folders are always separate entries even if they share a name.
-      const folderMap = new Map(); // folderId → accumulator
-
-      all.forEach(m => {
-        const album  = (m.album  || '').trim();
-        const artist = (m.artist || '').split(';')[0].trim(); // strip collaborators after ';'
-        if (!album || !m.folderId) return; // skip untagged or folder-less songs
-        if (!folderMap.has(m.folderId)) {
-          folderMap.set(m.folderId, {
-            folderId:        m.folderId,
-            albumCounts:     new Map(),
-            artistCounts:    new Map(),
-            yearCounts:      new Map(),
-            formatCounts:    new Map(),
-            coverUrlCounts:  new Map(), // url → count; majority wins
-            blobId:          null,      // first song id with coverBlob (fallback)
-            blobData:        null,
-            taggedCount:     0,
-            hasManual:       false,
-          });
-        }
-        const f = folderMap.get(m.folderId);
-        f.taggedCount++;
-        f.albumCounts.set(album,  (f.albumCounts.get(album)  || 0) + 1);
-        if (artist) f.artistCounts.set(artist, (f.artistCounts.get(artist) || 0) + 1);
-        if (m.year) f.yearCounts.set(m.year,   (f.yearCounts.get(m.year)   || 0) + 1);
-        // Track dominant audio format (mimeType → short label)
-        const fmt = _formatLabel(m.mimeType, m.name);
-        if (fmt) f.formatCounts.set(fmt, (f.formatCounts.get(fmt) || 0) + 1);
-        // Count each cover URL — the most frequent one wins (majority rule).
-        // Only stable external URLs are counted; expired Drive thumbnailLinks and
-        // blob: URLs would produce broken images and block _lfmThumbLibrary retries.
-        if (_isStableCoverUrl(m.thumbnailUrl)) f.coverUrlCounts.set(m.thumbnailUrl, (f.coverUrlCounts.get(m.thumbnailUrl) || 0) + 1);
-        // Blob fallback: keep first found; embedded art is usually identical across tracks.
-        if (!f.blobId && m.coverBlob) { f.blobId = m.id; f.blobData = m.coverBlob; }
-        // Manual edits flag: any song with manualAt > 0 marks the whole album
-        if ((m.manualAt || 0) > 0) f.hasManual = true;
-      });
+      const { folderMap, folderSongCount, rescannedMap, savedColMap } = await _buildFolderMap();
 
       const _top = map => map.size > 0
         ? [...map.entries()].sort((a, b) => b[1] - a[1])[0][0]
         : null;
 
+      // Build cache while we have the data
+      const colIds = new Set();
+      folderMap.forEach(f => { if (_isCollectionFolder(f, savedColMap)) colIds.add(f.folderId); });
+      _collectionFolderIdsCache = colIds;
+
       const albums = Array.from(folderMap.values())
-        .filter(f => f.artistCounts.size <= 3) // folders with >3 artists are Collections
+        .filter(f => !_isCollectionFolder(f, savedColMap)) // collections excluded
         .map(f => {
           const name      = _top(f.albumCounts);
           const artist    = _top(f.artistCounts) || '';
@@ -6254,17 +6283,16 @@ const App = (() => {
           const year      = _top(f.yearCounts);
           const format    = _top(f.formatCounts) || null;
           const songCount = Math.max(f.taggedCount, folderSongCount.get(f.folderId) || 0);
-          // Majority cover URL; fall back to embedded blob if no external URL at all
           const coverUrl  = _top(f.coverUrlCounts)
             || (f.blobId && f.blobData && typeof Meta !== 'undefined'
                 ? Meta.injectCover(f.blobId, f.blobData)
                 : null);
           const rescannedAt = rescannedMap.get(f.folderId) || null;
-          return { name, artist, artists, songCount, coverUrl, year, format, folderId: f.folderId, rescannedAt, hasManual: f.hasManual };
+          return { name, artist, artists, songCount, coverUrl, year, format,
+            folderId: f.folderId, rescannedAt, hasManual: f.hasManual };
         })
         .sort((a, b) => a.name.localeCompare(b.name));
 
-      // Store full list and render first page
       _libAllAlbums = albums;
       _renderAlbumPage(true);
     } catch (err) {
@@ -8303,6 +8331,10 @@ const App = (() => {
     onArtistClick,
     onAlbumClick,
     onCollectionClick,
+    onCollectionPlay,
+    onCollectionQueue,
+    onMoveToAlbums,
+    onMoveToCollections,
     _openCollectionEditModal,
     onAlbumRescan,
     onAlbumEdit,
