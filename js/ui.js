@@ -1409,6 +1409,44 @@ const UI = (() => {
     files.forEach(file => list.appendChild(_buildSongRow(file, file.id === activeSongId)));
   }
 
+  /**
+   * Patch the type chip of an already-rendered browse folder row without
+   * re-rendering the whole list. Called immediately after a Move action.
+   * @param {string} folderId
+   * @param {'album'|'collection'|null} newType  — null removes the chip
+   */
+  function updateBrowseFolderChip(folderId, newType) {
+    const screen = document.getElementById('screen-browse');
+    if (!screen) return;
+    const row = screen.querySelector(`.folder-row[data-id="${CSS.escape(folderId)}"]`);
+    if (!row) return;
+
+    // Remove any existing chip
+    row.querySelectorAll('.folder-type-chip').forEach(el => el.remove());
+
+    if (!newType) return;
+
+    // Build new chip
+    const chip = document.createElement('span');
+    if (newType === 'collection') {
+      chip.className  = 'folder-type-chip folder-type-chip--collection';
+      chip.textContent = t('lbl_collection');
+    } else {
+      chip.className  = 'folder-type-chip folder-type-chip--album';
+      chip.textContent = t('lbl_album_chip');
+    }
+
+    // Ensure .folder-row-sub exists; create it if the row had no sub-label before
+    let sub = row.querySelector('.folder-row-sub');
+    if (!sub) {
+      sub = document.createElement('div');
+      sub.className = 'folder-row-sub';
+      const info = row.querySelector('.folder-row-info') || row;
+      info.appendChild(sub);
+    }
+    sub.appendChild(chip);
+  }
+
   function _buildFolderRow(folder) {
     const row = document.createElement('div');
     row.className = 'folder-row';
@@ -3714,6 +3752,7 @@ const UI = (() => {
     // Browse
     renderBreadcrumb,
     renderFolderContents,
+    updateBrowseFolderChip,
     setActiveSongRow,
     showLoading,
     // Library

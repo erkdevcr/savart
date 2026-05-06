@@ -6225,13 +6225,17 @@ const App = (() => {
 
   /**
    * Force-move a folder to albums (even if it has >3 artists).
-   * Saves forceType:'album' to the collections store and reloads both tabs.
+   * Saves forceType:'album', patches the in-memory cache in-place, and
+   * immediately updates the browse chip without requiring a re-render.
    */
   async function onMoveToAlbums(item) {
     const folderId = item.folderId || item.id;
     if (!folderId) return;
     await DB.saveCollection(folderId, { forceType: 'album' });
-    _collectionFolderIdsCache = null; // invalidate cache
+    // Patch cache in-place (no full null-invalidation needed for type changes)
+    _collectionFolderIdsCache?.delete(folderId);
+    // Immediately update the chip in the current browse view
+    UI.updateBrowseFolderChip?.(folderId, 'album');
     if (_currentLibTab === 'collections') _loadCollections();
     if (_currentLibTab === 'albums')      _loadAlbums();
     UI.showToast?.(UI.t('toast_moved_to_albums'), 'success');
@@ -6239,13 +6243,17 @@ const App = (() => {
 
   /**
    * Force-move a folder to collections (even if it has ≤3 artists).
-   * Saves forceType:'collection' to the collections store and reloads both tabs.
+   * Saves forceType:'collection', patches the in-memory cache in-place, and
+   * immediately updates the browse chip without requiring a re-render.
    */
   async function onMoveToCollections(item) {
     const folderId = item.folderId || item.id;
     if (!folderId) return;
     await DB.saveCollection(folderId, { forceType: 'collection' });
-    _collectionFolderIdsCache = null; // invalidate cache
+    // Patch cache in-place
+    if (_collectionFolderIdsCache) _collectionFolderIdsCache.add(folderId);
+    // Immediately update the chip in the current browse view
+    UI.updateBrowseFolderChip?.(folderId, 'collection');
     if (_currentLibTab === 'collections') _loadCollections();
     if (_currentLibTab === 'albums')      _loadAlbums();
     UI.showToast?.(UI.t('toast_moved_to_collections'), 'success');
