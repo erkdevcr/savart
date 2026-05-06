@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '1.7.36';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.36 — Marquee: position:fixed probe fixes mobile text-width measurement
+const APP_VERSION  = '1.7.37';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.37 — Settings shows live SW version via MessageChannel
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
@@ -127,5 +127,8 @@ async function cacheFirst(request, cacheName) {
 self.addEventListener('message', (event) => {
   if (event.data?.type === 'SKIP_WAITING') {
     self.skipWaiting();
+  }
+  if (event.data?.type === 'GET_VERSION') {
+    event.ports[0]?.postMessage({ version: APP_VERSION });
   }
 });

@@ -131,9 +131,22 @@ const App = (() => {
   async function boot() {
     console.log('[App] Booting Savart', CONFIG.VERSION);
 
-    // Stamp the version label in Settings so it always matches CONFIG.VERSION
+    // Show the active SW version in Settings (automatic, no manual sync needed)
     const verLabel = document.getElementById('app-version-label');
-    if (verLabel) verLabel.textContent = `Savart — versión ${CONFIG.VERSION}`;
+    if (verLabel && 'serviceWorker' in navigator) {
+      navigator.serviceWorker.ready.then(reg => {
+        const sw = reg.active;
+        if (sw) {
+          const mc = new MessageChannel();
+          mc.port1.onmessage = (e) => {
+            if (e.data?.version) {
+              verLabel.textContent = `Savart SW v${e.data.version}`;
+            }
+          };
+          sw.postMessage({ type: 'GET_VERSION' }, [mc.port2]);
+        }
+      }).catch(() => {});
+    }
 
     // 1. Open IndexedDB
     try {
