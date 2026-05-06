@@ -3674,17 +3674,15 @@ const UI = (() => {
         return;
       }
 
-      // Measure true text width by briefly lifting overflow:hidden from the
-      // container so the browser reports the span's full layout width — not the
-      // clipped visible width. Chrome Android and iOS Safari both return the
-      // *visible* width (= containerW) for inline elements inside
-      // overflow:hidden, making the overflow calculation always ~0.
-      // Toggling to overflow:visible happens synchronously inside rAF, before
-      // the next paint, so there is no visible flash.
-      const savedOverflow = el.style.overflow;
-      el.style.overflow = 'visible';
+      // ── Measure true text width ────────────────────────────────────────────
+      // Chrome Android clips inline element widths to the overflow:hidden parent,
+      // so span.getBoundingClientRect().width == containerW and overflow is
+      // always 0. Fix: temporarily promote the span to display:inline-block,
+      // which gives it a self-determined box that is NOT clipped by the parent.
+      // We leave display:inline-block in place if the marquee fires (marquee-inner
+      // sets it anyway); otherwise we clear it.
+      span.style.display = 'inline-block';
       const textW = span.getBoundingClientRect().width;
-      el.style.overflow = savedOverflow || '';
 
       const overflow = Math.round(textW - containerW);
 
@@ -3692,13 +3690,13 @@ const UI = (() => {
         const scrollSecs = Math.ceil(overflow / 55);
         // 18% start-pause + 54% scroll + 18% end-pause + 10% snap-back
         const total = Math.min(Math.max(Math.round(scrollSecs / 0.54), 6), 20);
-        span.className = 'marquee-inner';
-        // Disable text-overflow:ellipsis while the marquee is running.
-        // On mobile Chrome the ellipsis interferes with translateX animation,
-        // causing the browser to draw '...' over the scrolling text.
+        span.className = 'marquee-inner'; // also sets display:inline-block
         el.style.textOverflow = 'clip';
         el.style.setProperty('--mo',     `-${overflow}px`);
         el.style.setProperty('--mo-dur', `${total}s`);
+      } else {
+        // Text fits — revert temporary inline-block
+        span.style.display = '';
       }
     }
 
