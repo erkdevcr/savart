@@ -571,38 +571,47 @@ const App = (() => {
     // Save to recents (type: 'song') so Home shows it in "Canciones recientes"
     if (track) {
       const safeThumb = (() => { const u = track.thumbnailUrl || track.thumbnailLink || null; return (u && u.startsWith('blob:')) ? (track.thumbnailLink || null) : u; })();
-      const recentData = {
-        id:           track.id,
-        name:         track.name,
-        displayName:  track.displayName || track.name || '',
-        type:         'song',
-        artist:       track.artist       || '',
-        thumbnailUrl:  safeThumb,
-        thumbnailLink: track.thumbnailLink || null,
-        folderId:     track.parents?.[0]  || track.folderId || null,
-      };
-      DB.addRecent(recentData).then(() => {
-        Sync.push('recents');
-        // Refresh Home in real-time if it's the active view
-        if (UI.getCurrentView() === 'home') _loadHomeData();
+
+      // Use the metadata store's displayName/artist when available — it reflects
+      // the latest rescan result and is more reliable than track.* which may have
+      // been snapshot-built from the original Drive filename before any scan ran.
+      DB.getMeta(track.id).catch(() => null).then(dbMeta => {
+        const bestName   = dbMeta?.displayName || track.displayName || track.name || '';
+        const bestArtist = dbMeta?.artist      || track.artist      || '';
+
+        const recentData = {
+          id:           track.id,
+          name:         track.name,
+          displayName:  bestName,
+          type:         'song',
+          artist:       bestArtist,
+          thumbnailUrl:  safeThumb,
+          thumbnailLink: track.thumbnailLink || null,
+          folderId:     track.parents?.[0]  || track.folderId || null,
+        };
+        DB.addRecent(recentData).then(() => {
+          Sync.push('recents');
+          // Refresh Home in real-time if it's the active view
+          if (UI.getCurrentView() === 'home') _loadHomeData();
+        }).catch(() => {});
+        // Add to playback history (no-duplicates, most-recent-first, 7-day / 100-item store)
+        DB.addToHistory({
+          id:          track.id,
+          name:        track.name,
+          displayName: bestName,
+          artist:      bestArtist,
+          thumbnailUrl: safeThumb,
+          folderId:    track.parents?.[0] || track.folderId || null,
+        }).then(() => Sync.push('history')).catch(() => {});
+        // Also persist display fields to metadata store so topPlayed can show them.
+        // IMPORTANT: only write non-empty artist/displayName so we never overwrite
+        // enriched values (from a previous AudD/Last.fm pass) with empty strings.
+        const _metaUpdate = { name: track.name, folderId: recentData.folderId };
+        if (bestName)                _metaUpdate.displayName  = bestName;
+        if (safeThumb)               _metaUpdate.thumbnailUrl = safeThumb;
+        if (bestArtist)              _metaUpdate.artist       = bestArtist;
+        DB.setMeta(track.id, _metaUpdate).catch(() => {});
       }).catch(() => {});
-      // Add to playback history (no-duplicates, most-recent-first, 7-day / 100-item store)
-      DB.addToHistory({
-        id:          track.id,
-        name:        track.name,
-        displayName: track.displayName || track.name || '',
-        artist:      track.artist      || '',
-        thumbnailUrl: safeThumb,
-        folderId:    track.parents?.[0] || track.folderId || null,
-      }).then(() => Sync.push('history')).catch(() => {});
-      // Also persist display fields to metadata store so topPlayed can show them.
-      // IMPORTANT: only write non-empty artist/displayName so we never overwrite
-      // enriched values (from a previous AudD/Last.fm pass) with empty strings.
-      const _metaUpdate = { name: recentData.name, folderId: recentData.folderId };
-      if (recentData.displayName)  _metaUpdate.displayName  = recentData.displayName;
-      if (recentData.thumbnailUrl) _metaUpdate.thumbnailUrl = recentData.thumbnailUrl;
-      if (recentData.artist)       _metaUpdate.artist       = recentData.artist;
-      DB.setMeta(track.id, _metaUpdate).catch(() => {});
       // Schedule sync for play counts (incremented by player.js after audio starts)
       setTimeout(() => Sync.push('playcounts'), 3000);
     }
@@ -3046,10 +3055,13 @@ const App = (() => {
         const inMem   = (typeof Meta !== 'undefined') ? Meta.getCached(item.id) : null;
         return {
           ...item,
-          displayName:  _pick(inMem?.title,    item.displayName,  dbMeta?.displayName, item.name, dbMeta?.name),
-          artist:       _pick(inMem?.artist,   item.artist,       dbMeta?.artist),
-          albumName:    _pick(inMem?.album,    item.albumName,    dbMeta?.album),
-          thumbnailUrl: _pick(inMem?.coverUrl, item.thumbnailUrl, dbMeta?.thumbnailUrl, dbMeta?.coverUrl),
+          // dbMeta (metadata store) reflects the latest rescan result — always
+          // prefer it over item.displayName which was snapshot-saved at play time
+          // and may be a stale filename from before the rescan ran.
+          displayName:  _pick(inMem?.title,    dbMeta?.displayName, item.displayName,  item.name, dbMeta?.name),
+          artist:       _pick(inMem?.artist,   dbMeta?.artist,      item.artist),
+          albumName:    _pick(inMem?.album,     dbMeta?.album,       item.albumName),
+          thumbnailUrl: _pick(inMem?.coverUrl, dbMeta?.thumbnailUrl, dbMeta?.coverUrl, item.thumbnailUrl),
         };
       });
 
