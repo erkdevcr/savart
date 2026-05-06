@@ -6002,6 +6002,40 @@ body.queue-open #mini-player { z-index: 65; }
   color: #a78bfa;
 }
 
+/* ── Dot legend (Browse action bar + Library header) ────────── */
+.dot-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-left: auto;        /* pushes to right in flex rows */
+}
+.dot-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+.dot-legend-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.dot-legend-rescan { color: #4caf50; font-weight: 500; }
+.dot-legend-manual { color: #4a90e2; font-weight: 500; }
+
+/* Library header: flex to allow legend on the right */
+.screen-header--flex {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.screen-header--flex .dot-legend {
+  margin-left: 0;   /* justify-content:space-between handles the gap */
+}
+
 /* Collection card art: same size as album art but mosaic-aware */
 .lib-collection-art {
   border-radius: var(--radius-md);

@@ -307,6 +307,8 @@ const UI = (() => {
       rescan_manual_warn_single: 'tiene datos editados manualmente que serán reemplazados al rescanear.',
       // ── Collections / Albums ───────────────────────────────
       ctx_go_to_collection:    'Ir a la colección',
+      lbl_rescanned:           'Rescaneada',
+      lbl_manual_edit:         'Ajuste manual',
       ctx_move_to_albums:      'Mover a Álbumes',
       ctx_move_to_collections: 'Mover a Colecciones',
       ctx_edit_collection:     'Editar colección',
@@ -601,6 +603,8 @@ const UI = (() => {
       rescan_manual_warn_single: 'has manually edited data that will be replaced on rescan.',
       // ── Collections / Albums ───────────────────────────────
       ctx_go_to_collection:    'Go to collection',
+      lbl_rescanned:           'Rescanned',
+      lbl_manual_edit:         'Manual edit',
       ctx_move_to_albums:      'Move to Albums',
       ctx_move_to_collections: 'Move to Collections',
       ctx_edit_collection:     'Edit collection',
