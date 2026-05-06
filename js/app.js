@@ -338,7 +338,8 @@ const App = (() => {
 
     UI.hideTokenBanner();
     UI.showView('home');
-    _loadHomeData();  // Instant render from local DB (may be empty/stale on new device)
+    _restoreHomeCacheSync(); // Paint localStorage snapshot instantly (zero DB round-trips)
+    _loadHomeData();         // Then overwrite with fresh DB data (stale-while-revalidate)
     // Fetch real user info and update Settings panel
     Auth.fetchUserInfo().then(info => {
       if (!info) return;
@@ -2490,6 +2491,54 @@ const App = (() => {
     }
   }
 
+  /* ── Home cache (localStorage) ──────────────────────────────
+     Stale-while-revalidate: paint the last known home data
+     instantly on startup, then overwrite with fresh DB data.
+  ─────────────────────────────────────────────────────────── */
+
+  const _HOME_CACHE_KEY = 'savart_home_v1';
+  const _HOME_CACHE_TTL = 30 * 24 * 3600 * 1000; // 30 days
+
+  function _saveHomeCache({ pinned, recents, topPlayed, playlists }) {
+    try {
+      // Strip blob:// URLs — they are session-only object URLs that become
+      // invalid after the page reloads and cannot be persisted.
+      const stripBlob = url => (url && !url.startsWith('blob:')) ? url : undefined;
+      const cleanItem = item => {
+        const c = { ...item };
+        if (c.thumbnailUrl) c.thumbnailUrl = stripBlob(c.thumbnailUrl);
+        if (c.coverUrl)     c.coverUrl     = stripBlob(c.coverUrl);
+        return c;
+      };
+      const payload = {
+        pinned:    (pinned    || []).slice(0, 20).map(cleanItem),
+        recents:   (recents   || []).slice(0, 20).map(cleanItem),
+        topPlayed: (topPlayed || []).slice(0, 20).map(cleanItem),
+        playlists: (playlists || []).slice(0, 12).map(pl => ({
+          ...pl,
+          resolvedCovers: (pl.resolvedCovers || []).filter(u => !u.startsWith('blob:')),
+        })),
+        savedAt: Date.now(),
+      };
+      localStorage.setItem(_HOME_CACHE_KEY, JSON.stringify(payload));
+    } catch (_) { /* ignore quota errors */ }
+  }
+
+  function _restoreHomeCacheSync() {
+    try {
+      const raw = localStorage.getItem(_HOME_CACHE_KEY);
+      if (!raw) return;
+      const data = JSON.parse(raw);
+      if (!data || (Date.now() - (data.savedAt || 0)) > _HOME_CACHE_TTL) return;
+      UI.renderHome({
+        pinned:    data.pinned    || [],
+        recents:   data.recents   || [],
+        topPlayed: data.topPlayed || [],
+        playlists: data.playlists || [],
+      });
+    } catch (_) { /* ignore parse/missing errors */ }
+  }
+
   /* ── Home ────────────────────────────────────────────────── */
 
   async function _loadHomeData() {
@@ -2596,6 +2645,10 @@ const App = (() => {
       );
 
       UI.renderHome({ pinned: enrichedPinned, recents: enrichedRecents, topPlayed, playlists: enrichedPlaylists });
+
+      // Persist home data to localStorage so the next startup can paint instantly
+      // before the DB is ready (stale-while-revalidate).
+      _saveHomeCache({ pinned: enrichedPinned, recents: enrichedRecents, topPlayed, playlists: enrichedPlaylists });
 
       // Async: load cover art for song cards and top-played in the background
       _prefetchHomeCovers(enrichedRecents).catch(() => {});
