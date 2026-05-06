@@ -3667,13 +3667,11 @@ const UI = (() => {
     function measure() {
       if (!el.isConnected) return;
 
-      // Temporarily lift overflow so offsetWidth is unrestricted
-      const prevOverflow = el.style.overflow;
-      el.style.overflow = 'visible';
-      const spanW = span.offsetWidth;
-      el.style.overflow = prevOverflow || '';
-
-      const containerW = el.clientWidth || el.offsetWidth;
+      // scrollWidth is the full content width (including hidden overflow).
+      // clientWidth is the visible container width.
+      // Their difference is the hidden overflow — no need for the overflow:visible hack,
+      // which is unreliable inside nested flex/grid layouts.
+      const containerW = el.clientWidth;
 
       if (containerW === 0 && retries < 10) {
         // Element not laid out yet — retry next frame
@@ -3682,7 +3680,7 @@ const UI = (() => {
         return;
       }
 
-      const overflow = Math.round(spanW - containerW);
+      const overflow = Math.round(el.scrollWidth - containerW);
       if (overflow > 4) {
         // Speed: ~55 px/s — comfortable reading while scrolling
         const scrollSecs = Math.ceil(overflow / 55);
