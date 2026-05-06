@@ -3151,12 +3151,80 @@ const UI = (() => {
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
       </button>`;
 
+    // ── Inline edit panel (same pattern as album detail) ──
+    const editPanel = document.createElement('div');
+    editPanel.className = 'album-edit-panel'; // reuses album panel CSS
+    editPanel.innerHTML = `
+      <div class="album-edit-actions">
+        <button class="album-edit-save-btn">Guardar</button>
+      </div>
+      <div class="album-edit-row">
+        <label class="album-edit-label">Nombre</label>
+        <input class="album-edit-input" data-field="name" value="${escHtml(collection.name || '')}" placeholder="Nombre de la colección">
+      </div>
+      <div class="album-edit-row">
+        <label class="album-edit-label">Cover URL</label>
+        <input class="album-edit-input" data-field="coverUrl" value="${escHtml(collection.manualCoverUrl && !collection.manualCoverUrl.startsWith('blob:') ? collection.manualCoverUrl : '')}" placeholder="https://…">
+        <button class="album-edit-apply-btn" data-apply="coverUrl" title="Aplicar portada a todos los ítems sin portada propia">Aplicar a todas</button>
+      </div>`;
+
+    // Toggle panel on ⋮ click
     entity.querySelector('.lib-detail-entity-more').addEventListener('click', e => {
       e.stopPropagation();
-      if (typeof App !== 'undefined') App._openCollectionEditModal?.(collection);
+      const isOpen = editPanel.classList.toggle('open');
+      entity.classList.toggle('album-editing', isOpen);
+      if (isOpen) editPanel.querySelector('[data-field="name"]').focus();
+    });
+
+    // "Aplicar a todas" — apply cover URL to all songs in folder that have no cover
+    editPanel.querySelector('.album-edit-apply-btn').addEventListener('click', async () => {
+      const coverUrl = editPanel.querySelector('[data-field="coverUrl"]').value.trim();
+      if (!coverUrl || !folderId) return;
+      const btn  = editPanel.querySelector('.album-edit-apply-btn');
+      const orig = btn.textContent;
+      btn.disabled = true; btn.textContent = '…';
+      try {
+        const all         = await DB.getAllMeta();
+        const folderSongs = all.filter(m => m.folderId === folderId);
+        let applied = 0;
+        for (const m of folderSongs) {
+          const hasOwn = (m.thumbnailUrl && !m.thumbnailUrl.startsWith('blob:')) || m.coverBlob;
+          if (!hasOwn) { await DB.setMeta(m.id, { thumbnailUrl: coverUrl }); applied++; }
+        }
+        btn.textContent = `✓ ${applied}`;
+        setTimeout(() => { btn.disabled = false; btn.textContent = orig; }, 2000);
+      } catch { btn.disabled = false; btn.textContent = orig; }
+    });
+
+    // Save → persist name + coverUrl to DB, update header in-place
+    editPanel.querySelector('.album-edit-save-btn').addEventListener('click', async () => {
+      const btn      = editPanel.querySelector('.album-edit-save-btn');
+      const name     = editPanel.querySelector('[data-field="name"]').value.trim();
+      const coverUrl = editPanel.querySelector('[data-field="coverUrl"]').value.trim();
+      btn.disabled = true; btn.textContent = 'Guardando…';
+      try {
+        await DB.saveCollection(folderId, {
+          ...(name     ? { name }     : {}),
+          ...(coverUrl ? { coverUrl } : {}),
+        });
+        btn.textContent = '✓ Guardado';
+        // Update header display immediately
+        const nameEl = entity.querySelector('.lib-col-detail-name');
+        const artEl  = entity.querySelector('.lib-col-detail-art');
+        if (nameEl && name)     nameEl.textContent = name;
+        if (artEl && coverUrl) {
+          artEl.innerHTML = `<img src="${escHtml(coverUrl)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)">`;
+        }
+        setTimeout(() => {
+          btn.disabled = false; btn.textContent = 'Guardar';
+          editPanel.classList.remove('open');
+          entity.classList.remove('album-editing');
+        }, 1500);
+      } catch { btn.disabled = false; btn.textContent = 'Guardar'; }
     });
 
     container.appendChild(entity);
+    container.appendChild(editPanel);
 
     if (songs.length === 0) {
       const empty = document.createElement('div');
