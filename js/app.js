@@ -6769,12 +6769,14 @@ const App = (() => {
       UI.showQueuePanel(false);
       return;
     }
-    // Open / refresh expanded player with current track info
-    UI.updateExpandedPlayer(_enrichTrack(track), Player.isPlaying());
+    // Make the player visible FIRST so _applyMarquee can measure the container width.
+    // Calling updateExpandedPlayer while display:none causes clientWidth/scrollWidth = 0,
+    // which breaks the marquee measurement even with rAF retries.
+    UI.setExpandedPlayerVisible(true);
     const dur = Player.getDuration();
     const cur = Player.getCurrentTime?.() || 0;
     UI.updateExpandedPlayerProgress(cur, dur);
-    UI.setExpandedPlayerVisible(true);
+    UI.updateExpandedPlayer(_enrichTrack(track), Player.isPlaying());
   }
 
   function _closeExpandedPlayer() {

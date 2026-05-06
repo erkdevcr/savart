@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '1.7.28';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.28 — Fix marquee measurement using scrollWidth
+const APP_VERSION  = '1.7.29';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.29 — Fix mobile marquee: make player visible before measuring
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
