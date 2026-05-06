@@ -2697,10 +2697,11 @@ const App = (() => {
       _sortItems(result.folders, result.files);
 
       // Tag each sub-folder as 'album' or 'collection' for the browse chip.
-      // If the cache is not yet populated, trigger a background build.
-      if (_collectionFolderIdsCache === null) _refreshCollectionCache().catch(() => {});
+      // Always refresh from DB so chips reflect the current state (e.g. after
+      // the user moves files in Drive and rescans — or between sessions).
+      await _refreshCollectionCache().catch(() => {});
       const colCache      = _collectionFolderIdsCache || new Set();
-      const knownFolders  = _allKnownFolderIdsCache;   // null = not yet ready
+      const knownFolders  = _allKnownFolderIdsCache;   // null only if refresh threw
       result.folders.forEach(f => {
         // Only show a chip when this folder actually has songs in the DB.
         // Folders that only contain other folders get no chip.
