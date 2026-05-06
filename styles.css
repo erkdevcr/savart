@@ -6033,6 +6033,43 @@ body.queue-open #mini-player { z-index: 65; }
 .dot-legend-rescan { color: #4caf50; font-weight: 500; }
 .dot-legend-manual { color: #4a90e2; font-weight: 500; }
 
+/* ── Browse action bar: mobile overflow fix ─────────────────
+   On narrow screens (< 480px) tighten padding/gaps/font so that
+   3-digit counts, rescan btn, sort btn and dot-legend all fit.   */
+@media (max-width: 479px) {
+  #browse-action-bar {
+    padding: 6px 10px;
+    gap: 6px;
+  }
+  .browse-item-count {
+    font-size: 10px;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+  .lib-rescan-btn {
+    padding: 5px 8px;
+    font-size: 11px;
+    gap: 4px;
+  }
+  .lib-rescan-btn svg {
+    width: 12px;
+    height: 12px;
+  }
+  .btn-sort-toggle {
+    padding: 5px 8px;
+    font-size: 11px;
+    gap: 4px;
+  }
+  .dot-legend--browse .dot-legend-item {
+    font-size: 9px;
+    gap: 3px;
+  }
+  .dot-legend--browse .dot-legend-dot {
+    width: 5px;
+    height: 5px;
+  }
+}
+
 /* Library header: flex to allow legend on the right */
 .screen-header--flex {
   display: flex;
