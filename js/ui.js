@@ -306,6 +306,7 @@ const UI = (() => {
       rescan_manual_warn:   'tienen datos editados manualmente que serán reemplazados al rescanear.',
       rescan_manual_warn_single: 'tiene datos editados manualmente que serán reemplazados al rescanear.',
       // ── Collections / Albums ───────────────────────────────
+      ctx_go_to_collection:    'Ir a la colección',
       ctx_move_to_albums:      'Mover a Álbumes',
       ctx_move_to_collections: 'Mover a Colecciones',
       ctx_edit_collection:     'Editar colección',
@@ -599,6 +600,7 @@ const UI = (() => {
       rescan_manual_warn:   'have manually edited data that will be replaced on rescan.',
       rescan_manual_warn_single: 'has manually edited data that will be replaced on rescan.',
       // ── Collections / Albums ───────────────────────────────
+      ctx_go_to_collection:    'Go to collection',
       ctx_move_to_albums:      'Move to Albums',
       ctx_move_to_collections: 'Move to Collections',
       ctx_edit_collection:     'Edit collection',
@@ -1592,12 +1594,18 @@ const UI = (() => {
       _addCtxItem(menu, _iconQueue,     t('play_after'),         () => { App.onFolderQueue(item, 'end');       hideContextMenu(); });
       _addCtxDivider(menu);
       _addCtxItem(menu, _iconFolder,    t('ctx_go_to_folder'),   () => { App.onGoToFolder(item);              hideContextMenu(); });
+      // "Go to album / Go to collection" — only for folders that have songs (chip visible)
+      if (item.folderType === 'album') {
+        _addCtxItem(menu, _iconAlbum,      t('ctx_go_to_album'),       () => { App.onGoToLibraryAlbum?.(item);      hideContextMenu(); });
+      } else if (item.folderType === 'collection') {
+        _addCtxItem(menu, _iconCollection, t('ctx_go_to_collection'),  () => { App.onGoToLibraryCollection?.(item); hideContextMenu(); });
+      }
       _addCtxItem(menu, _iconScan,      t('ctx_send_to_scan'),   () => { App.onSendToScan?.(item);            hideContextMenu(); });
       _addCtxDivider(menu);
       _addCtxItem(menu, iconStar(14),   t('ctx_add_fav_folder'), () => { App.onToggleStar(item);              hideContextMenu(); });
       _addCtxItem(menu, iconPin(14),    t('ctx_pin_to_home'),    () => { App.onTogglePin(item);               hideContextMenu(); });
       _addCtxItem(menu, iconPlus(14),   t('add_to_pl'),         (e) => { hideContextMenu(); App.onShowPlaylistPicker(e, item); });
-      // Show Move option only when the folder has a known classification
+      // "Move to …" — only when the folder has a known classification
       if (item.folderType === 'collection') {
         _addCtxDivider(menu);
         _addCtxItem(menu, _iconAlbum,      t('ctx_move_to_albums'),      () => { App.onMoveToAlbums?.(item);      hideContextMenu(); });

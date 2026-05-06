@@ -6981,6 +6981,34 @@ const App = (() => {
     onAlbumClick(album, null).catch(err => console.warn('[App] onGoToAlbum:', err));
   }
 
+  /**
+   * "Go to album" from a Browse folder that is classified as an album.
+   * Switches to Library → Albums and drills into the album detail.
+   * @param {{ id: string, name: string }} folder  — browse folder item
+   */
+  async function onGoToLibraryAlbum(folder) {
+    const folderId = folder.id || folder.folderId;
+    if (!folderId) return;
+    _navToLibrary();
+    _setLibTab('albums');
+    onAlbumClick({ folderId, name: folder.name || '' }, null)
+      .catch(err => console.warn('[App] onGoToLibraryAlbum:', err));
+  }
+
+  /**
+   * "Go to collection" from a Browse folder that is classified as a collection.
+   * Switches to Library → Collections and drills into the collection detail.
+   * @param {{ id: string, name: string }} folder  — browse folder item
+   */
+  async function onGoToLibraryCollection(folder) {
+    const folderId = folder.id || folder.folderId;
+    if (!folderId) return;
+    _navToLibrary();
+    _setLibTab('collections');
+    onCollectionClick({ folderId, name: folder.name || '' })
+      .catch(err => console.warn('[App] onGoToLibraryCollection:', err));
+  }
+
   /* ── Go to Artist ───────────────────────────────────────────
    * Navigates to Library → Artists tab and drills into the artist.
    * Builds the artist object directly from DB (like _loadArtists does)
@@ -8299,6 +8327,8 @@ const App = (() => {
     onFolderClick,
     onGoToFolder,
     onGoToAlbum,
+    onGoToLibraryAlbum,
+    onGoToLibraryCollection,
     onGoToArtist,
     onArtistRadio,
     onSendToScan,
