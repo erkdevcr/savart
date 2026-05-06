@@ -3690,10 +3690,13 @@ const UI = (() => {
         const scrollSecs = Math.ceil(overflow / 55);
         // 18% start-pause + 54% scroll + 18% end-pause + 10% snap-back
         const total = Math.min(Math.max(Math.round(scrollSecs / 0.54), 6), 20);
-        span.className = 'marquee-inner'; // also sets display:inline-block
+        span.className = 'marquee-inner'; // display:inline-block + white-space:nowrap
         el.style.textOverflow = 'clip';
         el.style.setProperty('--mo',     `-${overflow}px`);
         el.style.setProperty('--mo-dur', `${total}s`);
+        // Force animation via inline style — overrides any @media (prefers-reduced-motion)
+        // rule that sets animation:none, and overrides any compositing issue on Chrome Android.
+        span.style.animation = `marquee-pan ${total}s ease-in-out 0.8s infinite`;
       } else {
         // Text fits — revert temporary inline-block
         span.style.display = '';
