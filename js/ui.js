@@ -3674,24 +3674,17 @@ const UI = (() => {
         return;
       }
 
-      // Measure the true text width using a position:fixed probe placed outside
-      // all clipping contexts. This is necessary because getBoundingClientRect()
-      // on an inline element inside overflow:hidden returns the CLIPPED width on
-      // Chrome Android and iOS Safari — not the full rendered text width.
-      // We copy individual font properties (not the `font` shorthand, which can
-      // return an empty string on Chrome Android) from the span's computed style.
-      const cs = window.getComputedStyle(span);
-      const probe = document.createElement('span');
-      probe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;white-space:nowrap;visibility:hidden;pointer-events:none';
-      probe.style.fontSize      = cs.fontSize;
-      probe.style.fontFamily    = cs.fontFamily;
-      probe.style.fontWeight    = cs.fontWeight;
-      probe.style.fontStyle     = cs.fontStyle;
-      probe.style.letterSpacing = cs.letterSpacing;
-      probe.textContent = text;
-      document.body.appendChild(probe);
-      const textW = probe.getBoundingClientRect().width;
-      probe.remove();
+      // Measure true text width by briefly lifting overflow:hidden from the
+      // container so the browser reports the span's full layout width — not the
+      // clipped visible width. Chrome Android and iOS Safari both return the
+      // *visible* width (= containerW) for inline elements inside
+      // overflow:hidden, making the overflow calculation always ~0.
+      // Toggling to overflow:visible happens synchronously inside rAF, before
+      // the next paint, so there is no visible flash.
+      const savedOverflow = el.style.overflow;
+      el.style.overflow = 'visible';
+      const textW = span.getBoundingClientRect().width;
+      el.style.overflow = savedOverflow || '';
 
       const overflow = Math.round(textW - containerW);
 

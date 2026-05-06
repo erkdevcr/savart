@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '1.7.37';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.37 — Settings shows live SW version via MessageChannel
+const APP_VERSION  = '1.7.38';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.38 — Marquee: lift overflow:hidden to get true span width on mobile
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
