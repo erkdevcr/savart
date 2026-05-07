@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '1.7.49';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.49 — Library header: remove dot-legend entirely
+const APP_VERSION  = '1.7.50';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.50 — Browse header: album/collection chip next to item count
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

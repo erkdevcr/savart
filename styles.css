@@ -3553,6 +3553,9 @@ body.queue-open #mini-player { z-index: 65; }
 
 /* Item count — sits below the breadcrumb path, above the action bar */
 .browse-item-count {
+  display: flex;
+  align-items: center;
+  gap: 5px;
   padding: 0 16px 6px;
   font-size: 11px;
   font-weight: 500;
@@ -3560,6 +3563,7 @@ body.queue-open #mini-player { z-index: 65; }
   letter-spacing: 0.3px;
 }
 .browse-item-count:empty { display: none; }
+.browse-item-count .folder-type-chip { margin-right: 0; }
 
 /* Sort button — margin-left now on #sort-wrap wrapper */
 #btn-browse-sort { margin-left: 0; }
