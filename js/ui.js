@@ -3180,10 +3180,11 @@ const UI = (() => {
       artHtml = `<svg width="44" height="38" viewBox="0 0 361.54 315.2" fill="currentColor" style="color:var(--text-muted)"><path d="M136.81,41.58C61.25,41.58,0,102.83,0,178.39s61.25,136.81,136.81,136.81,136.81-61.25,136.81-136.81S212.37,41.58,136.81,41.58ZM136.81,239.6c-33.8,0-61.21-27.4-61.21-61.21s27.4-61.21,61.21-61.21,61.21,27.4,61.21,61.21-27.4,61.21-61.21,61.21ZM136.81,191.78c-7.39,0-13.39-5.99-13.39-13.39s5.99-13.39,13.39-13.39,13.39,5.99,13.39,13.39-5.99,13.39-13.39,13.39ZM361.54,126.94c0,54.17-33.93,100.4-81.69,118.63,9.59-20.39,14.96-43.16,14.96-67.18,0-78.52-57.28-143.65-132.33-155.91C182.95,8.31,207.8,0,234.6,0c70.11,0,126.94,56.83,126.94,126.94Z"/></svg>`;
     }
 
-    const hasMeta = col.rescannedAt || col.format;
+    const hasMeta = col.rescannedAt || col.hasManual || col.format;
     const metaHtml = hasMeta
       ? `<div class="home-card-year">${[
           col.rescannedAt ? '<span class="album-rescan-dot"></span>' : '',
+          col.hasManual   ? '<span class="album-manual-dot"></span>' : '',
           col.format      ? `<span class="album-format-badge">${escHtml(col.format)}</span>` : '',
         ].filter(Boolean).join(' ')}</div>`
       : '';
@@ -3236,7 +3237,17 @@ const UI = (() => {
       <button class="lib-rescan-btn" title="Rescan ítems de esta colección" aria-label="Rescan">
         <svg class="lib-rescan-icon" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
         Rescan
-      </button>`;
+      </button>
+      <div class="dot-legend dot-legend--album-back">
+        <span class="dot-legend-item col-detail-legend-rescan" style="display:${collection.rescannedAt ? '' : 'none'}">
+          <span class="dot-legend-dot" style="background:#4caf50"></span>
+          <span class="dot-legend-label dot-legend-rescan">${t('lbl_rescanned')}</span>
+        </span>
+        <span class="dot-legend-item col-detail-legend-manual" style="display:${collection.hasManual ? '' : 'none'}">
+          <span class="dot-legend-dot" style="background:#4a90e2"></span>
+          <span class="dot-legend-label dot-legend-manual">${t('lbl_manual_edit')}</span>
+        </span>
+      </div>`;
     backRow.querySelector('.lib-back-btn').addEventListener('click', () => {
       if (typeof App !== 'undefined') App._libGoBack('collections');
     });
@@ -3274,7 +3285,7 @@ const UI = (() => {
     entity.innerHTML = `
       <div class="lib-detail-entity-art lib-col-detail-art" style="background:${colBg}">${artHtml}</div>
       <div class="lib-detail-entity-info">
-        ${collection.format ? `<div class="lib-detail-entity-year"><span class="album-format-badge">${escHtml(collection.format)}</span></div>` : ''}
+        ${(collection.rescannedAt || collection.hasManual || collection.format) ? `<div class="lib-detail-entity-year">${[collection.rescannedAt ? '<span class="album-rescan-dot"></span>' : '', collection.hasManual ? '<span class="album-manual-dot"></span>' : '', collection.format ? `<span class="album-format-badge">${escHtml(collection.format)}</span>` : ''].filter(Boolean).join(' ')}</div>` : ''}
         <div class="lib-detail-entity-name lib-col-detail-name">${escHtml(collection.name)}</div>
         <div class="lib-detail-entity-sub">${escHtml(`${collection.artistCount || ''} artistas · ${songs.length} canciones`)}</div>
       </div>

@@ -1624,17 +1624,23 @@ const App = (() => {
 
     if (!topAlbum) return; // nothing to patch
 
-    // Update or create the year element (above the title)
-    let yearEl = container.querySelector('.lib-detail-entity-year');
-    if (topYear) {
+    // Update or create the entity-year row.
+    // After a rescan, always show the green dot; never show the manual dot
+    // (resetToVirgin already wiped manualAt for all songs).
+    // Build the inner HTML so dots + year coexist without clobbering each other.
+    {
+      const yearParts = [
+        '<span class="album-rescan-dot"></span>',
+        topYear ? `(${topYear})` : '',
+      ].filter(Boolean).join(' ');
+
+      let yearEl = container.querySelector('.lib-detail-entity-year');
       if (!yearEl) {
         yearEl = document.createElement('div');
         yearEl.className = 'lib-detail-entity-year';
         nameEl.parentNode.insertBefore(yearEl, nameEl);
       }
-      yearEl.textContent = `(${topYear})`;
-    } else if (yearEl) {
-      yearEl.remove();
+      yearEl.innerHTML = yearParts;
     }
 
     // Album name — clean, no year prefix
@@ -1653,6 +1659,13 @@ const App = (() => {
         artEl.innerHTML = `<img src="${coverUrl}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)">`;
       }
     }
+
+    // Show the green dot in the back-row legend (album or collection detail).
+    // Hide the manual dot — rescan cleared manualAt for all songs.
+    const legendRescan = container.querySelector('.album-detail-legend-rescan, .col-detail-legend-rescan');
+    const legendManual = container.querySelector('.album-detail-legend-manual, .col-detail-legend-manual');
+    if (legendRescan) legendRescan.style.display = '';
+    if (legendManual) legendManual.style.display = 'none';
   }
 
   /**
@@ -6536,7 +6549,8 @@ const App = (() => {
         const blobUrl = (!manualCoverUrl && mosaicUrls.length === 0 && f.blobId && f.blobData && typeof Meta !== 'undefined')
           ? (Meta.injectCover(f.blobId, f.blobData) || null) : null;
         collections.push({ folderId, name, manualCoverUrl, mosaicUrls, blobUrl,
-          songCount, format, rescannedAt, artistCount: f.artistCounts.size });
+          songCount, format, rescannedAt, hasManual: f.hasManual || false,
+          artistCount: f.artistCounts.size });
       });
 
       // Update global cache
@@ -6557,6 +6571,17 @@ const App = (() => {
     try {
       const all   = await DB.getAllMeta();
       const songs = all.filter(m => m.folderId === collection.folderId);
+
+      // Backfill rescannedAt / hasManual if the caller didn't supply them
+      // (e.g. when navigating from home via onGoToAlbum).
+      if (collection.rescannedAt === undefined || collection.hasManual === undefined) {
+        const folderRec = all.find(m => m.id === collection.folderId);
+        collection = {
+          ...collection,
+          rescannedAt: collection.rescannedAt ?? (folderRec?.rescannedAt || null),
+          hasManual:   collection.hasManual   ?? songs.some(m => (m.manualAt || 0) > 0),
+        };
+      }
 
       const toMap = m => ({
         id:           m.id,
