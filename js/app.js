@@ -7225,20 +7225,23 @@ const App = (() => {
       return;
     }
 
-    // Build a minimal album descriptor (folderId is the primary key in onAlbumClick)
+    // Build a minimal descriptor (folderId is the primary key)
     const meta  = (typeof Meta !== 'undefined') ? Meta.getCached(song.id) : null;
-    const album = {
+    const descriptor = {
       folderId,
       name:   song.album  || meta?.album  || song.displayName || song.name || '',
       artist: song.artist || meta?.artist || '',
     };
 
-    // Navigate to Library → Albums tab and drill into the album detail
-    // Use _navToLibrary() instead of onNavClick() to avoid the race where
-    // onNavClick re-loads the previously active tab before _setLibTab('albums') runs.
+    // Route to Collections or Albums depending on the folder's classification
     _navToLibrary();
-    _setLibTab('albums');
-    onAlbumClick(album, null).catch(err => console.warn('[App] onGoToAlbum:', err));
+    if (isFolderCollection(folderId)) {
+      _setLibTab('collections');
+      onCollectionClick(descriptor).catch(err => console.warn('[App] onGoToAlbum→collection:', err));
+    } else {
+      _setLibTab('albums');
+      onAlbumClick(descriptor, null).catch(err => console.warn('[App] onGoToAlbum:', err));
+    }
   }
 
   /**

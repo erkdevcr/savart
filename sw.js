@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '1.7.73';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.73 — stamp folderId/folderType on pinned+recents home items; fix LWW pin merge; collection context menu fix
+const APP_VERSION  = '1.7.74';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.74 — onGoToAlbum routes to collections tab when folderId is a collection
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
