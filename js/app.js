@@ -2850,17 +2850,11 @@ const App = (() => {
       const countEl = document.getElementById('browse-item-count');
       if (countEl) {
         countEl.textContent = '';
-        let curType = folder.folderType || null;
-        if (!curType && result.files.length > 0) {
-          curType = colCache.has(folder.id) ? 'collection' : 'album';
-        } else if (!curType && knownFolders?.has(folder.id)) {
-          curType = colCache.has(folder.id) ? 'collection' : 'album';
-        }
-        console.log('[chip-debug] folder.folderType=', folder.folderType,
-          '| files=', result.files.length, '| curType=', curType,
-          '| colCache.size=', colCache.size, '| inCol=', colCache.has(folder.id),
-          '| knownFolders=', knownFolders ? knownFolders.size : 'NULL',
-          '| countEl=', !!countEl);
+        // curType uses only already-computed variables — zero extra DB cost
+        const curType = folder.folderType
+          || (result.files.length > 0 || knownFolders?.has(folder.id)
+              ? (colCache.has(folder.id) ? 'collection' : 'album')
+              : null);
         if (curType) {
           const chip = document.createElement('span');
           chip.className = curType === 'collection'
