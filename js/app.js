@@ -1806,20 +1806,6 @@ const App = (() => {
   }
 
   /**
-   * Exposed to ui.js — async-updates a dot element for the given folderId.
-   * Called when rendering the library album detail back-header rescan button.
-   * @param {string}      folderId
-   * @param {HTMLElement} dotEl
-   */
-  async function checkRescanDot(folderId, dotEl) {
-    if (!dotEl || !folderId) return;
-    try {
-      const m = await DB.getMeta(folderId);
-      dotEl.style.display = (m?.rescannedAt) ? '' : 'none';
-    } catch (_) { dotEl.style.display = 'none'; }
-  }
-
-  /**
    * Show the lib-rescan-dialog with a custom message.
    * Resolves true if confirmed, false if cancelled.
    * @param {string} message  — text to show in the description paragraph
