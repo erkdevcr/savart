@@ -8560,6 +8560,15 @@ const App = (() => {
   }
 
   /* ── Expose ─────────────────────────────────────────────── */
+  /**
+   * Synchronous check: is the given folderId classified as a collection?
+   * Used by ui.js context menu to label songs correctly ("Ir a la colección" vs "Ir al álbum").
+   */
+  function isFolderCollection(folderId) {
+    if (!folderId || !_collectionFolderIdsCache) return false;
+    return _collectionFolderIdsCache.has(folderId);
+  }
+
   return {
     boot,
     // Called by UI event handlers
@@ -8571,6 +8580,7 @@ const App = (() => {
     onGoToAlbum,
     onGoToLibraryAlbum,
     onGoToLibraryCollection,
+    isFolderCollection,
     onGoToArtist,
     onArtistRadio,
     onSendToScan,
