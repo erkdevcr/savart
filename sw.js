@@ -10,7 +10,7 @@
    ============================================================ */
 
 const APP_VERSION  = '1.7.67';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.67 — remove green rescan dot from album cards
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.67 — remove green dot from rescan button in album detail (keep dot on cards)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
