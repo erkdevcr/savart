@@ -1749,16 +1749,30 @@ const App = (() => {
   }
 
   /**
-   * Show/hide the green dot on #browse-rescan-dot based on whether folderId has rescannedAt.
+   * Show/hide the rescan dot + dot-legend items based on the current folder's state.
+   * - rescan dot on rescan button: shown if folder has rescannedAt
+   * - #browse-legend-rescan item: shown if folder has rescannedAt
+   * - #browse-legend-manual item: shown if any song in folder has manualAt > 0
    * @param {string} folderId
    */
-  async function _updateBrowseRescanDot(folderId) {
-    const dot = document.getElementById('browse-rescan-dot');
-    if (!dot || !folderId) return;
+  async function _updateBrowseLegend(folderId) {
+    const rescanDot    = document.getElementById('browse-rescan-dot');
+    const legendRescan = document.getElementById('browse-legend-rescan');
+    const legendManual = document.getElementById('browse-legend-manual');
+    const hide = () => {
+      if (rescanDot)    rescanDot.style.display    = 'none';
+      if (legendRescan) legendRescan.style.display = 'none';
+      if (legendManual) legendManual.style.display = 'none';
+    };
+    if (!folderId) { hide(); return; }
     try {
-      const m = await DB.getMeta(folderId);
-      dot.style.display = (m?.rescannedAt) ? '' : 'none';
-    } catch (_) { dot.style.display = 'none'; }
+      const [folderMeta, all] = await Promise.all([DB.getMeta(folderId), DB.getAllMeta()]);
+      const hasRescan = !!(folderMeta?.rescannedAt);
+      const hasManual = all.some(m => m.folderId === folderId && (m.manualAt || 0) > 0);
+      if (rescanDot)    rescanDot.style.display    = hasRescan ? '' : 'none';
+      if (legendRescan) legendRescan.style.display = hasRescan ? '' : 'none';
+      if (legendManual) legendManual.style.display = hasManual ? '' : 'none';
+    } catch (_) { hide(); }
   }
 
   /**
@@ -2838,7 +2852,7 @@ const App = (() => {
       _browseFolderId = folder.id;
       _browseFiles    = result.files;
       // Update the rescan dot: show green if this folder was previously scanned
-      _updateBrowseRescanDot(folder.id);
+      _updateBrowseLegend(folder.id);
 
       // Cache all items for queue resolution
       result.files.forEach(f => _cacheItem(f));
@@ -6603,12 +6617,19 @@ const App = (() => {
           if (s.thumbnailUrl) { freshCoverUrl = s.thumbnailUrl; break; }
         }
       }
+      // Rescan/manual flags for dot-legend in album detail
+      const _albumFolderId  = enriched.find(s => s.folderId)?.folderId || album.folderId || null;
+      const _folderMetaRec  = _albumFolderId ? all.find(m => m.id === _albumFolderId) : null;
+      const _albumHasManual = songs.some(s => (s.manualAt || 0) > 0);
+
       const freshAlbum = {
         ...album,
-        name:     _topEntry(freshAlbumCounts)  || album.name     || '',
-        artist:   _topEntry(freshArtistCounts) || album.artist   || '',
-        year:     _topEntry(freshYearCounts)   || album.year     || null,
-        coverUrl: freshCoverUrl                || album.coverUrl || null,
+        name:        _topEntry(freshAlbumCounts)  || album.name     || '',
+        artist:      _topEntry(freshArtistCounts) || album.artist   || '',
+        year:        _topEntry(freshYearCounts)   || album.year     || null,
+        coverUrl:    freshCoverUrl                || album.coverUrl || null,
+        rescannedAt: _folderMetaRec?.rescannedAt  || null,
+        hasManual:   _albumHasManual,
       };
 
       const backTarget = fromArtist ? 'artist' : 'albums';

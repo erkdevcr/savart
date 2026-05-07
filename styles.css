@@ -6018,6 +6018,10 @@ body.queue-open #mini-player { z-index: 65; }
 .dot-legend--browse {
   margin-left: auto;
 }
+/* In album detail back-row the legend sits after the rescan button */
+.dot-legend--album-back {
+  margin-left: 6px;
+}
 .dot-legend-item {
   display: flex;
   align-items: center;
