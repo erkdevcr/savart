@@ -1628,7 +1628,9 @@ const UI = (() => {
       if (item.artist) _addCtxItem(menu, _iconRadio, t('ctx_artist_radio'), () => { App.onArtistRadio?.(item); hideContextMenu(); });
       _addCtxDivider(menu);
       if (item.artist) _addCtxItem(menu, _iconArtist, t('ctx_go_to_artist'), () => { App.onGoToArtist?.(item); hideContextMenu(); });
-      _addCtxItem(menu, _iconFolder,   t('ctx_go_to_album'),  () => { App.onGoToAlbum?.(item);  hideContextMenu(); });
+      _addCtxItem(menu, item.folderType === 'collection' ? _iconCollection : _iconFolder,
+        item.folderType === 'collection' ? t('ctx_go_to_collection') : t('ctx_go_to_album'),
+        () => { App.onGoToAlbum?.(item); hideContextMenu(); });
       _addCtxItem(menu, _iconFolder,   t('ctx_go_to_folder'), () => { App.onGoToFolder(item);    hideContextMenu(); });
       _addCtxDivider(menu);
       _addCtxItem(menu, iconStar(14),  t('add_fav'),     () => { App.onToggleStar(item);         hideContextMenu(); });
@@ -1676,8 +1678,9 @@ const UI = (() => {
       });
       _addCtxDivider(menu);
       if (!isFolder && item.artist) _addCtxItem(menu, _iconArtist, t('ctx_go_to_artist'), () => { App.onGoToArtist?.(item); hideContextMenu(); });
-      _addCtxItem(menu, _iconFolder,
-        isFolder ? t('ctx_go_to_folder') : t('ctx_go_to_album'),
+      _addCtxItem(menu,
+        isFolder ? _iconFolder : (item.folderType === 'collection' ? _iconCollection : _iconFolder),
+        isFolder ? t('ctx_go_to_folder') : (item.folderType === 'collection' ? t('ctx_go_to_collection') : t('ctx_go_to_album')),
         () => { isFolder ? App.onGoToFolder(item) : App.onGoToAlbum?.(item); hideContextMenu(); }
       );
       if (!isFolder) _addCtxItem(menu, _iconFolder, t('ctx_go_to_folder'), () => { App.onGoToFolder(item); hideContextMenu(); });
@@ -1702,8 +1705,9 @@ const UI = (() => {
       if (!isFolder && item.artist) _addCtxItem(menu, _iconRadio, t('ctx_artist_radio'), () => { App.onArtistRadio?.(item); hideContextMenu(); });
       _addCtxDivider(menu);
       if (!isFolder && item.artist) _addCtxItem(menu, _iconArtist, t('ctx_go_to_artist'), () => { App.onGoToArtist?.(item); hideContextMenu(); });
-      _addCtxItem(menu, _iconFolder,
-        isFolder ? t('ctx_go_to_folder') : t('ctx_go_to_album'),
+      _addCtxItem(menu,
+        isFolder ? _iconFolder : (item.folderType === 'collection' ? _iconCollection : _iconFolder),
+        isFolder ? t('ctx_go_to_folder') : (item.folderType === 'collection' ? t('ctx_go_to_collection') : t('ctx_go_to_album')),
         () => { isFolder ? App.onGoToFolder(item) : App.onGoToAlbum?.(item); hideContextMenu(); }
       );
       if (!isFolder) _addCtxItem(menu, _iconFolder, t('ctx_go_to_folder'), () => { App.onGoToFolder(item); hideContextMenu(); });
@@ -1764,7 +1768,9 @@ const UI = (() => {
       if (item.artist) _addCtxItem(menu, _iconRadio, t('ctx_artist_radio'), () => { App.onArtistRadio?.(item); hideContextMenu(); });
       _addCtxDivider(menu);
       if (item.artist) _addCtxItem(menu, _iconArtist, t('ctx_go_to_artist'), () => { App.onGoToArtist?.(item); hideContextMenu(); });
-      _addCtxItem(menu, _iconFolder,   t('ctx_go_to_album'),    () => { App.onGoToAlbum?.(item);      hideContextMenu(); });
+      _addCtxItem(menu, item.folderType === 'collection' ? _iconCollection : _iconFolder,
+        item.folderType === 'collection' ? t('ctx_go_to_collection') : t('ctx_go_to_album'),
+        () => { App.onGoToAlbum?.(item); hideContextMenu(); });
       _addCtxItem(menu, _iconFolder,   t('ctx_go_to_folder'),   () => { App.onGoToFolder(item);       hideContextMenu(); });
       _addCtxDivider(menu);
       _addCtxItem(menu, iconStar(14),  t('ctx_mark_fav'),       () => { App.onToggleStar(item);       hideContextMenu(); });
@@ -1796,7 +1802,9 @@ const UI = (() => {
       if (item.artist) _addCtxItem(menu, _iconRadio, t('ctx_artist_radio'), () => { App.onArtistRadio?.(item); hideContextMenu(); });
       _addCtxDivider(menu);
       if (item.artist) _addCtxItem(menu, _iconArtist, t('ctx_go_to_artist'), () => { App.onGoToArtist?.(item); hideContextMenu(); });
-      _addCtxItem(menu, _iconFolder,   t('ctx_go_to_album'), () => { App.onGoToAlbum?.(item);      hideContextMenu(); });
+      _addCtxItem(menu, item.folderType === 'collection' ? _iconCollection : _iconFolder,
+        item.folderType === 'collection' ? t('ctx_go_to_collection') : t('ctx_go_to_album'),
+        () => { App.onGoToAlbum?.(item); hideContextMenu(); });
       _addCtxItem(menu, _iconFolder,   t('ctx_go_to_folder'),() => { App.onGoToFolder(item);       hideContextMenu(); });
       _addCtxDivider(menu);
       _addCtxItem(menu, iconStar(14),  t('add_fav'),         () => { App.onToggleStar(item);       hideContextMenu(); });
@@ -1809,7 +1817,9 @@ const UI = (() => {
 
     if (type === 'player_song') {
       if (item.artist) _addCtxItem(menu, _iconArtist, t('ctx_go_to_artist'), () => { App.onGoToArtist?.(item); hideContextMenu(); });
-      _addCtxItem(menu, _iconFolder, t('ctx_go_to_album'),  () => { App.onGoToAlbum?.(item);  hideContextMenu(); });
+      _addCtxItem(menu, item.folderType === 'collection' ? _iconCollection : _iconFolder,
+        item.folderType === 'collection' ? t('ctx_go_to_collection') : t('ctx_go_to_album'),
+        () => { App.onGoToAlbum?.(item); hideContextMenu(); });
       _addCtxItem(menu, _iconFolder, t('ctx_go_to_folder'), () => { App.onGoToFolder?.(item); hideContextMenu(); });
       if (item.artist) {
         _addCtxDivider(menu);
@@ -1820,7 +1830,9 @@ const UI = (() => {
     // ── Deep Scan folder rows ────────────────────────────────────
 
     if (type === 'ds_folder') {
-      _addCtxItem(menu, _iconFolder, t('ctx_go_to_album'),  () => { App.onGoToAlbum?.(item);        hideContextMenu(); });
+      _addCtxItem(menu, item.folderType === 'collection' ? _iconCollection : _iconFolder,
+        item.folderType === 'collection' ? t('ctx_go_to_collection') : t('ctx_go_to_album'),
+        () => { App.onGoToAlbum?.(item); hideContextMenu(); });
       _addCtxItem(menu, _iconFolder, t('ctx_go_to_folder'), () => { App.onGoToFolder?.(item);        hideContextMenu(); });
     }
 
