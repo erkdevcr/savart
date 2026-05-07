@@ -5995,7 +5995,8 @@ body.queue-open #mini-player { z-index: 65; }
   text-transform: uppercase;
   padding: 1px 5px;
   border-radius: 3px;
-  margin-left: 5px;
+  margin-left: 0;
+  margin-right: 5px;
   vertical-align: middle;
   line-height: 1.5;
 }

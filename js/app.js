@@ -2830,6 +2830,7 @@ const App = (() => {
         // Folders that only contain other folders get no chip.
         if (knownFolders && knownFolders.has(f.id)) {
           f.folderType = colCache.has(f.id) ? 'collection' : 'album';
+          f.songCount  = _folderSongCountCache?.get(f.id) || 0;
         }
         // else: leave f.folderType undefined → no chip rendered
       });
@@ -6174,6 +6175,7 @@ const App = (() => {
    */
   let _collectionFolderIdsCache  = null;
   let _allKnownFolderIdsCache    = null; // Set of all folderIds that have ≥1 song in DB
+  let _folderSongCountCache      = null; // Map<folderId, songCount>
 
   /**
    * Determine whether a folder accumulator `f` is a collection, respecting
@@ -6255,6 +6257,7 @@ const App = (() => {
       folderMap.forEach(f => { if (_isCollectionFolder(f, savedColMap)) ids.add(f.folderId); });
       _collectionFolderIdsCache = ids;
       _allKnownFolderIdsCache   = new Set(folderSongCount.keys());
+      _folderSongCountCache     = folderSongCount;
     } catch (_) {}
   }
 
