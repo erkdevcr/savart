@@ -587,8 +587,9 @@ const App = (() => {
       const bestArtist = dbMeta?.artist      || track.artist      || '';
       const bestAlbum  = dbMeta?.album       || track.albumName   || '';
       const bestYear   = dbMeta?.year        || track.year        || '';
-      const bestThumb  = (dbMeta?.thumbnailUrl && !dbMeta.thumbnailUrl.startsWith('blob:'))
-                         ? dbMeta.thumbnailUrl : safeThumb;
+      const _dbThumb   = dbMeta?.thumbnailUrl;
+      const bestThumb  = (_dbThumb && _dbThumb !== 'id3' && !_dbThumb.startsWith('blob:'))
+                         ? _dbThumb : safeThumb;
 
       // Patch the Meta cache with DB values so subsequent _enrichTrack() calls
       // (e.g. _onPlayPause, queue navigation) return the correct enriched names.
@@ -715,7 +716,7 @@ const App = (() => {
       artist:        (meta?.artist)   || track.artist        || '',
       albumName:     (meta?.album)    || track.albumName    || '',
       year:          (meta?.year)     || track.year          || '',
-      thumbnailUrl:  (meta?.coverUrl) || track.thumbnailUrl  || null,
+      thumbnailUrl:  (meta?.coverUrl) || (track.thumbnailUrl === 'id3' ? null : track.thumbnailUrl) || null,
       bitrate:       meta?.bitrate      ?? track.bitrate      ?? null,
       sampleRate:    meta?.sampleRate   ?? track.sampleRate   ?? null,
       bitsPerSample: meta?.bitsPerSample ?? track.bitsPerSample ?? null,
@@ -1559,6 +1560,22 @@ const App = (() => {
         console.log(`[Audd] ✓ ${result.artist} — ${result.title}`);
       } catch (_) { /* non-fatal */ }
     }
+
+    // ── Pass 8: Stamp ID3-cover sentinel ──────────────────────────────────────
+    // For songs that ended up with a coverBlob (ID3 embedded art) but NO external
+    // thumbnailUrl, write thumbnailUrl:'id3' as a cross-device signal.
+    // Other devices receiving this sentinel will extract the cover from the audio
+    // file's embedded tags rather than showing no cover at all.
+    await Promise.allSettled(files.map(async file => {
+      try {
+        const m = await DB.getMeta(file.id);
+        if (!m?.coverBlob)             return; // no local blob — nothing to signal
+        if ((m.manualAt || 0) > 0)     return; // user-edited, leave alone
+        if (m.thumbnailUrl === 'id3')  return; // already stamped
+        if (_isStableCoverUrl(m.thumbnailUrl)) return; // has real external URL
+        await DB.setMeta(file.id, { thumbnailUrl: 'id3' });
+      } catch (_) {}
+    }));
 
     // Persist any newly enriched metadata to Drive for cross-device sync
     if (typeof Sync !== 'undefined') Sync.push('metadata');
@@ -3851,6 +3868,22 @@ const App = (() => {
    */
   async function _cacheExternalCover(id, url, force = false) {
     if (!url || url.startsWith('blob:') || url.startsWith('data:')) return;
+    // 'id3' sentinel — extract the cover from the audio file's embedded ID3 tags.
+    // Used when a rescan found an ID3 cover but no external URL; the sentinel is synced
+    // so other devices know to extract from the embedded art rather than fetching nothing.
+    if (url === 'id3') {
+      if (typeof Meta === 'undefined') return;
+      const m = await DB.getMeta(id).catch(() => null);
+      if (!force && m?.coverBlob) return; // already cached locally
+      try {
+        let blob = await DB.getCachedBlob(id);
+        if (!blob) blob = await Drive.downloadFileHead(id, 256 * 1024);
+        if (!blob) return;
+        const meta = await Meta.parse(id, blob);
+        if (meta?.coverBlob) await DB.setMeta(id, { coverBlob: meta.coverBlob });
+      } catch (_) {}
+      return;
+    }
     // Drive thumbnail URLs (lh3.googleusercontent.com/drive-storage/…) are CORS-blocked.
     // They work fine as <img src> but cannot be fetch()ed cross-origin — skip caching them.
     if (url.includes('lh3.googleusercontent.com') || url.includes('drive-storage')) return;
@@ -3879,8 +3912,9 @@ const App = (() => {
       if (url) return url;
     }
     // 3. Stored web URL (non-blob, from Last.fm / AudD / Drive thumbnailLink)
+    //    'id3' is a sentinel meaning "use embedded art" — skip it as a real URL
     const ext = dbMeta?.thumbnailUrl || storedUrl || null;
-    if (ext && !ext.startsWith('blob:')) {
+    if (ext && ext !== 'id3' && !ext.startsWith('blob:')) {
       // Cache the image locally so it loads offline next time (fire-and-forget)
       _cacheExternalCover(id, ext).catch(() => {});
       return ext;
@@ -6313,9 +6347,13 @@ const App = (() => {
 
     const folderMap = new Map();
     all.forEach(m => {
+      // Only folderId is required to group a song under a folder.
+      // album is NOT required here — songs without album tags still contribute
+      // to artistCounts so that forceType:'collection' and the >3-artist rule
+      // work even for folders whose songs haven't been fully scanned yet.
+      if (!m.folderId) return;
       const album  = (m.album  || '').trim();
       const artist = (m.artist || '').split(';')[0].trim();
-      if (!album || !m.folderId) return;
       if (!folderMap.has(m.folderId)) {
         folderMap.set(m.folderId, {
           folderId:       m.folderId,
@@ -6333,7 +6371,7 @@ const App = (() => {
       }
       const f = folderMap.get(m.folderId);
       f.taggedCount++;
-      f.albumCounts.set(album,   (f.albumCounts.get(album)   || 0) + 1);
+      if (album) f.albumCounts.set(album, (f.albumCounts.get(album) || 0) + 1); // only when tagged
       if (artist) f.artistCounts.set(artist, (f.artistCounts.get(artist) || 0) + 1);
       if (m.year) f.yearCounts.set(m.year,   (f.yearCounts.get(m.year)   || 0) + 1);
       const fmt = _formatLabel(m.mimeType, m.name);
@@ -6534,7 +6572,7 @@ const App = (() => {
       _allKnownFolderIdsCache   = new Set(folderSongCount.keys());
 
       const albums = Array.from(folderMap.values())
-        .filter(f => !_isCollectionFolder(f, savedColMap)) // collections excluded
+        .filter(f => !_isCollectionFolder(f, savedColMap) && f.albumCounts.size > 0) // collections excluded; require ≥1 album-tagged song for a valid album name
         .map(f => {
           const name      = _top(f.albumCounts);
           const artist    = _top(f.artistCounts) || '';

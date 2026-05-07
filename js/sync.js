@@ -530,8 +530,14 @@ const Sync = (() => {
             if (remoteIsEnriched || !merged[f]) merged[f] = item[f];
           }
 
-          // thumbnailUrl — remote wins unless local was manually edited more recently
-          if (item.thumbnailUrl && !localManualWins) merged.thumbnailUrl = item.thumbnailUrl;
+          // thumbnailUrl — remote wins unless local was manually edited more recently.
+          // Exception: 'id3' sentinel never overwrites a real external URL on this device.
+          if (item.thumbnailUrl && !localManualWins) {
+            const existingIsReal = merged.thumbnailUrl && merged.thumbnailUrl !== 'id3';
+            if (!(item.thumbnailUrl === 'id3' && existingIsReal)) {
+              merged.thumbnailUrl = item.thumbnailUrl;
+            }
+          }
 
           // Derive CAA URL if mbReleaseMbid present and still no cover URL.
           if (merged.mbReleaseMbid && !merged.thumbnailUrl) {
@@ -1058,8 +1064,14 @@ const Sync = (() => {
             if (remoteIsEnriched || !merged[f]) merged[f] = item[f];
           }
 
-          // thumbnailUrl — remote wins unless local was manually edited more recently
-          if (item.thumbnailUrl && !localManualWins) merged.thumbnailUrl = item.thumbnailUrl;
+          // thumbnailUrl — remote wins unless local was manually edited more recently.
+          // Exception: 'id3' sentinel never overwrites a real external URL on this device.
+          if (item.thumbnailUrl && !localManualWins) {
+            const existingIsReal = merged.thumbnailUrl && merged.thumbnailUrl !== 'id3';
+            if (!(item.thumbnailUrl === 'id3' && existingIsReal)) {
+              merged.thumbnailUrl = item.thumbnailUrl;
+            }
+          }
 
           if (merged.mbReleaseMbid && !merged.thumbnailUrl) {
             merged.thumbnailUrl = `https://coverartarchive.org/release/${merged.mbReleaseMbid}/front-250`;
