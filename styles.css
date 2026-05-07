@@ -976,7 +976,7 @@ img { display: block; }
   display: flex;
   align-items: center;
   gap: 2px;
-  padding: 0 16px 8px;
+  padding: 0 16px 8px 11px; /* 11px = 16px - 5px breadcrumb-item inner padding → aligns text with folder icon */
   overflow-x: auto;
   scrollbar-width: none;
   flex-shrink: 0;
