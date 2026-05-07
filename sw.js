@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '1.7.66';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.66 — remove green dot from album rescan button
+const APP_VERSION  = '1.7.67';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.67 — remove green rescan dot from album cards
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

@@ -3073,7 +3073,7 @@ const UI = (() => {
         }
       </div>
       <button class="home-card-more album-card-more" aria-label="Más opciones">${iconDots(14)}</button>
-      ${(album.rescannedAt || album.hasManual || album.year || album.format) ? `<div class="home-card-year">${[album.rescannedAt ? '<span class="album-rescan-dot"></span>' : '', album.hasManual ? '<span class="album-manual-dot"></span>' : '', album.year ? `(${escHtml(album.year)})` : '', album.format ? `<span class="album-format-badge">${escHtml(album.format)}</span>` : ''].filter(Boolean).join(' ')}</div>` : ''}
+      ${(album.hasManual || album.year || album.format) ? `<div class="home-card-year">${[album.hasManual ? '<span class="album-manual-dot"></span>' : '', album.year ? `(${escHtml(album.year)})` : '', album.format ? `<span class="album-format-badge">${escHtml(album.format)}</span>` : ''].filter(Boolean).join(' ')}</div>` : ''}
       <div class="home-card-name">${escHtml(album.name)}</div>
       ${album.artist ? `<div class="home-card-sub">${escHtml(album.artist)}</div>` : ''}
       <div class="home-card-count">${escHtml(songLabel)}</div>
@@ -3160,11 +3160,10 @@ const UI = (() => {
       artHtml = `<svg width="44" height="38" viewBox="0 0 361.54 315.2" fill="currentColor" style="color:var(--text-muted)"><path d="M136.81,41.58C61.25,41.58,0,102.83,0,178.39s61.25,136.81,136.81,136.81,136.81-61.25,136.81-136.81S212.37,41.58,136.81,41.58ZM136.81,239.6c-33.8,0-61.21-27.4-61.21-61.21s27.4-61.21,61.21-61.21,61.21,27.4,61.21,61.21-27.4,61.21-61.21,61.21ZM136.81,191.78c-7.39,0-13.39-5.99-13.39-13.39s5.99-13.39,13.39-13.39,13.39,5.99,13.39,13.39-5.99,13.39-13.39,13.39ZM361.54,126.94c0,54.17-33.93,100.4-81.69,118.63,9.59-20.39,14.96-43.16,14.96-67.18,0-78.52-57.28-143.65-132.33-155.91C182.95,8.31,207.8,0,234.6,0c70.11,0,126.94,56.83,126.94,126.94Z"/></svg>`;
     }
 
-    const hasMeta = col.rescannedAt || col.format;
+    const hasMeta = !!col.format;
     const metaHtml = hasMeta
       ? `<div class="home-card-year">${[
-          col.rescannedAt ? '<span class="album-rescan-dot"></span>' : '',
-          col.format      ? `<span class="album-format-badge">${escHtml(col.format)}</span>` : '',
+          col.format ? `<span class="album-format-badge">${escHtml(col.format)}</span>` : '',
         ].filter(Boolean).join(' ')}</div>`
       : '';
 
