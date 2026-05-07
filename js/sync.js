@@ -1061,6 +1061,21 @@ const Sync = (() => {
     }
   }
 
+  // Per-type debounce delays (ms).
+  // recents / history write the moment a song starts playing — near-zero debounce
+  // so Device B sees the change within the next poll cycle (~3 s) rather than 5-8 s.
+  // Other types keep a longer debounce to batch rapid changes (e.g. metadata edits).
+  const PUSH_DELAY = {
+    recents:    300,   // song just started → write fast
+    history:    300,   // same
+    favorites:  1500,
+    pinned:     1500,
+    playlists:  1500,
+    playcounts: 3000,
+    settings:   2000,
+    metadata:   2000,
+  };
+
   /**
    * Debounced push: called by app after any local data change.
    * Writes data to Drive and bumps the manifest so other devices pick it up.
@@ -1068,6 +1083,7 @@ const Sync = (() => {
    */
   function push(type) {
     if (!_ready) return;
+    const delay = PUSH_DELAY[type] ?? 2000;
     if (_timers[type]) clearTimeout(_timers[type]);
     _timers[type] = setTimeout(async () => {
       try {
@@ -1077,11 +1093,13 @@ const Sync = (() => {
         if (err.isScope) return;
         console.warn(`[Sync] push(${type}) failed:`, err.message);
       }
-    }, 2000);
+    }, delay);
 
     // Any change to a home-relevant type also triggers a home snapshot push.
-    // Slightly longer delay (3 s) so the individual push completes first.
+    // For recents/history: 1 s after the fast individual push so home reflects
+    // the new song quickly. Other types use 3 s to let their push complete first.
     if (HOME_TYPES.has(type)) {
+      const homeDelay = (type === 'recents' || type === 'history') ? 1000 : 3000;
       if (_timers._home) clearTimeout(_timers._home);
       _timers._home = setTimeout(async () => {
         try {
@@ -1091,7 +1109,7 @@ const Sync = (() => {
           if (err.isScope) return;
           console.warn('[Sync] push(home) failed:', err.message);
         }
-      }, 3000);
+      }, homeDelay);
     }
   }
 
