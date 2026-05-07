@@ -434,6 +434,37 @@ const DB = (() => {
   }
 
   /**
+   * Apply remote play-count records using MAX(local, remote) per song.
+   * Runs in a single IndexedDB transaction so there's no per-song round-trip.
+   * Prevents a lower remote count from overwriting a higher local count when
+   * two devices have played the same song a different number of times.
+   * @param {Object[]} items — each must have { id, playCount }
+   */
+  async function bulkApplyPlaycounts(items) {
+    if (!_db) return;
+    const valid = (items || []).filter(r => r && r.id);
+    if (!valid.length) return;
+    await new Promise((resolve, reject) => {
+      const tx    = _db.transaction('metadata', 'readwrite');
+      const store = tx.objectStore('metadata');
+      tx.oncomplete = resolve;
+      tx.onerror    = () => reject(tx.error);
+      tx.onabort    = () => reject(tx.error);
+      for (const item of valid) {
+        const clean = Object.fromEntries(
+          Object.entries(item).filter(([, v]) => v !== undefined && v !== null)
+        );
+        const req = store.get(item.id);
+        req.onsuccess = () => {
+          const existing  = req.result || { playCount: 0 };
+          const maxCount  = Math.max(existing.playCount || 0, item.playCount || 0);
+          store.put({ ...existing, ...clean, id: item.id, playCount: maxCount });
+        };
+      }
+    });
+  }
+
+  /**
    * Write pre-merged complete records in a single transaction.
    * Unlike bulkPutMeta, this does NOT strip nulls or add defaults — the caller
    * is responsible for providing fully-formed records (typically: spread of existing
@@ -994,6 +1025,7 @@ const DB = (() => {
     // Bulk writes (sync)
     bulkPutRecents,
     bulkPutMeta,
+    bulkApplyPlaycounts,
     bulkWriteMeta,
     // Recents management
     removeRecent,

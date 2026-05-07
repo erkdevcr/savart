@@ -337,16 +337,31 @@ const Sync = (() => {
       }
 
       case 'recents': {
-        const validRecents = (data || []).filter(r => r && r.id);
+        // LWW per-item by accessedAt — keep whichever device accessed each song more recently.
+        // Avoids wiping a song just played on this device (within the debounce window)
+        // when an older push from another device arrives.
+        const remote = (data || []).filter(r => r && r.id);
+        if (!remote.length) break;
+        const local  = await DB.getRecents();
+        const map    = new Map();
+        for (const item of local)  map.set(item.id, item);
+        for (const item of remote) {
+          const ex = map.get(item.id);
+          if (!ex || (item.accessedAt || 0) > (ex.accessedAt || 0)) map.set(item.id, item);
+        }
+        const merged = Array.from(map.values())
+          .sort((a, b) => (b.accessedAt || 0) - (a.accessedAt || 0))
+          .slice(0, CONFIG.RECENTS_MAX);
         await DB.clearRecents();
-        if (validRecents.length) await DB.bulkPutRecents(validRecents);
+        if (merged.length) await DB.bulkPutRecents(merged);
         break;
       }
 
       case 'playcounts': {
-        // Apply remote counts using a single transaction (avoids IDB async-deadlock)
+        // MAX(local, remote) per song — prevents a lower remote count from overwriting
+        // a higher local count when two devices have played the same song differently.
         const validCounts = (data || []).filter(r => r && r.id);
-        if (validCounts.length) await DB.bulkPutMeta(validCounts);
+        if (validCounts.length) await DB.bulkApplyPlaycounts(validCounts);
         break;
       }
 
@@ -356,9 +371,23 @@ const Sync = (() => {
       }
 
       case 'history': {
-        const validHistory = (data || []).filter(r => r && r.id);
+        // LWW per-item by playedAt — keep the most recent play record for each song.
+        const remote = (data || []).filter(r => r && r.id);
+        if (!remote.length) break;
+        const local   = await DB.getHistory();
+        const map     = new Map();
+        for (const item of local)  map.set(item.id, item);
+        for (const item of remote) {
+          const ex = map.get(item.id);
+          if (!ex || (item.playedAt || 0) > (ex.playedAt || 0)) map.set(item.id, item);
+        }
+        const cutoff  = Date.now() - CONFIG.HISTORY_MAX_DAYS * 24 * 60 * 60 * 1000;
+        const merged  = Array.from(map.values())
+          .filter(e => (e.playedAt || 0) >= cutoff)
+          .sort((a, b) => (b.playedAt || 0) - (a.playedAt || 0))
+          .slice(0, CONFIG.HISTORY_MAX);
         await DB.clearHistory();
-        if (validHistory.length) await DB.bulkPutHistory(validHistory);
+        if (merged.length) await DB.bulkPutHistory(merged);
         break;
       }
 
@@ -373,14 +402,26 @@ const Sync = (() => {
         }
 
         if (Array.isArray(recents) && recents.length) {
-          const valid = recents.filter(r => r && r.id);
+          // Per-item LWW by accessedAt (same as case 'recents')
+          const remote = recents.filter(r => r && r.id);
+          const local  = await DB.getRecents();
+          const map    = new Map();
+          for (const item of local)  map.set(item.id, item);
+          for (const item of remote) {
+            const ex = map.get(item.id);
+            if (!ex || (item.accessedAt || 0) > (ex.accessedAt || 0)) map.set(item.id, item);
+          }
+          const mergedR = Array.from(map.values())
+            .sort((a, b) => (b.accessedAt || 0) - (a.accessedAt || 0))
+            .slice(0, CONFIG.RECENTS_MAX);
           await DB.clearRecents();
-          if (valid.length) await DB.bulkPutRecents(valid);
+          if (mergedR.length) await DB.bulkPutRecents(mergedR);
         }
 
         if (Array.isArray(playcounts) && playcounts.length) {
+          // MAX(local, remote) per song (same as case 'playcounts')
           const valid = playcounts.filter(m => m && m.id);
-          if (valid.length) await DB.bulkPutMeta(valid);
+          if (valid.length) await DB.bulkApplyPlaycounts(valid);
         }
 
         if (Array.isArray(playlists) && playlists.length) {
@@ -398,9 +439,22 @@ const Sync = (() => {
         }
 
         if (Array.isArray(history) && history.length) {
-          const valid = history.filter(r => r && r.id);
+          // Per-item LWW by playedAt (same as case 'history')
+          const remote  = history.filter(r => r && r.id);
+          const local   = await DB.getHistory();
+          const map     = new Map();
+          for (const item of local)  map.set(item.id, item);
+          for (const item of remote) {
+            const ex = map.get(item.id);
+            if (!ex || (item.playedAt || 0) > (ex.playedAt || 0)) map.set(item.id, item);
+          }
+          const cutoff  = Date.now() - CONFIG.HISTORY_MAX_DAYS * 24 * 60 * 60 * 1000;
+          const mergedH = Array.from(map.values())
+            .filter(e => (e.playedAt || 0) >= cutoff)
+            .sort((a, b) => (b.playedAt || 0) - (a.playedAt || 0))
+            .slice(0, CONFIG.HISTORY_MAX);
           await DB.clearHistory();
-          if (valid.length) await DB.bulkPutHistory(valid);
+          if (mergedH.length) await DB.bulkPutHistory(mergedH);
         }
         break;
       }
