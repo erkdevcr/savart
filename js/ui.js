@@ -3350,13 +3350,32 @@ const UI = (() => {
           ...(coverUrl ? { coverUrl } : {}),
         });
         btn.textContent = t('saved_ok');
-        // Update header display immediately
+
+        // ── Update header display immediately ──────────────────
         const nameEl = entity.querySelector('.lib-col-detail-name');
         const artEl  = entity.querySelector('.lib-col-detail-art');
         if (nameEl && name)     nameEl.textContent = name;
         if (artEl && coverUrl) {
           artEl.innerHTML = `<img src="${escHtml(coverUrl)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)">`;
         }
+
+        // ── Live-show the manual-edit (blue) dot ───────────────
+        // In entity header: add blue dot if not already there
+        let yearRow = entity.querySelector('.lib-detail-entity-year');
+        if (!yearRow) {
+          yearRow = document.createElement('div');
+          yearRow.className = 'lib-detail-entity-year';
+          nameEl?.parentNode?.insertBefore(yearRow, nameEl);
+        }
+        if (!yearRow.querySelector('.album-manual-dot')) {
+          const dot = document.createElement('span');
+          dot.className = 'album-manual-dot';
+          yearRow.appendChild(dot);
+        }
+        // In back-row legend
+        const legendManual = container.querySelector('.col-detail-legend-manual');
+        if (legendManual) legendManual.style.display = '';
+
         setTimeout(() => {
           btn.disabled = false; btn.textContent = t('save_btn');
           editPanel.classList.remove('open');

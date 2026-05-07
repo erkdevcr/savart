@@ -2940,6 +2940,14 @@ const App = (() => {
       // Update the rescan dot: show green if this folder was previously scanned
       _updateBrowseLegend(folder.id);
 
+      // Persist folder name in meta so _loadCollections can use the Drive name
+      // without an extra API call.  We never overwrite a name the user typed.
+      DB.getMeta(folder.id).then(existing => {
+        if (!existing?.name) {
+          DB.setMeta(folder.id, { id: folder.id, name: folder.name }).catch(() => {});
+        }
+      }).catch(() => {});
+
       // Cache all items for queue resolution
       result.files.forEach(f => _cacheItem(f));
 
@@ -6463,10 +6471,13 @@ const App = (() => {
     const savedColMap     = new Map((savedCols || []).map(c => [c.id, c]));
     const folderSongCount = new Map();
     const rescannedMap    = new Map();
+    const folderNameMap   = new Map(); // folderId → Drive folder name (stored on first browse)
 
     all.forEach(m => {
       if (m.folderId) folderSongCount.set(m.folderId, (folderSongCount.get(m.folderId) || 0) + 1);
       if (m.rescannedAt) rescannedMap.set(m.id, m.rescannedAt);
+      // Folder meta records have no folderId (their id IS the folderId)
+      if (!m.folderId && m.name) folderNameMap.set(m.id, m.name);
     });
 
     const folderMap = new Map();
@@ -6510,7 +6521,7 @@ const App = (() => {
       if ((m.manualAt || 0) > 0) f.hasManual = true;
     });
 
-    return { all, folderMap, folderSongCount, rescannedMap, savedColMap };
+    return { all, folderMap, folderSongCount, rescannedMap, savedColMap, folderNameMap };
   }
 
   /** Rebuild the in-memory cache of collection folder IDs (fire-and-forget). */
@@ -6528,7 +6539,7 @@ const App = (() => {
   async function _loadCollections() {
     if (_libInDetail) return;
     try {
-      const { folderMap, folderSongCount, rescannedMap, savedColMap } = await _buildFolderMap();
+      const { folderMap, folderSongCount, rescannedMap, savedColMap, folderNameMap } = await _buildFolderMap();
 
       const _top = map => map.size > 0
         ? [...map.entries()].sort((a, b) => b[1] - a[1])[0][0]
@@ -6540,16 +6551,20 @@ const App = (() => {
         if (!_isCollectionFolder(f, savedColMap)) return;
         colIds.add(folderId);
         const saved   = savedColMap.get(folderId) || {};
-        const name    = saved.name || _top(f.albumCounts) || folderId;
+        // Name priority: user override → Drive folder name → most-common album tag → folderId
+        const name    = saved.name || folderNameMap.get(folderId) || _top(f.albumCounts) || folderId;
         const format  = _top(f.formatCounts) || null;
         const songCount   = Math.max(f.taggedCount, folderSongCount.get(folderId) || 0);
         const rescannedAt = rescannedMap.get(folderId) || null;
+        // hasManual: true when user manually edited name/cover in the collection modal
+        // OR when any song in the folder has manual edits.
+        const hasManual   = !!(saved.manualAt) || f.hasManual || false;
         const manualCoverUrl = saved.coverUrl || null;
         const mosaicUrls     = f.coverUrlList.slice(0, 4);
         const blobUrl = (!manualCoverUrl && mosaicUrls.length === 0 && f.blobId && f.blobData && typeof Meta !== 'undefined')
           ? (Meta.injectCover(f.blobId, f.blobData) || null) : null;
         collections.push({ folderId, name, manualCoverUrl, mosaicUrls, blobUrl,
-          songCount, format, rescannedAt, hasManual: f.hasManual || false,
+          songCount, format, rescannedAt, hasManual,
           artistCount: f.artistCounts.size });
       });
 

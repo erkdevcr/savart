@@ -998,7 +998,13 @@ const DB = (() => {
   async function saveCollection(folderId, changes) {
     const store    = _tx('collections', 'readwrite');
     const existing = await _promisify(store.get(folderId)) || { id: folderId };
-    return _promisify(store.put({ ...existing, ...changes, id: folderId, updatedAt: Date.now() }));
+    const now      = Date.now();
+    // manualAt marks that the user explicitly edited the collection's name or cover.
+    // Pass manualAt:0 in changes to clear the flag (e.g. on a full reset).
+    const manualAt = (changes.manualAt !== undefined) ? changes.manualAt
+                   : (changes.name !== undefined || changes.coverUrl !== undefined) ? now
+                   : (existing.manualAt || 0);
+    return _promisify(store.put({ ...existing, ...changes, id: folderId, manualAt, updatedAt: now }));
   }
 
   /**
