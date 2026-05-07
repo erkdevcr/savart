@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '1.7.81';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.81 — collection name=Drive folder; mosaic cover; manual dot from modal save; manualAt in saveCollection
+const APP_VERSION  = '1.7.84';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.84 — _resolveCoverUrl respects manualAt; apply-all sets manualAt+clears blob+revokes cache
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

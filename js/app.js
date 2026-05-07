@@ -3927,12 +3927,26 @@ const App = (() => {
   }
 
   async function _resolveCoverUrl(id, storedUrl) {
-    // Priority: ID3 embedded art > external persisted URL
+    // Read DB meta once — reused for manualAt check, blob, and URL fallback.
+    const dbMeta = await DB.getMeta(id).catch(() => null);
+
+    // ── Manual cover lock ─────────────────────────────────────────────────────
+    // If the user explicitly set a cover (manualAt > 0), that URL wins over
+    // everything — including ID3 in-memory cache and persisted coverBlob.
+    // This is what makes "Apply to all" actually stick.
+    if ((dbMeta?.manualAt || 0) > 0) {
+      const manualUrl = dbMeta?.thumbnailUrl;
+      if (manualUrl && manualUrl !== 'id3' && !manualUrl.startsWith('blob:')) {
+        _cacheExternalCover(id, manualUrl).catch(() => {});
+        return manualUrl;
+      }
+    }
+
+    // Priority for non-manual songs: ID3 embedded art > external persisted URL
     // 1. In-memory Meta cache: song was parsed this session (fastest, no DB round-trip)
     const inMem = (typeof Meta !== 'undefined') ? Meta.getCached(id) : null;
     if (inMem?.coverUrl) return inMem.coverUrl;
     // 2. Persisted coverBlob in DB (ID3 embedded — wins over external URLs)
-    const dbMeta = await DB.getMeta(id).catch(() => null);
     if (dbMeta?.coverBlob && typeof Meta !== 'undefined') {
       const url = Meta.injectCover(id, dbMeta.coverBlob);
       if (url) return url;
@@ -6587,14 +6601,49 @@ const App = (() => {
       const all   = await DB.getAllMeta();
       const songs = all.filter(m => m.folderId === collection.folderId);
 
-      // Backfill rescannedAt / hasManual if the caller didn't supply them
-      // (e.g. when navigating from home via onGoToAlbum).
-      if (collection.rescannedAt === undefined || collection.hasManual === undefined) {
-        const folderRec = all.find(m => m.id === collection.folderId);
+      // Backfill every visual field that callers (context menus, onGoToAlbum,
+      // onGoToLibraryCollection) don't supply — they only pass { folderId, name }.
+      const folderId  = collection.folderId;
+      const folderRec = all.find(m => m.id === folderId);
+      const savedCol  = await DB.getCollection(folderId).catch(() => null) || {};
+
+      if (collection.mosaicUrls === undefined || collection.manualCoverUrl === undefined) {
+        // Build mosaic from stable thumbnail URLs stored in DB (same logic as _loadCollections)
+        const seenUrls  = new Set();
+        const mosaicUrls = [];
+        for (const m of songs) {
+          if (mosaicUrls.length >= 4) break;
+          if (_isStableCoverUrl(m.thumbnailUrl) && !seenUrls.has(m.thumbnailUrl)) {
+            seenUrls.add(m.thumbnailUrl);
+            mosaicUrls.push(m.thumbnailUrl);
+          }
+        }
+        // Blob fallback: first song with a cover blob (for the header art)
+        let blobUrl = null;
+        if (mosaicUrls.length === 0 && !savedCol.coverUrl && typeof Meta !== 'undefined') {
+          const withBlob = songs.find(m => m.coverBlob);
+          if (withBlob) blobUrl = Meta.injectCover(withBlob.id, withBlob.coverBlob) || null;
+        }
+
+        // Count distinct artists for the subtitle
+        const artistSet = new Set(songs.map(m => m.artist).filter(Boolean));
+
+        collection = {
+          ...collection,
+          manualCoverUrl: savedCol.coverUrl || null,
+          mosaicUrls,
+          blobUrl,
+          artistCount:    collection.artistCount ?? artistSet.size,
+          format:         collection.format      ?? null,
+          rescannedAt:    collection.rescannedAt ?? (folderRec?.rescannedAt || null),
+          hasManual:      collection.hasManual   ?? (!!(savedCol.manualAt) || songs.some(m => (m.manualAt || 0) > 0)),
+        };
+      } else if (collection.rescannedAt === undefined || collection.hasManual === undefined) {
+        // Minimal backfill when cover fields were already provided
         collection = {
           ...collection,
           rescannedAt: collection.rescannedAt ?? (folderRec?.rescannedAt || null),
-          hasManual:   collection.hasManual   ?? songs.some(m => (m.manualAt || 0) > 0),
+          hasManual:   collection.hasManual   ?? (!!(savedCol.manualAt) || songs.some(m => (m.manualAt || 0) > 0)),
         };
       }
 
@@ -8452,6 +8501,24 @@ const App = (() => {
           if (coverEl && savedCol.coverUrl) {
             coverEl.innerHTML = `<img src="${savedCol.coverUrl}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-md)">`;
           }
+          // Show blue manual-edit dot in entity header
+          const entityInfo = header.querySelector('.lib-detail-entity-info');
+          let yearRow = header.querySelector('.lib-detail-entity-year');
+          if (!yearRow && entityInfo) {
+            yearRow = document.createElement('div');
+            yearRow.className = 'lib-detail-entity-year';
+            const nameNode = header.querySelector('.lib-col-detail-name');
+            entityInfo.insertBefore(yearRow, nameNode);
+          }
+          if (yearRow && !yearRow.querySelector('.album-manual-dot')) {
+            const dot = document.createElement('span');
+            dot.className = 'album-manual-dot';
+            yearRow.appendChild(dot);
+          }
+          // Show blue dot in back-row legend
+          const container   = document.getElementById('lib-detail-content');
+          const legendManual = container?.querySelector('.col-detail-legend-manual');
+          if (legendManual) legendManual.style.display = '';
         }
       }
     });
@@ -8460,18 +8527,45 @@ const App = (() => {
       const folderId = modal?.dataset?.folderId;
       const coverUrl = document.getElementById('collection-edit-cover')?.value.trim();
       if (!folderId || !coverUrl) return;
-      // Apply to all songs in the folder that have no cover of their own
-      const all   = await DB.getAllMeta();
-      const songs = all.filter(m => m.folderId === folderId);
-      let applied = 0;
-      for (const m of songs) {
-        const hasOwn = _isStableCoverUrl(m.thumbnailUrl) || m.coverBlob;
-        if (!hasOwn) {
-          await DB.setMeta(m.id, { thumbnailUrl: coverUrl });
-          applied++;
+
+      const btn  = document.getElementById('btn-collection-apply-all');
+      const orig = btn?.textContent;
+      if (btn) { btn.disabled = true; btn.textContent = '…'; }
+
+      try {
+        const all   = await DB.getAllMeta();
+        const songs = all.filter(m => m.folderId === folderId);
+        const now   = Date.now();
+
+        for (const m of songs) {
+          // Stamp manualAt so _resolveCoverUrl respects this URL over blob/ID3 cache.
+          // Clear coverBlob so the manual URL isn't shadowed by a stored ID3 cover.
+          await DB.setMeta(m.id, {
+            thumbnailUrl: coverUrl,
+            coverBlob:    null,
+            manualAt:     now,
+          });
+          // Evict the in-memory Meta cache so the next cover resolve reads from DB.
+          if (typeof Meta !== 'undefined') Meta.revoke(m.id);
+          // Update the cover in the collection detail song list row immediately.
+          _updateRowThumbnail(m.id, coverUrl);
         }
+
+        // Rebuild mosaic in the collection header with the new uniform cover.
+        const header  = document.getElementById('lib-collection-hdr');
+        const artEl   = header?.querySelector('.lib-col-detail-art');
+        if (artEl) {
+          artEl.innerHTML = `<img src="${_escHtml(coverUrl)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)">`;
+        }
+
+        console.log(`[App] Applied cover to ${songs.length} songs in collection ${folderId}`);
+        if (typeof Sync !== 'undefined') Sync.push('metadata');
+        if (btn) { btn.textContent = `✓ ${songs.length}`; }
+        setTimeout(() => { if (btn) { btn.disabled = false; btn.textContent = orig; } }, 2000);
+      } catch (err) {
+        console.error('[App] Apply all cover error:', err);
+        if (btn) { btn.disabled = false; btn.textContent = orig; }
       }
-      console.log(`[App] Applied cover to ${applied} songs in collection ${folderId}`);
     });
 
     // Deep Scan: send-to-scan warning dialog
