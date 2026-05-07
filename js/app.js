@@ -2215,18 +2215,15 @@ const App = (() => {
       } catch (_) {}
     }));
 
-    const stillNeed = [];
-
-    // Pass 1: in-memory Meta cache
+    // Pass 1: in-memory Meta cache (current session — instant, no DB call)
     songs.forEach(song => {
       const meta = Meta.getCached(song.id);
-      if (meta?.coverUrl) {
-        _updateHomeCardThumbnail(song.id, meta.coverUrl);
-      } else {
-        stillNeed.push(song);
-      }
+      if (meta?.coverUrl) _updateHomeCardThumbnail(song.id, meta.coverUrl);
     });
 
+    // Build stillNeed from actual DOM state — cards that Pass 0 or Pass 1 already
+    // covered are excluded, avoiding redundant ID3 parses for songs we already handled.
+    const stillNeed = songs.filter(song => !_homeCardHasCover(song.id));
     if (!stillNeed.length) return;
 
     // Pass 2: IndexedDB blobs → parse ID3 (2 parallel workers)
@@ -2608,6 +2605,10 @@ const App = (() => {
       pinnedSongs.forEach((p, i) => { if (pinnedMetaRecords[i]) pinnedMetaMap.set(p.id, pinnedMetaRecords[i]); });
 
       const _pick = (...vals) => vals.find(v => v && String(v).trim() !== '') || '';
+      // Only use persisted URLs that are NOT stale blob: URLs from a previous session.
+      // blob: URLs are session-scoped object URLs — they become invalid after page reload.
+      // In-memory coverUrls (inMem.coverUrl) are always fresh within the current session.
+      const _safeUrl = u => (u && !u.startsWith('blob:')) ? u : null;
 
       const enrichedPinned = pinned.map(p => {
         if (p.type === 'folder' || p.isFolder) return p;
@@ -2619,7 +2620,7 @@ const App = (() => {
           ...p,
           displayName:  _pick(dbMeta?.displayName, dbMeta?.name, inMem?.title,   p.displayName,  p.name),
           artist:       _pick(dbMeta?.artist,       inMem?.artist,  p.artist),
-          thumbnailUrl: _pick(dbMeta?.thumbnailUrl, dbMeta?.coverUrl, inMem?.coverUrl, p.thumbnailUrl),
+          thumbnailUrl: _pick(_safeUrl(dbMeta?.thumbnailUrl), _safeUrl(dbMeta?.coverUrl), inMem?.coverUrl, _safeUrl(p.thumbnailUrl)),
         };
       });
 
@@ -2632,7 +2633,7 @@ const App = (() => {
           ...r,
           displayName:  _pick(dbMeta?.displayName, dbMeta?.name, inMem?.title,   r.displayName,  r.name),
           name:         _pick(dbMeta?.name,          r.name),
-          thumbnailUrl: _pick(dbMeta?.thumbnailUrl,  dbMeta?.coverUrl, inMem?.coverUrl, r.thumbnailUrl),
+          thumbnailUrl: _pick(_safeUrl(dbMeta?.thumbnailUrl), _safeUrl(dbMeta?.coverUrl), inMem?.coverUrl, _safeUrl(r.thumbnailUrl)),
           artist:       _pick(dbMeta?.artist,        inMem?.artist,   r.artist),
         };
       });
@@ -2647,7 +2648,7 @@ const App = (() => {
           ...item,
           displayName:  _pick(dbMeta?.displayName,  dbMeta?.name,     inMem?.title,    item.displayName,  r?.displayName, r?.name, item.name),
           name:         _pick(dbMeta?.name,          item.name,        r?.name),
-          thumbnailUrl: _pick(dbMeta?.thumbnailUrl,  dbMeta?.coverUrl, inMem?.coverUrl, item.thumbnailUrl,  item.coverUrl,  r?.thumbnailUrl),
+          thumbnailUrl: _pick(_safeUrl(dbMeta?.thumbnailUrl), _safeUrl(dbMeta?.coverUrl), inMem?.coverUrl, _safeUrl(item.thumbnailUrl), _safeUrl(item.coverUrl), _safeUrl(r?.thumbnailUrl)),
           artist:       _pick(dbMeta?.artist,        inMem?.artist,    item.artist,     r?.artist),
           albumName:    _pick(dbMeta?.album,         inMem?.album,     item.albumName,  item.album,         r?.albumName),
           year:         _pick(dbMeta?.year,          inMem?.year,      item.year,       r?.year),
@@ -3711,26 +3712,61 @@ const App = (() => {
   async function _prefetchPinnedCovers(pinned) {
     if (typeof Meta === 'undefined') return;
     const songs = pinned.filter(item => item.type !== 'folder' && !item.isFolder);
-    for (const item of songs) {
+    if (!songs.length) return;
+
+    const _pinnedHasCover = id => {
+      const art = document.querySelector(`.pinned-card-art[data-id="${CSS.escape(id)}"]`);
+      return !!(art && art.querySelector('.pinned-art-img'));
+    };
+
+    // Pass 0: DB persisted covers — blob first, then external URL — all in parallel
+    await Promise.allSettled(songs.map(async item => {
       try {
-        const inMem = Meta.getCached(item.id);
-        if (inMem?.coverUrl) { _updatePinnedItemCover(item.id, inMem.coverUrl); continue; }
-        const meta = await DB.getMeta(item.id).catch(() => null);
-        if (meta?.coverBlob) {
-          const url = Meta.injectCover(item.id, meta.coverBlob);
-          if (url) _updatePinnedItemCover(item.id, url);
+        const dbMeta = await DB.getMeta(item.id);
+        if (!dbMeta) return;
+        if (dbMeta.coverBlob) {
+          const url = Meta.injectCover(item.id, dbMeta.coverBlob);
+          if (url) { _updatePinnedItemCover(item.id, url); return; }
+        }
+        // External URL (Last.fm / MusicBrainz / AudD) — valid across sessions
+        const extUrl = dbMeta.coverUrl || dbMeta.thumbnailUrl;
+        if (extUrl && !extUrl.startsWith('blob:')) {
+          _updatePinnedItemCover(item.id, extUrl);
         }
       } catch (_) { /* non-fatal */ }
+    }));
+
+    // Pass 1: in-memory Meta cache (covers resolved this session — always fresh)
+    songs.forEach(item => {
+      const inMem = Meta.getCached(item.id);
+      if (inMem?.coverUrl) _updatePinnedItemCover(item.id, inMem.coverUrl);
+    });
+
+    // Pass 2: parse cached audio blobs for songs still without cover (2 workers)
+    const stillNeed = songs.filter(item => !_pinnedHasCover(item.id));
+    if (stillNeed.length) {
+      const queue = [...stillNeed];
+      async function pinnedWorker() {
+        while (queue.length > 0) {
+          const item = queue.shift();
+          try {
+            const blob = await DB.getCachedBlob(item.id);
+            if (!blob) continue;
+            const m = await DB.getMeta(item.id).catch(() => null);
+            if ((m?.manualAt || 0) > 0) continue; // manual cover — skip ID3 parse
+            const meta = await Meta.parse(item.id, blob);
+            if (meta?.coverUrl) {
+              _updatePinnedItemCover(item.id, meta.coverUrl);
+              if (meta.coverBlob) DB.setMeta(item.id, { coverBlob: meta.coverBlob }).catch(() => {});
+            }
+          } catch (_) { /* non-fatal */ }
+        }
+      }
+      await Promise.allSettled([pinnedWorker(), pinnedWorker()]);
     }
-    // Drive fallback: songs synced from another device with no local blob
-    await _driveThumbFallback(
-      songs,
-      id => {
-        const art = document.querySelector(`.pinned-card-art[data-id="${CSS.escape(id)}"]`);
-        return !!(art && art.querySelector('.pinned-art-img'));
-      },
-      _updatePinnedItemCover
-    );
+
+    // Pass 3: Drive API fallback — songs from another device with no local blob
+    await _driveThumbFallback(songs, _pinnedHasCover, _updatePinnedItemCover);
   }
 
   /** Patch the cover art of a pinned card for a given song id. */

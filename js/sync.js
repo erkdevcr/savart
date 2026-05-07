@@ -672,6 +672,7 @@ const Sync = (() => {
       pinnedOrder: pinnedOrder || [],
       recents: (recents || []).map(r => ({
         id: r.id, name: r.name || null, displayName: r.displayName || r.name || null,
+        artist: r.artist || null,
         type: r.type || 'song', folderId: r.folderId || null, mimeType: r.mimeType || null,
         thumbnailUrl: cleanUrl(r.thumbnailUrl), accessedAt: r.accessedAt ?? Date.now(),
       })),
