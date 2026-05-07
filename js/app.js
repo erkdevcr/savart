@@ -8626,7 +8626,7 @@ const App = (() => {
     onAlbumShowPlaylistPicker,
     onTrackRename,
     onBrowseRescan,
-    checkRescanDot,
+
     onPlaylistClick,
     onPlaylistPlay,
     onPlaylistQueue,
