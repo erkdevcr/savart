@@ -7264,20 +7264,25 @@ const App = (() => {
       return;
     }
 
-    // Build a minimal descriptor (folderId is the primary key)
-    const meta  = (typeof Meta !== 'undefined') ? Meta.getCached(song.id) : null;
-    const descriptor = {
-      folderId,
-      name:   song.album  || meta?.album  || song.displayName || song.name || '',
-      artist: song.artist || meta?.artist || '',
-    };
-
     // Route to Collections or Albums depending on the folder's classification
     _navToLibrary();
     if (isFolderCollection(folderId)) {
+      // For collections: use the saved collection name (from DB), not the song's album tag.
+      // Songs from home/recents/pinned often lack the album field, which would cause the
+      // collection to open with the song's display name as its title.
+      const saved = await DB.getCollection(folderId).catch(() => null);
+      const meta  = (typeof Meta !== 'undefined') ? Meta.getCached(song.id) : null;
+      const collectionName = saved?.name || song.album || meta?.album || '';
       _setLibTab('collections');
-      onCollectionClick(descriptor).catch(err => console.warn('[App] onGoToAlbum→collection:', err));
+      onCollectionClick({ folderId, name: collectionName }).catch(err => console.warn('[App] onGoToAlbum→collection:', err));
     } else {
+      // For albums: derive name from song metadata (album tag is reliable here)
+      const meta  = (typeof Meta !== 'undefined') ? Meta.getCached(song.id) : null;
+      const descriptor = {
+        folderId,
+        name:   song.album  || meta?.album  || song.displayName || song.name || '',
+        artist: song.artist || meta?.artist || '',
+      };
       _setLibTab('albums');
       onAlbumClick(descriptor, null).catch(err => console.warn('[App] onGoToAlbum:', err));
     }
