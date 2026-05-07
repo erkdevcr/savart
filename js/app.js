@@ -2966,11 +2966,18 @@ const App = (() => {
    */
   function onSongClick(clickedSong, contextSongs = null) {
     if (UI.getCurrentView() === 'browse') {
-      // Browse: queue = whole visible folder, no radio (folder is already curated)
-      const browseList = document.querySelector('#screen-browse .item-list');
-      const rows       = Array.from(browseList?.querySelectorAll('.song-row:not(.wma)') || []);
-      const ids        = rows.map(r => r.dataset.id);
-      const allSongs   = ids.map(id => _resolveItemById(id)).filter(Boolean);
+      // When search is active, build the queue from the visible search results —
+      // NOT from the folder's .item-list (which is still in the DOM but display:none).
+      // querySelectorAll ignores display:none for traversal, so we must pick the right
+      // container manually. If no search is active, use the full folder list as usual.
+      const searchInput    = document.getElementById('search-input');
+      const isSearchActive = !!(searchInput?.value?.trim());
+      const sourceEl = isSearchActive
+        ? document.getElementById('search-results')
+        : document.querySelector('#screen-browse .item-list');
+      const rows     = Array.from(sourceEl?.querySelectorAll('.song-row:not(.wma)') || []);
+      const ids      = rows.map(r => r.dataset.id);
+      const allSongs = ids.map(id => _resolveItemById(id)).filter(Boolean);
 
       _resetRadio();
       if (allSongs.length > 0) {
