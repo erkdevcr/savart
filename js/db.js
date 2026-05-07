@@ -494,16 +494,30 @@ const DB = (() => {
     const store   = _tx('recents');
     const entries = await _promisify(store.getAll());
     return entries
+      .filter(e => !e.removedAt)          // hide tombstones from callers
       .sort((a, b) => b.accessedAt - a.accessedAt)
       .slice(0, limit);
+  }
+
+  /** Returns ALL recents store records, including tombstones. Used by sync push. */
+  async function getRecentsAll() {
+    const store = _tx('recents');
+    return _promisify(store.getAll());
   }
 
   async function _trimRecents() {
     const store   = _tx('recents', 'readwrite');
     const entries = await _promisify(store.getAll());
-    if (entries.length <= CONFIG.RECENTS_MAX) return;
-    entries.sort((a, b) => a.accessedAt - b.accessedAt);
-    const toDelete = entries.slice(0, entries.length - CONFIG.RECENTS_MAX);
+    // Purge tombstones older than 7 days — they've had enough time to propagate
+    const week = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    for (const e of entries) {
+      if (e.removedAt && e.removedAt < week) await _promisify(store.delete(e.id));
+    }
+    // Trim live items beyond RECENTS_MAX
+    const live = entries.filter(e => !e.removedAt);
+    if (live.length <= CONFIG.RECENTS_MAX) return;
+    live.sort((a, b) => a.accessedAt - b.accessedAt);
+    const toDelete = live.slice(0, live.length - CONFIG.RECENTS_MAX);
     for (const e of toDelete) await _promisify(store.delete(e.id));
   }
 
@@ -656,11 +670,15 @@ const DB = (() => {
 
   /**
    * Remove a single item from the recents list.
+   * Writes a tombstone { id, removedAt } instead of a hard delete so that
+   * other devices learn about the removal via sync (getRecents filters these out).
    * @param {string} id
    */
   async function removeRecent(id) {
     const store = _tx('recents', 'readwrite');
-    await _promisify(store.delete(id));
+    // Keep display fields so the tombstone is self-describing, but stamp removedAt.
+    const existing = await _promisify(store.get(id));
+    await _promisify(store.put({ ...(existing || {}), id, removedAt: Date.now() }));
   }
 
   /**
@@ -1016,6 +1034,7 @@ const DB = (() => {
     // Recents
     addRecent,
     getRecents,
+    getRecentsAll,
     // Playlists
     createPlaylist,
     putPlaylist,

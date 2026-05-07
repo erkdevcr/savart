@@ -3123,6 +3123,7 @@ const App = (() => {
     await DB.removeRecent(item.id).catch(() => {});
     UI.showToast(UI.t('toast_removed_history'));
     _loadHomeData();
+    Sync.push('recents'); // propagate tombstone to other devices
   }
 
   async function onRemoveFromHistoryItem(item) {

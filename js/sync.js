@@ -232,17 +232,44 @@ const Sync = (() => {
   }
 
   function _mergeRecents(local, remote) {
+    // Build a unified tombstone map: highest removedAt wins across both sides
+    const tombstones = new Map();
+    for (const item of [...local, ...remote]) {
+      if (!item.id) continue;
+      if (item.removedAt) {
+        const prev = tombstones.get(item.id) || 0;
+        if (item.removedAt > prev) tombstones.set(item.id, item.removedAt);
+      }
+    }
+
+    // Merge live items (remote base, local wins on newer accessedAt)
     const map = new Map();
-    for (const item of remote) map.set(item.id, item);
+    for (const item of remote) {
+      if (!item.id || item.removedAt) continue;
+      map.set(item.id, item);
+    }
     for (const item of local) {
+      if (!item.id || item.removedAt) continue;
       const ex = map.get(item.id);
       if (!ex || item.accessedAt > ex.accessedAt) map.set(item.id, item);
     }
+
+    // Apply tombstones: remove any item whose tombstone is newer than its accessedAt
+    for (const [id, removedAt] of tombstones) {
+      const item = map.get(id);
+      if (item && removedAt > (item.accessedAt || 0)) map.delete(id);
+    }
+
     const merged   = Array.from(map.values())
       .sort((a, b) => b.accessedAt - a.accessedAt)
       .slice(0, CONFIG.RECENTS_MAX);
-    const localIds = new Set(local.map(r => r.id));
-    return { merged, toAdd: merged.filter(r => !localIds.has(r.id)) };
+
+    // Tombstone records to apply locally (so this device doesn't re-add deleted items)
+    const tombstoneRecords = [...tombstones.entries()]
+      .map(([id, removedAt]) => ({ id, removedAt }));
+
+    const localIds = new Set(local.filter(r => !r.removedAt).map(r => r.id));
+    return { merged, toAdd: merged.filter(r => !localIds.has(r.id)), tombstoneRecords };
   }
 
   function _mergePlaycounts(local, remote) {
@@ -417,18 +444,17 @@ const Sync = (() => {
         }
 
         if (Array.isArray(recents) && recents.length) {
-          // Per-item LWW by accessedAt (same as case 'recents')
-          const remote = recents.filter(r => r && r.id);
-          const local  = await DB.getRecents();
-          const map    = new Map();
-          for (const item of local)  map.set(item.id, item);
-          for (const item of remote) {
-            const ex = map.get(item.id);
-            if (!ex || (item.accessedAt || 0) > (ex.accessedAt || 0)) map.set(item.id, item);
-          }
-          const mergedR = Array.from(map.values())
-            .sort((a, b) => (b.accessedAt || 0) - (a.accessedAt || 0))
-            .slice(0, CONFIG.RECENTS_MAX);
+          // Per-item LWW by accessedAt — same logic as case 'recents', with tombstones
+          const validRemote = recents.filter(r => r && r.id);
+          const local = await DB.getRecentsAll();
+          const { merged: mergedR, tombstoneRecords } = _mergeRecents(local, validRemote);
+          // Apply remote tombstones locally
+          const localHomeMap = new Map(local.map(r => [r.id, r]));
+          const toTombstoneH = tombstoneRecords.filter(t => {
+            const l = localHomeMap.get(t.id);
+            return l && !l.removedAt && t.removedAt > (l.accessedAt || 0);
+          });
+          if (toTombstoneH.length) await DB.bulkPutRecents(toTombstoneH);
           await DB.clearRecents();
           if (mergedR.length) await DB.bulkPutRecents(mergedR);
         }
@@ -606,24 +632,45 @@ const Sync = (() => {
   }
 
   async function _pushPinned() {
-    const raw = (await DB.getState('pinnedMeta')) || {};
+    const raw  = (await DB.getState('pinnedMeta')) || {};
+    const now  = Date.now();
     const clean = {};
     for (const [id, item] of Object.entries(raw)) {
-      clean[id] = { ...item, thumbnailUrl: (item.thumbnailUrl && !item.thumbnailUrl.startsWith('blob:')) ? item.thumbnailUrl : null };
+      clean[id] = {
+        ...item,
+        // Backfill pinnedAt for items pinned before the field was added —
+        // without it the LWW merge can't distinguish offline-pins from deletions.
+        pinnedAt:     item.pinnedAt || now,
+        thumbnailUrl: (item.thumbnailUrl && !item.thumbnailUrl.startsWith('blob:')) ? item.thumbnailUrl : null,
+      };
     }
     await _writeFile(FILENAMES.pinned, clean);
     console.log(`[Sync] Pushed pinned (${Object.keys(clean).length})`);
   }
 
   async function _pushRecents() {
-    const recents = await DB.getRecents(CONFIG.RECENTS_MAX);
-    await _writeFile(FILENAMES.recents, recents.map(r => ({
-      id: r.id, name: r.name || null, displayName: r.displayName || r.name || null,
-      type: r.type || 'song', folderId: r.folderId || null, mimeType: r.mimeType || null,
-      thumbnailUrl: (r.thumbnailUrl && !r.thumbnailUrl.startsWith('blob:')) ? r.thumbnailUrl : null,
-      accessedAt: r.accessedAt ?? Date.now(),
-    })));
-    console.log(`[Sync] Pushed recents (${recents.length})`);
+    const all  = await DB.getRecentsAll();
+    const week = Date.now() - 7 * 24 * 60 * 60 * 1000;
+
+    // Live items (up to RECENTS_MAX)
+    const live = all
+      .filter(r => !r.removedAt)
+      .sort((a, b) => b.accessedAt - a.accessedAt)
+      .slice(0, CONFIG.RECENTS_MAX)
+      .map(r => ({
+        id: r.id, name: r.name || null, displayName: r.displayName || r.name || null,
+        type: r.type || 'song', folderId: r.folderId || null, mimeType: r.mimeType || null,
+        thumbnailUrl: (r.thumbnailUrl && !r.thumbnailUrl.startsWith('blob:')) ? r.thumbnailUrl : null,
+        accessedAt: r.accessedAt ?? Date.now(),
+      }));
+
+    // Tombstones from the last 7 days (so other devices can honour the deletion)
+    const tombstones = all
+      .filter(r => r.removedAt && r.removedAt > week)
+      .map(r => ({ id: r.id, removedAt: r.removedAt }));
+
+    await _writeFile(FILENAMES.recents, [...live, ...tombstones]);
+    console.log(`[Sync] Pushed recents (${live.length} live, ${tombstones.length} tombstones)`);
   }
 
   async function _pushPlaycounts() {
@@ -957,22 +1004,27 @@ const Sync = (() => {
         if (!Array.isArray(remoteRecents) || remoteRecents.length === 0) return;
         const validRemote = remoteRecents.filter(r => r && r.id);
         if (!validRemote.length) return;
-        const local = await DB.getRecents(CONFIG.RECENTS_MAX);
-        const { merged } = _mergeRecents(local, validRemote);
+        const local = await DB.getRecentsAll(); // includes local tombstones
+        const { merged, tombstoneRecords } = _mergeRecents(local, validRemote);
+
+        // Apply remote tombstones locally so deleted items don't come back
+        const localMap = new Map(local.map(r => [r.id, r]));
+        const toTombstone = tombstoneRecords.filter(t => {
+          const l = localMap.get(t.id);
+          return l && !l.removedAt && t.removedAt > (l.accessedAt || 0);
+        });
+        if (toTombstone.length) await DB.bulkPutRecents(toTombstone);
+
         if (!merged.length) return;
 
-        // Write the FULL merged set, not just toAdd (new-id items).
-        // Bug without this: an item present on both devices keeps the LOCAL accessedAt
-        // even when remote is newer. The next push then writes stale timestamps to Drive,
-        // which LWW applies back to the other device — making old items look "fresh".
-        const localMap = new Map(local.map(r => [r.id, r]));
-        const toWrite  = merged.filter(m => {
+        // Write live items where remote is newer
+        const toWrite = merged.filter(m => {
           const l = localMap.get(m.id);
           return !l || m.accessedAt > (l.accessedAt || 0);
         });
         if (toWrite.length) {
           await DB.bulkPutRecents(toWrite);
-          console.log(`[Sync] Merged recents: ${toWrite.filter(m => !localMap.has(m.id)).length} added, ${toWrite.filter(m => localMap.has(m.id)).length} updated`);
+          console.log(`[Sync] Merged recents: ${toWrite.filter(m => !localMap.has(m.id)).length} added, ${toWrite.filter(m => localMap.has(m.id)).length} updated, ${toTombstone.length} tombstoned`);
         }
       });
 
