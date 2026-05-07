@@ -550,71 +550,106 @@ const App = (() => {
   function _onTrackChange(track, index, total) {
     // Show loading spinner (delayed 120ms to avoid flash for cached tracks)
     _startLoadingSpinner();
-    // Enrich immediately if metadata was already cached (e.g. track played before)
+    // Initial sync display — uses in-memory Meta cache (may still show filename
+    // if this track has never been parsed in this session). The DB read below
+    // will immediately correct it with the enriched/manual values.
     const enriched = _enrichTrack(track);
     UI.updateMiniPlayer(enriched, true);
     UI.updateExpandedPlayer(enriched, true);
     UI.setActiveSongRow(track?.id);
-    document.title = track ? `${track.displayName} — Savart` : 'Savart';
+    document.title = track ? `${enriched.displayName} — Savart` : 'Savart';
 
-    // Sync heart button state with DB
     UI.setHeartActive(false); // reset while loading
-    if (track?.id) {
-      DB.getMeta(track.id).then(m => {
-        // Only apply if this is still the current track
-        if (Player.getCurrentTrack()?.id === track.id) {
-          UI.setHeartActive(!!m?.starred);
-        }
-      }).catch(() => {});
-    }
 
-    // Save to recents (type: 'song') so Home shows it in "Canciones recientes"
-    if (track) {
-      const safeThumb = (() => { const u = track.thumbnailUrl || track.thumbnailLink || null; return (u && u.startsWith('blob:')) ? (track.thumbnailLink || null) : u; })();
+    if (!track?.id) return;
 
-      // Use the metadata store's displayName/artist when available — it reflects
-      // the latest rescan result and is more reliable than track.* which may have
-      // been snapshot-built from the original Drive filename before any scan ran.
-      DB.getMeta(track.id).catch(() => null).then(dbMeta => {
-        const bestName   = dbMeta?.displayName || track.displayName || track.name || '';
-        const bestArtist = dbMeta?.artist      || track.artist      || '';
+    const safeThumb = (() => {
+      const u = track.thumbnailUrl || track.thumbnailLink || null;
+      return (u && u.startsWith('blob:')) ? (track.thumbnailLink || null) : u;
+    })();
 
-        const recentData = {
-          id:           track.id,
-          name:         track.name,
+    // Single DB read — DB is the authoritative source for display names, artist, etc.
+    // Enriched values (MusicBrainz rescan, manual edits) live only in the DB;
+    // the in-memory Meta cache only stores raw ID3 tags parsed during this session.
+    // This read patches the Meta cache and immediately re-renders the player UI
+    // so the correct names appear without waiting for the blob to be parsed.
+    DB.getMeta(track.id).catch(() => null).then(dbMeta => {
+      const stillCurrent = Player.getCurrentTrack()?.id === track.id;
+
+      // Heart button
+      if (stillCurrent) UI.setHeartActive(!!dbMeta?.starred);
+
+      const bestName   = dbMeta?.displayName || track.displayName || track.name || '';
+      const bestArtist = dbMeta?.artist      || track.artist      || '';
+      const bestAlbum  = dbMeta?.album       || track.albumName   || '';
+      const bestYear   = dbMeta?.year        || track.year        || '';
+      const bestThumb  = (dbMeta?.thumbnailUrl && !dbMeta.thumbnailUrl.startsWith('blob:'))
+                         ? dbMeta.thumbnailUrl : safeThumb;
+
+      // Patch the Meta cache with DB values so subsequent _enrichTrack() calls
+      // (e.g. _onPlayPause, queue navigation) return the correct enriched names.
+      if (typeof Meta !== 'undefined') {
+        Meta.forcePatch(track.id, {
+          title:    bestName   || undefined,
+          artist:   bestArtist || undefined,
+          album:    bestAlbum  || undefined,
+          year:     bestYear   || undefined,
+          coverUrl: bestThumb  || undefined,
+        });
+      }
+
+      // Re-render player with DB-correct names
+      if (stillCurrent) {
+        const dbEnriched = {
+          ...enriched,
           displayName:  bestName,
-          type:         'song',
           artist:       bestArtist,
-          thumbnailUrl:  safeThumb,
-          thumbnailLink: track.thumbnailLink || null,
-          folderId:     track.parents?.[0]  || track.folderId || null,
+          albumName:    bestAlbum,
+          year:         bestYear,
+          thumbnailUrl: bestThumb || enriched.thumbnailUrl,
         };
-        DB.addRecent(recentData).then(() => {
-          Sync.push('recents');
-          // Refresh Home in real-time if it's the active view
-          if (UI.getCurrentView() === 'home') _loadHomeData();
-        }).catch(() => {});
-        // Add to playback history (no-duplicates, most-recent-first, 7-day / 100-item store)
-        DB.addToHistory({
-          id:          track.id,
-          name:        track.name,
-          displayName: bestName,
-          artist:      bestArtist,
-          thumbnailUrl: safeThumb,
-          folderId:    track.parents?.[0] || track.folderId || null,
-        }).then(() => Sync.push('history')).catch(() => {});
-        // Also persist display fields to metadata store so topPlayed can show them.
-        // IMPORTANT: only write non-empty artist/displayName so we never overwrite
-        // enriched values (from a previous AudD/Last.fm pass) with empty strings.
-        const _metaUpdate = { name: track.name, folderId: recentData.folderId };
-        if (bestName)                _metaUpdate.displayName  = bestName;
-        if (safeThumb)               _metaUpdate.thumbnailUrl = safeThumb;
-        if (bestArtist)              _metaUpdate.artist       = bestArtist;
-        DB.setMeta(track.id, _metaUpdate).catch(() => {});
+        UI.updateMiniPlayer(dbEnriched, Player.isPlaying());
+        UI.updateExpandedPlayer(dbEnriched, Player.isPlaying());
+        if (bestName) document.title = `${bestName} — Savart`;
+      }
+
+      // Save to recents so Home shows it in "Canciones recientes"
+      const recentData = {
+        id:           track.id,
+        name:         track.name,
+        displayName:  bestName,
+        type:         'song',
+        artist:       bestArtist,
+        thumbnailUrl: bestThumb,
+        thumbnailLink: track.thumbnailLink || null,
+        folderId:     track.parents?.[0]  || track.folderId || null,
+      };
+      DB.addRecent(recentData).then(() => {
+        Sync.push('recents');
+        if (UI.getCurrentView() === 'home') _loadHomeData();
       }).catch(() => {});
-      // Schedule sync for play counts (incremented by player.js after audio starts)
-      setTimeout(() => Sync.push('playcounts'), 3000);
-    }
+
+      // Add to playback history
+      DB.addToHistory({
+        id:          track.id,
+        name:        track.name,
+        displayName: bestName,
+        artist:      bestArtist,
+        thumbnailUrl: bestThumb,
+        folderId:    track.parents?.[0] || track.folderId || null,
+      }).then(() => Sync.push('history')).catch(() => {});
+
+      // Persist display fields to metadata store so topPlayed can show them.
+      // Only write non-empty values to avoid overwriting enriched fields with blanks.
+      const _metaUpdate = { name: track.name, folderId: recentData.folderId };
+      if (bestName)   _metaUpdate.displayName  = bestName;
+      if (bestThumb)  _metaUpdate.thumbnailUrl = bestThumb;
+      if (bestArtist) _metaUpdate.artist       = bestArtist;
+      DB.setMeta(track.id, _metaUpdate).catch(() => {});
+    });
+
+    // Schedule sync for play counts (incremented by player.js after audio starts)
+    setTimeout(() => Sync.push('playcounts'), 3000);
   }
 
   function _onPlayPause(isPlaying) {
@@ -667,21 +702,19 @@ const App = (() => {
   function _enrichTrack(track) {
     if (!track || typeof Meta === 'undefined') return track;
     const meta = Meta.getCached(track.id);
-    if (!meta) return track;
+    // Meta cache is patched with DB values by _onTrackChange (via Meta.forcePatch),
+    // so meta.title / meta.artist reflect the enriched/manual DB names, not just
+    // raw ID3 tags. Prefer cache over track.* (which may be the original filename).
     return {
       ...track,
-      // DB-stored values (track.*) take precedence over the ID3 in-memory cache
-      // because the user may have manually corrected them. ID3 cache is used only
-      // as a fallback when the queue item has no value (e.g. raw Drive listing item).
-      displayName:   track.displayName  || meta.title        || track.name,
-      artist:        track.artist       || meta.artist        || '',
-      albumName:     track.albumName    || meta.album         || '',
-      year:          track.year         || meta.year          || '',
-      thumbnailUrl:  track.thumbnailUrl || meta.coverUrl      || null,
-      bitrate:       meta.bitrate      ?? track.bitrate      ?? null,
-      sampleRate:    meta.sampleRate   ?? track.sampleRate   ?? null,
-      bitsPerSample: meta.bitsPerSample ?? track.bitsPerSample ?? null,
-      // Use cached blob size if the queue item lacks one (e.g. loaded from recents)
+      displayName:   (meta?.title)    || track.displayName  || track.name,
+      artist:        (meta?.artist)   || track.artist        || '',
+      albumName:     (meta?.album)    || track.albumName    || '',
+      year:          (meta?.year)     || track.year          || '',
+      thumbnailUrl:  (meta?.coverUrl) || track.thumbnailUrl  || null,
+      bitrate:       meta?.bitrate      ?? track.bitrate      ?? null,
+      sampleRate:    meta?.sampleRate   ?? track.sampleRate   ?? null,
+      bitsPerSample: meta?.bitsPerSample ?? track.bitsPerSample ?? null,
       size:          _blobSizeCache.get(track.id) ?? track.size ?? 0,
     };
   }

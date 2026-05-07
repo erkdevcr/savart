@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '1.7.64';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.64 — legend text appears immediately after rescan or manual save
+const APP_VERSION  = '1.7.65';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.65 — player always shows DB-enriched names, not raw filenames
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
