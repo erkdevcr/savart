@@ -8558,27 +8558,49 @@ const App = (() => {
       if (btn) { btn.disabled = true; btn.textContent = '…'; }
 
       try {
-        const all   = await DB.getAllMeta();
-        const songs = all.filter(m => m.folderId === folderId);
-        const now   = Date.now();
+        const all  = await DB.getAllMeta();
+        let songs  = all.filter(m => m.folderId === folderId);
 
+        // Folder not yet scanned — no meta records have folderId set.
+        // Fetch the file list directly from Drive and seed minimal meta entries
+        // so the cover can be stamped on each file.
+        if (songs.length === 0 && typeof Drive !== 'undefined' && Auth.getValidToken()) {
+          try {
+            const driveResult = await Drive.listFolderAll(folderId);
+            const audioFiles  = (driveResult?.files || []).filter(f =>
+              f.mimeType?.startsWith('audio/') ||
+              /\.(mp3|m4a|flac|ogg|wav|aac|opus)$/i.test(f.name || '')
+            );
+            for (const f of audioFiles) {
+              await DB.setMeta(f.id, {
+                id:       f.id,
+                folderId: folderId,
+                name:     f.name     || f.id,
+                mimeType: f.mimeType || null,
+              });
+            }
+            if (audioFiles.length > 0) {
+              const refreshed = await DB.getAllMeta();
+              songs = refreshed.filter(m => m.folderId === folderId);
+            }
+          } catch (driveErr) {
+            console.warn('[App] Apply-all: Drive fallback failed', driveErr);
+          }
+        }
+
+        const now = Date.now();
         for (const m of songs) {
-          // Stamp manualAt so _resolveCoverUrl respects this URL over blob/ID3 cache.
-          // Clear coverBlob so the manual URL isn't shadowed by a stored ID3 cover.
-          await DB.setMeta(m.id, {
-            thumbnailUrl: coverUrl,
-            coverBlob:    null,
-            manualAt:     now,
-          });
-          // Evict the in-memory Meta cache so the next cover resolve reads from DB.
+          // Stamp manualAt so _resolveCoverUrl returns this URL over blob/ID3 cache.
+          await DB.setMeta(m.id, { thumbnailUrl: coverUrl, manualAt: now });
+          // Evict the in-memory Meta cache so the next resolve reads from DB.
           if (typeof Meta !== 'undefined') Meta.revoke(m.id);
           // Update the cover in the collection detail song list row immediately.
           _updateRowThumbnail(m.id, coverUrl);
         }
 
         // Rebuild mosaic in the collection header with the new uniform cover.
-        const header  = document.getElementById('lib-collection-hdr');
-        const artEl   = header?.querySelector('.lib-col-detail-art');
+        const header = document.getElementById('lib-collection-hdr');
+        const artEl  = header?.querySelector('.lib-col-detail-art');
         if (artEl) {
           artEl.innerHTML = `<img src="${_escHtml(coverUrl)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)">`;
         }

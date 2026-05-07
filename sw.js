@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '1.7.87';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.87 — _patchFolderDots + _updateBrowseLegend also check collections store manualAt
+const APP_VERSION  = '1.7.88';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.88 — apply-all: Drive fallback when folder songs not in DB (unscanned collection)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
