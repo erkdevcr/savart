@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '1.7.84';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.84 — _resolveCoverUrl respects manualAt; apply-all sets manualAt+clears blob+revokes cache
+const APP_VERSION  = '1.7.86';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.86 — collection header: remove dots from entity-year (legend-only); compute format badge from songs on context-menu nav
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

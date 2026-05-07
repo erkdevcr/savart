@@ -3285,7 +3285,7 @@ const UI = (() => {
     entity.innerHTML = `
       <div class="lib-detail-entity-art lib-col-detail-art" style="background:${colBg}">${artHtml}</div>
       <div class="lib-detail-entity-info">
-        ${(collection.rescannedAt || collection.hasManual || collection.format) ? `<div class="lib-detail-entity-year">${[collection.rescannedAt ? '<span class="album-rescan-dot"></span>' : '', collection.hasManual ? '<span class="album-manual-dot"></span>' : '', collection.format ? `<span class="album-format-badge">${escHtml(collection.format)}</span>` : ''].filter(Boolean).join(' ')}</div>` : ''}
+        ${collection.format ? `<div class="lib-detail-entity-year"><span class="album-format-badge">${escHtml(collection.format)}</span></div>` : ''}
         <div class="lib-detail-entity-name lib-col-detail-name">${escHtml(collection.name)}</div>
         <div class="lib-detail-entity-sub">${escHtml(`${collection.artistCount || ''} artistas · ${songs.length} canciones`)}</div>
       </div>
@@ -3359,20 +3359,8 @@ const UI = (() => {
           artEl.innerHTML = `<img src="${escHtml(coverUrl)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)">`;
         }
 
-        // ── Live-show the manual-edit (blue) dot ───────────────
-        // In entity header: add blue dot if not already there
-        let yearRow = entity.querySelector('.lib-detail-entity-year');
-        if (!yearRow) {
-          yearRow = document.createElement('div');
-          yearRow.className = 'lib-detail-entity-year';
-          nameEl?.parentNode?.insertBefore(yearRow, nameEl);
-        }
-        if (!yearRow.querySelector('.album-manual-dot')) {
-          const dot = document.createElement('span');
-          dot.className = 'album-manual-dot';
-          yearRow.appendChild(dot);
-        }
-        // In back-row legend
+        // ── Live-show the manual-edit dot in the back-row legend only ──
+        // (dots are intentionally absent from the collection entity header)
         const legendManual = container.querySelector('.col-detail-legend-manual');
         if (legendManual) legendManual.style.display = '';
 

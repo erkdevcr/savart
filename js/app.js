@@ -6554,6 +6554,7 @@ const App = (() => {
     if (_libInDetail) return;
     try {
       const { folderMap, folderSongCount, rescannedMap, savedColMap, folderNameMap } = await _buildFolderMap();
+      if (_libInDetail) return; // re-check after async gap — onCollectionClick may have set this
 
       const _top = map => map.size > 0
         ? [...map.entries()].sort((a, b) => b[1] - a[1])[0][0]
@@ -6580,6 +6581,21 @@ const App = (() => {
         collections.push({ folderId, name, manualCoverUrl, mosaicUrls, blobUrl,
           songCount, format, rescannedAt, hasManual,
           artistCount: f.artistCounts.size });
+      });
+
+      // Also include forceType:'collection' folders saved in DB that didn't appear
+      // in folderMap (e.g. folder was moved via context-menu before its songs had folderId set)
+      savedColMap.forEach((saved, folderId) => {
+        if (saved.forceType !== 'collection') return;
+        if (colIds.has(folderId)) return; // already included via folderMap
+        colIds.add(folderId);
+        const name         = saved.name || folderNameMap.get(folderId) || folderId;
+        const songCount    = folderSongCount.get(folderId) || 0;
+        const rescannedAt  = rescannedMap.get(folderId) || null;
+        const hasManual    = !!(saved.manualAt);
+        const manualCoverUrl = saved.coverUrl || null;
+        collections.push({ folderId, name, manualCoverUrl, mosaicUrls: [], blobUrl: null,
+          songCount, format: null, rescannedAt, hasManual, artistCount: 0 });
       });
 
       // Update global cache
@@ -6628,13 +6644,23 @@ const App = (() => {
         // Count distinct artists for the subtitle
         const artistSet = new Set(songs.map(m => m.artist).filter(Boolean));
 
+        // Compute format badge from song mimeTypes (same logic as _buildFolderMap)
+        const fmtCounts = new Map();
+        songs.forEach(m => {
+          const fmt = _formatLabel(m.mimeType, m.name);
+          if (fmt) fmtCounts.set(fmt, (fmtCounts.get(fmt) || 0) + 1);
+        });
+        const computedFormat = fmtCounts.size > 0
+          ? [...fmtCounts.entries()].sort((a, b) => b[1] - a[1])[0][0]
+          : null;
+
         collection = {
           ...collection,
           manualCoverUrl: savedCol.coverUrl || null,
           mosaicUrls,
           blobUrl,
           artistCount:    collection.artistCount ?? artistSet.size,
-          format:         collection.format      ?? null,
+          format:         collection.format      ?? computedFormat,
           rescannedAt:    collection.rescannedAt ?? (folderRec?.rescannedAt || null),
           hasManual:      collection.hasManual   ?? (!!(savedCol.manualAt) || songs.some(m => (m.manualAt || 0) > 0)),
         };
@@ -8501,22 +8527,9 @@ const App = (() => {
           if (coverEl && savedCol.coverUrl) {
             coverEl.innerHTML = `<img src="${savedCol.coverUrl}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-md)">`;
           }
-          // Show blue manual-edit dot in entity header
-          const entityInfo = header.querySelector('.lib-detail-entity-info');
-          let yearRow = header.querySelector('.lib-detail-entity-year');
-          if (!yearRow && entityInfo) {
-            yearRow = document.createElement('div');
-            yearRow.className = 'lib-detail-entity-year';
-            const nameNode = header.querySelector('.lib-col-detail-name');
-            entityInfo.insertBefore(yearRow, nameNode);
-          }
-          if (yearRow && !yearRow.querySelector('.album-manual-dot')) {
-            const dot = document.createElement('span');
-            dot.className = 'album-manual-dot';
-            yearRow.appendChild(dot);
-          }
-          // Show blue dot in back-row legend
-          const container   = document.getElementById('lib-detail-content');
+          // Show blue dot in back-row legend only
+          // (dots are intentionally absent from the collection entity header)
+          const container    = document.getElementById('lib-detail-content');
           const legendManual = container?.querySelector('.col-detail-legend-manual');
           if (legendManual) legendManual.style.display = '';
         }
