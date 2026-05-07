@@ -6078,9 +6078,6 @@ body.queue-open #mini-player { z-index: 65; }
   align-items: center;
   justify-content: space-between;
 }
-.screen-header--flex .dot-legend {
-  margin-left: 0;   /* justify-content:space-between handles the gap */
-}
 
 /* Collection card art: same size as album art but mosaic-aware */
 .lib-collection-art {
