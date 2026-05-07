@@ -211,14 +211,22 @@ const Sync = (() => {
     };
   }
 
-  function _mergePinned(localMeta, remoteMeta) {
+  function _mergePinned(localMeta, remoteMeta, remoteManifestTs) {
     // Remote is the authoritative base — remote deletions are respected.
-    // Only add local-only items (pinned offline while remote was stale).
-    // OLD: { ...remoteMeta, ...localMeta } let local override remote,
-    // meaning pins deleted on device A would re-appear after device B synced.
+    // LWW per-item using pinnedAt timestamp:
+    //   • If a local-only item's pinnedAt > remoteManifestTs → pinned after the
+    //     remote was last written → genuine offline addition → keep it.
+    //   • If pinnedAt ≤ remoteManifestTs (or missing) → remote had the chance to
+    //     include it but didn't → it was deleted on another device → drop it.
+    const remoteTs = remoteManifestTs || 0;
     const merged = { ...remoteMeta };
     for (const [id, item] of Object.entries(localMeta)) {
-      if (!merged[id]) merged[id] = item; // offline addition — not yet in remote
+      if (merged[id]) continue; // already in remote — remote wins
+      const pinnedAt = item.pinnedAt || 0;
+      if (pinnedAt > remoteTs) {
+        merged[id] = item; // pinned after remote snapshot → genuine offline addition
+      }
+      // else: remote knew about this item and chose to omit it → respect the deletion
     }
     return merged;
   }
@@ -397,8 +405,15 @@ const Sync = (() => {
         const { pinned, pinnedOrder, recents, playcounts, playlists, history } = data || {};
 
         if (pinned && typeof pinned === 'object') {
-          await DB.setState('pinnedMeta', pinned);
-          await DB.setState('pinned', Array.isArray(pinnedOrder) ? pinnedOrder : Object.keys(pinned));
+          // LWW per-item: remote wins for deletions & updates.
+          // Local-only items kept only if pinnedAt > remote home timestamp (offline addition).
+          const localMeta = (await DB.getState('pinnedMeta')) || {};
+          const remoteHomeTs = data.ts || 0;
+          const mergedPinned = _mergePinned(localMeta, pinned, remoteHomeTs);
+          const remoteOrder  = Array.isArray(pinnedOrder) ? pinnedOrder : Object.keys(pinned);
+          const localOnlyIds = Object.keys(mergedPinned).filter(id => !pinned[id]);
+          await DB.setState('pinnedMeta', mergedPinned);
+          await DB.setState('pinned', [...remoteOrder, ...localOnlyIds]);
         }
 
         if (Array.isArray(recents) && recents.length) {
@@ -918,8 +933,10 @@ const Sync = (() => {
       await _mergeStep('pinned', async () => {
         if (!remotePinned || typeof remotePinned !== 'object') return;
         const localMeta = (await DB.getState('pinnedMeta')) || {};
-        // _mergePinned: remote is base (deletions respected), local-only items appended
-        const merged  = _mergePinned(localMeta, remotePinned);
+        // _mergePinned: remote is base (deletions respected).
+        // Local-only items kept only if pinnedAt > remote manifest timestamp
+        // (i.e., pinned offline after the remote was last written).
+        const merged  = _mergePinned(localMeta, remotePinned, _remoteTs.pinned || 0);
         const mergedIds = Object.keys(merged);
         await DB.setState('pinnedMeta', merged);
         // Order: remote order first, then any local-only additions at the end

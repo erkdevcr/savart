@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '1.7.60';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.60 — LWW: recents/history per-item merge, playcounts MAX(local,remote)
+const APP_VERSION  = '1.7.62';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.62 — fix: pinned LWW per-item (pinnedAt), deleted pins no longer resurrect
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

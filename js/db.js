@@ -638,6 +638,7 @@ const DB = (() => {
         displayName:  item.displayName  || item.name,
         type:         item.type         || (item.isFolder ? 'folder' : 'song'),
         thumbnailUrl: item.thumbnailUrl || item.thumbnailLink || null,
+        pinnedAt:     Date.now(),
       };
       await setState('pinned', pinned);
       await setState('pinnedMeta', stored);

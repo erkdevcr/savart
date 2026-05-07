@@ -2914,6 +2914,10 @@ const App = (() => {
    * @param {DriveItem} item
    */
   async function onGoToFolder(item) {
+    // On mobile, collapse the expanded player so Browse is visible
+    if (!window.matchMedia('(min-width: 768px)').matches) {
+      UI.setExpandedPlayerVisible(false);
+    }
     if (item.isFolder || item.type === 'folder') {
       // The item is already a folder — open it directly
       _breadcrumb = [];
