@@ -1611,10 +1611,11 @@ const UI = (() => {
 
     // Helper: is this item (song or folder) inside a collection?
     // Checks item.folderType first (set on folder rows), then falls back to
-    // App.isFolderCollection which looks up the folderId in the collection cache.
+    // App.isFolderCollection which resolves via the collection cache using
+    // folderId, parents[0], or item.id (for folder items where id === folderId).
     const _isCollection = (it) =>
       it.folderType === 'collection' ||
-      !!(typeof App !== 'undefined' && App.isFolderCollection?.(it.folderId || it.id));
+      !!(typeof App !== 'undefined' && App.isFolderCollection?.(it));
 
     // Shared SVG icons for context menus
     const _iconNext       = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zM20 6v12h2V6h-2z"/></svg>`;

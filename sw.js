@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '1.7.71';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.71 — context menu: isFolderCollection checks cache for songs without folderType
+const APP_VERSION  = '1.7.72';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.72 — populate collection cache at boot so home/player menus resolve correctly
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

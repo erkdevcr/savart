@@ -366,6 +366,10 @@ const App = (() => {
     // Restore EQ + tempo from DB before first render
     _restoreSettings();
 
+    // Populate collection cache early so context menus on home/player/browse
+    // correctly show "Ir a la colección" without requiring a library visit first.
+    _refreshCollectionCache().catch(() => {});
+
     // Fast path: read home snapshot from Drive (~1 API call, ~300 ms).
     // Re-renders home with cross-device state before the full init() merge finishes.
     Sync.readHome().then(data => {
@@ -8563,10 +8567,16 @@ const App = (() => {
   /**
    * Synchronous check: is the given folderId classified as a collection?
    * Used by ui.js context menu to label songs correctly ("Ir a la colección" vs "Ir al álbum").
+   * Accepts a song/folder item or a raw folderId string.
    */
-  function isFolderCollection(folderId) {
-    if (!folderId || !_collectionFolderIdsCache) return false;
-    return _collectionFolderIdsCache.has(folderId);
+  function isFolderCollection(folderIdOrItem) {
+    if (!_collectionFolderIdsCache) return false;
+    if (!folderIdOrItem) return false;
+    // Accept both a raw ID string and an item object
+    const id = typeof folderIdOrItem === 'string'
+      ? folderIdOrItem
+      : (folderIdOrItem.folderId || folderIdOrItem.parents?.[0] || null);
+    return id ? _collectionFolderIdsCache.has(id) : false;
   }
 
   return {
