@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '1.7.72';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.72 — populate collection cache at boot so home/player menus resolve correctly
+const APP_VERSION  = '1.7.73';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.73 — stamp folderId/folderType on pinned+recents home items; fix LWW pin merge; collection context menu fix
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

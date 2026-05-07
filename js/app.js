@@ -2629,17 +2629,27 @@ const App = (() => {
       // In-memory coverUrls (inMem.coverUrl) are always fresh within the current session.
       const _safeUrl = u => (u && !u.startsWith('blob:')) ? u : null;
 
+      // Helper: stamp folderType on an item using the collection cache.
+      // Called at enrichment time so context menus always have the correct label
+      // regardless of when _collectionFolderIdsCache was populated.
+      const _stampFolderType = (item, dbMeta) => {
+        if (item.folderType) return item.folderType; // already set (e.g. folder rows)
+        const fid = dbMeta?.folderId || item.folderId || item.parents?.[0] || null;
+        if (!fid) return undefined;
+        return isFolderCollection(fid) ? 'collection' : 'album';
+      };
+
       const enrichedPinned = pinned.map(p => {
         if (p.type === 'folder' || p.isFolder) return p;
         const dbMeta = pinnedMetaMap.get(p.id);
         const inMem  = (typeof Meta !== 'undefined') ? Meta.getCached(p.id) : null;
-        // DB values (dbMeta) take priority over ID3 in-memory cache (inMem) —
-        // manual edits live in the DB and must override any stale embedded tags.
         return {
           ...p,
           displayName:  _pick(dbMeta?.displayName, dbMeta?.name, inMem?.title,   p.displayName,  p.name),
           artist:       _pick(dbMeta?.artist,       inMem?.artist,  p.artist),
           thumbnailUrl: _pick(_safeUrl(dbMeta?.thumbnailUrl), _safeUrl(dbMeta?.coverUrl), inMem?.coverUrl, _safeUrl(p.thumbnailUrl)),
+          folderId:     dbMeta?.folderId || p.folderId || null,
+          folderType:   _stampFolderType(p, dbMeta),
         };
       });
 
@@ -2654,6 +2664,8 @@ const App = (() => {
           name:         _pick(dbMeta?.name,          r.name),
           thumbnailUrl: _pick(_safeUrl(dbMeta?.thumbnailUrl), _safeUrl(dbMeta?.coverUrl), inMem?.coverUrl, _safeUrl(r.thumbnailUrl)),
           artist:       _pick(dbMeta?.artist,        inMem?.artist,   r.artist),
+          folderId:     dbMeta?.folderId || r.folderId || null,
+          folderType:   _stampFolderType(r, dbMeta),
         };
       });
 
@@ -2671,6 +2683,8 @@ const App = (() => {
           artist:       _pick(dbMeta?.artist,        inMem?.artist,    item.artist,     r?.artist),
           albumName:    _pick(dbMeta?.album,         inMem?.album,     item.albumName,  item.album,         r?.albumName),
           year:         _pick(dbMeta?.year,          inMem?.year,      item.year,       r?.year),
+          folderId:     dbMeta?.folderId || item.folderId || r?.folderId || null,
+          folderType:   _stampFolderType(item, dbMeta),
         };
       });
 
