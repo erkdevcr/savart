@@ -2933,6 +2933,10 @@ const App = (() => {
       // Prefetch folder cover art and apply to all song rows (fire-and-forget)
       _prefetchAndApplyFolderCovers(folder.id, result.files);
 
+      // Soft scan: lightweight ID3-only enrichment for folders not yet rescanned.
+      // Runs in background — no UI blocking, no MusicBrainz/Last.fm/AudD calls.
+      _softScanFolder(folder.id, result.files).catch(() => {});
+
       // Add to recents
       DB.addRecent({
         id:   folder.id,
@@ -5995,6 +5999,106 @@ const App = (() => {
     return count;
   }
 
+  /* ── Soft scan ───────────────────────────────────────────────
+   * Lightweight ID3-only enrichment fired when the user opens a folder in browse.
+   * Rules:
+   *  • Skip if folder has rescannedAt (manual rescan already done)
+   *  • Skip if any song in the folder has manualAt > 0 (manual edits present)
+   *  • Only reads ID3 tags — no MusicBrainz / Last.fm / AudD calls
+   *  • Only patches songs that are still missing artist, album, or cover
+   *  • Runs fire-and-forget in background; yields between files to avoid blocking
+   * ─────────────────────────────────────────────────────────── */
+
+  /**
+   * @param {string}   folderId
+   * @param {Object[]} files  — audio file objects from Drive.listFolderAll
+   */
+  async function _softScanFolder(folderId, files) {
+    if (!folderId || !files || files.length === 0) return;
+    if (typeof Meta === 'undefined' || typeof Drive === 'undefined') return;
+
+    try {
+      // Guard 1: folder already manually rescanned
+      const folderMeta = await DB.getMeta(folderId).catch(() => null);
+      if (folderMeta?.rescannedAt) return;
+
+      // Guard 2: any manual edits in this folder → leave it alone
+      const allMeta      = await DB.getAllMeta();
+      const folderIdSet  = new Set(files.map(f => f.id));
+      const hasManual    = allMeta.some(m => folderIdSet.has(m.id) && (m.manualAt || 0) > 0);
+      if (hasManual) return;
+
+      // Build a quick lookup of existing DB meta for this folder's songs
+      const existingMap = new Map();
+      for (const m of allMeta) {
+        if (folderIdSet.has(m.id)) existingMap.set(m.id, m);
+      }
+
+      // Only process songs that are still missing at least one of: artist, album, cover
+      const candidates = files.filter(f => {
+        const m = existingMap.get(f.id);
+        return !m || !m.artist || !m.album || (!m.thumbnailUrl && !m.coverBlob);
+      });
+      if (candidates.length === 0) return;
+
+      console.log(`[SoftScan] ${folderId}: scanning ${candidates.length} candidates`);
+      let patched = 0;
+
+      for (const file of candidates) {
+        try {
+          const existing = existingMap.get(file.id) || null;
+
+          // Use cached blob (from prior play) or fetch just the first 256 KB
+          let blob = await DB.getCachedBlob(file.id).catch(() => null);
+          if (!blob) blob = await Drive.downloadFileHead(file.id, 256 * 1024).catch(() => null);
+          if (!blob) continue;
+
+          const parsed = await Meta.parse(file.id, blob).catch(() => null);
+          if (!parsed) continue;
+
+          const patch = {};
+          if (parsed.artist && !existing?.artist) patch.artist = parsed.artist;
+          if (parsed.album  && !existing?.album)  patch.album  = parsed.album;
+          if (parsed.year   && !existing?.year)   patch.year   = parsed.year;
+          if (parsed.coverBlob && !existing?.coverBlob) {
+            patch.coverBlob   = parsed.coverBlob;
+            // Mark thumbnailUrl sentinel so other devices know to extract ID3 cover
+            if (!existing?.thumbnailUrl) patch.thumbnailUrl = 'id3';
+          }
+
+          if (Object.keys(patch).length === 0) continue;
+
+          await DB.setMeta(file.id, { id: file.id, ...patch });
+          // Keep in-memory item cache fresh
+          _cacheItem({ ...file, folderId, ...(patch.artist ? { artist: patch.artist } : {}),
+                                           ...(patch.album  ? { album:  patch.album  } : {}) });
+          patched++;
+        } catch (_) {}
+
+        // Yield between files — soft scan must never disrupt playback
+        await new Promise(r => setTimeout(r, 30));
+      }
+
+      if (patched === 0) return;
+      console.log(`[SoftScan] ${folderId}: patched ${patched} file(s)`);
+
+      // Rebuild collection cache — new artist data may change classification
+      await _refreshCollectionCache().catch(() => {});
+
+      // Refresh visible library tab if open (not in a detail view)
+      if (!_libInDetail) {
+        if (_currentLibTab === 'albums')      _loadAlbums();
+        if (_currentLibTab === 'collections') _loadCollections();
+        if (_currentLibTab === 'artists')     _loadArtists();
+      }
+
+      // Sync new metadata to other devices
+      if (typeof Sync !== 'undefined') Sync.push('metadata');
+    } catch (err) {
+      console.warn('[SoftScan] Error:', err);
+    }
+  }
+
   /**
    * Propagate enriched album metadata to sibling songs in the same folder.
    * Called after _onBlobReady FINALIZE when a song is identified by ID3/Last.fm/AudD.
@@ -6007,8 +6111,14 @@ const App = (() => {
     const folderId = item.parents?.[0];
     if (!folderId) return;
 
-    const album    = meta.album    || null;
-    const artist   = meta.artist   || null;
+    // Collections have intentionally diverse artists — propagating one track's
+    // artist/album to all siblings would collapse artist diversity and cause the
+    // folder to be reclassified as an album after a rescan.  Cover art is still
+    // propagated (folder-level art is shared across all tracks).
+    const isCollection = isFolderCollection(folderId);
+
+    const album    = isCollection ? null : (meta.album  || null);
+    const artist   = isCollection ? null : (meta.artist || null);
     const year     = meta.year     || null;
     const coverUrl = meta.coverUrl || null;
     if (!album && !artist && !year && !coverUrl) return;

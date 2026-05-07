@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '1.7.78';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.78 — onGoToAlbum→collection uses saved collection name, not song display name
+const APP_VERSION  = '1.7.79';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.79 — soft scan on browse open; _propagateAlbumMeta skips artist/album in collections
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
