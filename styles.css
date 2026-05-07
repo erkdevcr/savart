@@ -2149,12 +2149,18 @@ img { display: block; }
   justify-content: space-between;
   padding: 14px 12px 0;
   flex-shrink: 0;
+  position: relative;
 }
 
 .pexp-topbar-title {
   font-size: 14px;
   font-weight: 500;
   color: var(--text-secondary);
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  pointer-events: none;
 }
 
 .pexp-icon-btn {
