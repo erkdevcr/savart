@@ -2844,10 +2844,37 @@ const App = (() => {
       // If any records changed, rebuild the chip cache and patch visible folder rows.
       _reconcileBrowseFolder(folder.id, result.files).catch(() => {});
 
-      // Update item count badge
+      // Update item count badge — include album/collection chip for current folder.
+      // Priority: (1) folder.folderType from parent view, (2) files present = leaf folder.
       const total = result.folders.length + result.files.length;
       const countEl = document.getElementById('browse-item-count');
-      if (countEl) countEl.textContent = total > 0 ? `${total} ${total === 1 ? UI.t('lbl_item') : UI.t('lbl_items')}` : '';
+      if (countEl) {
+        countEl.textContent = '';
+        let curType = folder.folderType || null;
+        if (!curType && result.files.length > 0) {
+          curType = colCache.has(folder.id) ? 'collection' : 'album';
+        } else if (!curType && knownFolders?.has(folder.id)) {
+          curType = colCache.has(folder.id) ? 'collection' : 'album';
+        }
+        console.log('[chip-debug] folder.folderType=', folder.folderType,
+          '| files=', result.files.length, '| curType=', curType,
+          '| colCache.size=', colCache.size, '| inCol=', colCache.has(folder.id),
+          '| knownFolders=', knownFolders ? knownFolders.size : 'NULL',
+          '| countEl=', !!countEl);
+        if (curType) {
+          const chip = document.createElement('span');
+          chip.className = curType === 'collection'
+            ? 'folder-type-chip folder-type-chip--collection'
+            : 'folder-type-chip folder-type-chip--album';
+          chip.textContent = curType === 'collection' ? UI.t('lbl_collection') : UI.t('lbl_album_chip');
+          countEl.appendChild(chip);
+        }
+        if (total > 0) {
+          countEl.appendChild(document.createTextNode(
+            `${total} ${total === 1 ? UI.t('lbl_item') : UI.t('lbl_items')}`
+          ));
+        }
+      }
 
       // Track current browse folder for rescan
       _browseFolderId = folder.id;
