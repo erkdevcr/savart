@@ -1756,11 +1756,9 @@ const App = (() => {
    * @param {string} folderId
    */
   async function _updateBrowseLegend(folderId) {
-    const rescanDot    = document.getElementById('browse-rescan-dot');
     const legendRescan = document.getElementById('browse-legend-rescan');
     const legendManual = document.getElementById('browse-legend-manual');
     const hide = () => {
-      if (rescanDot)    rescanDot.style.display    = 'none';
       if (legendRescan) legendRescan.style.display = 'none';
       if (legendManual) legendManual.style.display = 'none';
     };
@@ -1769,7 +1767,6 @@ const App = (() => {
       const [folderMeta, all] = await Promise.all([DB.getMeta(folderId), DB.getAllMeta()]);
       const hasRescan = !!(folderMeta?.rescannedAt);
       const hasManual = all.some(m => m.folderId === folderId && (m.manualAt || 0) > 0);
-      if (rescanDot)    rescanDot.style.display    = hasRescan ? '' : 'none';
       if (legendRescan) legendRescan.style.display = hasRescan ? '' : 'none';
       if (legendManual) legendManual.style.display = hasManual ? '' : 'none';
     } catch (_) { hide(); }
@@ -1966,11 +1963,10 @@ const App = (() => {
       }));
       if (_browseFolderId) _folderCoverCache.delete(_browseFolderId);
       await _prefetchAndApplyFolderCovers(_browseFolderId, _browseFiles, true); // force=true
-      // Mark folder as rescanned BEFORE pushHot so the dot syncs in the hot delta
+      // Mark folder as rescanned BEFORE pushHot so rescannedAt syncs in the hot delta
       if (_browseFolderId) {
         await DB.setMeta(_browseFolderId, { rescannedAt: Date.now() }).catch(() => {});
-        const dot = document.getElementById('browse-rescan-dot');
-        if (dot) dot.style.display = '';
+        _updateBrowseLegend(_browseFolderId);
       }
       if (typeof Sync !== 'undefined') {
         // Hot push: immediate small delta so Device B sees changes within 3 s
@@ -5441,6 +5437,7 @@ const App = (() => {
       _dsUpdateCounters();
       await _dsSaveSession();
       if (typeof Sync !== 'undefined') Sync.push('metadata');
+      if (_browseFolderId) _updateBrowseLegend(_browseFolderId);
       if (saveBtn) { saveBtn.textContent = UI.t('saved_ok'); setTimeout(() => { if(saveBtn){saveBtn.disabled=false;saveBtn.textContent=UI.t('save_btn');} }, 1800); }
       UI.showToast(`${saved} ${UI.t('lbl_songs_updated')}`);
     } catch (err) {
@@ -6782,6 +6779,7 @@ const App = (() => {
     _liveMetaUpdate(songs.map(m => m.id), liveDbPatch);
 
     if (typeof Sync !== 'undefined') Sync.push('metadata');
+    if (_browseFolderId) _updateBrowseLegend(_browseFolderId);
     UI.showToast(`${songs.length} canciones actualizadas`);
   }
 
@@ -6797,6 +6795,7 @@ const App = (() => {
     await DB.setMeta(songId, { displayName: name, manualAt: Date.now() });
     _liveMetaUpdate([songId], { displayName: name });
     if (typeof Sync !== 'undefined') Sync.push('metadata');
+    if (_browseFolderId) _updateBrowseLegend(_browseFolderId);
   }
 
   /** Called from the "Nueva playlist" button rendered inside the Playlists tab. */
