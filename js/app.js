@@ -1758,13 +1758,19 @@ const App = (() => {
   async function _patchFolderDots(folders) {
     if (!folders.length) return;
     try {
-      const all = await DB.getAllMeta();
-      // Rescan: folder records carry rescannedAt (id === folderId)
+      const [all, savedCols] = await Promise.all([
+        DB.getAllMeta(),
+        DB.getAllCollections().catch(() => []),
+      ]);
+      // Rescan: folder meta records carry rescannedAt (record id === folderId)
       const rescannedIds = new Set(all.filter(m => m.rescannedAt).map(m => m.id));
-      // Manual: any song with manualAt > 0 marks its folder
+      // Manual: any song with manualAt > 0, OR the collection record has manualAt > 0
       const manualFolderIds = new Set();
       for (const m of all) {
         if (m.folderId && (m.manualAt || 0) > 0) manualFolderIds.add(m.folderId);
+      }
+      for (const col of (savedCols || [])) {
+        if ((col.manualAt || 0) > 0) manualFolderIds.add(col.id);
       }
       for (const folder of folders) {
         const row = document.querySelector(`.folder-row[data-id="${CSS.escape(folder.id)}"]`);
@@ -1831,9 +1837,15 @@ const App = (() => {
     };
     if (!folderId) { hide(); return; }
     try {
-      const [folderMeta, all] = await Promise.all([DB.getMeta(folderId), DB.getAllMeta()]);
+      const [folderMeta, all, colRec] = await Promise.all([
+        DB.getMeta(folderId),
+        DB.getAllMeta(),
+        DB.getCollection(folderId).catch(() => null),
+      ]);
       const hasRescan = !!(folderMeta?.rescannedAt);
-      const hasManual = all.some(m => m.folderId === folderId && (m.manualAt || 0) > 0);
+      // Manual: any song in this folder has manualAt, OR the collection record has manualAt
+      const hasManual = all.some(m => m.folderId === folderId && (m.manualAt || 0) > 0)
+                     || (colRec?.manualAt || 0) > 0;
       if (legendRescan) legendRescan.style.display = hasRescan ? '' : 'none';
       if (legendManual) legendManual.style.display = hasManual ? '' : 'none';
     } catch (_) { hide(); }
