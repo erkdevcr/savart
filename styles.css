@@ -12,6 +12,10 @@
   --bg-card:      #242430;
   --bg-hover:     #2E2E3C;
 
+  /* Item interactions — blue-tinted hover + tap flash */
+  --item-hover:   rgba(74,136,245,0.08);
+  --item-tap:     rgba(74,136,245,0.20);
+
   /* Accent */
   --accent:       #4A88F5;
   --accent-soft:  #162A50;
@@ -547,8 +551,8 @@ img { display: block; }
   min-width: 0;
 }
 
-.pinned-card:hover { background: var(--bg-hover); }
-.pinned-card:active { opacity: 0.85; }
+.pinned-card:hover  { background: var(--item-hover); }
+.pinned-card:active { background: var(--item-tap); transition: background 0s; }
 
 /* ── Art square: cover image for songs, colored square for folders ── */
 .pinned-card-art {
@@ -660,11 +664,12 @@ img { display: block; }
   padding: 10px 0;
   border-bottom: 1px solid var(--bg-hover);
   cursor: pointer;
-  transition: background 0.1s;
+  transition: background 0.3s ease-out;
 }
 
 .top-list-item:last-child { border-bottom: none; }
-.top-list-item:hover { background: var(--bg-surface); border-radius: var(--radius-sm); }
+.top-list-item:hover  { background: var(--item-hover); border-radius: var(--radius-sm); }
+.top-list-item:active { background: var(--item-tap);   border-radius: var(--radius-sm); transition: background 0s; }
 
 .top-list-rank {
   font-size: 14px;
@@ -1028,11 +1033,11 @@ img { display: block; }
   gap: 12px;
   padding: 10px 16px;
   cursor: pointer;
-  transition: background 0.1s;
+  transition: background 0.3s ease-out;
 }
 
-.folder-row:hover { background: var(--bg-surface); }
-.folder-row:active { background: var(--bg-hover); }
+.folder-row:hover  { background: var(--item-hover); }
+.folder-row:active { background: var(--item-tap); transition: background 0s; }
 
 .folder-icon {
   position: relative;
@@ -1137,7 +1142,7 @@ img { display: block; }
   gap: 10px;
   padding: 8px 16px;
   cursor: pointer;
-  transition: background 0.1s;
+  transition: background 0.3s ease-out;
   position: relative;
 }
 
@@ -1151,8 +1156,8 @@ img { display: block; }
   flex-shrink: 0;
 }
 
-.song-row:hover { background: var(--bg-surface); }
-.song-row:active { background: var(--bg-hover); }
+.song-row:hover  { background: var(--item-hover); }
+.song-row:active { background: var(--item-tap); transition: background 0s; }
 
 .song-row.active .song-row-title {
   color: var(--accent);
@@ -1307,6 +1312,10 @@ img { display: block; }
   font-size: 14px;
   color: var(--text-primary);
 }
+
+/* Hide the native browser clear button on search inputs — we use our own */
+.search-bar input[type="search"]::-webkit-search-cancel-button { -webkit-appearance: none; }
+.search-bar input[type="search"]::-ms-clear { display: none; }
 
 .search-bar input::placeholder { color: var(--text-muted); }
 
@@ -1896,7 +1905,8 @@ img { display: block; }
   border-radius: var(--radius-md);
   transition: background 0.12s;
 }
-.lib-artist-card:hover { background: var(--bg-hover); }
+.lib-artist-card:hover  { background: var(--item-hover); }
+.lib-artist-card:active { background: var(--item-tap); transition: background 0s; }
 .lib-artist-avatar-wrap {
   position: relative;
   flex-shrink: 0;
@@ -2895,7 +2905,8 @@ body.queue-open #mini-player { z-index: 65; }
   transition: background 0.12s;
   position: relative;
 }
-.queue-item:hover { background: var(--bg-hover); }
+.queue-item:hover  { background: var(--item-hover); }
+.queue-item:active { background: var(--item-tap); transition: background 0s; }
 
 .queue-item.active {
   background: rgba(74,136,245,0.10);
@@ -3702,8 +3713,8 @@ body.queue-open #mini-player { z-index: 65; }
   transition: background 0.1s;
 }
 
-.artist-row:hover { background: var(--bg-surface); }
-.artist-row:active { background: var(--bg-hover); }
+.artist-row:hover  { background: var(--item-hover); }
+.artist-row:active { background: var(--item-tap); transition: background 0s; }
 
 .artist-avatar {
   width: 48px;
