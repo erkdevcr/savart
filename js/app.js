@@ -2997,6 +2997,25 @@ const App = (() => {
         // else: leave f.folderType undefined → no chip rendered
       });
 
+      // Enrich files with DB metadata (artist, album, displayName) so Browse rows
+      // show artist · album from the first render, not just filename + size.
+      // Runs in parallel for speed; silently skips files not yet in DB.
+      if (result.files.length > 0) {
+        const dbMetas = await Promise.allSettled(result.files.map(f => DB.getMeta(f.id)));
+        dbMetas.forEach((res, i) => {
+          if (res.status !== 'fulfilled' || !res.value) return;
+          const m = res.value;
+          const f = result.files[i];
+          if (m.artist)      f.artist      = m.artist;
+          if (m.album)       f.album       = m.album;
+          if (m.displayName) f.displayName = m.displayName;
+          // Also pick up persisted thumbnailUrl/coverBlob so _buildSongRow shows cover
+          if (!f.thumbnailUrl && m.thumbnailUrl && m.thumbnailUrl !== 'id3') {
+            f.thumbnailUrl = m.thumbnailUrl;
+          }
+        });
+      }
+
       const activeSong = Player.getCurrentTrack();
       UI.renderFolderContents(result.folders, result.files, activeSong?.id);
 
@@ -6411,8 +6430,14 @@ const App = (() => {
 
           await DB.setMeta(file.id, { id: file.id, ...patch });
           // Keep in-memory item cache fresh
-          _cacheItem({ ...file, folderId, ...(patch.artist ? { artist: patch.artist } : {}),
-                                           ...(patch.album  ? { album:  patch.album  } : {}) });
+          const newArtist = patch.artist || existing?.artist || null;
+          const newAlbum  = patch.album  || existing?.album  || null;
+          _cacheItem({ ...file, folderId, ...(newArtist ? { artist: newArtist } : {}),
+                                           ...(newAlbum  ? { album:  newAlbum  } : {}) });
+          // Update the visible Browse row immediately (artist · album in meta line)
+          if (_browseFolderId === folderId && (patch.artist || patch.album)) {
+            UI.updateBrowseSongMeta(file.id, newArtist, newAlbum);
+          }
           patched++;
         } catch (_) {}
 
@@ -6422,6 +6447,14 @@ const App = (() => {
 
       if (patched === 0) return;
       console.log(`[SoftScan] ${folderId}: patched ${patched} file(s)`);
+
+      // Re-apply cover thumbnails to the visible Browse rows.
+      // _prefetchAndApplyFolderCovers ran before soft scan started, so any coverBlob
+      // that was just extracted and saved to DB was missed. Re-run (non-force) so
+      // those covers appear immediately without needing to re-enter the folder.
+      if (_browseFolderId === folderId && _browseFiles.length > 0) {
+        _prefetchAndApplyFolderCovers(folderId, _browseFiles, false).catch(() => {});
+      }
 
       // Rebuild collection cache — new artist data may change classification.
       // _refreshCollectionCache now auto-refreshes the Collections tab if new IDs appear.

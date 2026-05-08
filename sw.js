@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '1.8.6';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.8.6 — restore scroll position in Browse and Artists on Back navigation
+const APP_VERSION  = '1.8.8';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.8.8 — Browse song rows show Artist · Album; soft scan patches rows in real time
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

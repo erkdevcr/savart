@@ -1418,6 +1418,27 @@ const UI = (() => {
   }
 
   /**
+   * Patch the artist/album meta text of an already-rendered Browse song row.
+   * Called after soft scan fills in metadata so the row updates without re-render.
+   * @param {string} fileId
+   * @param {string|null} artist
+   * @param {string|null} album
+   */
+  function updateBrowseSongMeta(fileId, artist, album) {
+    const screen = document.getElementById('screen-browse');
+    if (!screen) return;
+    const row = screen.querySelector(`.song-row[data-id="${CSS.escape(fileId)}"]`);
+    if (!row) return;
+    const metaEl = row.querySelector('.song-row-meta');
+    if (!metaEl) return;
+    const _artist = (artist || '').split(';')[0].trim();
+    const _album  = (album  || '').trim();
+    if (_artist || _album) {
+      metaEl.textContent = [_artist, _album].filter(Boolean).join(' · ');
+    }
+  }
+
+  /**
    * Patch the type chip of an already-rendered browse folder row without
    * re-rendering the whole list. Called immediately after a Move action.
    * @param {string} folderId
@@ -1514,12 +1535,16 @@ const UI = (() => {
     row.className = 'song-row' + (isActive ? ' active' : '') + (file.isWma ? ' wma' : '');
     row.dataset.id = file.id;
 
-    // Build metadata string: "8.4 MB · MP3" or "Formato no compatible"
-    const _ext  = (file.name || '').split('.').pop().toUpperCase();
-    const _size = file.size ? formatBytes(parseInt(file.size, 10)) : '';
+    // Build metadata string: "Artist · Album" if available, else "8.4 MB · MP3"
+    const _ext    = (file.name || '').split('.').pop().toUpperCase();
+    const _size   = file.size ? formatBytes(parseInt(file.size, 10)) : '';
+    const _artist = (file.artist || '').split(';')[0].trim(); // strip collaborators
+    const _album  = (file.album  || '').trim();
     const _meta = file.isWma
       ? t('format_unsupported')
-      : [_size, _ext].filter(Boolean).join(' · ');
+      : (_artist || _album)
+        ? [_artist, _album].filter(Boolean).join(' · ')
+        : [_size, _ext].filter(Boolean).join(' · ');
 
     row.innerHTML = `
       <div class="song-thumb">
@@ -3900,6 +3925,7 @@ const UI = (() => {
     renderBreadcrumb,
     renderFolderContents,
     updateBrowseFolderChip,
+    updateBrowseSongMeta,
     setActiveSongRow,
     showLoading,
     // Library
