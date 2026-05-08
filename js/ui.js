@@ -1433,6 +1433,36 @@ const UI = (() => {
   }
 
   /**
+   * Update the thumbnail image of an already-rendered Browse song row.
+   * Called from _onBlobReady when a fresh ID3 cover is found during playback,
+   * so the list stays in sync with the player cover.
+   * @param {string} fileId
+   * @param {string} coverUrl  — object URL from Meta.parse / Meta.injectCover
+   */
+  function updateBrowseSongThumb(fileId, coverUrl) {
+    const screen = document.getElementById('screen-browse');
+    if (!screen) return;
+    const row = screen.querySelector(`.song-row[data-id="${CSS.escape(fileId)}"]`);
+    if (!row) return;
+    const thumb = row.querySelector('.song-thumb');
+    if (!thumb) return;
+    let img = thumb.querySelector('img');
+    if (img) {
+      img.src = coverUrl;
+    } else {
+      // Replace placeholder with a real image
+      const placeholder = thumb.querySelector('.thumb-placeholder');
+      if (placeholder) {
+        img = document.createElement('img');
+        img.alt = '';
+        img.loading = 'lazy';
+        img.src = coverUrl;
+        placeholder.replaceWith(img);
+      }
+    }
+  }
+
+  /**
    * Patch the title, artist/album lines of an already-rendered Browse song row.
    * File size/format lives in .song-row-fileinfo and is never touched here.
    * @param {string}      fileId
@@ -3978,6 +4008,7 @@ const UI = (() => {
     updateBrowseHeaderChip,
     markBrowseSongScanning,
     updateBrowseSongMeta,
+    updateBrowseSongThumb,
     setActiveSongRow,
     showLoading,
     // Library

@@ -985,8 +985,11 @@ const App = (() => {
       // Persist embedded cover blob immediately — playlists/favorites can use it
       // across sessions without re-parsing the file.
       // Skip if the user has manually set a custom cover (manualAt > 0).
+      // Also stamp thumbnailUrl:'id3' so the list row uses the fresh blob
+      // instead of a stale Google Drive CDN thumbnail.
       if (meta?.coverBlob && !playManual) {
-        DB.setMeta(item.id, { coverBlob: meta.coverBlob }).catch(() => {});
+        DB.setMeta(item.id, { coverBlob: meta.coverBlob, thumbnailUrl: 'id3' }).catch(() => {});
+        if (meta.coverUrl) UI.updateBrowseSongThumb?.(item.id, meta.coverUrl);
       }
 
       /* ── PASS 1 — IDENTIFICATION ──────────────────────────────
