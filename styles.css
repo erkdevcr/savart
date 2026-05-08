@@ -6124,9 +6124,18 @@ body.queue-open #mini-player { z-index: 65; }
   flex-direction: column;
   gap: 2px;
 }
-/* In Browse the legend is pushed to the far right of the action bar */
-.dot-legend--browse {
+/* sort+rescan+legend group: pinned to the right, never squeezed by other flex children */
+#browse-action-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   margin-left: auto;
+  flex-shrink: 0;
+}
+/* Legend inside the right group — no extra margin needed */
+.dot-legend--browse {
+  margin-left: 0;
+  flex-shrink: 0;
 }
 /* In album detail back-row the legend sits after the rescan button */
 .dot-legend--album-back {
