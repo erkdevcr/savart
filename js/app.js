@@ -958,7 +958,19 @@ const App = (() => {
   async function _onBlobReady(item, blob) {
     if (typeof Meta === 'undefined') return;
     try {
-      const meta = await Meta.parse(item.id, blob);
+      let meta = await Meta.parse(item.id, blob);
+
+      // If Meta.parse returned from cache (e.g. soft scan parsed a 1MB head) with no
+      // coverUrl, try the DB coverBlob — soft scan saves it even when the image frame
+      // was too large for the head. Meta.injectCover creates the object URL and updates
+      // the session cache so subsequent lookups also find it.
+      if (!meta.coverUrl) {
+        const dbCover = await DB.getMeta(item.id).catch(() => null);
+        if (dbCover?.coverBlob) {
+          const injected = Meta.injectCover(item.id, dbCover.coverBlob);
+          if (injected) meta = { ...meta, coverUrl: injected };
+        }
+      }
 
       // Cache blob.size so _enrichTrack can always provide it
       if (blob.size > 0) {
