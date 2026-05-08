@@ -1402,8 +1402,8 @@ const UI = (() => {
       return;
     }
 
-    // Folders
-    folders.forEach(folder => list.appendChild(_buildFolderRow(folder)));
+    // Folders — numbered from 1
+    folders.forEach((folder, i) => list.appendChild(_buildFolderRow(folder, i + 1)));
 
     // Section label if both folders and files
     if (folders.length > 0 && files.length > 0) {
@@ -1413,8 +1413,9 @@ const UI = (() => {
       list.appendChild(label);
     }
 
-    // Files
-    files.forEach(file => list.appendChild(_buildSongRow(file, file.id === activeSongId)));
+    // Files — numbers continue from after the folders
+    const fileOffset = folders.length;
+    files.forEach((file, i) => list.appendChild(_buildSongRow(file, file.id === activeSongId, fileOffset + i + 1)));
   }
 
   /**
@@ -1523,7 +1524,7 @@ const UI = (() => {
     sub.prepend(chip);
   }
 
-  function _buildFolderRow(folder) {
+  function _buildFolderRow(folder, idx) {
     const row = document.createElement('div');
     row.className = 'folder-row';
     row.dataset.id = folder.id;
@@ -1540,7 +1541,10 @@ const UI = (() => {
       ? `<div class="folder-row-sub">${typeChip}${folder.songCount ? `${folder.songCount} ${t('songs').toLowerCase()}` : ''}</div>`
       : '';
 
+    const numHtml = idx != null ? `<span class="browse-item-num">${idx}</span>` : '';
+
     row.innerHTML = `
+      ${numHtml}
       <div class="folder-icon">
         ${iconFolder(22)}
         <span class="folder-rescan-dot" style="display:none"></span>
@@ -1573,7 +1577,7 @@ const UI = (() => {
     return row;
   }
 
-  function _buildSongRow(file, isActive = false) {
+  function _buildSongRow(file, isActive = false, idx) {
     const row = document.createElement('div');
     row.className = 'song-row' + (isActive ? ' active' : '') + (file.isWma ? ' wma' : '');
     row.dataset.id = file.id;
@@ -1588,7 +1592,10 @@ const UI = (() => {
     const _album    = (file.album  || '').trim();
     const _meta     = [_artist, _album].filter(Boolean).join(' · ');
 
+    const numHtml = idx != null ? `<span class="browse-item-num">${idx}</span>` : '';
+
     row.innerHTML = `
+      ${numHtml}
       <div class="song-thumb">
         ${file.thumbnailUrl
           ? `<img src="${file.thumbnailUrl}" alt="" loading="lazy">`

@@ -1117,6 +1117,19 @@ img { display: block; }
   color: var(--text-secondary);
 }
 
+/* Browse item number (folders + songs) */
+.browse-item-num {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-disabled);
+  width: 22px;
+  min-width: 22px;
+  text-align: right;
+  flex-shrink: 0;
+  line-height: 1;
+  padding-top: 2px; /* align with first text line */
+}
+
 /* Song row */
 .song-row {
   display: flex;

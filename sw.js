@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '1.9.9';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.9.9 — scroll restore on Back in Collections; 1.9.5 — soft scan head increased 256KB→1MB so ID3 artist/album/title survive large embedded covers
+const APP_VERSION  = '2.0.0';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.0.0 — sequential item numbers on Browse folders and files
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
