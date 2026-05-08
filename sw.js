@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '1.8.8';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.8.8 — Browse song rows show Artist · Album; soft scan patches rows in real time
+const APP_VERSION  = '1.8.9';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.8.9 — soft scan shows row-by-row progress ("Leyendo…"); meta shows Artist · Album · size · format
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

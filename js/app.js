@@ -6405,16 +6405,33 @@ const App = (() => {
       let patched = 0;
 
       for (const file of candidates) {
+        // Show "Leyendo…" on this row immediately so the user sees progress one by one
+        if (_browseFolderId === folderId) UI.markBrowseSongScanning(file.id);
+
         try {
           const existing = existingMap.get(file.id) || null;
 
           // Use cached blob (from prior play) or fetch just the first 256 KB
           let blob = await DB.getCachedBlob(file.id).catch(() => null);
           if (!blob) blob = await Drive.downloadFileHead(file.id, 256 * 1024).catch(() => null);
-          if (!blob) continue;
+
+          // Always call updateBrowseSongMeta at the end to clear "Leyendo…" indicator,
+          // even if we couldn't fetch the blob or nothing changed.
+          const existing2 = existingMap.get(file.id) || null; // re-read (may have been updated)
+
+          if (!blob) {
+            if (_browseFolderId === folderId)
+              UI.updateBrowseSongMeta(file.id, existing2?.artist || null, existing2?.album || null);
+            continue;
+          }
 
           const parsed = await Meta.parse(file.id, blob).catch(() => null);
-          if (!parsed) continue;
+
+          if (!parsed) {
+            if (_browseFolderId === folderId)
+              UI.updateBrowseSongMeta(file.id, existing2?.artist || null, existing2?.album || null);
+            continue;
+          }
 
           const patch = {};
           if (parsed.artist && !existing?.artist) patch.artist = parsed.artist;
@@ -6426,23 +6443,30 @@ const App = (() => {
             if (!existing?.thumbnailUrl) patch.thumbnailUrl = 'id3';
           }
 
-          if (Object.keys(patch).length === 0) continue;
-
-          await DB.setMeta(file.id, { id: file.id, ...patch });
-          // Keep in-memory item cache fresh
           const newArtist = patch.artist || existing?.artist || null;
           const newAlbum  = patch.album  || existing?.album  || null;
-          _cacheItem({ ...file, folderId, ...(newArtist ? { artist: newArtist } : {}),
-                                           ...(newAlbum  ? { album:  newAlbum  } : {}) });
-          // Update the visible Browse row immediately (artist · album in meta line)
-          if (_browseFolderId === folderId && (patch.artist || patch.album)) {
+
+          if (Object.keys(patch).length > 0) {
+            await DB.setMeta(file.id, { id: file.id, ...patch });
+            // Keep in-memory item cache fresh
+            _cacheItem({ ...file, folderId, ...(newArtist ? { artist: newArtist } : {}),
+                                             ...(newAlbum  ? { album:  newAlbum  } : {}) });
+            patched++;
+          }
+
+          // Update the visible Browse row — clears "Leyendo…" and shows final metadata
+          if (_browseFolderId === folderId) {
             UI.updateBrowseSongMeta(file.id, newArtist, newAlbum);
           }
-          patched++;
-        } catch (_) {}
+        } catch (_) {
+          // On error, clear the scanning indicator with whatever data exists
+          const fallback = existingMap.get(file.id) || null;
+          if (_browseFolderId === folderId)
+            UI.updateBrowseSongMeta(file.id, fallback?.artist || null, fallback?.album || null);
+        }
 
         // Yield between files — soft scan must never disrupt playback
-        await new Promise(r => setTimeout(r, 30));
+        await new Promise(r => setTimeout(r, 50));
       }
 
       if (patched === 0) return;

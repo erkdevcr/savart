@@ -1418,7 +1418,26 @@ const UI = (() => {
   }
 
   /**
+   * Show a subtle "Leyendo…" indicator on a Browse song row while soft scan
+   * is fetching/parsing it. Cleared by updateBrowseSongMeta when done.
+   * @param {string} fileId
+   */
+  function markBrowseSongScanning(fileId) {
+    const screen = document.getElementById('screen-browse');
+    if (!screen) return;
+    const row = screen.querySelector(`.song-row[data-id="${CSS.escape(fileId)}"]`);
+    if (!row) return;
+    const metaEl = row.querySelector('.song-row-meta');
+    if (!metaEl) return;
+    metaEl.dataset.scanning = '1';
+    // Prepend scanning indicator before the file info
+    const fileInfo = metaEl.dataset.fileInfo || '';
+    metaEl.textContent = ['Leyendo…', fileInfo].filter(Boolean).join(' · ');
+  }
+
+  /**
    * Patch the artist/album meta text of an already-rendered Browse song row.
+   * Also restores file size/format from data-file-info attribute.
    * Called after soft scan fills in metadata so the row updates without re-render.
    * @param {string} fileId
    * @param {string|null} artist
@@ -1431,11 +1450,11 @@ const UI = (() => {
     if (!row) return;
     const metaEl = row.querySelector('.song-row-meta');
     if (!metaEl) return;
-    const _artist = (artist || '').split(';')[0].trim();
-    const _album  = (album  || '').trim();
-    if (_artist || _album) {
-      metaEl.textContent = [_artist, _album].filter(Boolean).join(' · ');
-    }
+    delete metaEl.dataset.scanning;
+    const _artist   = (artist || '').split(';')[0].trim();
+    const _album    = (album  || '').trim();
+    const _fileInfo = metaEl.dataset.fileInfo || '';
+    metaEl.textContent = [_artist, _album, _fileInfo].filter(Boolean).join(' · ');
   }
 
   /**
@@ -1535,16 +1554,16 @@ const UI = (() => {
     row.className = 'song-row' + (isActive ? ' active' : '') + (file.isWma ? ' wma' : '');
     row.dataset.id = file.id;
 
-    // Build metadata string: "Artist · Album" if available, else "8.4 MB · MP3"
-    const _ext    = (file.name || '').split('.').pop().toUpperCase();
-    const _size   = file.size ? formatBytes(parseInt(file.size, 10)) : '';
-    const _artist = (file.artist || '').split(';')[0].trim(); // strip collaborators
-    const _album  = (file.album  || '').trim();
+    // Build metadata string: "Artist · Album · 8.4 MB · MP3"
+    // Size/format always shown; artist/album prepended when available.
+    const _ext      = (file.name || '').split('.').pop().toUpperCase();
+    const _size     = file.size ? formatBytes(parseInt(file.size, 10)) : '';
+    const _fileInfo = [_size, _ext].filter(Boolean).join(' · ');
+    const _artist   = (file.artist || '').split(';')[0].trim(); // strip collaborators
+    const _album    = (file.album  || '').trim();
     const _meta = file.isWma
       ? t('format_unsupported')
-      : (_artist || _album)
-        ? [_artist, _album].filter(Boolean).join(' · ')
-        : [_size, _ext].filter(Boolean).join(' · ');
+      : [_artist, _album, _fileInfo].filter(Boolean).join(' · ');
 
     row.innerHTML = `
       <div class="song-thumb">
@@ -1561,7 +1580,7 @@ const UI = (() => {
       </div>
       <div class="song-row-info">
         <div class="song-row-title">${escHtml(file.displayName || file.name)}</div>
-        <div class="song-row-meta">${_meta}</div>
+        <div class="song-row-meta" data-file-info="${escHtml(_fileInfo)}">${escHtml(_meta)}</div>
       </div>
       ${file.isWma ? `<span class="wma-badge">WMA</span>` : ''}
       <button class="btn-more" aria-label="Más opciones" data-id="${escHtml(file.id)}">${iconDots()}</button>
@@ -3925,6 +3944,7 @@ const UI = (() => {
     renderBreadcrumb,
     renderFolderContents,
     updateBrowseFolderChip,
+    markBrowseSongScanning,
     updateBrowseSongMeta,
     setActiveSongRow,
     showLoading,
