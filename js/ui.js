@@ -3330,7 +3330,7 @@ const UI = (() => {
       if (isOpen) editPanel.querySelector('[data-field="name"]').focus();
     });
 
-    // "Aplicar a todas" — apply cover URL to all songs in folder that have no cover
+    // "Aplicar a todas" — apply cover URL to ALL songs in the collection (override existing)
     editPanel.querySelector('.album-edit-apply-btn').addEventListener('click', async () => {
       const coverUrl = editPanel.querySelector('[data-field="coverUrl"]').value.trim();
       if (!coverUrl || !folderId) return;
@@ -3338,16 +3338,41 @@ const UI = (() => {
       const orig = btn.textContent;
       btn.disabled = true; btn.textContent = '…';
       try {
-        const all         = await DB.getAllMeta();
-        const folderSongs = all.filter(m => m.folderId === folderId);
+        // Use songs already in scope; fall back to DB query if empty
+        let targets = songs.length > 0 ? songs : [];
+        if (targets.length === 0) {
+          const all = await DB.getAllMeta();
+          targets = all.filter(m => m.folderId === folderId);
+        }
+        // If still empty (unscanned collection) and Drive is available, seed minimal records
+        if (targets.length === 0 && typeof Drive !== 'undefined' && typeof Auth !== 'undefined' && Auth.getValidToken()) {
+          const driveResult = await Drive.listFolderAll(folderId).catch(() => null);
+          const audioFiles  = (driveResult?.files || []).filter(f =>
+            f.mimeType?.startsWith('audio/') ||
+            /\.(mp3|m4a|flac|ogg|wav|aac|opus)$/i.test(f.name || '')
+          );
+          for (const f of audioFiles) {
+            await DB.setMeta(f.id, { id: f.id, folderId, name: f.name || f.id, mimeType: f.mimeType || null }).catch(() => {});
+          }
+          const refreshed = await DB.getAllMeta();
+          targets = refreshed.filter(m => m.folderId === folderId);
+        }
+
+        // Apply to every target — no hasOwn guard, this is an intentional override
         let applied = 0;
-        for (const m of folderSongs) {
-          const hasOwn = (m.thumbnailUrl && !m.thumbnailUrl.startsWith('blob:')) || m.coverBlob;
-          if (!hasOwn) { await DB.setMeta(m.id, { thumbnailUrl: coverUrl }); applied++; }
+        for (const m of targets) {
+          await DB.setMeta(m.id, { thumbnailUrl: coverUrl }).catch(() => {});
+          applied++;
+          // Also update the thumbnail in the visible song row
+          const thumb = container.querySelector(`.top-list-item[data-id="${CSS.escape(m.id)}"] .top-list-thumb`);
+          if (thumb) thumb.innerHTML = `<img src="${escHtml(coverUrl)}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)">`;
         }
         btn.textContent = `✓ ${applied}`;
-        setTimeout(() => { btn.disabled = false; btn.textContent = orig; }, 2000);
-      } catch { btn.disabled = false; btn.textContent = orig; }
+        setTimeout(() => { btn.disabled = false; btn.textContent = orig; }, 2500);
+      } catch (err) {
+        console.warn('[apply-all cover]', err);
+        btn.disabled = false; btn.textContent = orig;
+      }
     });
 
     // Save → persist name + coverUrl to DB, update header in-place

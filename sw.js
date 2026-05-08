@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '1.7.93';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.93 — Collection header: fallback cover from songs; Cover URL pre-filled in edit panel
+const APP_VERSION  = '1.7.94';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.94 — Apply-to-all: remove hasOwn guard, always override; use songs in scope; update visible thumbs
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
