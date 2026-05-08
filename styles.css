@@ -2084,8 +2084,7 @@ img { display: block; }
   }
   .lib-artist-avatar {
     width: min(112px, 100%);
-    height: auto;
-    aspect-ratio: 1;
+    height: min(112px, 100%);
     font-size: 28px;
   }
   .lib-artist-name {
