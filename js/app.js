@@ -6409,9 +6409,14 @@ const App = (() => {
       console.log(`[SoftScan] ${folderId}: scanning ${candidates.length} candidates`);
       let patched = 0;
 
+      // Live artist set for real-time chip update — seed with artists already in DB
+      const liveArtistSet = new Set();
+      existingMap.forEach(m => { if (m.artist && !m.artistInferred) liveArtistSet.add(m.artist.split(';')[0].trim().toLowerCase()); });
+      const inBrowse = () => _browseFolderId === folderId;
+
       for (const file of candidates) {
         // Show "Leyendo…" on this row immediately so the user sees progress one by one
-        if (_browseFolderId === folderId) UI.markBrowseSongScanning(file.id);
+        if (inBrowse()) UI.markBrowseSongScanning(file.id);
 
         try {
           const existing = existingMap.get(file.id) || null;
@@ -6420,60 +6425,69 @@ const App = (() => {
           let blob = await DB.getCachedBlob(file.id).catch(() => null);
           if (!blob) blob = await Drive.downloadFileHead(file.id, 256 * 1024).catch(() => null);
 
-          // Always call updateBrowseSongMeta at the end to clear "Leyendo…" indicator,
-          // even if we couldn't fetch the blob or nothing changed.
-          const existing2 = existingMap.get(file.id) || null; // re-read (may have been updated)
-
           if (!blob) {
-            if (_browseFolderId === folderId)
-              UI.updateBrowseSongMeta(file.id, existing2?.artist || null, existing2?.album || null);
+            if (inBrowse()) UI.updateBrowseSongMeta(file.id, existing?.artist || null, existing?.album || null, null);
             continue;
           }
 
           const parsed = await Meta.parse(file.id, blob).catch(() => null);
 
           if (!parsed) {
-            if (_browseFolderId === folderId)
-              UI.updateBrowseSongMeta(file.id, existing2?.artist || null, existing2?.album || null);
+            if (inBrowse()) UI.updateBrowseSongMeta(file.id, existing?.artist || null, existing?.album || null, null);
             continue;
           }
 
           const patch = {};
-          // Allow ID3 artist to overwrite folder-name-inferred artist (artistInferred flag),
-          // but never overwrite a real enriched artist or a manually-edited one (manualAt).
+          // Title: update if missing or still just the raw filename
+          const currentDisplay = existing?.displayName || '';
+          const rawFilename    = cleanTitle ? cleanTitle(file.name) : file.name;
+          if (parsed.title && (!currentDisplay || currentDisplay === rawFilename) && !existing?.manualAt) {
+            patch.displayName = parsed.title;
+          }
+          // Artist: ID3 overwrites folder-name inference (artistInferred flag) but not manual edits
           const artistIsInferred = existing?.artistInferred === true;
           if (parsed.artist && (!existing?.artist || artistIsInferred) && !existing?.manualAt) {
-            patch.artist          = parsed.artist;
-            patch.artistInferred  = false; // clear the flag — now sourced from real ID3
+            patch.artist         = parsed.artist;
+            patch.artistInferred = false;
           }
           if (parsed.album  && !existing?.album)  patch.album  = parsed.album;
           if (parsed.year   && !existing?.year)   patch.year   = parsed.year;
           if (parsed.coverBlob && !existing?.coverBlob) {
-            patch.coverBlob   = parsed.coverBlob;
-            // Mark thumbnailUrl sentinel so other devices know to extract ID3 cover
+            patch.coverBlob = parsed.coverBlob;
             if (!existing?.thumbnailUrl) patch.thumbnailUrl = 'id3';
           }
 
-          const newArtist = patch.artist || existing?.artist || null;
-          const newAlbum  = patch.album  || existing?.album  || null;
+          const newArtist  = patch.artist      || existing?.artist      || null;
+          const newAlbum   = patch.album        || existing?.album       || null;
+          const newDisplay = patch.displayName  || existing?.displayName || null;
 
           if (Object.keys(patch).length > 0) {
             await DB.setMeta(file.id, { id: file.id, ...patch });
-            // Keep in-memory item cache fresh
-            _cacheItem({ ...file, folderId, ...(newArtist ? { artist: newArtist } : {}),
-                                             ...(newAlbum  ? { album:  newAlbum  } : {}) });
+            _cacheItem({ ...file, folderId,
+              ...(newArtist  ? { artist:      newArtist  } : {}),
+              ...(newAlbum   ? { album:       newAlbum   } : {}),
+              ...(newDisplay ? { displayName: newDisplay } : {}),
+            });
             patched++;
           }
 
-          // Update the visible Browse row — clears "Leyendo…" and shows final metadata
-          if (_browseFolderId === folderId) {
-            UI.updateBrowseSongMeta(file.id, newArtist, newAlbum);
+          // Update visible Browse row immediately — title, artist · album
+          if (inBrowse()) {
+            UI.updateBrowseSongMeta(file.id, newArtist, newAlbum, newDisplay);
           }
+
+          // Update live artist set and chip in real-time
+          if (newArtist) {
+            liveArtistSet.add(newArtist.split(';')[0].trim().toLowerCase());
+            if (inBrowse()) {
+              const chipType = liveArtistSet.size > 3 ? 'collection' : 'album';
+              UI.updateBrowseHeaderChip(chipType);
+            }
+          }
+
         } catch (_) {
-          // On error, clear the scanning indicator with whatever data exists
           const fallback = existingMap.get(file.id) || null;
-          if (_browseFolderId === folderId)
-            UI.updateBrowseSongMeta(file.id, fallback?.artist || null, fallback?.album || null);
+          if (inBrowse()) UI.updateBrowseSongMeta(file.id, fallback?.artist || null, fallback?.album || null, null);
         }
 
         // Yield between files — soft scan must never disrupt playback
@@ -6495,15 +6509,10 @@ const App = (() => {
       // _refreshCollectionCache now auto-refreshes the Collections tab if new IDs appear.
       await _refreshCollectionCache().catch(() => {});
 
-      // If this folder is now classified as a collection, upgrade its Browse chip
-      // immediately so the user sees the change without navigating away and back.
-      if (_collectionFolderIdsCache?.has(folderId)) {
-        const countEl = document.getElementById('browse-item-count');
-        const chip    = countEl?.querySelector('.folder-type-chip');
-        if (chip && !chip.classList.contains('folder-type-chip--collection')) {
-          chip.className   = 'folder-type-chip folder-type-chip--collection';
-          chip.textContent = typeof UI !== 'undefined' ? UI.t('lbl_collection') : 'Colección';
-        }
+      // Confirm final chip state based on authoritative cache (post-scan)
+      if (inBrowse()) {
+        const finalType = _collectionFolderIdsCache?.has(folderId) ? 'collection' : 'album';
+        UI.updateBrowseHeaderChip(finalType);
       }
 
       // Refresh visible library tab if open (not in a detail view)

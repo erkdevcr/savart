@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '1.9.2';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.9.2 — fix 3-line Browse row layout: align-items flex-start so all 3 lines are visible
+const APP_VERSION  = '1.9.3';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.9.3 — soft scan updates title+artist+album per row in real time; header chip updates live during scan
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

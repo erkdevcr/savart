@@ -1428,27 +1428,57 @@ const UI = (() => {
     const row = screen.querySelector(`.song-row[data-id="${CSS.escape(fileId)}"]`);
     if (!row) return;
     const metaEl = row.querySelector('.song-row-meta');
-    if (!metaEl) return;
-    metaEl.textContent = 'Leyendo…';
+    if (metaEl) metaEl.textContent = 'Leyendo…';
   }
 
   /**
-   * Patch the artist/album line of an already-rendered Browse song row.
+   * Patch the title, artist/album lines of an already-rendered Browse song row.
    * File size/format lives in .song-row-fileinfo and is never touched here.
-   * @param {string} fileId
+   * @param {string}      fileId
    * @param {string|null} artist
    * @param {string|null} album
+   * @param {string|null} [title]  — song title from ID3; updates .song-row-title if provided
    */
-  function updateBrowseSongMeta(fileId, artist, album) {
+  function updateBrowseSongMeta(fileId, artist, album, title) {
     const screen = document.getElementById('screen-browse');
     if (!screen) return;
     const row = screen.querySelector(`.song-row[data-id="${CSS.escape(fileId)}"]`);
     if (!row) return;
+    if (title) {
+      const titleEl = row.querySelector('.song-row-title');
+      if (titleEl) titleEl.textContent = title;
+    }
     const metaEl = row.querySelector('.song-row-meta');
     if (!metaEl) return;
     const _artist = (artist || '').split(';')[0].trim();
     const _album  = (album  || '').trim();
     metaEl.textContent = [_artist, _album].filter(Boolean).join(' · ');
+  }
+
+  /**
+   * Update the album/collection chip in the Browse header in real-time.
+   * @param {'album'|'collection'|null} type
+   */
+  function updateBrowseHeaderChip(type) {
+    const countEl = document.getElementById('browse-item-count');
+    if (!countEl) return;
+    let chip = countEl.querySelector('.folder-type-chip');
+    if (!type) {
+      chip?.remove();
+      return;
+    }
+    const isCollection = type === 'collection';
+    const newClass = isCollection
+      ? 'folder-type-chip folder-type-chip--collection'
+      : 'folder-type-chip folder-type-chip--album';
+    if (!chip) {
+      chip = document.createElement('span');
+      countEl.prepend(chip);
+    }
+    if (chip.className !== newClass) {
+      chip.className   = newClass;
+      chip.textContent = isCollection ? t('lbl_collection') : t('lbl_album_chip');
+    }
   }
 
   /**
@@ -3938,6 +3968,7 @@ const UI = (() => {
     renderBreadcrumb,
     renderFolderContents,
     updateBrowseFolderChip,
+    updateBrowseHeaderChip,
     markBrowseSongScanning,
     updateBrowseSongMeta,
     setActiveSongRow,
