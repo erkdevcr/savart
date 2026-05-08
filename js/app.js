@@ -6393,14 +6393,26 @@ const App = (() => {
       if (patched === 0) return;
       console.log(`[SoftScan] ${folderId}: patched ${patched} file(s)`);
 
-      // Rebuild collection cache — new artist data may change classification
+      // Rebuild collection cache — new artist data may change classification.
+      // _refreshCollectionCache now auto-refreshes the Collections tab if new IDs appear.
       await _refreshCollectionCache().catch(() => {});
+
+      // If this folder is now classified as a collection, upgrade its Browse chip
+      // immediately so the user sees the change without navigating away and back.
+      if (_collectionFolderIdsCache?.has(folderId)) {
+        const countEl = document.getElementById('browse-item-count');
+        const chip    = countEl?.querySelector('.folder-type-chip');
+        if (chip && !chip.classList.contains('folder-type-chip--collection')) {
+          chip.className   = 'folder-type-chip folder-type-chip--collection';
+          chip.textContent = typeof UI !== 'undefined' ? UI.t('lbl_collection') : 'Colección';
+        }
+      }
 
       // Refresh visible library tab if open (not in a detail view)
       if (!_libInDetail) {
-        if (_currentLibTab === 'albums')      _loadAlbums();
-        if (_currentLibTab === 'collections') _loadCollections();
-        if (_currentLibTab === 'artists')     _loadArtists();
+        if (_currentLibTab === 'albums')  _loadAlbums();
+        if (_currentLibTab === 'artists') _loadArtists();
+        // Collections tab is handled by _refreshCollectionCache above when new IDs appear
       }
 
       // Sync new metadata to other devices
