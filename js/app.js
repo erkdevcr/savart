@@ -3570,6 +3570,26 @@ const App = (() => {
   let _libScrollBeforeDetail = 0;    // .lib-detail scrollTop saved before drill-down
   const _libDetailPane = () => document.querySelector('#screen-library .lib-detail');
 
+  /**
+   * Restore .lib-detail scrollTop after re-rendering a paginated list.
+   * For paginated tabs (artists, albums) the first render only fills one page,
+   * so scrollTop gets clamped to 0. We retry up to ~1s while the
+   * IntersectionObserver loads more pages and content grows tall enough.
+   */
+  function _restoreLibScroll(savedScroll) {
+    if (savedScroll <= 0) return;
+    const libPane = _libDetailPane();
+    if (!libPane) return;
+    let tries = 0;
+    const attempt = () => {
+      libPane.scrollTop = savedScroll;
+      if (libPane.scrollTop >= savedScroll - 4) return; // reached target
+      if (++tries < 16) setTimeout(attempt, 60);        // retry while pages load
+    };
+    // Double rAF ensures the first page is laid out before first attempt
+    requestAnimationFrame(() => requestAnimationFrame(attempt));
+  }
+
   // ── Library pagination ────────────────────────────────────
   const LIB_PAGE_SIZE     = 40;
   let _libAllArtists      = [];   // full sorted list (source of truth)
@@ -3652,30 +3672,15 @@ const App = (() => {
     // Reload data — each loader re-applies the current search filter after render
     if (tab === 'artists') {
       const savedScroll = _libScrollBeforeDetail;
-      _loadArtists().then(() => {
-        if (savedScroll > 0) {
-          const libPane = _libDetailPane();
-          if (libPane) requestAnimationFrame(() => { libPane.scrollTop = savedScroll; });
-        }
-      }).catch(() => {});
+      _loadArtists().then(() => _restoreLibScroll(savedScroll)).catch(() => {});
     }
     if (tab === 'albums') {
       const savedScroll = _libScrollBeforeDetail;
-      _loadAlbums().then(() => {
-        if (savedScroll > 0) {
-          const libPane = _libDetailPane();
-          if (libPane) requestAnimationFrame(() => { libPane.scrollTop = savedScroll; });
-        }
-      }).catch(() => {});
+      _loadAlbums().then(() => _restoreLibScroll(savedScroll)).catch(() => {});
     }
     if (tab === 'collections') {
       const savedScroll = _libScrollBeforeDetail;
-      _loadCollections().then(() => {
-        if (savedScroll > 0) {
-          const libPane = _libDetailPane();
-          if (libPane) requestAnimationFrame(() => { libPane.scrollTop = savedScroll; });
-        }
-      }).catch(() => {});
+      _loadCollections().then(() => _restoreLibScroll(savedScroll)).catch(() => {});
     }
     if (tab === 'playlists')   _loadPlaylists();
   }
