@@ -3619,6 +3619,16 @@ body.queue-open #mini-player { z-index: 65; }
   transition: background 0.15s, color 0.15s;
 }
 .btn-sort-toggle:hover { background: var(--bg-hover); color: var(--text-primary); }
+/* Browse rescan scanning state — amber, same pattern as lib-rescan-btn.scanning */
+#btn-browse-rescan.scanning {
+  color: #e8a020;
+  border-color: rgba(232,160,32,0.45);
+  background: rgba(232,160,32,0.08);
+  cursor: pointer;
+}
+#btn-browse-rescan.scanning:hover { background: rgba(232,160,32,0.16); }
+@keyframes browse-rescan-spin { to { transform: rotate(360deg); } }
+#btn-browse-rescan.scanning #browse-rescan-icon { animation: browse-rescan-spin 1s linear infinite; }
 
 /* Rescan button — album detail header + browse action bar */
 .lib-rescan-btn {

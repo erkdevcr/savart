@@ -1365,6 +1365,7 @@ const App = (() => {
 
       let anyTrackFoundMB = false;
       for (const { file, title, artist, album, m } of mbQueue) {
+        if (_browseRescanAbort) break; // abort check — browse rescan was stopped
         try {
           const result = await MusicBrainz.lookup(file.id, title, artist, album);
           DB.setMeta(file.id, { mbTried: true }).catch(() => {});
@@ -1413,6 +1414,7 @@ const App = (() => {
     // Sequential at 1 req/s (Discogs unauthenticated rate limit is 25/min).
     if (typeof Discogs !== 'undefined') {
       for (const file of files) {
+        if (_browseRescanAbort) break; // abort check
         try {
           const m = await DB.getMeta(file.id).catch(() => null);
           // Never overwrite a manually set cover
@@ -1594,10 +1596,12 @@ const App = (() => {
     // Last resort: identifies songs with no metadata at all from their audio content.
     // Limited per folder open to conserve daily quota (CONFIG.AUDD_MAX_PER_FOLDER).
     if (typeof Audd === 'undefined') return;
+    if (_browseRescanAbort) return; // abort check
     const auddCandidates = files.filter(file => !_rowHasCover(file.id));
     if (auddCandidates.length === 0) return;
     const auddLimit = Math.min(auddCandidates.length, CONFIG.AUDD_MAX_PER_FOLDER || 5);
     for (let i = 0; i < auddLimit; i++) {
+      if (_browseRescanAbort) break; // abort check
       const file = auddCandidates[i];
       try {
         const dbMeta = await DB.getMeta(file.id);
@@ -2099,7 +2103,16 @@ const App = (() => {
    */
   async function onBrowseRescan() {
     if (!_browseFiles.length) return;
-    if (_browseRescanRunning) return; // prevent double-tap while running
+
+    // Second tap while running → abort
+    if (_browseRescanRunning) {
+      _browseRescanAbort = true;
+      const btn  = document.getElementById('btn-browse-rescan');
+      const span = btn?.querySelector('span');
+      if (span) span.textContent = UI.t('rescan_stop_btn') + '…';
+      if (btn)  btn.disabled = true; // prevent further taps while stopping
+      return;
+    }
 
     // ── Check for manual edits and warn before proceeding ──────────────────
     const manualFiles = await _getManualFiles(_browseFiles);
@@ -2113,9 +2126,13 @@ const App = (() => {
     }
 
     _browseRescanRunning = true;
+    _browseRescanAbort   = false;
     const btn  = document.getElementById('btn-browse-rescan');
+    const span = btn?.querySelector('span');
     const icon = document.getElementById('browse-rescan-icon');
-    if (btn)  btn.disabled = true;
+    // Keep button enabled so a second tap can abort; swap label to "Detener"
+    if (btn)  { btn.disabled = false; btn.classList.add('scanning'); }
+    if (span) span.textContent = UI.t('rescan_stop_btn');
     if (icon) icon.style.animation = 'spin 1s linear infinite';
     try {
       UI.showToast(UI.t('toast_rescan_folder'));
@@ -2143,6 +2160,12 @@ const App = (() => {
       }));
       if (_browseFolderId) _folderCoverCache.delete(_browseFolderId);
       await _prefetchAndApplyFolderCovers(_browseFolderId, _browseFiles, true); // force=true
+
+      if (_browseRescanAbort) {
+        UI.showToast(UI.t('toast_rescan_stopped'));
+        return;
+      }
+
       // Mark folder as rescanned BEFORE pushHot so rescannedAt syncs in the hot delta
       if (_browseFolderId) {
         await DB.setMeta(_browseFolderId, { rescannedAt: Date.now() }).catch(() => {});
@@ -2165,7 +2188,9 @@ const App = (() => {
       }
     } finally {
       _browseRescanRunning = false;
-      if (btn)  btn.disabled = false;
+      _browseRescanAbort   = false;
+      if (btn)  { btn.disabled = false; btn.classList.remove('scanning'); }
+      if (span) span.textContent = UI.t('rescan_btn');
       if (icon) icon.style.animation = '';
     }
   }
