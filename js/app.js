@@ -20,6 +20,7 @@ const App = (() => {
   let _rootFolderId    = 'root';
   let _browseFolderId  = null;  // current open folder id (for rescan)
   let _browseFiles     = [];    // current open folder audio files (for rescan)
+  const _browseScrollMap = new Map(); // folderId → scrollTop, restored on Back
 
   /* ── Folder cover art cache ──────────────────────────────── */
   // folderId → object URL string | null (null = no image found)
@@ -2923,6 +2924,13 @@ const App = (() => {
   async function _openFolder(folder, appendToBreadcrumb = true) {
     UI.showView('browse');
 
+    // Save current scroll position before leaving this folder (forward navigation).
+    // On back navigation (appendToBreadcrumb = false) we restore it after render.
+    if (appendToBreadcrumb && _browseFolderId) {
+      const browseScreen = document.getElementById('screen-browse');
+      if (browseScreen) _browseScrollMap.set(_browseFolderId, browseScreen.scrollTop);
+    }
+
     // If the browse search is active (user navigated from search results),
     // clear it so the folder contents are not hidden behind #search-results.
     const searchInp = document.getElementById('search-input');
@@ -2991,6 +2999,18 @@ const App = (() => {
 
       const activeSong = Player.getCurrentTrack();
       UI.renderFolderContents(result.folders, result.files, activeSong?.id);
+
+      // Restore scroll position when navigating back (appendToBreadcrumb = false)
+      if (!appendToBreadcrumb) {
+        const savedScroll = _browseScrollMap.get(folder.id);
+        if (savedScroll != null) {
+          const browseScreen = document.getElementById('screen-browse');
+          if (browseScreen) {
+            requestAnimationFrame(() => { browseScreen.scrollTop = savedScroll; });
+          }
+        }
+      }
+
       if (result.folders.length > 0) _patchFolderDots(result.folders).catch(() => {});
 
       // Lightweight movement reconciliation (fire-and-forget):
@@ -3513,6 +3533,7 @@ const App = (() => {
 
   let _currentLibTab  = 'albums'; // persists tab across sync refreshes
   let _libInDetail    = false;       // true while showing an artist/album drill-down
+  let _libScrollBeforeDetail = 0;    // #screen-library scrollTop saved before drill-down
 
   // ── Library pagination ────────────────────────────────────
   const LIB_PAGE_SIZE     = 40;
@@ -3594,7 +3615,16 @@ const App = (() => {
     UI.setLibSearchPlaceholder(LIB_TAB_PLACEHOLDERS[tab] || 'Buscar…');
 
     // Reload data — each loader re-applies the current search filter after render
-    if (tab === 'artists')     { _loadArtists();     setTimeout(_scanLibraryBackground, 400); }
+    if (tab === 'artists') {
+      const savedScroll = _libScrollBeforeDetail;
+      _loadArtists().then(() => {
+        if (savedScroll > 0) {
+          const libScreen = document.getElementById('screen-library');
+          if (libScreen) requestAnimationFrame(() => { libScreen.scrollTop = savedScroll; });
+        }
+      }).catch(() => {});
+      setTimeout(_scanLibraryBackground, 400);
+    }
     if (tab === 'albums')      { _loadAlbums();      setTimeout(_scanLibraryBackground, 400); }
     if (tab === 'collections') _loadCollections();
     if (tab === 'playlists')   _loadPlaylists();
@@ -7133,6 +7163,9 @@ const App = (() => {
    * Show albums for a given artist (drill-down from artist grid).
    */
   async function onArtistClick(artist) {
+    // Save scroll position of the library screen before drilling into artist detail
+    const libScreen = document.getElementById('screen-library');
+    if (libScreen) _libScrollBeforeDetail = libScreen.scrollTop;
     try {
       const all = await DB.getAllMeta();
       const artistKey = artist.name.toLowerCase();
