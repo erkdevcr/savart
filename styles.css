@@ -1209,6 +1209,15 @@ img { display: block; }
   margin-top: 2px;
 }
 
+.song-row-fileinfo {
+  font-size: 10px;
+  color: var(--text-disabled);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 1px;
+}
+
 .wma-badge {
   font-size: 9px;
   font-weight: 500;

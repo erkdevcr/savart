@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '1.9.0';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.9.0 — fix: soft scan now overwrites folder-inferred artist with real ID3 artist (artistInferred flag)
+const APP_VERSION  = '1.9.1';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.9.1 — Browse rows: 3-line layout (title / artist·album / size·format)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

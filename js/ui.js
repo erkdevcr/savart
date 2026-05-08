@@ -1429,16 +1429,12 @@ const UI = (() => {
     if (!row) return;
     const metaEl = row.querySelector('.song-row-meta');
     if (!metaEl) return;
-    metaEl.dataset.scanning = '1';
-    // Prepend scanning indicator before the file info
-    const fileInfo = metaEl.dataset.fileInfo || '';
-    metaEl.textContent = ['Leyendo…', fileInfo].filter(Boolean).join(' · ');
+    metaEl.textContent = 'Leyendo…';
   }
 
   /**
-   * Patch the artist/album meta text of an already-rendered Browse song row.
-   * Also restores file size/format from data-file-info attribute.
-   * Called after soft scan fills in metadata so the row updates without re-render.
+   * Patch the artist/album line of an already-rendered Browse song row.
+   * File size/format lives in .song-row-fileinfo and is never touched here.
    * @param {string} fileId
    * @param {string|null} artist
    * @param {string|null} album
@@ -1450,11 +1446,9 @@ const UI = (() => {
     if (!row) return;
     const metaEl = row.querySelector('.song-row-meta');
     if (!metaEl) return;
-    delete metaEl.dataset.scanning;
-    const _artist   = (artist || '').split(';')[0].trim();
-    const _album    = (album  || '').trim();
-    const _fileInfo = metaEl.dataset.fileInfo || '';
-    metaEl.textContent = [_artist, _album, _fileInfo].filter(Boolean).join(' · ');
+    const _artist = (artist || '').split(';')[0].trim();
+    const _album  = (album  || '').trim();
+    metaEl.textContent = [_artist, _album].filter(Boolean).join(' · ');
   }
 
   /**
@@ -1554,16 +1548,15 @@ const UI = (() => {
     row.className = 'song-row' + (isActive ? ' active' : '') + (file.isWma ? ' wma' : '');
     row.dataset.id = file.id;
 
-    // Build metadata string: "Artist · Album · 8.4 MB · MP3"
-    // Size/format always shown; artist/album prepended when available.
+    // Three-line layout: title / artist · album / size · format
     const _ext      = (file.name || '').split('.').pop().toUpperCase();
     const _size     = file.size ? formatBytes(parseInt(file.size, 10)) : '';
-    const _fileInfo = [_size, _ext].filter(Boolean).join(' · ');
+    const _fileInfo = file.isWma
+      ? t('format_unsupported')
+      : [_size, _ext].filter(Boolean).join(' · ');
     const _artist   = (file.artist || '').split(';')[0].trim(); // strip collaborators
     const _album    = (file.album  || '').trim();
-    const _meta = file.isWma
-      ? t('format_unsupported')
-      : [_artist, _album, _fileInfo].filter(Boolean).join(' · ');
+    const _meta     = [_artist, _album].filter(Boolean).join(' · ');
 
     row.innerHTML = `
       <div class="song-thumb">
@@ -1580,7 +1573,8 @@ const UI = (() => {
       </div>
       <div class="song-row-info">
         <div class="song-row-title">${escHtml(file.displayName || file.name)}</div>
-        <div class="song-row-meta" data-file-info="${escHtml(_fileInfo)}">${escHtml(_meta)}</div>
+        <div class="song-row-meta">${escHtml(_meta)}</div>
+        <div class="song-row-fileinfo">${escHtml(_fileInfo)}</div>
       </div>
       ${file.isWma ? `<span class="wma-badge">WMA</span>` : ''}
       <button class="btn-more" aria-label="Más opciones" data-id="${escHtml(file.id)}">${iconDots()}</button>
