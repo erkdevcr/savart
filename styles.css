@@ -1648,6 +1648,15 @@ img { display: block; }
 .lib-rescan-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 @keyframes lib-rescan-spin { to { transform: rotate(360deg); } }
 .lib-rescan-btn.spinning #lib-rescan-icon { animation: lib-rescan-spin 1s linear infinite; }
+/* While a scan is running: amber tint + spinning icon; tappable to stop */
+.lib-rescan-btn.scanning {
+  color: #e8a020;
+  border-color: rgba(232,160,32,0.45);
+  background: rgba(232,160,32,0.08);
+  cursor: pointer;
+}
+.lib-rescan-btn.scanning:hover { background: rgba(232,160,32,0.16); }
+.lib-rescan-btn.scanning #lib-rescan-icon { animation: lib-rescan-spin 1s linear infinite; }
 
 /* ── Library album card 3-dot: always fully visible ─────────── */
 .album-card-more {

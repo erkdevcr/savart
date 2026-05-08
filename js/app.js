@@ -1981,13 +1981,24 @@ const App = (() => {
      ────────────────────────────────────────────────────────── */
 
   let _libRescanRunning = false;
+  let _libRescanAbort   = false;
+  let _browseRescanRunning = false;
+  let _browseRescanAbort   = false;
 
   /**
    * Collect visible album folder IDs from the current search results,
    * warn if any songs have manual edits, confirm, then run the rescan.
    */
   async function onLibRescan() {
-    if (_libRescanRunning) return;
+    // Second tap while running → abort
+    if (_libRescanRunning) {
+      _libRescanAbort = true;
+      const btn  = document.getElementById('btn-lib-rescan');
+      const span = btn?.querySelector('span');
+      if (span) span.textContent = UI.t('rescan_stop_btn') + '…';
+      if (btn)  btn.disabled = true; // prevent further taps while stopping
+      return;
+    }
 
     // Collect folder IDs of album cards currently visible
     const cards = document.querySelectorAll(
@@ -2019,15 +2030,21 @@ const App = (() => {
   async function _doLibRescan(folderIds) {
     if (_libRescanRunning) return;
     _libRescanRunning = true;
+    _libRescanAbort   = false;
 
     const btn  = document.getElementById('btn-lib-rescan');
+    const span = btn?.querySelector('span');
     const icon = document.getElementById('lib-rescan-icon');
-    if (btn)  { btn.disabled = true; btn.classList.add('spinning'); }
+    // Keep button enabled so a second tap can abort; swap label to "Detener"
+    if (btn)  { btn.disabled = false; btn.classList.add('scanning'); }
+    if (span) span.textContent = UI.t('rescan_stop_btn');
 
     UI.showToast(`${UI.t('toast_rescan_start').replace('…', '')} (${folderIds.length})…`);
 
-    let done = 0;
+    let done    = 0;
+    let aborted = false;
     for (const folderId of folderIds) {
+      if (_libRescanAbort) { aborted = true; break; }
       try {
         const page = await Drive.listFolderScan(folderId);
         const songs = page.audioFiles || [];
@@ -2055,15 +2072,21 @@ const App = (() => {
       }
     }
 
-    if (typeof Sync !== 'undefined') Sync.push('metadata');
-    _lfmThumbLibrary().catch(() => {});
-
     _libRescanRunning = false;
-    if (btn)  { btn.disabled = false; btn.classList.remove('spinning'); }
-    UI.showToast(`${UI.t('toast_rescan_done')} (${done})`);
+    _libRescanAbort   = false;
+    // Restore button to its original state
+    if (btn)  { btn.classList.remove('scanning'); }
+    if (span) span.textContent = UI.t('rescan_btn');
 
-    // Refresh albums grid so new data / covers appear immediately
-    _loadAlbums();
+    if (aborted) {
+      UI.showToast(UI.t('toast_rescan_stopped'));
+    } else {
+      if (typeof Sync !== 'undefined') Sync.push('metadata');
+      _lfmThumbLibrary().catch(() => {});
+      UI.showToast(`${UI.t('toast_rescan_done')} (${done})`);
+      // Refresh albums grid so new data / covers appear immediately
+      _loadAlbums();
+    }
   }
 
   /**
@@ -2076,6 +2099,7 @@ const App = (() => {
    */
   async function onBrowseRescan() {
     if (!_browseFiles.length) return;
+    if (_browseRescanRunning) return; // prevent double-tap while running
 
     // ── Check for manual edits and warn before proceeding ──────────────────
     const manualFiles = await _getManualFiles(_browseFiles);
@@ -2088,6 +2112,7 @@ const App = (() => {
       // Note: resetToVirgin below already clears manualAt — no separate clear needed
     }
 
+    _browseRescanRunning = true;
     const btn  = document.getElementById('btn-browse-rescan');
     const icon = document.getElementById('browse-rescan-icon');
     if (btn)  btn.disabled = true;
@@ -2139,6 +2164,7 @@ const App = (() => {
         if (_currentLibTab === 'artists') _loadArtists();
       }
     } finally {
+      _browseRescanRunning = false;
       if (btn)  btn.disabled = false;
       if (icon) icon.style.animation = '';
     }
