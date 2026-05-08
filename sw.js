@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '1.7.96';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.96 — Fast lib render: getAllMetaLight strips blobs; ID3 covers injected async post-render
+const APP_VERSION  = '1.7.97';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.97 — SW: skip cross-origin requests (Discogs CDN CORS fix)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
@@ -96,7 +96,15 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // App shell: Cache First (stale-while-revalidate style)
+  // Cross-origin requests (Discogs CDN, Last.fm, AudD, lrclib, etc.) must NOT
+  // be intercepted — their servers don't send CORS headers for SW fetch(),
+  // which causes the browser to block the request and throw a network error.
+  // The browser handles these directly without the service worker.
+  if (url.origin !== self.location.origin) {
+    return;
+  }
+
+  // App shell (same-origin only): Cache First
   event.respondWith(cacheFirst(event.request, CACHE_NAME));
 });
 
