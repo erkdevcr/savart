@@ -2096,6 +2096,11 @@ img { display: block; }
     overflow: hidden;
     padding: 8px 4px;
   }
+  .lib-artist-avatar-wrap {
+    width: 100%;          /* fill the grid column so the avatar has a concrete parent */
+    display: flex;
+    justify-content: center;
+  }
   .lib-artist-avatar {
     width: min(112px, 100%);
     height: min(112px, 100%);
