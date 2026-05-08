@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '1.7.95';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.95 — Album grid: cards fill column width, art uses aspect-ratio:1 (no more left-edge gap)
+const APP_VERSION  = '1.7.96';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.96 — Fast lib render: getAllMetaLight strips blobs; ID3 covers injected async post-render
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

@@ -3167,6 +3167,7 @@ const UI = (() => {
     card.className = 'home-card';
     card.style.cursor = 'pointer';
     card.dataset.searchKey = norm(col.name);
+    if (col.folderId) card.dataset.folderId = col.folderId;
 
     // Cover: manual URL > mosaic > blob fallback > empty
     let artHtml;

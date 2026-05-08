@@ -256,6 +256,24 @@ const DB = (() => {
   }
 
   /**
+   * Like getAllMeta() but strips coverBlob from every record to avoid loading
+   * megabytes of image binary data during library listing.
+   * Records that had a coverBlob get a lightweight `hasCoverBlob: true` flag
+   * so callers can still detect which files have a persisted blob cover.
+   * @returns {Promise<Object[]>}
+   */
+  async function getAllMetaLight() {
+    const store = _tx('metadata');
+    const all   = await _promisify(store.getAll());
+    return (all || []).map(m => {
+      if (!m.coverBlob) return m;
+      // eslint-disable-next-line no-unused-vars
+      const { coverBlob, ...rest } = m;
+      return { ...rest, hasCoverBlob: true };
+    });
+  }
+
+  /**
    * Save or update metadata for a file.
    * Merges with existing metadata if present.
    * @param {string} fileId
@@ -1029,6 +1047,7 @@ const DB = (() => {
     // Metadata
     getMeta,
     getAllMeta,
+    getAllMetaLight,
     setMeta,
     incrementPlayCount,
     toggleStar,

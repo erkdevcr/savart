@@ -1795,6 +1795,36 @@ const App = (() => {
    * Uses a single getAllMeta() call to avoid N round-trips for large folder lists.
    * @param {Object[]} folders  — array of folder objects with .id
    */
+  /**
+   * After the album/collection grid is painted, fetch ID3 cover blobs one by one
+   * and inject them into cards that have no URL-based cover.
+   * This keeps the initial render fast — blobs are loaded on demand rather than
+   * being pulled into memory with getAllMeta().
+   *
+   * @param {Object[]} items  — album or collection objects with { folderId, blobId?, coverUrl?, mosaicUrls? }
+   */
+  async function _patchGridBlobCovers(items) {
+    const grid = document.querySelector('#lib-detail-content .lib-album-grid');
+    if (!grid || typeof Meta === 'undefined') return;
+    for (const item of items) {
+      const blobId = item.blobId;
+      if (!blobId) continue;
+      try {
+        const meta = await DB.getMeta(blobId);
+        if (!meta?.coverBlob) continue;
+        const url = Meta.injectCover(blobId, meta.coverBlob);
+        if (!url) continue;
+        // Find the card by folderId data attribute
+        const card  = Array.from(grid.querySelectorAll('.home-card'))
+          .find(c => c.dataset.folderId === item.folderId);
+        const artEl = card?.querySelector('.home-card-art');
+        if (artEl && !artEl.querySelector('img')) {
+          artEl.innerHTML = `<img src="${url}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-md)">`;
+        }
+      } catch (_) { /* non-fatal */ }
+    }
+  }
+
   async function _patchFolderDots(folders) {
     if (!folders.length) return;
     try {
@@ -6323,6 +6353,8 @@ const App = (() => {
     } else {
       UI.appendAlbums(batch);
     }
+    // Async-inject ID3 blob covers after this batch is painted
+    _patchGridBlobCovers(batch).catch(() => {});
 
     // If more items remain, attach an IntersectionObserver sentinel
     if (_libAlbumOffset < filtered.length) {
@@ -6530,7 +6562,7 @@ const App = (() => {
    */
   async function _buildFolderMap() {
     const [all, savedCols] = await Promise.all([
-      DB.getAllMeta(),
+      DB.getAllMetaLight(), // strips coverBlob binaries — fast bulk load
       DB.getAllCollections().catch(() => []),
     ]);
 
@@ -6564,8 +6596,7 @@ const App = (() => {
           formatCounts:   new Map(),
           coverUrlCounts: new Map(),
           coverUrlList:   [],
-          blobId:         null,
-          blobData:       null,
+          blobId:         null, // fileId of first song with coverBlob (blob loaded on demand)
           taggedCount:    0,
           hasManual:      false,
         });
@@ -6583,7 +6614,7 @@ const App = (() => {
           f.coverUrlList.push(m.thumbnailUrl);
         }
       }
-      if (!f.blobId && m.coverBlob) { f.blobId = m.id; f.blobData = m.coverBlob; }
+      if (!f.blobId && m.hasCoverBlob) f.blobId = m.id; // candidate for async blob cover
       if ((m.manualAt || 0) > 0) f.hasManual = true;
     });
 
@@ -6628,9 +6659,10 @@ const App = (() => {
         const hasManual   = !!(saved.manualAt) || f.hasManual || false;
         const manualCoverUrl = saved.coverUrl || null;
         const mosaicUrls     = f.coverUrlList.slice(0, 4);
-        const blobUrl = (!manualCoverUrl && mosaicUrls.length === 0 && f.blobId && f.blobData && typeof Meta !== 'undefined')
-          ? (Meta.injectCover(f.blobId, f.blobData) || null) : null;
-        collections.push({ folderId, name, manualCoverUrl, mosaicUrls, blobUrl,
+        // blobUrl is intentionally null here — injected async after render to avoid
+        // stalling the grid on megabytes of IndexedDB blob data.
+        const blobId = (!manualCoverUrl && mosaicUrls.length === 0) ? (f.blobId || null) : null;
+        collections.push({ folderId, name, manualCoverUrl, mosaicUrls, blobUrl: null, blobId,
           songCount, format, rescannedAt, hasManual,
           artistCount: f.artistCounts.size });
       });
@@ -6658,6 +6690,8 @@ const App = (() => {
       _setLibTabCount('collections', collections.length);
       UI.renderCollections(collections);
       _domFilterLibItems();
+      // Async-inject blob covers after the grid is painted (avoids pre-render stall)
+      _patchGridBlobCovers(collections).catch(() => {});
     } catch (err) {
       console.error('[App] Load collections error:', err);
     }
@@ -6858,13 +6892,12 @@ const App = (() => {
           const year      = _top(f.yearCounts);
           const format    = _top(f.formatCounts) || null;
           const songCount = Math.max(f.taggedCount, folderSongCount.get(f.folderId) || 0);
-          const coverUrl  = _top(f.coverUrlCounts)
-            || (f.blobId && f.blobData && typeof Meta !== 'undefined'
-                ? Meta.injectCover(f.blobId, f.blobData)
-                : null);
+          const coverUrl  = _top(f.coverUrlCounts) || null;
+          // blobId passed for async cover injection after render (no sync blob load here)
+          const blobId    = !coverUrl ? (f.blobId || null) : null;
           const rescannedAt = rescannedMap.get(f.folderId) || null;
           return { name, artist, artists, songCount, coverUrl, year, format,
-            folderId: f.folderId, rescannedAt, hasManual: f.hasManual };
+            folderId: f.folderId, rescannedAt, hasManual: f.hasManual, blobId };
         })
         .sort((a, b) => a.name.localeCompare(b.name));
 
