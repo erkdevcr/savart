@@ -385,11 +385,12 @@ const App = (() => {
       if (view === 'library') _setLibTab(_currentLibTab || 'albums');
       // Start live 3-second polling (Last-Write-Wins)
       Sync.startLiveSync(_onSyncDataChanged);
-      // Background collection scan — runs once per session, low priority.
-      // Delay 10 s so boot, sync, and home render all finish first.
-      setTimeout(() => _backgroundCollectionScan().catch(() => {}), 10_000);
     }).catch(() => {}).finally(() => {
       _hideBootToast();
+      // Background collection scan — runs once per session, low priority.
+      // Lives in .finally() so it fires whether Sync succeeds or fails.
+      // Delay 12 s to let boot, render and any in-flight enrichment settle first.
+      setTimeout(() => _backgroundCollectionScan().catch(() => {}), 12000);
     });
 
     // Auto-open Deep Scan if launched from "Abrir en pestaña"
@@ -6159,9 +6160,13 @@ const App = (() => {
 
   async function _backgroundCollectionScan() {
     if (_bgScanDone) return;
-    _bgScanDone = true;
     if (typeof Drive === 'undefined' || typeof DB === 'undefined') return;
-    if (!Auth.getValidToken()) return;
+    if (!Auth.getValidToken()) {
+      // Token not ready yet — retry once after 15 more seconds
+      setTimeout(() => _backgroundCollectionScan().catch(() => {}), 15000);
+      return;
+    }
+    _bgScanDone = true; // locked after confirming we can actually run
 
     console.log('[BgScan] Starting background collection scan…');
 
@@ -6206,17 +6211,32 @@ const App = (() => {
 
         newlyChecked.push(folderId);
 
-        // Extract artist from "Artist - Title.ext" filename pattern (no ID3 needed)
+        // ── Pass A: extract artist from "Artist - Title.ext" filename pattern ──
         const artists = new Set();
         for (const f of files) {
-          const base     = f.name.replace(/\.[^.]+$/, '').trim();
-          const dashIdx  = base.indexOf(' - ');
+          const base    = f.name.replace(/\.[^.]+$/, '').trim();
+          const dashIdx = base.indexOf(' - ');
           if (dashIdx > 1) {
             const candidate = base.slice(0, dashIdx)
-              .replace(/^\d+\.?\s*/, '')       // strip leading track number
-              .replace(/^track\s+\d+\s*/i, '') // strip "Track 01"
+              .replace(/^\d+\.?\s*/, '')
+              .replace(/^track\s+\d+\s*/i, '')
               .trim().toLowerCase();
             if (candidate.length >= 2) artists.add(candidate);
+          }
+        }
+
+        // ── Pass B: filename gave no artists → sample ID3 of up to 5 files ──
+        // This handles collections whose files don't follow "Artist - Title.mp3".
+        if (artists.size === 0 && typeof Meta !== 'undefined') {
+          const sample = files.slice(0, 5);
+          for (const f of sample) {
+            try {
+              const blob   = await Drive.downloadFileHead(f.id, 64 * 1024).catch(() => null);
+              if (!blob) continue;
+              const parsed = await Meta.parse(f.id, blob).catch(() => null);
+              if (parsed?.artist) artists.add(parsed.artist.toLowerCase().trim());
+            } catch (_) {}
+            await new Promise(r => setTimeout(r, 100)); // 100 ms between ID3 reads
           }
         }
 
