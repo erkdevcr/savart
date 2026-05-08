@@ -6144,7 +6144,12 @@ const App = (() => {
       // and never overwrite fields the user manually edited (manualAt guard).
       const inferManual = (existing?.manualAt || 0) > 0;
       if (!existing?.album  && albumName      && !inferManual) patch.album  = albumName;
-      if (!existing?.artist && inferredArtist && !inferManual) patch.artist = inferredArtist;
+      // Only write inferred (folder-name) artist if there is no real artist yet.
+      // Mark it so soft scan / ID3 enrichment can overwrite it with the real value.
+      if (!existing?.artist && inferredArtist && !inferManual) {
+        patch.artist           = inferredArtist;
+        patch.artistInferred   = true;   // flag: came from folder name, not ID3/MB/Last.fm
+      }
       // Only persist STABLE external URLs (MB, Last.fm, AudD, CAA…).
       // Drive thumbnailLinks (lh*.googleusercontent.com) expire in hours and are
       // worthless on other devices — storing them would block _lfmThumbLibrary from
@@ -6434,7 +6439,13 @@ const App = (() => {
           }
 
           const patch = {};
-          if (parsed.artist && !existing?.artist) patch.artist = parsed.artist;
+          // Allow ID3 artist to overwrite folder-name-inferred artist (artistInferred flag),
+          // but never overwrite a real enriched artist or a manually-edited one (manualAt).
+          const artistIsInferred = existing?.artistInferred === true;
+          if (parsed.artist && (!existing?.artist || artistIsInferred) && !existing?.manualAt) {
+            patch.artist          = parsed.artist;
+            patch.artistInferred  = false; // clear the flag — now sourced from real ID3
+          }
           if (parsed.album  && !existing?.album)  patch.album  = parsed.album;
           if (parsed.year   && !existing?.year)   patch.year   = parsed.year;
           if (parsed.coverBlob && !existing?.coverBlob) {
