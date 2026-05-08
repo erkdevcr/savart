@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '1.7.97';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.97 — SW: skip cross-origin requests (Discogs CDN CORS fix)
+const APP_VERSION  = '1.7.98';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.98 — _cacheExternalCover: skip all cross-origin URLs (CORS fix for Discogs CDN and all external image hosts)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

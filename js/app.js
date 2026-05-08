@@ -3992,9 +3992,15 @@ const App = (() => {
       } catch (_) {}
       return;
     }
-    // Drive thumbnail URLs (lh3.googleusercontent.com/drive-storage/…) are CORS-blocked.
-    // They work fine as <img src> but cannot be fetch()ed cross-origin — skip caching them.
-    if (url.includes('lh3.googleusercontent.com') || url.includes('drive-storage')) return;
+    // Most external image CDNs do not send Access-Control-Allow-Origin headers,
+    // so fetch() is CORS-blocked even though <img src> loads them fine.
+    // Only attempt blob-caching for same-origin URLs or explicitly CORS-safe APIs.
+    // Known CORS-blocked: lh3.googleusercontent.com (Drive), i.discogs.com,
+    //   lastfm.freetls.fastly.net, staticflickr.com, and most image CDNs.
+    try {
+      const _u = new URL(url);
+      if (_u.origin !== window.location.origin) return; // cross-origin → use as <img src>, don't fetch
+    } catch (_) { return; } // malformed URL — skip
     try {
       if (!force) {
         const m = await DB.getMeta(id).catch(() => null);
