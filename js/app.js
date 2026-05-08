@@ -3656,8 +3656,25 @@ const App = (() => {
       }).catch(() => {});
       setTimeout(_scanLibraryBackground, 400);
     }
-    if (tab === 'albums')      { _loadAlbums();      setTimeout(_scanLibraryBackground, 400); }
-    if (tab === 'collections') _loadCollections();
+    if (tab === 'albums') {
+      const savedScroll = _libScrollBeforeDetail;
+      _loadAlbums().then(() => {
+        if (savedScroll > 0) {
+          const libScreen = document.getElementById('screen-library');
+          if (libScreen) requestAnimationFrame(() => { libScreen.scrollTop = savedScroll; });
+        }
+      }).catch(() => {});
+      setTimeout(_scanLibraryBackground, 400);
+    }
+    if (tab === 'collections') {
+      const savedScroll = _libScrollBeforeDetail;
+      _loadCollections().then(() => {
+        if (savedScroll > 0) {
+          const libScreen = document.getElementById('screen-library');
+          if (libScreen) requestAnimationFrame(() => { libScreen.scrollTop = savedScroll; });
+        }
+      }).catch(() => {});
+    }
     if (tab === 'playlists')   _loadPlaylists();
   }
 
@@ -7037,6 +7054,8 @@ const App = (() => {
 
   /** Drill into a collection's detail view. */
   async function onCollectionClick(collection) {
+    const libScreen = document.getElementById('screen-library');
+    if (libScreen) _libScrollBeforeDetail = libScreen.scrollTop;
     try {
       const all   = await DB.getAllMeta();
       const songs = all.filter(m => m.folderId === collection.folderId);
@@ -7328,6 +7347,9 @@ const App = (() => {
    * Show songs for a given album (drill-down from album grid or artist detail).
    */
   async function onAlbumClick(album, fromArtist) {
+    // Save scroll position of the library screen before drilling into album detail
+    const libScreen = document.getElementById('screen-library');
+    if (libScreen) _libScrollBeforeDetail = libScreen.scrollTop;
     try {
       const all = await DB.getAllMeta();
 
