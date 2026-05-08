@@ -6821,9 +6821,24 @@ const App = (() => {
       const { folderMap, folderSongCount, savedColMap } = await _buildFolderMap();
       const ids = new Set();
       folderMap.forEach(f => { if (_isCollectionFolder(f, savedColMap)) ids.add(f.folderId); });
+
+      // Detect new collection IDs that weren't in the previous cache.
+      // This happens when the user browses a folder and enrichment fills in
+      // artist tags — the folder now qualifies as a collection but the
+      // Collections tab was never told.
+      const prevCache = _collectionFolderIdsCache;
+      const hasNewCollections = prevCache !== null &&
+        [...ids].some(id => !prevCache.has(id));
+
       _collectionFolderIdsCache = ids;
       _allKnownFolderIdsCache   = new Set(folderSongCount.keys());
       _folderSongCountCache     = folderSongCount;
+
+      // Auto-refresh the Collections tab if it's currently visible and
+      // new collections just appeared (without the user having to re-click the tab).
+      if (hasNewCollections && _currentLibTab === 'collections' && !_libInDetail) {
+        _loadCollections();
+      }
     } catch (_) {}
   }
 
