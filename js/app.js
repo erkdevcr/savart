@@ -3288,6 +3288,13 @@ const App = (() => {
     Sync.push('pinned');
   }
 
+  async function onRemoveFromTopPlayed(item) {
+    // Reset playCount to 0 so the item drops out of getTopPlayed()
+    await DB.setMeta(item.id, { playCount: 0 }).catch(() => {});
+    UI.showToast(UI.t('toast_removed_top_played'));
+    _loadHomeData();
+  }
+
   async function onRemoveFromHistory(item) {
     await DB.removeRecent(item.id).catch(() => {});
     UI.showToast(UI.t('toast_removed_history'));
@@ -9428,6 +9435,7 @@ const App = (() => {
     onShowPlaylistPicker,
     onAddToPlaylist,
     onCreateAndAddPlaylist,
+    onRemoveFromTopPlayed,
     onRemoveFromHistory,
     onRemoveFromHistoryItem,
     // Nav

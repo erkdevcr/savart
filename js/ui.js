@@ -77,7 +77,8 @@ const UI = (() => {
       ctx_add_fav_folder: 'Añadir a favoritos',
       ctx_pin_to_home:    'Agregar a inicio',
       ctx_unpin_from_home:'Eliminar de inicio',
-      ctx_remove_from_pl: 'Eliminar de playlist',
+      ctx_remove_from_pl:    'Eliminar de playlist',
+      ctx_remove_top_played: 'Quitar de más reproducidas',
       ctx_rename:         'Renombrar',
       ctx_delete:         'Eliminar',
       ctx_remove_history: 'Borrar del historial',
@@ -181,7 +182,8 @@ const UI = (() => {
       toast_folder_open_error:  'No se pudo abrir la carpeta',
       toast_added_fav:          'Marcada como favorita ♥',
       toast_removed_fav:        'Quitada de favoritas',
-      toast_removed_history:    'Eliminado del historial',
+      toast_removed_history:       'Eliminado del historial',
+      toast_removed_top_played:    'Quitada de más reproducidas',
       toast_no_playable:        'No hay canciones reproducibles',
       toast_playlist_empty:     'Playlist vacía',
       toast_playlist_error:     'Error al abrir playlist',
@@ -375,7 +377,8 @@ const UI = (() => {
       ctx_add_fav_folder: 'Add to favorites',
       ctx_pin_to_home:    'Add to home',
       ctx_unpin_from_home:'Remove from home',
-      ctx_remove_from_pl: 'Remove from playlist',
+      ctx_remove_from_pl:    'Remove from playlist',
+      ctx_remove_top_played: 'Remove from most played',
       ctx_rename:         'Rename',
       ctx_delete:         'Delete',
       ctx_remove_history: 'Remove from history',
@@ -479,7 +482,8 @@ const UI = (() => {
       toast_folder_open_error:  'Could not open folder',
       toast_added_fav:          'Added to favorites ♥',
       toast_removed_fav:        'Removed from favorites',
-      toast_removed_history:    'Removed from history',
+      toast_removed_history:       'Removed from history',
+      toast_removed_top_played:    'Removed from most played',
       toast_no_playable:        'No playable songs',
       toast_playlist_empty:     'Empty playlist',
       toast_playlist_error:     'Error opening playlist',
@@ -1831,6 +1835,8 @@ const UI = (() => {
       );
       _addCtxItem(menu, iconPlus(14), t('add_to_pl'), (e) => { hideContextMenu(); App.onShowPlaylistPicker(e, item); });
       _addCtxItem(menu, iconPin(14),  t('ctx_pin_to_home'), () => { App.onTogglePin(item); hideContextMenu(); });
+      _addCtxDivider(menu);
+      _addCtxItem(menu, iconTrash(14), t('ctx_remove_top_played'), () => { App.onRemoveFromTopPlayed?.(item); hideContextMenu(); });
     }
 
     if (type === 'lib_album') {
