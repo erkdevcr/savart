@@ -6387,11 +6387,9 @@ const App = (() => {
       const folderMeta = await DB.getMeta(folderId).catch(() => null);
       if (folderMeta?.rescannedAt) return;
 
-      // Guard 2: any manual edits in this folder → leave it alone
-      const allMeta      = await DB.getAllMeta();
-      const folderIdSet  = new Set(files.map(f => f.id));
-      const hasManual    = allMeta.some(m => folderIdSet.has(m.id) && (m.manualAt || 0) > 0);
-      if (hasManual) return;
+      // Guard 2: build existing DB meta map
+      const allMeta     = await DB.getAllMeta();
+      const folderIdSet = new Set(files.map(f => f.id));
 
       // Build a quick lookup of existing DB meta for this folder's songs
       const existingMap = new Map();
@@ -6399,10 +6397,18 @@ const App = (() => {
         if (folderIdSet.has(m.id)) existingMap.set(m.id, m);
       }
 
-      // Only process songs that are still missing at least one of: artist, album, cover
+      // Candidates: any file not yet soft-scanned AND not manually edited.
+      // We intentionally ignore whether artist/album is already set — folder-name
+      // inference (artistInferred) and stale data need to be replaced by real ID3.
+      // rescannedAt = full manual rescan already done → skip (has authoritative data).
+      // softScannedAt = already read real ID3 in a previous session → skip.
       const candidates = files.filter(f => {
         const m = existingMap.get(f.id);
-        return !m || !m.artist || !m.album || (!m.thumbnailUrl && !m.coverBlob);
+        if (!m) return true;                   // no data at all
+        if (m.manualAt)     return false;      // user manually edited → never touch
+        if (m.rescannedAt)  return false;      // full rescan done → authoritative
+        if (m.softScannedAt) return false;     // already soft-scanned → skip
+        return true;                           // anything else: scan to get real ID3
       });
       if (candidates.length === 0) return;
 
@@ -6423,7 +6429,7 @@ const App = (() => {
 
           // Use cached blob (from prior play) or fetch just the first 256 KB
           let blob = await DB.getCachedBlob(file.id).catch(() => null);
-          if (!blob) blob = await Drive.downloadFileHead(file.id, 256 * 1024).catch(() => null);
+          if (!blob) blob = await Drive.downloadFileHead(file.id, 1024 * 1024).catch(() => null);
 
           if (!blob) {
             if (inBrowse()) UI.updateBrowseSongMeta(file.id, existing?.artist || null, existing?.album || null, null);
@@ -6441,17 +6447,15 @@ const App = (() => {
           // Title: update if missing or still just the raw filename
           const currentDisplay = existing?.displayName || '';
           const rawFilename    = cleanTitle ? cleanTitle(file.name) : file.name;
-          if (parsed.title && (!currentDisplay || currentDisplay === rawFilename) && !existing?.manualAt) {
-            patch.displayName = parsed.title;
-          }
-          // Artist: ID3 overwrites folder-name inference (artistInferred flag) but not manual edits
-          const artistIsInferred = existing?.artistInferred === true;
-          if (parsed.artist && (!existing?.artist || artistIsInferred) && !existing?.manualAt) {
-            patch.artist         = parsed.artist;
-            patch.artistInferred = false;
-          }
-          if (parsed.album  && !existing?.album)  patch.album  = parsed.album;
-          if (parsed.year   && !existing?.year)   patch.year   = parsed.year;
+          // Since we only reach here for files not yet soft-scanned and not manually
+          // edited, ID3 data always takes priority over any previously inferred values.
+          const patch = {};
+          patch.softScannedAt = Date.now(); // mark as soft-scanned regardless of what was found
+
+          if (parsed.title)  patch.displayName    = parsed.title;
+          if (parsed.artist) { patch.artist = parsed.artist; patch.artistInferred = false; }
+          if (parsed.album)  patch.album           = parsed.album;
+          if (parsed.year)   patch.year            = parsed.year;
           if (parsed.coverBlob && !existing?.coverBlob) {
             patch.coverBlob = parsed.coverBlob;
             if (!existing?.thumbnailUrl) patch.thumbnailUrl = 'id3';
@@ -6461,15 +6465,13 @@ const App = (() => {
           const newAlbum   = patch.album        || existing?.album       || null;
           const newDisplay = patch.displayName  || existing?.displayName || null;
 
-          if (Object.keys(patch).length > 0) {
-            await DB.setMeta(file.id, { id: file.id, ...patch });
-            _cacheItem({ ...file, folderId,
-              ...(newArtist  ? { artist:      newArtist  } : {}),
-              ...(newAlbum   ? { album:       newAlbum   } : {}),
-              ...(newDisplay ? { displayName: newDisplay } : {}),
-            });
-            patched++;
-          }
+          await DB.setMeta(file.id, { id: file.id, ...patch });
+          _cacheItem({ ...file, folderId,
+            ...(newArtist  ? { artist:      newArtist  } : {}),
+            ...(newAlbum   ? { album:       newAlbum   } : {}),
+            ...(newDisplay ? { displayName: newDisplay } : {}),
+          });
+          patched++;
 
           // Update visible Browse row immediately — title, artist · album
           if (inBrowse()) {
