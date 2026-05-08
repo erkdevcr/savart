@@ -452,11 +452,43 @@ const Drive = (() => {
     }
   }
 
+  /* ── listAllAudioFiles ───────────────────────────────────── */
+  /**
+   * Fetch one page of ALL audio files across Drive.
+   * Used by the background collection scanner to discover unseen folders.
+   * Returns minimal objects — no full _normalizeItem overhead.
+   *
+   * @param {string|null} pageToken  — pass null for first page, then nextPageToken for subsequent pages
+   * @returns {Promise<{ files: Array<{id,name,mimeType,parents}>, nextPageToken: string|null }>}
+   */
+  async function listAllAudioFiles(pageToken = null) {
+    const params = new URLSearchParams({
+      q:         `mimeType contains 'audio/' and trashed = false`,
+      pageSize:  '1000',
+      fields:    'nextPageToken,files(id,name,mimeType,parents)',
+      supportsAllDrives:          'true',
+      includeItemsFromAllDrives:  'true',
+    });
+    if (pageToken) params.set('pageToken', pageToken);
+    const res  = await _fetch(`${CONFIG.API_BASE}/files?${params}`);
+    const data = await res.json();
+    return {
+      files: (data.files || []).map(f => ({
+        id:       f.id       || '',
+        name:     f.name     || '',
+        mimeType: f.mimeType || '',
+        parents:  f.parents  || [],
+      })),
+      nextPageToken: data.nextPageToken || null,
+    };
+  }
+
   /* ── Expose ─────────────────────────────────────────────── */
   return {
     listFolder,
     listFolderAll,
     listFolderScan,
+    listAllAudioFiles,
     searchFiles,
     downloadFile,
     downloadFileHead,

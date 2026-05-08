@@ -385,6 +385,9 @@ const App = (() => {
       if (view === 'library') _setLibTab(_currentLibTab || 'albums');
       // Start live 3-second polling (Last-Write-Wins)
       Sync.startLiveSync(_onSyncDataChanged);
+      // Background collection scan — runs once per session, low priority.
+      // Delay 10 s so boot, sync, and home render all finish first.
+      setTimeout(() => _backgroundCollectionScan().catch(() => {}), 10_000);
     }).catch(() => {}).finally(() => {
       _hideBootToast();
     });
@@ -6135,6 +6138,156 @@ const App = (() => {
     // Callers (_scanLibraryBackground, _fullLibraryRefresh) issue a single push after
     // the entire loop completes.
     return count;
+  }
+
+  /* ── Background collection scan ─────────────────────────────
+   * Runs once per session, after Sync.init() completes.
+   * Goal: discover Drive folders that qualify as collections (>3 distinct artists)
+   * without the user having to manually browse them.
+   *
+   * Strategy:
+   *  1. Fetch all audio files across Drive (paginated, 1 000/page — usually 1–3 API calls).
+   *  2. Group by parent folder ID.
+   *  3. Skip folders already in DB (known) or already processed in a prior session.
+   *  4. For each unseen folder, extract artist from "Artist - Title.ext" filename pattern.
+   *  5. If >3 distinct artists → save minimal DB records → folder appears in Collections.
+   *  6. Persist ALL examined folder IDs (collection or not) to avoid re-processing them.
+   *  7. Refresh collection cache; update Collections tab if currently visible.
+   * ─────────────────────────────────────────────────────────── */
+
+  let _bgScanDone = false; // session guard — run at most once per page load
+
+  async function _backgroundCollectionScan() {
+    if (_bgScanDone) return;
+    _bgScanDone = true;
+    if (typeof Drive === 'undefined' || typeof DB === 'undefined') return;
+    if (!Auth.getValidToken()) return;
+
+    console.log('[BgScan] Starting background collection scan…');
+
+    try {
+      // ── 1. Load persistent "already checked" folder IDs ───────────────────
+      const checkedArr = await DB.getBgScannedFolders().catch(() => []);
+      const checked    = new Set(checkedArr);
+
+      // ── 2. Load folder IDs already in DB (songs we've seen before) ─────────
+      // _allKnownFolderIdsCache is populated by _refreshCollectionCache (called
+      // early in _onTokenReady), so it's ready by the time we get here.
+      const knownFolders = _allKnownFolderIdsCache ?? new Set();
+
+      // ── 3. Fetch all audio files from Drive (paginated) ────────────────────
+      const folderMap = new Map(); // folderId → [{ id, name, mimeType }]
+      let pageToken   = null;
+      let pageCount   = 0;
+
+      do {
+        if (!Auth.getValidToken()) { console.log('[BgScan] Token lost, aborting.'); return; }
+        const page = await Drive.listAllAudioFiles(pageToken);
+        for (const f of page.files) {
+          const fid = f.parents[0];
+          if (!fid) continue;
+          if (!folderMap.has(fid)) folderMap.set(fid, []);
+          folderMap.get(fid).push(f);
+        }
+        pageToken = page.nextPageToken;
+        pageCount++;
+        if (pageCount > 1) await new Promise(r => setTimeout(r, 200)); // gentle pacing
+      } while (pageToken);
+
+      console.log(`[BgScan] Drive returned ${[...folderMap.values()].reduce((s, a) => s + a.length, 0)} audio files across ${folderMap.size} folders`);
+
+      // ── 4. Process unseen folders ──────────────────────────────────────────
+      const newlyChecked = [];
+      let   newCollections = 0;
+
+      for (const [folderId, files] of folderMap) {
+        // Skip if already known from DB or from a previous scan session
+        if (knownFolders.has(folderId) || checked.has(folderId)) continue;
+
+        newlyChecked.push(folderId);
+
+        // Extract artist from "Artist - Title.ext" filename pattern (no ID3 needed)
+        const artists = new Set();
+        for (const f of files) {
+          const base     = f.name.replace(/\.[^.]+$/, '').trim();
+          const dashIdx  = base.indexOf(' - ');
+          if (dashIdx > 1) {
+            const candidate = base.slice(0, dashIdx)
+              .replace(/^\d+\.?\s*/, '')       // strip leading track number
+              .replace(/^track\s+\d+\s*/i, '') // strip "Track 01"
+              .trim().toLowerCase();
+            if (candidate.length >= 2) artists.add(candidate);
+          }
+        }
+
+        // Not enough artists to qualify as a collection → mark checked, continue
+        if (artists.size <= 3) continue;
+
+        // ── Save minimal DB records so _buildFolderMap can classify this folder ─
+        const now = Date.now();
+        for (const f of files) {
+          // Only write if not already in DB (race-safe)
+          const existing = await DB.getMeta(f.id).catch(() => null);
+          if (existing) continue;
+
+          const base        = f.name.replace(/\.[^.]+$/, '').trim();
+          const dashIdx     = base.indexOf(' - ');
+          let   artist = '';
+          if (dashIdx > 1) {
+            artist = base.slice(0, dashIdx)
+              .replace(/^\d+\.?\s*/, '')
+              .replace(/^track\s+\d+\s*/i, '')
+              .trim();
+          }
+          await DB.setMeta(f.id, {
+            id:          f.id,
+            folderId,
+            name:        f.name,
+            displayName: cleanTitle(f.name),
+            mimeType:    f.mimeType,
+            artist:      artist || '',
+            bgScanned:   now,   // marker — enrichment will fill the rest on first play
+          }).catch(() => {});
+        }
+
+        newCollections++;
+        console.log(`[BgScan] New collection found: ${folderId} (${artists.size} artists, ${files.length} songs)`);
+
+        // Yield to avoid blocking the event loop
+        await new Promise(r => setTimeout(r, 50));
+      }
+
+      // ── 5. Persist newly-checked folder IDs ───────────────────────────────
+      if (newlyChecked.length > 0) {
+        await DB.addBgScannedFolders(newlyChecked).catch(() => {});
+      }
+
+      if (newCollections === 0) {
+        console.log('[BgScan] No new collections found.');
+        return;
+      }
+
+      console.log(`[BgScan] Done — ${newCollections} new collection(s) added.`);
+
+      // ── 6. Refresh collection cache + UI ──────────────────────────────────
+      await _refreshCollectionCache().catch(() => {});
+
+      const view = UI.getCurrentView();
+      if (view === 'library' && _currentLibTab === 'collections' && !_libInDetail) {
+        _loadCollections();
+      }
+
+      // Friendly toast only when something new was actually found
+      UI.showToast(
+        newCollections === 1
+          ? '1 nueva colección encontrada'
+          : `${newCollections} nuevas colecciones encontradas`,
+        'info'
+      );
+
+    } catch (err) {
+      console.warn('[BgScan] Error:', err);
+    }
   }
 
   /* ── Soft scan ───────────────────────────────────────────────

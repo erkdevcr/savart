@@ -935,6 +935,31 @@ const DB = (() => {
    * @param {string[]} liveFileIds Array of Drive file IDs currently in the folder.
    * @returns {Promise<number>}    Total number of DB records updated (0 = no change needed).
    */
+  /* ── Background collection scan log ─────────────────────── */
+
+  /**
+   * Return the array of folder IDs already processed by the background
+   * collection scanner.  Persisted in the `state` store so it survives
+   * across sessions; new Drive folders are NOT in this list until the
+   * scanner sees them.
+   * @returns {Promise<string[]>}
+   */
+  async function getBgScannedFolders() {
+    return (await getState('bg_scan_checked_folders')) || [];
+  }
+
+  /**
+   * Append newly-processed folder IDs to the persistent scan log.
+   * Deduplicates automatically; no-op when ids is empty.
+   * @param {string[]} ids
+   */
+  async function addBgScannedFolders(ids) {
+    if (!ids || ids.length === 0) return;
+    const existing = (await getState('bg_scan_checked_folders')) || [];
+    const merged   = [...new Set([...existing, ...ids])];
+    await setState('bg_scan_checked_folders', merged);
+  }
+
   async function reconcileFolderContents(folderId, liveFileIds) {
     if (!folderId || !Array.isArray(liveFileIds)) return 0;
     const liveSet = new Set(liveFileIds);
@@ -1098,6 +1123,9 @@ const DB = (() => {
     getCollection,
     saveCollection,
     getAllCollections,
+    // Background collection scan log
+    getBgScannedFolders,
+    addBgScannedFolders,
     // Movement reconciliation
     reconcileFolderContents,
   };
