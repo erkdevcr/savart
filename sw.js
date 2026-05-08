@@ -9,7 +9,7 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '1.9.5';
+const APP_VERSION  = '1.9.6';
 const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.9.5 — soft scan head increased 256KB→1MB so ID3 artist/album/title survive large embedded covers
 
 /* Base path — auto-detected from sw.js location.

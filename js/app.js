@@ -6443,10 +6443,6 @@ const App = (() => {
             continue;
           }
 
-          const patch = {};
-          // Title: update if missing or still just the raw filename
-          const currentDisplay = existing?.displayName || '';
-          const rawFilename    = cleanTitle ? cleanTitle(file.name) : file.name;
           // Since we only reach here for files not yet soft-scanned and not manually
           // edited, ID3 data always takes priority over any previously inferred values.
           const patch = {};
