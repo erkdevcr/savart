@@ -1672,14 +1672,14 @@ const UI = (() => {
 
   /** Mark a song row as the currently active track. */
   function setActiveSongRow(fileId) {
-    document.querySelectorAll('.song-row').forEach(row => {
+    // Handle both .song-row and .top-list-item rows
+    document.querySelectorAll('.song-row, .top-list-item').forEach(row => {
       const isActive = row.dataset.id === fileId;
       row.classList.toggle('active', isActive);
-      // EQ bars only inside Browse screen, nowhere else
+      // EQ bars: show as overlay on the active row in any screen
       const eqBars = row.querySelector('.eq-bars');
       if (eqBars) {
-        const inBrowse = !!row.closest('#screen-browse');
-        eqBars.style.display = (isActive && inBrowse) ? 'flex' : '';
+        eqBars.style.display = isActive ? 'flex' : '';
       }
     });
   }
@@ -2501,6 +2501,7 @@ const UI = (() => {
             ? `<img src="${song.thumbnailUrl}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)">`
             : iconMusicNote(22)
           }
+          <div class="eq-bars"><div class="eq-bar"></div><div class="eq-bar"></div><div class="eq-bar"></div><div class="eq-bar"></div></div>
         </div>
         <div class="top-list-info">
           <div class="top-list-title">${escHtml(song.displayName || song.name || '')}</div>
@@ -2628,6 +2629,12 @@ const UI = (() => {
             ? `<img src="${song.thumbnailUrl}" alt="">`
             : `<div class="thumb-placeholder">${iconMusicNote(20)}</div>`
           }
+          <div class="eq-bars">
+            <div class="eq-bar"></div>
+            <div class="eq-bar"></div>
+            <div class="eq-bar"></div>
+            <div class="eq-bar"></div>
+          </div>
         </div>
         <div class="song-row-info">
           <div class="song-row-title">${escHtml(song.displayName || song.name || song.id)}</div>
@@ -3146,6 +3153,7 @@ const UI = (() => {
             ? `<img src="${song.thumbnailUrl}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)">`
             : iconMusicNote(22)
           }
+          <div class="eq-bars"><div class="eq-bar"></div><div class="eq-bar"></div><div class="eq-bar"></div><div class="eq-bar"></div></div>
         </div>
         <div class="top-list-info">
           <div class="top-list-title">${escHtml(song.displayName || song.name || '')}</div>
@@ -3590,6 +3598,7 @@ const UI = (() => {
             ? `<img src="${song.thumbnailUrl}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)">`
             : iconMusicNote(22)
           }
+          <div class="eq-bars"><div class="eq-bar"></div><div class="eq-bar"></div><div class="eq-bar"></div><div class="eq-bar"></div></div>
         </div>
         <div class="top-list-info">
           <div class="top-list-title">${escHtml(song.displayName || song.name || '')}</div>

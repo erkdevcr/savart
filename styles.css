@@ -690,6 +690,7 @@ img { display: block; }
   display: flex;
   align-items: center;
   justify-content: center;
+  position: relative; /* needed for eq-bars overlay */
 }
 
 .top-list-info {
@@ -1198,7 +1199,8 @@ img { display: block; }
   height: 20px;
 }
 
-.song-thumb .eq-bars {
+.song-thumb .eq-bars,
+.top-list-thumb .eq-bars {
   display: none;
   position: absolute;
   inset: 0;
@@ -1207,10 +1209,12 @@ img { display: block; }
   gap: 2px;
   padding: 8px;
   background: rgba(12,12,15,0.65);
+  z-index: 1; /* sit above the cover image */
 }
 
-/* EQ bars only in Browse (Examinar), not in search/library/home */
-#screen-browse .song-row.active .song-thumb .eq-bars {
+/* EQ overlay on active rows — Browse, Library songs, Album/Collection detail */
+.song-row.active .song-thumb .eq-bars,
+.top-list-item.active .top-list-thumb .eq-bars {
   display: flex !important;
 }
 
