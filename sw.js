@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '1.8.0';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.8.0 — fix manual album covers being overwritten by enrichment; X clear search buttons; lib sidebar gap
+const APP_VERSION  = '1.8.1';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.8.1 — album edit panel pre-fills from live entity header on open
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

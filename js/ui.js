@@ -2875,7 +2875,38 @@ const UI = (() => {
       e.stopPropagation();
       const isOpen = editPanel.classList.toggle('open');
       entity.classList.toggle('album-editing', isOpen);
-      if (isOpen) editPanel.querySelector('[data-field="artist"]').focus();
+      if (isOpen) {
+        // Sync inputs from the current entity header — so enrichment-updated values
+        // (artist, album name, year, cover) are always reflected when the panel opens.
+
+        // Album name
+        const nameEl = entity.querySelector('.lib-detail-entity-name');
+        if (nameEl) editPanel.querySelector('[data-field="album"]').value = nameEl.textContent.trim();
+
+        // Artist — sub line is "Artist · N canciones"; strip the last segment
+        const subEl = entity.querySelector('.lib-detail-entity-sub');
+        if (subEl) {
+          const parts = subEl.textContent.split(' · ');
+          // Last segment is always the song count — everything before it is artist
+          const artistText = parts.length > 1 ? parts.slice(0, -1).join(' · ') : parts[0] || '';
+          editPanel.querySelector('[data-field="artist"]').value = artistText.trim();
+        }
+
+        // Year — year element may contain "(2020) <format badge>"
+        const yearEl = entity.querySelector('.lib-detail-entity-year');
+        if (yearEl) {
+          const yearMatch = yearEl.textContent.match(/\((\d{4})\)/);
+          editPanel.querySelector('[data-field="year"]').value = yearMatch ? yearMatch[1] : '';
+        }
+
+        // Cover URL — read from the displayed img; skip blob: (ID3 embeds have no shareable URL)
+        const artImg = entity.querySelector('.lib-detail-entity-art img');
+        const artSrc = artImg ? (artImg.getAttribute('src') || '') : '';
+        editPanel.querySelector('[data-field="coverUrl"]').value =
+          (artSrc && !artSrc.startsWith('blob:') && artSrc !== 'id3') ? artSrc : '';
+
+        editPanel.querySelector('[data-field="artist"]').focus();
+      }
     });
 
     // "Aplicar a todas" — applies just artist or album field to every track
