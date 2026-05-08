@@ -3572,22 +3572,36 @@ const App = (() => {
 
   /**
    * Restore .lib-detail scrollTop after re-rendering a paginated list.
-   * For paginated tabs (artists, albums) the first render only fills one page,
-   * so scrollTop gets clamped to 0. We retry up to ~1s while the
-   * IntersectionObserver loads more pages and content grows tall enough.
+   * Synchronously pre-renders extra pages (artists / albums) until the
+   * content is tall enough to reach savedScroll, then sets scrollTop.
    */
   function _restoreLibScroll(savedScroll) {
     if (savedScroll <= 0) return;
     const libPane = _libDetailPane();
     if (!libPane) return;
-    let tries = 0;
-    const attempt = () => {
+
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      // Pre-render pages until the pane is scrollable to savedScroll
+      let safety = 0;
+      while (
+        libPane.scrollHeight - libPane.clientHeight < savedScroll - 4 &&
+        safety++ < 60
+      ) {
+        const sentinel = libPane.querySelector('.lib-scroll-sentinel');
+        if (!sentinel) break;
+        sentinel.remove();
+        if (_currentLibTab === 'artists') _renderArtistPage(false);
+        else if (_currentLibTab === 'albums') _renderAlbumPage(false);
+        else break;
+      }
       libPane.scrollTop = savedScroll;
-      if (libPane.scrollTop >= savedScroll - 4) return; // reached target
-      if (++tries < 16) setTimeout(attempt, 60);        // retry while pages load
-    };
-    // Double rAF ensures the first page is laid out before first attempt
-    requestAnimationFrame(() => requestAnimationFrame(attempt));
+    }));
+  }
+
+  /** Reset .lib-detail to top when entering any drill-down view. */
+  function _scrollDetailToTop() {
+    const libPane = _libDetailPane();
+    if (libPane) requestAnimationFrame(() => { libPane.scrollTop = 0; });
   }
 
   // ── Library pagination ────────────────────────────────────
@@ -7146,6 +7160,7 @@ const App = (() => {
       _libInDetail = true;
       _setLibSearchBarVisible(false);
       UI.renderLibraryCollectionDetail(collection, enriched);
+      _scrollDetailToTop();
       if (enriched.length > 0 && Auth.getValidToken()) {
         _prefetchAndApplyFolderCovers(collection.folderId, enriched).catch(() => {});
       }
@@ -7343,6 +7358,7 @@ const App = (() => {
       _libInDetail = true;
       _setLibSearchBarVisible(false);
       UI.renderLibraryArtistDetail(artist, albums);
+      _scrollDetailToTop();
       const q = document.getElementById('lib-search-input')?.value || '';
       if (q) _onLibSearch(q);
     } catch (err) {
@@ -7460,6 +7476,7 @@ const App = (() => {
       _libInDetail = true;
       _setLibSearchBarVisible(false);
       UI.renderLibraryAlbumDetail(freshAlbum, enriched, backTarget, fromArtist || null);
+      _scrollDetailToTop();
 
       // Background cover + metadata enrichment for songs in this album.
       // Uses the same multi-pass pipeline as the browse folder view:
