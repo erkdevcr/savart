@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '2.0.1';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.0.1 — fix artist placeholder avatar size on mobile (height: auto → explicit match)
+const APP_VERSION  = '2.0.2';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.0.2 — chip moves below browse title; chip + item count +20% size
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

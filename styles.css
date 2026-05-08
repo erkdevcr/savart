@@ -953,7 +953,7 @@ img { display: block; }
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 14px 16px 6px;
+  padding: 14px 16px 4px;
 }
 
 .browse-folder-icon {
@@ -3614,15 +3614,19 @@ body.queue-open #mini-player { z-index: 65; }
 .browse-item-count {
   display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 0 16px 6px;
-  font-size: 11px;
+  gap: 6px;
+  padding: 2px 16px 8px;
+  font-size: 13px;        /* +20 % (was 11px) */
   font-weight: 500;
   color: var(--text-tertiary);
   letter-spacing: 0.3px;
 }
 .browse-item-count:empty { display: none; }
-.browse-item-count .folder-type-chip { margin-right: 0; }
+.browse-item-count .folder-type-chip {
+  margin-right: 0;
+  font-size: 0.78em;      /* 0.65 * 1.2 — scales with parent */
+  padding: 2px 6px;       /* was 1px 5px */
+}
 
 /* Sort button — margin-left now on #sort-wrap wrapper */
 #btn-browse-sort { margin-left: 0; }

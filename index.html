@@ -143,12 +143,12 @@
           <svg class="browse-folder-icon" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>
           <h1 class="browse-current-name" id="browse-folder-name">Mi Drive</h1>
         </div>
+        <!-- Row 1b: chip (album/collection) + item count — directly below title -->
+        <div id="browse-item-count" class="browse-item-count"></div>
         <!-- Row 2: parent path (all crumbs before current — each clickable) -->
         <div class="browse-path">
           <!-- Rendered by UI.renderBreadcrumb() — hidden when at root -->
         </div>
-        <!-- Row 2b: item count — below path, above action bar -->
-        <div id="browse-item-count" class="browse-item-count"></div>
         <!-- Row 3: actions bar (always present) -->
         <div id="browse-action-bar">
           <button id="btn-browse-back" class="btn-sort-toggle" aria-label="Carpeta anterior" style="display:none">
