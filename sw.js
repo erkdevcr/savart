@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '1.7.94';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.94 — Apply-to-all: remove hasOwn guard, always override; use songs in scope; update visible thumbs
+const APP_VERSION  = '1.7.95';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.95 — Album grid: cards fill column width, art uses aspect-ratio:1 (no more left-edge gap)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
