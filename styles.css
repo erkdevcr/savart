@@ -1120,12 +1120,22 @@ img { display: block; }
 /* Song row */
 .song-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
   padding: 8px 16px;
   cursor: pointer;
   transition: background 0.1s;
   position: relative;
+}
+
+.song-row .song-thumb {
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.song-row .btn-more {
+  margin-top: 6px;
+  flex-shrink: 0;
 }
 
 .song-row:hover { background: var(--bg-surface); }
