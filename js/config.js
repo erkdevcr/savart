@@ -92,6 +92,24 @@ const CONFIG = {
   // Free API key — get one at: https://www.last.fm/api/account/create
   LASTFM_API_KEY: 'a6a6ef739488b2b0c4a81980f17581e6',
 
+  // ── Discogs ───────────────────────────────────────────────
+  // Used by discogs.js to fetch release cover art and metadata.
+  // ⚠️  Authentication is REQUIRED to receive image URLs.
+  //     Without a token, cover_image is absent from API results.
+  //
+  // Simplest: generate a Personal Access Token at
+  //   https://www.discogs.com/settings/developers → "Generate token"
+  //   Then paste it below as DISCOGS_TOKEN.
+  //
+  // Alternative: register an app at the same page to get a
+  //   Consumer Key + Secret pair (fill DISCOGS_KEY + DISCOGS_SECRET).
+  //   Personal token takes priority when both are set.
+  //
+  // Authenticated requests: 60 req/min · Unauthenticated: 25 req/min
+  DISCOGS_TOKEN:  'ehjkABXIdIkTauZgObjNDWGDJLWBxBCqMAMDfRjc',   // personal access token (recommended)
+  DISCOGS_KEY:    '',   // consumer key   (alternative)
+  DISCOGS_SECRET: '',   // consumer secret (alternative)
+
   // ── AudD.io ───────────────────────────────────────────────
   // Used by audd.js to identify songs with no ID3 metadata.
   // Free tier: 500 identifications/day — https://dashboard.audd.io

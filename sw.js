@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '1.7.88';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.88 — apply-all: Drive fallback when folder songs not in DB (unscanned collection)
+const APP_VERSION  = '1.7.92';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 1.7.92 — Discogs: personal access token added to config
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
@@ -33,6 +33,7 @@ const SHELL_FILES = [
   `${BASE}/js/lastfm.js`,
   `${BASE}/js/audd.js`,
   `${BASE}/js/musicbrainz.js`,
+  `${BASE}/js/discogs.js`,
   `${BASE}/js/lyrics.js`,
   `${BASE}/js/ui.js`,
   `${BASE}/js/app.js`,

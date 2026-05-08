@@ -2,7 +2,9 @@
    Savart — Lyrics module
    Fetches song lyrics via a chain of free, CORS-enabled APIs:
      1. lyrics.ovh   — fast, no auth, plain lyrics
-     2. lrclib       — no auth, plain + synced (LRC) lyrics
+     2. lrclib       — direct match (plain + synced LRC)
+     3. lrclib       — fuzzy search fallback
+     4. Discogs      — canonical artist enrichment → retry 1–3
    ============================================================
    Design decisions:
    - Lazy fetch: only called after all recognition passes are done
@@ -121,6 +123,20 @@ const Lyrics = (() => {
 
     // 3. lrclib — fuzzy search (handles slight spelling differences)
     if (!lyrics) lyrics = await _fetchLrclibSearch(artist, title);
+
+    // 4. Discogs metadata enrichment → retry providers with canonical artist
+    // Handles compound artist strings like "Eminem feat. Rihanna" that lyrics
+    // APIs don't recognise — Discogs resolves the primary artist name.
+    if (!lyrics && typeof Discogs !== 'undefined') {
+      try {
+        const enriched = await Discogs.fetchMetadataForLyrics(artist, title);
+        if (enriched && enriched.artist.toLowerCase() !== artist.toLowerCase()) {
+          lyrics = await _fetchOvh(enriched.artist, enriched.title);
+          if (!lyrics) lyrics = await _fetchLrclibGet(enriched.artist, enriched.title);
+          if (!lyrics) lyrics = await _fetchLrclibSearch(enriched.artist, enriched.title);
+        }
+      } catch (_) { /* non-fatal */ }
+    }
 
     _cache.set(key, lyrics);
     return lyrics;

@@ -1192,11 +1192,12 @@ const App = (() => {
    * Pre-2   — ID3 blob parse [force only] (overwrites artist/album/year from file tags first)
    * Pass 2  — MusicBrainz              (text: artist, album, year, track — no file download)
    *             normal: fills empty fields | force: has clean ID3 context → better accuracy
-   * Pass 3  — ID3 blob parse [normal / cover-only force]
+   * Pass 3  — Discogs                  (cover art + album/year via release database)
+   *             sequential 1 req/s; respects manual edits (manualAt guard)
+   * Pass 4  — ID3 blob parse [normal / cover-only force]
    *             normal: fills what MB missed + embedded cover
    *             force:  only songs without a cover (pre-2 covered the rest)
-   * Pass 4  — Cover Art Archive (CAA)  (MusicBrainz cover for songs without embedded art)
-   * Pass 5  — Folder cover.jpg         (generic fallback)
+   * Pass 5  — Cover Art Archive (CAA)  (MusicBrainz cover for songs without embedded art)
    * Pass 6  — Last.fm                  (external cover by artist+album)
    * Pass 7  — AudD.io fingerprinting   (last resort: identifies song from audio)
    *
@@ -1325,7 +1326,7 @@ const App = (() => {
     // ── Pass 2: MusicBrainz — text metadata ───────────────────────────────────
     // MB is the authoritative source: artist, album, year always come from MB when found.
     // In force mode, ID3 pre-pass has already set correct context so MB gets accurate input.
-    // ID3 (Pass 3) only fills fields MB left empty. AudD (Pass 7) fills what ID3 also missed.
+    // ID3 (Pass 4) only fills fields MB left empty. AudD (Pass 7) fills what ID3 also missed.
     // Sequential: 1 req/sec rate limit.
     if (typeof MusicBrainz !== 'undefined') {
       const mbQueue = [];
@@ -1385,9 +1386,56 @@ const App = (() => {
       if (anyTrackFoundMB && _libInDetail) _resortAlbumDetail(files).catch(() => {});
     }
 
-    // ── Pass 3: ID3 blob parse — text + embedded cover ────────────────────────
+    // ── Pass 3: Discogs — cover art + metadata enrichment ─────────────────────
+    // Runs after MusicBrainz so MB text context (artist, album) is available to
+    // build a precise Discogs query. Fills covers for files MB/CAA didn't match,
+    // and backfills album/year gaps.
+    // Sequential at 1 req/s (Discogs unauthenticated rate limit is 25/min).
+    if (typeof Discogs !== 'undefined') {
+      for (const file of files) {
+        try {
+          const m = await DB.getMeta(file.id).catch(() => null);
+          // Never overwrite a manually set cover
+          if ((m?.manualAt || 0) > 0) continue;
+          // In normal mode only process files that still lack a cover
+          const needsCover = !_rowHasCover(file.id);
+          if (!force && !needsCover) continue;
+
+          const artist = m?.artist || '';
+          const title  = m?.displayName || m?.name || file.name || '';
+          const album  = m?.album  || '';
+          if (!artist && !title) continue;
+
+          const result = await Discogs.lookup(file.id, artist, title, album);
+          if (!result) continue;
+
+          const patch = {};
+          if (result.year   && !m?.year)  patch.year  = result.year;
+          if (result.album  && !m?.album) patch.album = result.album;
+          // Apply cover: in force mode also update songs that lack a persisted URL
+          const wantsCover = needsCover || (force && !m?.thumbnailUrl);
+          if (result.coverUrl && wantsCover) {
+            patch.thumbnailUrl = result.coverUrl;
+            _updateRowThumbnail(file.id, result.coverUrl);
+          }
+          if (Object.keys(patch).length > 0) {
+            await DB.setMeta(file.id, patch).catch(() => {});
+            if (patch.album || patch.year) {
+              _patchMetaText(file.id, {
+                title:  null,
+                artist: m?.artist  || null,
+                album:  patch.album || m?.album || null,
+                year:   patch.year  || m?.year  || null,
+              });
+            }
+          }
+        } catch (_) { /* non-fatal */ }
+      }
+    }
+
+    // ── Pass 4: ID3 blob parse — text + embedded cover ────────────────────────
     // In force mode: ID3 pre-pass already ran before MB with full overwrite rights.
-    //   Pass 3 here only handles songs that failed the pre-pass (no cached blob, no cover yet).
+    //   Pass 4 here only handles songs that failed the pre-pass (no cached blob, no cover yet).
     //   Text is fill-only — MB already had its turn and is authoritative.
     // In normal mode: MB ran first; ID3 fills remaining gaps + embedded cover.
     // displayName always comes from ID3 — it's the cleanest display title source.
@@ -1449,7 +1497,7 @@ const App = (() => {
       await Promise.allSettled(Array.from({ length: CONCURRENCY }, () => id3Worker()));
     }
 
-    // ── Pass 4: Cover Art Archive (MusicBrainz) ───────────────────────────────
+    // ── Pass 5: Cover Art Archive (MusicBrainz) ───────────────────────────────
     // For songs still without an embedded ID3 cover but with a MB release ID.
     // CAA URL: https://coverartarchive.org/release/{mbid}/front-250
     if (typeof MusicBrainz !== 'undefined') {
@@ -1480,14 +1528,6 @@ const App = (() => {
           } catch (_) {}
         }));
       }
-    }
-
-    // ── Pass 5: folder cover.jpg fallback ─────────────────────────────────────
-    // Skipped for search results (folderId=null).
-    const stillNeed = files.filter(file => !_rowHasCover(file.id));
-    if (stillNeed.length > 0 && folderId) {
-      const folderCover = await _getFolderCover(folderId);
-      if (folderCover) stillNeed.forEach(file => _updateRowThumbnail(file.id, folderCover));
     }
 
     // ── Pass 6: Last.fm cover lookup ──────────────────────────────────────────
