@@ -1576,6 +1576,7 @@ img { display: block; }
   display: flex;
   align-items: center;
   gap: 8px;
+  padding: 8px 10px;
 }
 .lib-search-wrap .search-bar {
   flex: 1;

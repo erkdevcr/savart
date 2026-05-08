@@ -1907,6 +1907,17 @@ const UI = (() => {
         ? _plPickerAllPlaylists.filter(pl => norm(pl.name).includes(term))
         : _plPickerAllPlaylists;
       _renderPickerList(filtered);
+      const clearBtn = document.getElementById('btn-pl-picker-clear');
+      if (clearBtn) clearBtn.style.display = e.target.value ? '' : 'none';
+    });
+
+    // Playlist picker: search clear button
+    document.getElementById('btn-pl-picker-clear')?.addEventListener('click', () => {
+      const input = document.getElementById('pl-picker-input');
+      if (input) { input.value = ''; input.focus(); }
+      const clearBtn = document.getElementById('btn-pl-picker-clear');
+      if (clearBtn) clearBtn.style.display = 'none';
+      _renderPickerList(_plPickerAllPlaylists);
     });
 
     // "Nueva playlist" row → show inline create input
@@ -1997,6 +2008,8 @@ const UI = (() => {
     if (createRow)    createRow.classList.remove('visible');
     if (createInput)  createInput.value = '';
     if (newRow)       newRow.style.display = '';
+    const plClearBtn = document.getElementById('btn-pl-picker-clear');
+    if (plClearBtn)   plClearBtn.style.display = 'none';
 
     _renderPickerList(playlists);
 
@@ -3086,7 +3099,7 @@ const UI = (() => {
     const songLabel = album.songCount === 1 ? '1 canción' : `${album.songCount} canciones`;
 
     card.innerHTML = `
-      <div class="home-card-art" style="background:${albBg}">
+      <div class="home-card-art" style="background:${albBg}"${album.hasManual && album.coverUrl ? ' data-manual-cover="1"' : ''}>
         ${album.coverUrl
           ? `<img src="${album.coverUrl}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-md)">`
           : `<svg width="38" height="38" viewBox="0 0 24 24" fill="currentColor" style="color:var(--text-muted)"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 14.5c-2.49 0-4.5-2.01-4.5-4.5S9.51 7.5 12 7.5s4.5 2.01 4.5 4.5-2.01 4.5-4.5 4.5zm0-5.5c-.55 0-1 .45-1 1s.45 1 1 1 1-.45 1-1-.45-1-1-1z"/></svg>`
@@ -3194,7 +3207,7 @@ const UI = (() => {
     const artistLabel = col.artistCount ? `${col.artistCount} artistas` : '';
 
     card.innerHTML = `
-      <div class="home-card-art lib-collection-art" style="background:${colBg}">${artHtml}</div>
+      <div class="home-card-art lib-collection-art" style="background:${colBg}"${col.manualCoverUrl ? ' data-manual-cover="1"' : ''}>${artHtml}</div>
       <button class="home-card-more collection-card-more" aria-label="Más opciones">${iconDots(14)}</button>
       ${metaHtml}
       <div class="home-card-name">${escHtml(col.name)}</div>
@@ -3360,9 +3373,12 @@ const UI = (() => {
         }
 
         // Apply to every target — no hasOwn guard, this is an intentional override
+        // manualAt is set so enrichment passes (Discogs, Last.fm, MB, soft scan) treat
+        // these songs as user-owned and never overwrite the cover they just received.
+        const nowTs = Date.now();
         let applied = 0;
         for (const m of targets) {
-          await DB.setMeta(m.id, { thumbnailUrl: coverUrl }).catch(() => {});
+          await DB.setMeta(m.id, { thumbnailUrl: coverUrl, manualAt: nowTs }).catch(() => {});
           applied++;
           // Also update the thumbnail in the visible song row
           const thumb = container.querySelector(`.top-list-item[data-id="${CSS.escape(m.id)}"] .top-list-thumb`);

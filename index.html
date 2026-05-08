@@ -254,6 +254,7 @@
             <div class="search-bar">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
               <input type="text" id="lib-search-input" placeholder="Buscar en Favoritos…" autocomplete="off" spellcheck="false">
+              <button id="btn-lib-search-clear" class="browse-search-clear" aria-label="Limpiar búsqueda" style="display:none"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button>
             </div>
             <!-- Rescan button: only shown when albums tab is active and search has text -->
             <button id="btn-lib-rescan" class="lib-rescan-btn" title="Rescanear álbumes mostrados" style="display:none" aria-label="Rescanear resultados">
@@ -686,6 +687,7 @@
         <div class="ds-artists-search-row">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" class="ds-artists-search-icon"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
           <input id="ds-artists-search" class="ds-artists-search-input" type="search" data-i18n-placeholder="ds_artists_search" placeholder="Buscar artista…">
+          <button id="btn-ds-search-clear" class="browse-search-clear" aria-label="Limpiar búsqueda" style="display:none"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button>
         </div>
       </div>
       <div class="ds-artists-grid" id="ds-artists-grid">
@@ -1099,6 +1101,7 @@
   <div class="pl-picker-search-wrap">
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
     <input id="pl-picker-input" type="search" placeholder="Busca una playlist" data-i18n-placeholder="pl_picker_search" autocomplete="off" autocorrect="off" spellcheck="false">
+    <button id="btn-pl-picker-clear" class="browse-search-clear" aria-label="Limpiar búsqueda" style="display:none"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button>
   </div>
   <div class="pl-picker-new" id="pl-picker-new">
     <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>

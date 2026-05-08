@@ -2289,9 +2289,13 @@ const App = (() => {
     if (!card) return;
     const art = card.querySelector('.home-card-art');
     if (!art) return;
+    // If this card was rendered with a manual cover (user explicitly set it via
+    // "Apply to all" or the edit modal), never let enrichment callbacks overwrite it.
+    // The card is re-rendered from fresh DB data on next library reload, which will
+    // pick up any legitimate manual change correctly.
+    if (art.dataset.manualCover) return;
     const img = art.querySelector('img');
     if (img) {
-      // Already has a cover — only upgrade if it's the same source type
       img.src = coverUrl;
     } else {
       // No cover yet — inject immediately
@@ -5738,10 +5742,21 @@ const App = (() => {
         grid.querySelectorAll('.ds-artist-card').forEach(c => {
           c.style.display = (!q || c.dataset.artistKey.includes(q)) ? '' : 'none';
         });
+        const clearBtn = document.getElementById('btn-ds-search-clear');
+        if (clearBtn) clearBtn.style.display = searchInput.value ? '' : 'none';
+      });
+      const dsClearBtn = document.getElementById('btn-ds-search-clear');
+      dsClearBtn?.addEventListener('click', () => {
+        searchInput.value = '';
+        searchInput.focus();
+        dsClearBtn.style.display = 'none';
+        grid.querySelectorAll('.ds-artist-card').forEach(c => { c.style.display = ''; });
       });
     }
     // Clear any previous search when artists are re-rendered
-    if (searchInput) searchInput.value = '';
+    if (searchInput) { searchInput.value = ''; }
+    const _dsClearBtnReset = document.getElementById('btn-ds-search-clear');
+    if (_dsClearBtnReset) _dsClearBtnReset.style.display = 'none';
 
     for (const [key, name] of filtered) {
       const url = photoMap[key] || '';
@@ -8973,9 +8988,21 @@ const App = (() => {
     });
 
     // Library: search input (debounced — re-renders paginated list after 400ms idle)
-    document.getElementById('lib-search-input')?.addEventListener('input', () => {
+    document.getElementById('lib-search-input')?.addEventListener('input', (e) => {
       clearTimeout(_libSearchDebounce);
       _libSearchDebounce = setTimeout(() => _onLibSearch(), 400);
+      const clearBtn = document.getElementById('btn-lib-search-clear');
+      if (clearBtn) clearBtn.style.display = e.target.value ? '' : 'none';
+    });
+
+    // Library: search clear button
+    document.getElementById('btn-lib-search-clear')?.addEventListener('click', () => {
+      const input = document.getElementById('lib-search-input');
+      if (input) { input.value = ''; input.focus(); }
+      const clearBtn = document.getElementById('btn-lib-search-clear');
+      if (clearBtn) clearBtn.style.display = 'none';
+      clearTimeout(_libSearchDebounce);
+      _onLibSearch();
     });
 
     // Library: batch rescan visible album search results
