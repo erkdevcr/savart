@@ -1705,16 +1705,18 @@ img { display: block; }
 .lib-back-btn {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
+  padding: 7px 12px;
   font-size: 12px;
   font-weight: 500;
   color: var(--accent);
+  background: rgba(74,136,245,0.12);
+  border: 1px solid rgba(74,136,245,0.30);
+  border-radius: var(--radius-pill);
   cursor: pointer;
-  background: none;
-  border: none;
-  padding: 0;
+  transition: background 0.15s;
 }
-.lib-back-btn:hover { opacity: 0.8; }
+.lib-back-btn:hover { background: rgba(74,136,245,0.22); }
 .lib-detail-entity {
   display: flex;
   align-items: center;
@@ -3646,6 +3648,17 @@ body.queue-open #mini-player { z-index: 65; }
   margin-right: 0;
   font-size: 0.78em;      /* 0.65 * 1.2 — scales with parent */
   padding: 2px 6px;       /* was 1px 5px */
+}
+
+/* Browse back button — blue pill matching lib-back-btn */
+#btn-browse-back {
+  color: var(--accent);
+  background: rgba(74,136,245,0.12);
+  border-color: rgba(74,136,245,0.30);
+}
+#btn-browse-back:hover {
+  background: rgba(74,136,245,0.22);
+  color: var(--accent);
 }
 
 /* Sort button — margin-left now on #sort-wrap wrapper */
