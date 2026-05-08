@@ -3270,14 +3270,26 @@ const UI = (() => {
     const hash  = [...(collection.name || '')].reduce((a, c) => a + c.charCodeAt(0), 0);
     const colBg = COL_COLORS[Math.abs(hash) % COL_COLORS.length];
 
+    // Best available cover from songs (first non-blob thumbnailUrl)
+    const songCoverUrl = songs.find(s =>
+      s.thumbnailUrl && !s.thumbnailUrl.startsWith('blob:')
+    )?.thumbnailUrl || null;
+
     let artHtml;
     if (collection.manualCoverUrl) {
       artHtml = `<img src="${escHtml(collection.manualCoverUrl)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)">`;
     } else if (collection.mosaicUrls && collection.mosaicUrls.length > 0) {
       artHtml = _buildMosaicThumb(collection.mosaicUrls, collection.name);
+    } else if (songCoverUrl) {
+      artHtml = `<img src="${escHtml(songCoverUrl)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)">`;
     } else {
       artHtml = `<svg width="25" height="22" viewBox="0 0 361.54 315.2" fill="currentColor" style="color:var(--text-secondary)"><path d="M136.81,41.58C61.25,41.58,0,102.83,0,178.39s61.25,136.81,136.81,136.81,136.81-61.25,136.81-136.81S212.37,41.58,136.81,41.58ZM136.81,239.6c-33.8,0-61.21-27.4-61.21-61.21s27.4-61.21,61.21-61.21,61.21,27.4,61.21,61.21-27.4,61.21-61.21,61.21ZM136.81,191.78c-7.39,0-13.39-5.99-13.39-13.39s5.99-13.39,13.39-13.39,13.39,5.99,13.39,13.39-5.99,13.39-13.39,13.39ZM361.54,126.94c0,54.17-33.93,100.4-81.69,118.63,9.59-20.39,14.96-43.16,14.96-67.18,0-78.52-57.28-143.65-132.33-155.91C182.95,8.31,207.8,0,234.6,0c70.11,0,126.94,56.83,126.94,126.94Z"/></svg>`;
     }
+
+    // Pre-fill the URL input with the best known URL (manual takes priority, then first song cover)
+    const prefillCoverUrl = (collection.manualCoverUrl && !collection.manualCoverUrl.startsWith('blob:'))
+      ? collection.manualCoverUrl
+      : (songCoverUrl || '');
 
     const entity = document.createElement('div');
     entity.id        = 'lib-collection-hdr';
@@ -3306,7 +3318,7 @@ const UI = (() => {
       </div>
       <div class="album-edit-row">
         <label class="album-edit-label">Cover URL</label>
-        <input class="album-edit-input" data-field="coverUrl" value="${escHtml(collection.manualCoverUrl && !collection.manualCoverUrl.startsWith('blob:') ? collection.manualCoverUrl : '')}" placeholder="https://…">
+        <input class="album-edit-input" data-field="coverUrl" value="${escHtml(prefillCoverUrl)}" placeholder="https://…">
         <button class="album-edit-apply-btn" data-apply="coverUrl" title="${t('lbl_apply_to_all')}">${t('lbl_apply_to_all')}</button>
       </div>`;
 
