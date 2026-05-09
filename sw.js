@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '2.3.0';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.3.0 — fix duplicate z-index on #bottom-nav (20 was overriding 70, letting player slide on top)
+const APP_VERSION  = '2.3.2';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.3.2 — fix lib rescan btn: _libRescanRunning set synchronously in onLibRescan before fire-and-forget _doLibRescan; prevents race with async _loadAlbums/_syncLibRescanBtn
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

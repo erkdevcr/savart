@@ -1380,7 +1380,7 @@ const App = (() => {
 
       let anyTrackFoundMB = false;
       for (const { file, title, artist, album, m } of mbQueue) {
-        if (_browseRescanAbort || _albumRescanAbort) break; // abort check
+        if (_browseRescanAbort || _albumRescanAbort || _libRescanAbort) break; // abort check
         try {
           const result = await MusicBrainz.lookup(file.id, title, artist, album);
           DB.setMeta(file.id, { mbTried: true }).catch(() => {});
@@ -1429,7 +1429,7 @@ const App = (() => {
     // Sequential at 1 req/s (Discogs unauthenticated rate limit is 25/min).
     if (typeof Discogs !== 'undefined') {
       for (const file of files) {
-        if (_browseRescanAbort || _albumRescanAbort) break; // abort check
+        if (_browseRescanAbort || _albumRescanAbort || _libRescanAbort) break; // abort check
         try {
           const m = await DB.getMeta(file.id).catch(() => null);
           // Never overwrite a manually set cover
@@ -1537,6 +1537,7 @@ const App = (() => {
     // ── Pass 5: Cover Art Archive (MusicBrainz) ───────────────────────────────
     // For songs still without an embedded ID3 cover but with a MB release ID.
     // CAA URL: https://coverartarchive.org/release/{mbid}/front-250
+    if (_browseRescanAbort || _albumRescanAbort || _libRescanAbort) return; // abort check
     if (typeof MusicBrainz !== 'undefined') {
       const caaFiles = files.filter(file => {
         const eid = CSS.escape(file.id);
@@ -1576,6 +1577,7 @@ const App = (() => {
     //             have NO thumbnailUrl in DB. Goal = persist an external URL so other
     //             devices (which don't have the local blob) can show the album thumbnail.
     if (typeof Lastfm === 'undefined') return;
+    if (_browseRescanAbort || _albumRescanAbort || _libRescanAbort) return; // abort check
     let lfmEntries; // [{ file, updateDom }]
     if (force) {
       const checks = await Promise.all(files.map(async file => {
@@ -1611,12 +1613,12 @@ const App = (() => {
     // Last resort: identifies songs with no metadata at all from their audio content.
     // Limited per folder open to conserve daily quota (CONFIG.AUDD_MAX_PER_FOLDER).
     if (typeof Audd === 'undefined') return;
-    if (_browseRescanAbort || _albumRescanAbort) return; // abort check
+    if (_browseRescanAbort || _albumRescanAbort || _libRescanAbort) return; // abort check
     const auddCandidates = files.filter(file => !_rowHasCover(file.id));
     if (auddCandidates.length === 0) return;
     const auddLimit = Math.min(auddCandidates.length, CONFIG.AUDD_MAX_PER_FOLDER || 5);
     for (let i = 0; i < auddLimit; i++) {
-      if (_browseRescanAbort || _albumRescanAbort) break; // abort check
+      if (_browseRescanAbort || _albumRescanAbort || _libRescanAbort) break; // abort check
       const file = auddCandidates[i];
       try {
         const dbMeta = await DB.getMeta(file.id);
@@ -2058,7 +2060,7 @@ const App = (() => {
       _libRescanAbort = true;
       const btn  = document.getElementById('btn-lib-rescan');
       const span = btn?.querySelector('span');
-      if (span) span.textContent = UI.t('rescan_stop_btn') + '…';
+      if (span) span.textContent = UI.t('rescan_stopping_btn');
       if (btn)  btn.disabled = true; // prevent rapid re-taps while draining
       return;
     }
@@ -2089,6 +2091,14 @@ const App = (() => {
     const confirmed = await _showRescanDialog(baseMsg);
     if (!confirmed) return;
 
+    // Set state synchronously NOW — before the fire-and-forget _doLibRescan runs.
+    // This prevents any async callback (live-sync poll, _loadAlbums, etc.) that
+    // might sneak in between here and _doLibRescan's own _syncLibRescanBtn() call
+    // from seeing _libRescanRunning=false and resetting the button back to "Rescanear".
+    _libRescanRunning = true;
+    _libRescanAbort   = false;
+    _syncLibRescanBtn(); // show "Detener" immediately
+
     _doLibRescan(folderIds);
   }
 
@@ -2097,10 +2107,13 @@ const App = (() => {
    * Clears manual overrides before enriching so the guard doesn't block.
    */
   async function _doLibRescan(folderIds) {
-    if (_libRescanRunning) return;
-    _libRescanRunning = true;
-    _libRescanAbort   = false;
-    _syncLibRescanBtn(); // show "Detener" immediately, stay visible across tab switches
+    // onLibRescan always sets _libRescanRunning=true and calls _syncLibRescanBtn() BEFORE
+    // invoking us. We still set state here as a safety net if ever called directly.
+    if (!_libRescanRunning) {
+      _libRescanRunning = true;
+      _libRescanAbort   = false;
+      _syncLibRescanBtn(); // show "Detener" immediately, stay visible across tab switches
+    }
 
     UI.showToast(`${UI.t('toast_rescan_start').replace('…', '')} (${folderIds.length})…`);
 
