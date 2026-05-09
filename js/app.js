@@ -2179,7 +2179,7 @@ const App = (() => {
       _browseRescanAbort = true;
       const btn  = document.getElementById('btn-browse-rescan');
       const span = btn?.querySelector('span');
-      if (span) span.textContent = UI.t('rescan_stop_btn') + '…';
+      if (span) span.textContent = UI.t('rescan_stopping_btn');
       if (btn)  btn.disabled = true; // prevent further taps while stopping
       return;
     }

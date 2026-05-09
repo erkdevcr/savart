@@ -3659,6 +3659,15 @@ body.queue-open #mini-player { z-index: 65; }
   cursor: pointer;
 }
 #btn-browse-rescan.scanning:hover { background: rgba(232,160,32,0.16); }
+/* Stopping state (disabled + scanning): preserve amber color at reduced opacity —
+   mirrors .lib-rescan-btn:disabled so UA stylesheet doesn't override to grey */
+#btn-browse-rescan.scanning:disabled {
+  color: #e8a020;
+  border-color: rgba(232,160,32,0.45);
+  background: rgba(232,160,32,0.08);
+  opacity: 0.55;
+  cursor: not-allowed;
+}
 @keyframes browse-rescan-spin { to { transform: rotate(360deg); } }
 #btn-browse-rescan.scanning #browse-rescan-icon { animation: browse-rescan-spin 1s linear infinite; }
 
