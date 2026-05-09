@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '2.4.5';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.4.5 — song edit modal: "Editar canción" in all song context menus, edits name/artist/album/year/cover, pre-filled from DB, autocomplete
+const APP_VERSION  = '2.4.6';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.4.6 — fix cover bleeding: stop propagating artist/album to siblings in _propagateAlbumMeta; guard Pass-6 Last.fm queries with trusted-source check
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

@@ -1074,9 +1074,18 @@ const App = (() => {
       // 1a. DB — data persisted from a previous session
       // (AudD artist/title/album stored earlier, or cached thumbnailUrl)
       if (dbMeta) {
-        if (!meta.artist && dbMeta.artist)      meta.artist = dbMeta.artist;
-        if (!meta.title  && dbMeta.displayName) meta.title  = dbMeta.displayName;
-        if (!meta.album  && dbMeta.album)       meta.album  = dbMeta.album;
+        // title/displayName: safe to restore unconditionally — was never propagated.
+        if (!meta.title && dbMeta.displayName) meta.title = dbMeta.displayName;
+
+        // artist/album: only restore from DB when there is evidence these values came
+        // from this song specifically (ID3 parse stored coverBlob, AudD identified it,
+        // or the user set them manually).  Without such evidence the DB value may be
+        // a contaminated entry written by the old _propagateAlbumMeta behaviour —
+        // treating it as correct would cause Last.fm to return another song's cover.
+        const _dbMetaTrusted = !!(dbMeta.coverBlob || dbMeta.auddTried || (dbMeta.manualAt || 0) > 0);
+        if (!meta.artist && dbMeta.artist && _dbMetaTrusted) meta.artist = dbMeta.artist;
+        if (!meta.album  && dbMeta.album  && _dbMetaTrusted) meta.album  = dbMeta.album;
+
         // Restore a previously-found external cover URL (not a Drive thumbnail)
         if (!meta.coverUrl) {
           const stored = dbMeta.coverUrl || dbMeta.thumbnailUrl;
@@ -1664,9 +1673,20 @@ const App = (() => {
         const dbM    = await DB.getMeta(file.id);
         // Never overwrite a manually set cover
         if ((dbM?.manualAt || 0) > 0) return;
-        const artist = inMem?.artist || dbM?.artist || '';
-        const album  = inMem?.album  || dbM?.album  || '';
+
+        // Determine artist/album from trusted sources only.
+        // Prefer in-memory parse (reliable — from this session's ID3 extraction).
+        // DB values are only trusted when there's evidence the song was individually
+        // identified: own ID3 blob stored (coverBlob), AudD ran on it, or manual edit.
+        // DB artist/album from old _propagateAlbumMeta runs (now fixed) is untrusted
+        // and would cause cover bleeding — skip those songs rather than store wrong art.
+        const inMemArtist = inMem?.artist || '';
+        const inMemAlbum  = inMem?.album  || '';
+        const dbTrusted   = !!(dbM?.coverBlob || dbM?.auddTried || (dbM?.manualAt || 0) > 0);
+        const artist      = inMemArtist || (dbTrusted ? (dbM?.artist || '') : '');
+        const album       = inMemAlbum  || (dbTrusted ? (dbM?.album  || '') : '');
         if (!artist || !album) return;
+
         const url = await Lastfm.fetchCover(artist, album);
         if (!url) return;
         if (updateDom) _updateRowThumbnail(file.id, url);
@@ -6879,20 +6899,25 @@ const App = (() => {
     const folderId = item.parents?.[0];
     if (!folderId) return;
 
-    // Collections have intentionally diverse artists — propagating one track's
-    // artist/album to all siblings would collapse artist diversity and cause the
-    // folder to be reclassified as an album after a rescan.  Only the folder-level
-    // cover (cover.jpg / folder.jpg discovered by _getFolderCover) is propagated
-    // to all tracks; track-specific covers (ID3, Last.fm, AudD) are NOT propagated
-    // to avoid showing one song's cover art on a different song's home card.
-    const isCollection = isFolderCollection(folderId);
-
-    const album    = isCollection ? null : (meta.album  || null);
-    const artist   = isCollection ? null : (meta.artist || null);
-    const year     = meta.year     || null;
+    // ── What we propagate and why ────────────────────────────────────────────────
+    // SAFE to propagate: year and folder-level cover (cover.jpg / folder.jpg).
+    //   • year is the same for every track on an album and is harmless to share.
+    //   • folderCoverUrl is a folder-wide image, not tied to any single track.
+    //
+    // UNSAFE to propagate: artist and album text.
+    //   • These come from ONE song's ID3 tags.  If that song has correct tags but
+    //     another song in the same folder is from a different album (compilation,
+    //     download folder, etc.), writing the first song's artist/album into the
+    //     sibling's DB record causes the sibling to later query Last.fm with the
+    //     wrong key — and adopt a completely different song's cover art.
+    //     This is the root cause of "cover bleeding."
+    //   • Each song must discover its own artist/album from its own sources
+    //     (ID3 tags → AudD fingerprint → appProperties from Drive).
+    // ────────────────────────────────────────────────────────────────────────────
+    const year     = meta.year || null;
     // Only propagate covers that came from the shared folder image, never track-specific art.
     const coverUrl = folderCoverUrl || null;
-    if (!album && !artist && !year && !coverUrl) return;
+    if (!year && !coverUrl) return;
 
     try {
       const all = await DB.getAllMeta();
@@ -6903,8 +6928,6 @@ const App = (() => {
         if (m.folderId !== folderId)   continue;    // only siblings in same folder
 
         const patch = {};
-        if (album    && !m.album)        patch.album        = album;
-        if (artist   && !m.artist)       patch.artist       = artist;
         if (year     && !m.year)         patch.year         = year;
         if (coverUrl && !m.thumbnailUrl) patch.thumbnailUrl = coverUrl;
         if (Object.keys(patch).length === 0) continue;
@@ -6920,7 +6943,7 @@ const App = (() => {
         if (_currentLibTab === 'artists') _loadArtists();
       }
 
-      // Propagation writes artist/album/year to siblings — sync to Drive for cross-device
+      // Propagation writes year/cover to siblings — sync to Drive for cross-device
       if (updated > 0 && typeof Sync !== 'undefined') Sync.push('metadata');
     } catch (err) {
       console.warn('[App] _propagateAlbumMeta error:', err);
