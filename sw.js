@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '2.4.2';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.4.2 — album/collection edit panel: live real-time update of cover, artist, year, song row thumbnails
+const APP_VERSION  = '2.4.4';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.4.4 — autocomplete suggestions for artist/album in edit panels (starts-with + contains, bold match, keyboard nav)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

@@ -660,6 +660,53 @@ const App = (() => {
       if (bestThumb)  _metaUpdate.thumbnailUrl = bestThumb;
       if (bestArtist) _metaUpdate.artist       = bestArtist;
       DB.setMeta(track.id, _metaUpdate).catch(() => {});
+
+      // ── Proactive early cover fetch ────────────────────────────────────────────
+      // If there's no cover yet but we have artist metadata, query Last.fm in the
+      // background WITHOUT waiting for the blob to download.  This makes covers
+      // appear faster on slow connections and for songs with no local blob cache.
+      // _onBlobReady may later find a better (ID3-embedded) cover — that is fine,
+      // it will overwrite this one via the protected isId3 path.
+      const _hasManual = (dbMeta?.manualAt || 0) > 0;
+      if (!bestThumb && !_hasManual && bestArtist && (bestAlbum || bestName)) {
+        (async () => {
+          try {
+            const stillCurrent = () => Player.getCurrentTrack()?.id === track.id;
+            let earlyUrl = null;
+
+            if (typeof Lastfm !== 'undefined') {
+              if (bestAlbum) {
+                earlyUrl = await Lastfm.fetchCover(bestArtist, bestAlbum).catch(() => null);
+              }
+              if (!earlyUrl) {
+                earlyUrl = await Lastfm.fetchCoverByTrack(bestArtist, bestName || track.name).catch(() => null);
+              }
+            }
+
+            if (earlyUrl) {
+              // Persist so _loadHomeData and future sessions pick it up
+              DB.setMeta(track.id, { thumbnailUrl: earlyUrl }).catch(() => {});
+              Meta.forcePatch(track.id, { coverUrl: earlyUrl });
+
+              // Patch all visible surfaces (home cards, rows, queue) immediately
+              _updateHomeCardThumbnail(track.id, earlyUrl);
+              _updateRowThumbnail(track.id, earlyUrl, false);
+              _updateQueueItemCover(track.id, earlyUrl);
+
+              // Update player if track is still current
+              if (stillCurrent()) {
+                const cur = Player.getCurrentTrack();
+                const e2  = _enrichTrack(cur);
+                UI.updateMiniPlayer(e2, Player.isPlaying());
+                if (UI.isExpandedPlayerVisible()) UI.updateExpandedPlayer(e2, Player.isPlaying());
+              }
+
+              // If home is visible, refresh it so recents card shows the cover
+              if (UI.getCurrentView() === 'home') _loadHomeData().catch(() => {});
+            }
+          } catch (_) { /* non-fatal — _onBlobReady will try again */ }
+        })();
+      }
     });
 
     // Schedule sync for play counts (incremented by player.js after audio starts)
@@ -782,6 +829,24 @@ const App = (() => {
       if (hasMeta)  Meta.forcePatch(id, metaPatch);
       if (hasQueue && Player.patchQueueItem(id, queuePatch)) {
         currentAffected = true;
+      }
+    }
+
+    // Patch all visible surfaces (home cards, queue rows, library rows) for every
+    // edited ID — these are keyed by song ID so they update regardless of playback state.
+    const coverUrl = dbPatch.thumbnailUrl && !dbPatch.thumbnailUrl.startsWith('blob:') && dbPatch.thumbnailUrl !== 'id3'
+      ? dbPatch.thumbnailUrl : null;
+    for (const id of editedIds) {
+      if (coverUrl)           _updateHomeCardThumbnail(id, coverUrl);
+      if (coverUrl)           _updateRowThumbnail(id, coverUrl, false);
+      if (coverUrl)           _updateQueueItemCover(id, coverUrl);
+      if (dbPatch.displayName || dbPatch.artist || dbPatch.album || dbPatch.year) {
+        _patchMetaText(id, {
+          title:  dbPatch.displayName || null,
+          artist: dbPatch.artist      || null,
+          album:  dbPatch.album       || null,
+          year:   dbPatch.year        || null,
+        });
       }
     }
 
@@ -1136,11 +1201,11 @@ const App = (() => {
 
       _applyMeta(item, meta);
 
-      // If home is currently visible and we enriched the artist/title, refresh it
-      // so recents cards show the updated text immediately in this session.
-      // (_patchMetaText already handled DOM-level patches; this keeps the data
-      //  model consistent for subsequent re-renders like live sync.)
-      if ((meta.artist || meta.title) && UI.getCurrentView() === 'home') {
+      // If home is currently visible and any enrichment happened (cover OR text),
+      // reload home data so recents cards always reflect the latest values.
+      // _applyMeta already patched the DOM in-place; _loadHomeData keeps the
+      // data model consistent so subsequent re-renders (live sync) are correct too.
+      if ((meta.artist || meta.title || meta.coverUrl) && UI.getCurrentView() === 'home') {
         _loadHomeData().catch(() => {});
       }
 
@@ -2325,7 +2390,29 @@ const App = (() => {
     const title  = meta.title  || item.displayName;
     const artist = meta.artist || '';
 
-    // Only update if this is still the current track
+    // ── Always patch all visible surfaces keyed by song ID ─────────────────────────
+    // These updates target specific song cards/rows by data-id regardless of what is
+    // currently playing, so they must run even if the user skipped to another track
+    // while _onBlobReady was enriching this one. Skipping these was the root cause of
+    // home-card covers and recents text never updating for previously-played tracks.
+
+    if (meta.coverUrl) {
+      _updateRowThumbnail(item.id, meta.coverUrl, true);
+      _updateHomeCardThumbnail(item.id, meta.coverUrl);
+      _updateTopListThumb(item.id, meta.coverUrl, true);
+      // Queue panel rows are also song-id keyed — update them too
+      _updateQueueItemCover(item.id, meta.coverUrl);
+    }
+
+    // Patch title/artist text in all visible surfaces (queue, home, top-played, browse).
+    _patchMetaText(item.id, {
+      title:  meta.title  || null,
+      artist: meta.artist || null,
+      album:  meta.album  || null,
+      year:   meta.year   || null,
+    });
+
+    // ── Player UI — only if this is still the current track ────────────────────────
     const currentTrack = Player.getCurrentTrack();
     if (currentTrack?.id !== item.id) return;
 
@@ -2352,26 +2439,6 @@ const App = (() => {
     UI.updateExpandedPlayer(enriched, Player.isPlaying());
     // Refresh lock-screen / notification metadata with resolved ID3 info
     Player.updateMediaSessionArtwork(enriched);
-
-    // Update all visible thumbnail surfaces with the resolved cover (ID3 = protected)
-    if (meta.coverUrl) {
-      _updateRowThumbnail(item.id, meta.coverUrl, true);
-      _updateHomeCardThumbnail(item.id, meta.coverUrl);
-      _updateTopListThumb(item.id, meta.coverUrl, true);
-      // Queue panel: patch the row for this song (needed when AudD resolves
-      // after the panel was already open, since _prefetchQueueCovers ran before
-      // the cover was available)
-      _updateQueueItemCover(item.id, meta.coverUrl);
-    }
-
-    // Patch title/artist text in all visible surfaces (queue, home, top-played, browse).
-    // Runs regardless of whether a cover was found — enriched text matters too.
-    _patchMetaText(item.id, {
-      title:  meta.title  || null,
-      artist: meta.artist || null,
-      album:  meta.album  || null,
-      year:   meta.year   || null,
-    });
   }
 
   /**
@@ -3757,6 +3824,33 @@ const App = (() => {
   }
 
   /* ── Library ─────────────────────────────────────────────── */
+
+  // ── Meta suggestions cache (artist/album autocomplete) ───────────────────────
+  let _metaSuggestionsCache   = null;
+  let _metaSuggestionsCacheTs = 0;
+
+  /**
+   * Return deduplicated, sorted lists of artist and album names from the
+   * metadata store.  Results are cached for 30 s to avoid repeated DB scans.
+   * @returns {Promise<{artists: string[], albums: string[]}>}
+   */
+  async function getMetaSuggestions() {
+    const now = Date.now();
+    if (_metaSuggestionsCache && now - _metaSuggestionsCacheTs < 30_000) {
+      return _metaSuggestionsCache;
+    }
+    const all     = await DB.getAllMetaLight().catch(() => []);
+    const artists = [...new Set(all.map(m => m.artist).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+    const albums  = [...new Set(all.map(m => m.album).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+    _metaSuggestionsCache   = { artists, albums };
+    _metaSuggestionsCacheTs = now;
+    return _metaSuggestionsCache;
+  }
+
+  /** Invalidate suggestions cache (call after bulk metadata writes). */
+  function _invalidateSuggestionsCache() { _metaSuggestionsCache = null; }
 
   let _currentLibTab  = 'albums'; // persists tab across sync refreshes
   let _libInDetail    = false;       // true while showing an artist/album drill-down
@@ -7757,6 +7851,7 @@ const App = (() => {
 
     if (typeof Sync !== 'undefined') Sync.push('metadata');
     if (_browseFolderId) _updateBrowseLegend(_browseFolderId);
+    _invalidateSuggestionsCache(); // new artist/album names now available as suggestions
     UI.showToast(`${songs.length} canciones actualizadas`);
   }
 
@@ -9691,6 +9786,7 @@ const App = (() => {
     onAlbumRescan,
     stopAlbumRescan,
     onAlbumEdit,
+    getMetaSuggestions,
     onAlbumPlay,
     onAlbumQueue,
     onAlbumGoToFolder,

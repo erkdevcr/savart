@@ -3221,6 +3221,14 @@ const UI = (() => {
     container.appendChild(entity);
     container.appendChild(editPanel);
 
+    // ── Autocomplete for artist / album fields (album detail) ──────────────
+    if (typeof App !== 'undefined' && App.getMetaSuggestions) {
+      const artistInput = editPanel.querySelector('[data-field="artist"]');
+      const albumInput  = editPanel.querySelector('[data-field="album"]');
+      if (artistInput) _attachAutocomplete(artistInput, () => App.getMetaSuggestions().then(s => s.artists));
+      if (albumInput)  _attachAutocomplete(albumInput,  () => App.getMetaSuggestions().then(s => s.albums));
+    }
+
     if (songs.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'empty-state';
@@ -3692,6 +3700,12 @@ const UI = (() => {
     container.appendChild(entity);
     container.appendChild(editPanel);
 
+    // ── Autocomplete for name field (collection detail) ────────────────────
+    if (typeof App !== 'undefined' && App.getMetaSuggestions) {
+      const nameInput = editPanel.querySelector('[data-field="name"]');
+      if (nameInput) _attachAutocomplete(nameInput, () => App.getMetaSuggestions().then(s => s.albums));
+    }
+
     if (songs.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'empty-state';
@@ -3983,6 +3997,119 @@ const UI = (() => {
   }
 
   /* ── Utils ───────────────────────────────────────────────── */
+
+  /**
+   * Attach an autocomplete dropdown to an <input> element.
+   *
+   * @param {HTMLInputElement} input    — the field to enhance
+   * @param {() => Promise<string[]>}  getSuggestions — async fn returning the full list
+   * @param {Object} [opts]
+   * @param {number} [opts.maxItems=8] — max suggestions shown at once
+   */
+  function _attachAutocomplete(input, getSuggestions, { maxItems = 8 } = {}) {
+    // Wrap the input so the dropdown can be position:absolute inside it
+    const wrap = document.createElement('div');
+    wrap.className = 'ac-wrap';
+    input.parentNode.insertBefore(wrap, input);
+    wrap.appendChild(input);
+
+    const drop = document.createElement('div');
+    drop.className = 'ac-dropdown';
+    drop.style.display = 'none';
+    wrap.appendChild(drop);
+
+    let _allItems  = [];
+    let _activeIdx = -1;
+
+    const _hide = () => {
+      drop.style.display = 'none';
+      drop.innerHTML     = '';
+      _activeIdx         = -1;
+    };
+
+    const _setActive = (idx) => {
+      const items = drop.querySelectorAll('.ac-item');
+      items.forEach((el, i) => el.classList.toggle('ac-active', i === idx));
+      _activeIdx = idx;
+      if (items[idx]) items[idx].scrollIntoView({ block: 'nearest' });
+    };
+
+    const _select = (value) => {
+      input.value = value;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      _hide();
+      input.focus();
+    };
+
+    const _show = (query) => {
+      const q = query.trim().toLowerCase();
+      if (!q) { _hide(); return; }
+
+      // Filter: prioritise starts-with, then contains
+      const starts   = _allItems.filter(s => s.toLowerCase().startsWith(q));
+      const contains = _allItems.filter(s => !s.toLowerCase().startsWith(q) && s.toLowerCase().includes(q));
+      const matches  = [...starts, ...contains].slice(0, maxItems);
+
+      if (!matches.length) { _hide(); return; }
+
+      drop.innerHTML = '';
+      _activeIdx     = -1;
+
+      matches.forEach(item => {
+        const el = document.createElement('div');
+        el.className = 'ac-item';
+        // Bold the matched portion
+        const lo  = item.toLowerCase();
+        const idx = lo.indexOf(q);
+        if (idx >= 0) {
+          el.innerHTML =
+            escHtml(item.slice(0, idx)) +
+            `<em>${escHtml(item.slice(idx, idx + q.length))}</em>` +
+            escHtml(item.slice(idx + q.length));
+        } else {
+          el.textContent = item;
+        }
+        el.addEventListener('mousedown', e => { e.preventDefault(); _select(item); });
+        drop.appendChild(el);
+      });
+
+      drop.style.display = 'block';
+    };
+
+    // Lazy-load suggestions the first time the input is focused
+    let _loaded = false;
+    input.addEventListener('focus', async () => {
+      if (!_loaded) {
+        _allItems = await getSuggestions().catch(() => []);
+        _loaded   = true;
+      }
+      _show(input.value);
+    });
+
+    input.addEventListener('input', () => _show(input.value));
+
+    input.addEventListener('keydown', e => {
+      if (drop.style.display === 'none') return;
+      const items = drop.querySelectorAll('.ac-item');
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        _setActive(Math.min(_activeIdx + 1, items.length - 1));
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        _setActive(Math.max(_activeIdx - 1, -1));
+      } else if (e.key === 'Enter' && _activeIdx >= 0) {
+        e.preventDefault();
+        _select(items[_activeIdx].textContent.replace(/\n/g, '').trim());
+      } else if (e.key === 'Escape') {
+        _hide();
+      }
+    });
+
+    // Close when clicking outside
+    document.addEventListener('mousedown', e => {
+      if (!wrap.contains(e.target)) _hide();
+    }, true);
+  }
 
   function escHtml(str) {
     return String(str ?? '')
