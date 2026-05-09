@@ -1706,7 +1706,7 @@ img { display: block; }
 /* Wave icon inside the boot toast — mirrors .savart-wave-wrap exactly.
    No height on the SVG so aspect-ratio stays intact and the scroll loop is seamless. */
 .boot-toast-wave {
-  width: 40px;          /* container width — natural SVG height ≈ 40*(32/144)*3 ≈ 27px */
+  width: 28px;          /* container width — natural SVG height ≈ 28*(32/144)*3 ≈ 19px */
   flex-shrink: 0;
   overflow: hidden;
   -webkit-mask-image: linear-gradient(to right, transparent 0%, black 18%, black 82%, transparent 100%);
