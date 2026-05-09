@@ -1380,7 +1380,7 @@ const App = (() => {
 
       let anyTrackFoundMB = false;
       for (const { file, title, artist, album, m } of mbQueue) {
-        if (_browseRescanAbort) break; // abort check — browse rescan was stopped
+        if (_browseRescanAbort || _albumRescanAbort) break; // abort check
         try {
           const result = await MusicBrainz.lookup(file.id, title, artist, album);
           DB.setMeta(file.id, { mbTried: true }).catch(() => {});
@@ -1429,7 +1429,7 @@ const App = (() => {
     // Sequential at 1 req/s (Discogs unauthenticated rate limit is 25/min).
     if (typeof Discogs !== 'undefined') {
       for (const file of files) {
-        if (_browseRescanAbort) break; // abort check
+        if (_browseRescanAbort || _albumRescanAbort) break; // abort check
         try {
           const m = await DB.getMeta(file.id).catch(() => null);
           // Never overwrite a manually set cover
@@ -1611,12 +1611,12 @@ const App = (() => {
     // Last resort: identifies songs with no metadata at all from their audio content.
     // Limited per folder open to conserve daily quota (CONFIG.AUDD_MAX_PER_FOLDER).
     if (typeof Audd === 'undefined') return;
-    if (_browseRescanAbort) return; // abort check
+    if (_browseRescanAbort || _albumRescanAbort) return; // abort check
     const auddCandidates = files.filter(file => !_rowHasCover(file.id));
     if (auddCandidates.length === 0) return;
     const auddLimit = Math.min(auddCandidates.length, CONFIG.AUDD_MAX_PER_FOLDER || 5);
     for (let i = 0; i < auddLimit; i++) {
-      if (_browseRescanAbort) break; // abort check
+      if (_browseRescanAbort || _albumRescanAbort) break; // abort check
       const file = auddCandidates[i];
       try {
         const dbMeta = await DB.getMeta(file.id);
@@ -1759,6 +1759,7 @@ const App = (() => {
    * @param {string}   folderId
    */
   async function onAlbumRescan(songs, folderId) {
+    if (_albumRescanRunning) return; // second call while running — ignored (UI handles abort via stopAlbumRescan)
     if (!songs || songs.length === 0) return;
 
     // ── Check for manual edits and warn before proceeding ──────────────────
@@ -1772,33 +1773,51 @@ const App = (() => {
       // Note: resetToVirgin below already clears manualAt — no separate clear needed
     }
 
-    UI.showToast(UI.t('toast_rescan_start'));
+    _albumRescanRunning = true;
+    _albumRescanAbort   = false;
 
-    // ── Purge orphans: remove DB records for files no longer in Drive ──
-    if (folderId) {
-      const liveIds = songs.map(s => s.id);
-      const pruned  = await DB.purgeOrphans(folderId, liveIds).catch(() => 0);
-      if (pruned > 0) console.log(`[App] Purged ${pruned} orphan(s) from folder ${folderId}`);
-    }
+    try {
+      UI.showToast(UI.t('toast_rescan_start'));
 
-    // Virgin reset: wipe all enrichment AND manual data — only stars/playCount survive.
-    // The pipeline will start from scratch using only the original filename.
-    await Promise.all(songs.map(async s => {
-      await DB.resetToVirgin(s.id).catch(() => {});
-      if (typeof Meta !== 'undefined') Meta.revoke(s.id);
-    }));
-    if (folderId) _folderCoverCache.delete(folderId);
-    await _prefetchAndApplyFolderCovers(folderId, songs, true); // force=true
-    await _patchAlbumDetailHeader(songs);
-    // Mark folder as rescanned BEFORE pushHot so the dot syncs in the hot delta
-    if (folderId) await DB.setMeta(folderId, { rescannedAt: Date.now() }).catch(() => {});
-    if (typeof Sync !== 'undefined') {
-      const hotItems = folderId ? [...songs, { id: folderId }] : songs;
-      Sync.pushHot(hotItems).catch(() => {});
-      Sync.push('metadata');
+      // ── Purge orphans: remove DB records for files no longer in Drive ──
+      if (folderId) {
+        const liveIds = songs.map(s => s.id);
+        const pruned  = await DB.purgeOrphans(folderId, liveIds).catch(() => 0);
+        if (pruned > 0) console.log(`[App] Purged ${pruned} orphan(s) from folder ${folderId}`);
+      }
+
+      if (_albumRescanAbort) { UI.showToast(UI.t('toast_rescan_stopped')); return; }
+
+      // Virgin reset: wipe all enrichment AND manual data — only stars/playCount survive.
+      await Promise.all(songs.map(async s => {
+        await DB.resetToVirgin(s.id).catch(() => {});
+        if (typeof Meta !== 'undefined') Meta.revoke(s.id);
+      }));
+      if (folderId) _folderCoverCache.delete(folderId);
+
+      await _prefetchAndApplyFolderCovers(folderId, songs, true); // force=true — honours _albumRescanAbort internally
+
+      if (_albumRescanAbort) { UI.showToast(UI.t('toast_rescan_stopped')); return; }
+
+      await _patchAlbumDetailHeader(songs);
+      // Mark folder as rescanned BEFORE pushHot so the dot syncs in the hot delta
+      if (folderId) await DB.setMeta(folderId, { rescannedAt: Date.now() }).catch(() => {});
+      if (typeof Sync !== 'undefined') {
+        const hotItems = folderId ? [...songs, { id: folderId }] : songs;
+        Sync.pushHot(hotItems).catch(() => {});
+        Sync.push('metadata');
+      }
+      _lfmThumbLibrary().catch(() => {});
+      UI.showToast(UI.t('toast_rescan_done'));
+    } finally {
+      _albumRescanRunning = false;
+      _albumRescanAbort   = false;
     }
-    _lfmThumbLibrary().catch(() => {});
-    UI.showToast(UI.t('toast_rescan_done'));
+  }
+
+  /** Abort a running album/collection detail rescan. Called from the UI stop button. */
+  function stopAlbumRescan() {
+    if (_albumRescanRunning) _albumRescanAbort = true;
   }
 
   /* ── Manual-data helpers for rescan flows ───────────────────
@@ -2003,6 +2022,8 @@ const App = (() => {
   let _libRescanAbort   = false;
   let _browseRescanRunning = false;
   let _browseRescanAbort   = false;
+  let _albumRescanRunning  = false;
+  let _albumRescanAbort    = false;
 
   /**
    * Sync the lib-rescan button state to reality:
@@ -9629,6 +9650,7 @@ const App = (() => {
     onMoveToCollections,
     _openCollectionEditModal,
     onAlbumRescan,
+    stopAlbumRescan,
     onAlbumEdit,
     onAlbumPlay,
     onAlbumQueue,

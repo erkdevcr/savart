@@ -308,6 +308,7 @@ const UI = (() => {
       ds_rescan_prompt:     'Esta carpeta contiene subcarpetas escaneadas anteriormente. ¿Qué deseas hacer?',
       rescan_btn:           'Rescanear',
       rescan_stop_btn:      'Detener',
+      rescan_stopping_btn:  'Deteniendo…',
       toast_rescan_stopped: 'Rescan detenido',
       rescan_manual_warn:   'tienen datos editados manualmente que serán reemplazados al rescanear.',
       rescan_manual_warn_single: 'tiene datos editados manualmente que serán reemplazados al rescanear.',
@@ -610,6 +611,7 @@ const UI = (() => {
       ds_rescan_prompt:     'This folder contains previously scanned subfolders. What do you want to do?',
       rescan_btn:           'Rescan',
       rescan_stop_btn:      'Stop',
+      rescan_stopping_btn:  'Stopping…',
       toast_rescan_stopped: 'Rescan stopped',
       rescan_manual_warn:   'have manually edited data that will be replaced on rescan.',
       rescan_manual_warn_single: 'has manually edited data that will be replaced on rescan.',
@@ -2935,7 +2937,7 @@ const UI = (() => {
       </button>
       <button class="lib-rescan-btn" title="Rescan con MusicBrainz" aria-label="Rescan con MusicBrainz">
         <svg class="lib-rescan-icon" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
-        Rescan
+        <span>${t('rescan_btn')}</span>
       </button>
       <div class="dot-legend dot-legend--album-back">
         <span class="dot-legend-item album-detail-legend-rescan" style="display:${album.rescannedAt ? '' : 'none'}">
@@ -2953,16 +2955,30 @@ const UI = (() => {
         else App._libGoBack('albums');
       }
     });
-    const rescanBtn = backRow.querySelector('.lib-rescan-btn');
-    const folderId  = songs.find(s => s.folderId)?.folderId || null;
+    const rescanBtn  = backRow.querySelector('.lib-rescan-btn');
+    const rescanIcon = rescanBtn.querySelector('.lib-rescan-icon');
+    const rescanSpan = rescanBtn.querySelector('span');
+    const folderId   = songs.find(s => s.folderId)?.folderId || null;
+    let _albumBtnRunning = false;
     rescanBtn.addEventListener('click', () => {
       if (typeof App === 'undefined') return;
-      const icon = rescanBtn.querySelector('.lib-rescan-icon');
-      rescanBtn.disabled = true;
-      icon.style.animation = 'spin 1s linear infinite';
+      if (_albumBtnRunning) {
+        // Stop the running rescan
+        App.stopAlbumRescan();
+        if (rescanSpan) rescanSpan.textContent = t('rescan_stopping_btn');
+        rescanBtn.disabled = true;
+        return;
+      }
+      // Start rescan
+      _albumBtnRunning = true;
+      rescanBtn.disabled = false;
+      if (rescanSpan) rescanSpan.textContent = t('rescan_stop_btn');
+      rescanIcon.style.animation = 'spin 1s linear infinite';
       App.onAlbumRescan(songs, folderId).finally(() => {
+        _albumBtnRunning = false;
         rescanBtn.disabled = false;
-        icon.style.animation = '';
+        rescanIcon.style.animation = '';
+        if (rescanSpan) rescanSpan.textContent = t('rescan_btn');
       });
     });
     container.appendChild(backRow);
@@ -3431,7 +3447,7 @@ const UI = (() => {
       </button>
       <button class="lib-rescan-btn" title="Rescan ítems de esta colección" aria-label="Rescan">
         <svg class="lib-rescan-icon" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
-        Rescan
+        <span>${t('rescan_btn')}</span>
       </button>
       <div class="dot-legend dot-legend--album-back">
         <span class="dot-legend-item col-detail-legend-rescan" style="display:${collection.rescannedAt ? '' : 'none'}">
@@ -3446,16 +3462,28 @@ const UI = (() => {
     backRow.querySelector('.lib-back-btn').addEventListener('click', () => {
       if (typeof App !== 'undefined') App._libGoBack('collections');
     });
-    const rescanBtn = backRow.querySelector('.lib-rescan-btn');
-    const folderId  = collection.folderId;
+    const rescanBtn  = backRow.querySelector('.lib-rescan-btn');
+    const rescanIcon = rescanBtn.querySelector('.lib-rescan-icon');
+    const rescanSpan = rescanBtn.querySelector('span');
+    const folderId   = collection.folderId;
+    let _colBtnRunning = false;
     rescanBtn.addEventListener('click', () => {
       if (typeof App === 'undefined') return;
-      const icon = rescanBtn.querySelector('.lib-rescan-icon');
-      rescanBtn.disabled = true;
-      icon.style.animation = 'spin 1s linear infinite';
+      if (_colBtnRunning) {
+        App.stopAlbumRescan();
+        if (rescanSpan) rescanSpan.textContent = t('rescan_stopping_btn');
+        rescanBtn.disabled = true;
+        return;
+      }
+      _colBtnRunning = true;
+      rescanBtn.disabled = false;
+      if (rescanSpan) rescanSpan.textContent = t('rescan_stop_btn');
+      rescanIcon.style.animation = 'spin 1s linear infinite';
       App.onAlbumRescan(songs, folderId).finally(() => {
+        _colBtnRunning = false;
         rescanBtn.disabled = false;
-        icon.style.animation = '';
+        rescanIcon.style.animation = '';
+        if (rescanSpan) rescanSpan.textContent = t('rescan_btn');
       });
     });
     container.appendChild(backRow);
