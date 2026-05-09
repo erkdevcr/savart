@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '2.3.8';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.3.8 — boot toast: green→blue (#4A88F5), circular spinner→wave animation (reuses savart-wave-svg scroll)
+const APP_VERSION  = '2.3.9';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.3.9 — boot toast wave: remove forced height on SVG so aspect-ratio stays intact and scroll loop is seamless (mirrors savart-wave-wrap exactly)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

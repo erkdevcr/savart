@@ -1703,20 +1703,16 @@ img { display: block; }
   align-items: center;
   gap: 9px;
 }
-/* Wave icon inside the boot toast — reuses savart-wave-svg scroll animation */
+/* Wave icon inside the boot toast — mirrors .savart-wave-wrap exactly.
+   No height on the SVG so aspect-ratio stays intact and the scroll loop is seamless. */
 .boot-toast-wave {
-  width: 38px;
-  height: 14px;
+  width: 40px;          /* container width — natural SVG height ≈ 40*(32/144)*3 ≈ 27px */
   flex-shrink: 0;
   overflow: hidden;
-  -webkit-mask-image: linear-gradient(to right, transparent 0%, black 20%, black 80%, transparent 100%);
-  mask-image: linear-gradient(to right, transparent 0%, black 20%, black 80%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, black 18%, black 82%, transparent 100%);
+  mask-image: linear-gradient(to right, transparent 0%, black 18%, black 82%, transparent 100%);
 }
-.boot-toast-wave .savart-wave-svg {
-  width: 300%;
-  height: 14px;
-  display: block;
-}
+/* .savart-wave-svg already provides: width:300%, height:auto, display:block, animation */
 /* indeterminate loading bar track */
 .boot-toast-bar-track {
   width: 100%;
