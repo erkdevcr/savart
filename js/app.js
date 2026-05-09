@@ -669,6 +669,9 @@ const App = (() => {
     const enriched = _enrichTrack(track);
     UI.updateMiniPlayer(enriched, isPlaying);
     UI.updateExpandedPlayer(enriched, isPlaying);
+    // Re-mark active row — renderHome (and other renders) create fresh DOM nodes
+    // that lose the .active class; re-applying here keeps EQ bars visible.
+    UI.setActiveSongRow(track?.id ?? null);
   }
 
   function _onProgress(currentTime, duration) {
@@ -2777,6 +2780,8 @@ const App = (() => {
         topPlayed: data.topPlayed || [],
         playlists: data.playlists || [],
       });
+      // Re-mark active row after fresh DOM nodes are created
+      UI.setActiveSongRow(Player.getCurrentTrack()?.id ?? null);
     } catch (_) { /* ignore parse/missing errors */ }
   }
 
@@ -2904,6 +2909,8 @@ const App = (() => {
       );
 
       UI.renderHome({ pinned: enrichedPinned, recents: enrichedRecents, topPlayed, playlists: enrichedPlaylists });
+      // Re-mark the active row after renderHome creates fresh DOM nodes
+      UI.setActiveSongRow(Player.getCurrentTrack()?.id ?? null);
 
       // Persist home data to localStorage so the next startup can paint instantly
       // before the DB is ready (stale-while-revalidate).
