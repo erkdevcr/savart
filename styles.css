@@ -2215,7 +2215,7 @@ img { display: block; }
 #player-expanded {
   position: fixed;
   inset: 0;
-  bottom: var(--bottom-nav-h); /* stop above bottom-nav so footer stays visible */
+  bottom: 0; /* extends to screen bottom; bottom-nav floats on top via z-index:70 */
   z-index: 60;
   background: var(--bg-base);
   display: none;
@@ -2497,6 +2497,8 @@ img { display: block; }
   align-items: center;
   justify-content: space-between;
   margin-bottom: 20px;
+  /* Pad below controls so they clear the floating bottom-nav bar */
+  padding-bottom: var(--bottom-nav-h);
 }
 
 .pexp-ctrl-btn {
@@ -2671,7 +2673,7 @@ img { display: block; }
 
   .pexp-progress-wrap { padding: 6px 0 2px; }
   .pexp-times { margin-bottom: 12px; font-size: 11px; }
-  .pexp-controls { margin-bottom: 12px; }
+  .pexp-controls { margin-bottom: 12px; padding-bottom: 0; } /* no floating nav on desktop */
 
   /* Slightly smaller play button to fit panel */
   .pexp-play-btn { width: 52px; height: 52px; }

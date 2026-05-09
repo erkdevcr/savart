@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '2.1.8';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.1.8 — expanded player slide-down dismiss animation on mobile
+const APP_VERSION  = '2.1.9';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.1.9 — player extends behind bottom-nav; nav floats on top
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
