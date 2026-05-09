@@ -3078,7 +3078,8 @@ const App = (() => {
     _setLibTab('playlists');
     // Mark detail as open immediately so _loadPlaylists (async) won't
     // overwrite the detail pane once it finishes its DB queries.
-    _libInDetail = true;
+    _libInDetail        = true;
+    _libDetailRestoreFn = () => onPlaylistClick(pl);
     // Small delay so Library renders before we open the detail
     setTimeout(() => onPlaylistClick(pl), 80);
   }
@@ -3759,6 +3760,7 @@ const App = (() => {
 
   let _currentLibTab  = 'albums'; // persists tab across sync refreshes
   let _libInDetail    = false;       // true while showing an artist/album drill-down
+  let _libDetailRestoreFn = null;    // restores detail view when user nav Home → Library
   let _libScrollBeforeDetail = 0;    // .lib-detail scrollTop saved before drill-down
   const _libDetailPane = () => document.querySelector('#screen-library .lib-detail');
 
@@ -3825,7 +3827,8 @@ const App = (() => {
 
   function _setLibTab(tab) {
     _currentLibTab = tab;
-    _libInDetail   = false; // leaving any drill-down view
+    _libInDetail        = false; // leaving any drill-down view
+    _libDetailRestoreFn = null;  // explicit tab switch — no restore needed
 
     // Disconnect any active pagination observers when switching tabs
     _libArtistObserver?.disconnect(); _libArtistObserver = null;
@@ -3861,8 +3864,9 @@ const App = (() => {
    * After re-rendering the list, re-applies whatever is currently in the search bar.
    */
   function _libGoBack(tab) {
-    _currentLibTab = tab;
-    _libInDetail   = false;
+    _currentLibTab      = tab;
+    _libInDetail        = false;
+    _libDetailRestoreFn = null;  // user pressed Back — no restore needed
 
     // Restore search bar
     _setLibSearchBarVisible(true);
@@ -7351,7 +7355,8 @@ const App = (() => {
         return url ? { ...s, thumbnailUrl: url } : s;
       }));
 
-      _libInDetail = true;
+      _libInDetail        = true;
+      _libDetailRestoreFn = () => onCollectionClick(collection);
       _setLibSearchBarVisible(false);
       UI.renderLibraryCollectionDetail(collection, enriched);
       UI.setActiveSongRow(Player.getCurrentTrack()?.id ?? null);
@@ -7550,7 +7555,8 @@ const App = (() => {
         })
         .sort((a, b) => a.name.localeCompare(b.name));
 
-      _libInDetail = true;
+      _libInDetail        = true;
+      _libDetailRestoreFn = () => onArtistClick(artist);
       _setLibSearchBarVisible(false);
       UI.renderLibraryArtistDetail(artist, albums);
       UI.setActiveSongRow(Player.getCurrentTrack()?.id ?? null);
@@ -7669,7 +7675,8 @@ const App = (() => {
       };
 
       const backTarget = fromArtist ? 'artist' : 'albums';
-      _libInDetail = true;
+      _libInDetail        = true;
+      _libDetailRestoreFn = () => onAlbumClick(album, fromArtist);
       _setLibSearchBarVisible(false);
       UI.renderLibraryAlbumDetail(freshAlbum, enriched, backTarget, fromArtist || null);
       UI.setActiveSongRow(Player.getCurrentTrack()?.id ?? null);
@@ -7786,6 +7793,10 @@ const App = (() => {
       if (songIds.length === 0) {
         UI.renderPlaylistDetail([], pl.name);
         UI.setActiveSongRow(Player.getCurrentTrack()?.id ?? null);
+        if (!document.getElementById('lib-pl-two-col')) {
+          _libInDetail        = true;
+          _libDetailRestoreFn = () => onPlaylistClick(fullPl || pl);
+        }
         return;
       }
       // Fetch cached metadata and resolve cover URL for each song
@@ -7801,6 +7812,12 @@ const App = (() => {
       )).filter(Boolean);
       UI.renderPlaylistDetail(songs, pl.name);
       UI.setActiveSongRow(Player.getCurrentTrack()?.id ?? null);
+      // Single-pane mode (mobile): detail takes over the content area — mark as
+      // drill-down so nav Home → Library restores this playlist view.
+      if (!document.getElementById('lib-pl-two-col')) {
+        _libInDetail        = true;
+        _libDetailRestoreFn = () => onPlaylistClick(fullPl || pl);
+      }
       // Drive fallback: fetch thumbnailLink for songs still without cover after local passes
       _driveThumbFallback(
         songs.filter(s => !s.thumbnailUrl),
@@ -8483,7 +8500,16 @@ const App = (() => {
     UI.showView(viewId);
     UI.updateSearchChipCounts(null); // clear search chip counts on every nav
     if (viewId === 'home')    _loadHomeData();
-    if (viewId === 'library') _setLibTab(_currentLibTab || 'albums');
+    if (viewId === 'library') {
+      if (_libDetailRestoreFn) {
+        // User was inside a detail view — restore it instead of showing root list
+        const restore = _libDetailRestoreFn;
+        _libDetailRestoreFn = null;
+        restore();
+      } else {
+        _setLibTab(_currentLibTab || 'albums');
+      }
+    }
     // When navigating away from browse, clear any active search so the
     // folder list is restored immediately when Browse is opened again.
     if (viewId !== 'browse') {

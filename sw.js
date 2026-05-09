@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '2.3.9';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.3.9 — boot toast wave: remove forced height on SVG so aspect-ratio stays intact and scroll loop is seamless (mirrors savart-wave-wrap exactly)
+const APP_VERSION  = '2.4.0';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.4.0 — library detail restore: nav Home → Library returns to last album/artist/collection/playlist detail view
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
