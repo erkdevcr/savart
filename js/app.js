@@ -3093,6 +3093,7 @@ const App = (() => {
 
       const activeSong = Player.getCurrentTrack();
       UI.renderFolderContents(result.folders, result.files, activeSong?.id);
+      UI.setActiveSongRow(activeSong?.id ?? null);
 
       // Restore scroll position when navigating back (appendToBreadcrumb = false)
       if (!appendToBreadcrumb) {
@@ -3401,6 +3402,7 @@ const App = (() => {
       });
 
       UI.renderHistory(items);
+      UI.setActiveSongRow(Player.getCurrentTrack()?.id ?? null);
       // Async: apply covers from DB coverBlobs
       _prefetchTopPlayedCovers(items).catch(() => {});
     } catch (err) {
@@ -3619,6 +3621,7 @@ const App = (() => {
       [...(result.folders || []), ...(result.files || [])].forEach(item => _cacheItem(item));
       // Render sorted results
       UI.renderSearchResults(result, filter);
+      UI.setActiveSongRow(Player.getCurrentTrack()?.id ?? null);
       // Prefetch covers (same pipeline as Browse)
       if (result.files?.length) {
         _prefetchAndApplyFolderCovers(null, result.files).catch(() => {});
@@ -4236,6 +4239,7 @@ const App = (() => {
         return url ? { ...song, thumbnailUrl: url } : song;
       }));
       UI.renderStarredSongs(enriched);
+      UI.setActiveSongRow(Player.getCurrentTrack()?.id ?? null);
       _setLibTabCount('fav', enriched.length);
       _domFilterLibItems();
       _driveThumbFallback(
@@ -7227,6 +7231,7 @@ const App = (() => {
       _libInDetail = true;
       _setLibSearchBarVisible(false);
       UI.renderLibraryCollectionDetail(collection, enriched);
+      UI.setActiveSongRow(Player.getCurrentTrack()?.id ?? null);
       _scrollDetailToTop();
       if (enriched.length > 0 && Auth.getValidToken()) {
         _prefetchAndApplyFolderCovers(collection.folderId, enriched).catch(() => {});
@@ -7425,6 +7430,7 @@ const App = (() => {
       _libInDetail = true;
       _setLibSearchBarVisible(false);
       UI.renderLibraryArtistDetail(artist, albums);
+      UI.setActiveSongRow(Player.getCurrentTrack()?.id ?? null);
       _scrollDetailToTop();
       const q = document.getElementById('lib-search-input')?.value || '';
       if (q) _onLibSearch(q);
@@ -7543,6 +7549,7 @@ const App = (() => {
       _libInDetail = true;
       _setLibSearchBarVisible(false);
       UI.renderLibraryAlbumDetail(freshAlbum, enriched, backTarget, fromArtist || null);
+      UI.setActiveSongRow(Player.getCurrentTrack()?.id ?? null);
       _scrollDetailToTop();
 
       // Background cover + metadata enrichment for songs in this album.
@@ -7655,6 +7662,7 @@ const App = (() => {
       const songIds = (fullPl || pl).songIds || [];
       if (songIds.length === 0) {
         UI.renderPlaylistDetail([], pl.name);
+        UI.setActiveSongRow(Player.getCurrentTrack()?.id ?? null);
         return;
       }
       // Fetch cached metadata and resolve cover URL for each song
@@ -7669,6 +7677,7 @@ const App = (() => {
         })
       )).filter(Boolean);
       UI.renderPlaylistDetail(songs, pl.name);
+      UI.setActiveSongRow(Player.getCurrentTrack()?.id ?? null);
       // Drive fallback: fetch thumbnailLink for songs still without cover after local passes
       _driveThumbFallback(
         songs.filter(s => !s.thumbnailUrl),
