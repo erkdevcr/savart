@@ -40,6 +40,15 @@ const Player = (() => {
   // Playback rate (tempo)
   let _tempo = 1.0;
 
+  // ── Android background-audio keepalive ──────────────────
+  // A looping near-silent audio element that keeps the browser's audio
+  // session alive during the gap between tracks. Without it, Android
+  // detects "no audio playing" between tracks and freezes the page,
+  // cutting off the queue. Stops only on explicit user pause, not on
+  // natural track end.
+  let _keepAlive    = null;      // HTMLAudioElement (looping silent audio)
+  let _keepAliveUrl = null;      // blob URL for the silent audio clip
+
   /* ── Event callbacks ────────────────────────────────────── */
   // External UI registers to these
   let _onTrackChange = null;  // (driveItem, index, total) => void
@@ -162,6 +171,60 @@ const Player = (() => {
     _msSetMetadata(item);
   }
 
+  /* ── Android keepalive ──────────────────────────────────── */
+
+  /**
+   * Build a 1-second silent WAV and return a blob URL.
+   * 8-bit PCM, mono, 8000 Hz — smallest valid audio Android will accept.
+   */
+  function _createSilentBlob() {
+    const SR = 8000, SAMPLES = SR; // 1 second
+    const buf = new ArrayBuffer(44 + SAMPLES);
+    const v   = new DataView(buf);
+    const w32 = (o, n, le) => v.setUint32(o, n, le);
+    const w16 = (o, n)     => v.setUint16(o, n, true);
+    // RIFF header
+    w32(0, 0x52494646, false); // "RIFF"
+    w32(4, 36 + SAMPLES, true);
+    w32(8, 0x57415645, false); // "WAVE"
+    // fmt chunk
+    w32(12, 0x666D7420, false); // "fmt "
+    w32(16, 16, true);
+    w16(20, 1);                 // PCM
+    w16(22, 1);                 // mono
+    w32(24, SR, true);          // sample rate
+    w32(28, SR, true);          // byte rate
+    w16(32, 1);                 // block align
+    w16(34, 8);                 // bits/sample
+    // data chunk
+    w32(36, 0x64617461, false); // "data"
+    w32(40, SAMPLES, true);
+    // 8-bit PCM silence = 0x80 (midpoint)
+    new Uint8Array(buf).fill(0x80, 44);
+    return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
+  }
+
+  /**
+   * Start the silent keepalive loop.
+   * Must be called from within a user-gesture or trusted audio-event context.
+   */
+  function _keepAliveStart() {
+    if (_keepAlive) return; // already running
+    if (!_keepAliveUrl) _keepAliveUrl = _createSilentBlob();
+    _keepAlive = new Audio(_keepAliveUrl);
+    _keepAlive.loop   = true;
+    _keepAlive.volume = 0.001; // inaudible but non-zero — Android needs non-zero to keep session
+    _keepAlive.play().catch(() => {}); // may fail if called too early; that's fine
+  }
+
+  /** Stop the keepalive — only call on explicit user pause, not on track end. */
+  function _keepAliveStop() {
+    if (!_keepAlive) return;
+    _keepAlive.pause();
+    _keepAlive.src = '';
+    _keepAlive = null;
+  }
+
   /**
    * Build the Web Audio graph. Must be called from a user gesture context.
    */
@@ -270,8 +333,10 @@ const Player = (() => {
     if (!_audio) return;
     _initAudioGraph();
     if (_audio.paused) {
+      _keepAliveStart();
       await _audio.play().catch(_handleAudioError);
     } else {
+      _keepAliveStop(); // explicit user pause — release keepalive
       _audio.pause();
     }
   }
@@ -282,6 +347,7 @@ const Player = (() => {
   async function play() {
     if (!_audio) return;
     _initAudioGraph();
+    _keepAliveStart();
     await _audio.play().catch(_handleAudioError);
   }
 
@@ -289,6 +355,7 @@ const Player = (() => {
    * Pause.
    */
   function pause() {
+    _keepAliveStop(); // explicit user pause — release keepalive
     _audio?.pause();
   }
 
@@ -484,6 +551,8 @@ const Player = (() => {
       if (_audioCtx?.state === 'suspended') {
         await _audioCtx.resume().catch(() => {});
       }
+      // Ensure keepalive is running (guards automatic queue advance with screen off)
+      _keepAliveStart();
       // Set Media Session metadata before play so lock screen shows correct info
       _msSetMetadata(item);
       _msSetPlaybackState('playing');

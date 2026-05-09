@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '2.1.6';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.1.6 — fix queue cut on Android screen-off: resume AudioContext in 'ended' event + retry blob fetch
+const APP_VERSION  = '2.1.7';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.1.7 — silent keepalive audio loop keeps Android audio session alive between tracks
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
