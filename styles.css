@@ -1713,18 +1713,13 @@ img { display: block; }
   overflow: hidden;
   margin: 0 -2px; /* bleed to pill edges */
 }
-/* sliding fill — indeterminate animation */
+/* real progress fill — width driven by JS */
 .boot-toast-bar-fill {
   height: 100%;
-  width: 40%;
+  width: 0%;
   background: #4ddb8a;
   border-radius: 2px;
-  animation: bootBarSlide 1.4s ease-in-out infinite;
-}
-@keyframes bootBarSlide {
-  0%   { transform: translateX(-120%); }
-  50%  { transform: translateX(160%);  }
-  100% { transform: translateX(160%);  }
+  transition: width 0.35s ease;
 }
 #boot-toast.hidden {
   opacity: 0 !important;

@@ -896,8 +896,10 @@ const Sync = (() => {
    * One-time init: pull remote, merge with local, push merged back.
    * Then starts live polling.
    */
-  async function init() {
+  async function init({ onProgress } = {}) {
     _ready = false;
+    const _prog = (p) => { try { onProgress?.(p); } catch (_) {} };
+    _prog(0);
 
     // Track which merge steps failed so we can skip their push (prevents data-poisoning:
     // a failed merge leaves local DB empty for that type — pushing that empty state to Drive
@@ -916,6 +918,7 @@ const Sync = (() => {
 
     try {
       await _refreshFileList();
+      _prog(8);
 
       // Pull everything in parallel (including manifest)
       const [
@@ -934,6 +937,7 @@ const Sync = (() => {
         _readFile(FILENAMES.history).catch(() => null),
         _readFile(FILENAMES.metadata).catch(() => null),
       ]);
+      _prog(24);
 
       // Seed remote timestamps from manifest
       _remoteTs = { ...manifest };
@@ -972,6 +976,7 @@ const Sync = (() => {
 
         if (added || removed) console.log(`[Sync] Favorites merged: +${added} added, −${removed} removed`);
       });
+      _prog(32);
 
       // ── Merge playlists ───────────────────────────────────
       await _mergeStep('playlists', async () => {
@@ -981,6 +986,7 @@ const Sync = (() => {
         for (const pl of toUpsert) await DB.putPlaylist(pl);
         if (toUpsert.length) console.log(`[Sync] Merged ${toUpsert.length} remote playlists`);
       });
+      _prog(40);
 
       // ── Merge pinned ──────────────────────────────────────
       await _mergeStep('pinned', async () => {
@@ -998,6 +1004,7 @@ const Sync = (() => {
         await DB.setState('pinned', [...remoteOrder, ...localOnlyIds]);
         console.log(`[Sync] Merged pinned: ${mergedIds.length} items (remote: ${remoteOrder.length}, local-only: ${localOnlyIds.length})`);
       });
+      _prog(48);
 
       // ── Merge recents ─────────────────────────────────────
       await _mergeStep('recents', async () => {
@@ -1027,6 +1034,7 @@ const Sync = (() => {
           console.log(`[Sync] Merged recents: ${toWrite.filter(m => !localMap.has(m.id)).length} added, ${toWrite.filter(m => localMap.has(m.id)).length} updated, ${toTombstone.length} tombstoned`);
         }
       });
+      _prog(56);
 
       // ── Merge play counts ─────────────────────────────────
       await _mergeStep('playcounts', async () => {
@@ -1040,6 +1048,7 @@ const Sync = (() => {
           console.log(`[Sync] Merged ${toUpsert.length} remote playcounts`);
         }
       });
+      _prog(63);
 
       // ── Merge settings ────────────────────────────────────
       await _mergeStep('settings', async () => {
@@ -1051,6 +1060,7 @@ const Sync = (() => {
           console.log('[Sync] Merged remote settings');
         }
       });
+      _prog(68);
 
       // ── Merge history ─────────────────────────────────────
       await _mergeStep('history', async () => {
@@ -1070,6 +1080,7 @@ const Sync = (() => {
           console.log(`[Sync] Merged history: ${toWrite.filter(m => !localMap.has(m.id)).length} added, ${toWrite.filter(m => localMap.has(m.id)).length} updated`);
         }
       });
+      _prog(74);
 
       // ── Merge song metadata (name, album membership, enrichment) ─────────────
       // Text fields (artist/album/year): overwrite if remote was MB/AudD-enriched —
@@ -1162,6 +1173,7 @@ const Sync = (() => {
           }
         }
       });
+      _prog(86);
 
       // Push merged state back + update manifest.
       // Skip any type whose merge step failed (prevents data-poisoning via LWW).
@@ -1172,6 +1184,7 @@ const Sync = (() => {
       for (const t of safeToPush) _localTs[t] = now;
       if (safeToPush.length) await _bumpManifest(safeToPush);
       if (_failedTypes.size) console.warn('[Sync] Skipped push for failed types:', [..._failedTypes]);
+      _prog(95);
 
       // Push home snapshot last — after all individual types are merged and pushed,
       // so the snapshot reflects the fully-merged state (not stale pre-merge data).
@@ -1182,6 +1195,7 @@ const Sync = (() => {
         _remoteTs.home = homeTs;
         await _bumpManifest(['home']);
       } catch (_) {}
+      _prog(100);
 
       console.log('[Sync] Init complete ✓');
     } catch (err) {

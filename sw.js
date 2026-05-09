@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '2.2.2';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.2.2 — EQ bars active in artist/album/playlist/search views
+const APP_VERSION  = '2.2.3';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.2.3 — boot toast loading bar shows real sync progress
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

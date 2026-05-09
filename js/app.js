@@ -379,7 +379,11 @@ const App = (() => {
 
     // Full sync in background — merges all types, pushes merged state back.
     // When complete, refresh UI so any data that wasn't in the home snapshot appears.
-    Sync.init().then(() => {
+    const _bootBarFill = document.querySelector('.boot-toast-bar-fill');
+    const _onBootProgress = (pct) => {
+      if (_bootBarFill) _bootBarFill.style.width = pct + '%';
+    };
+    Sync.init({ onProgress: _onBootProgress }).then(() => {
       _restoreSettings();
       _loadHomeData();
       const view = UI.getCurrentView();
