@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '2.1.4';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.1.4 — browse rescan: tap again to abort; action bar sort+rescan pinned right
+const APP_VERSION  = '2.1.5';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.1.5 — Media Session API: background/lock-screen audio continuity
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

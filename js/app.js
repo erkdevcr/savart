@@ -2280,6 +2280,8 @@ const App = (() => {
     };
     UI.updateMiniPlayer(enriched, Player.isPlaying());
     UI.updateExpandedPlayer(enriched, Player.isPlaying());
+    // Refresh lock-screen / notification metadata with resolved ID3 info
+    Player.updateMediaSessionArtwork(enriched);
 
     // Update all visible thumbnail surfaces with the resolved cover (ID3 = protected)
     if (meta.coverUrl) {

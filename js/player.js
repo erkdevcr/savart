@@ -71,20 +71,95 @@ const Player = (() => {
     _onBlobReady   = onBlobReady   || null;
 
     _audio = new Audio();
-    _audio.preload = 'auto';
+    _audio.preload    = 'auto';
+    _audio.playsInline = true;  // required for iOS background audio
 
     // Wire up audio events
-    _audio.addEventListener('play',    () => _onPlayPause(true));
-    _audio.addEventListener('pause',   () => _onPlayPause(false));
+    _audio.addEventListener('play',  () => {
+      _onPlayPause(true);
+      _msSetPlaybackState('playing');
+    });
+    _audio.addEventListener('pause', () => {
+      _onPlayPause(false);
+      _msSetPlaybackState('paused');
+    });
     _audio.addEventListener('ended',   _handleEnded);
     _audio.addEventListener('error',   _handleAudioError);
     _audio.addEventListener('timeupdate', () => {
       _onProgress(_audio.currentTime, _audio.duration || 0);
+      _msUpdatePositionState();
     });
+    _audio.addEventListener('durationchange', _msUpdatePositionState);
+
+    // Resume AudioContext when page comes back from background/lock screen
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && _audioCtx?.state === 'suspended') {
+        _audioCtx.resume().catch(() => {});
+      }
+    });
+
+    // Register Media Session action handlers (once)
+    _msRegisterHandlers();
 
     // Build Web Audio graph lazily on first user gesture to satisfy
     // Chrome's AudioContext autoplay policy
     console.log('[Player] Initialized.');
+  }
+
+  /* ── Media Session API ──────────────────────────────────── */
+  // Registers this PWA as a media app with the OS so audio keeps
+  // playing when the screen locks and shows lock-screen controls.
+
+  function _msRegisterHandlers() {
+    if (!('mediaSession' in navigator)) return;
+    const ms = navigator.mediaSession;
+    ms.setActionHandler('play',          () => { play(); });
+    ms.setActionHandler('pause',         () => { pause(); });
+    ms.setActionHandler('previoustrack', () => { prev(); });
+    ms.setActionHandler('nexttrack',     () => { next(); });
+    ms.setActionHandler('seekto',        (e) => { if (e.seekTime != null) seekTo(e.seekTime); });
+    ms.setActionHandler('seekforward',   (e) => { seekTo(Math.min(getDuration(), getCurrentTime() + (e.seekOffset || 10))); });
+    ms.setActionHandler('seekbackward',  (e) => { seekTo(Math.max(0, getCurrentTime() - (e.seekOffset || 10))); });
+  }
+
+  function _msSetMetadata(item) {
+    if (!('mediaSession' in navigator)) return;
+    // Only use absolute http(s) URLs for artwork — blob: URLs are not allowed
+    const artworkUrl = (item.thumbnailUrl && item.thumbnailUrl.startsWith('http'))
+      ? item.thumbnailUrl
+      : null;
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title:  item.displayName || item.name || '',
+      artist: item.artist      || '',
+      album:  item.albumName   || item.album || '',
+      artwork: artworkUrl
+        ? [{ src: artworkUrl, sizes: '250x250', type: 'image/jpeg' }]
+        : [],
+    });
+  }
+
+  function _msSetPlaybackState(state) {
+    if (!('mediaSession' in navigator)) return;
+    navigator.mediaSession.playbackState = state; // 'playing' | 'paused' | 'none'
+  }
+
+  function _msUpdatePositionState() {
+    if (!('mediaSession' in navigator) || !_audio) return;
+    const duration = _audio.duration;
+    if (!duration || !isFinite(duration) || duration <= 0) return;
+    try {
+      navigator.mediaSession.setPositionState({
+        duration:     duration,
+        playbackRate: _audio.playbackRate || 1,
+        position:     Math.min(_audio.currentTime, duration),
+      });
+    } catch (_) { /* not supported on all browsers */ }
+  }
+
+  // Called externally (from app.js _onBlobReady) to refresh artwork
+  // after ID3 cover is extracted — thumbnailUrl may have changed.
+  function updateMediaSessionArtwork(item) {
+    _msSetMetadata(item);
   }
 
   /**
@@ -404,6 +479,9 @@ const Player = (() => {
       _audio.playbackRate = _tempo;
 
       _initAudioGraph();
+      // Set Media Session metadata before play so lock screen shows correct info
+      _msSetMetadata(item);
+      _msSetPlaybackState('playing');
       await _audio.play();
 
       // Save to recents
@@ -562,6 +640,7 @@ const Player = (() => {
   /* ── Expose ─────────────────────────────────────────────── */
   return {
     init,
+    updateMediaSessionArtwork,
     // Queue
     setQueue,
     insertNext,
