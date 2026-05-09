@@ -1997,6 +1997,29 @@ const App = (() => {
   let _browseRescanAbort   = false;
 
   /**
+   * Sync the lib-rescan button state to reality:
+   * - Scanning → always visible, label "Detener", amber scanning class
+   * - Idle     → visible only on albums tab with a search term; plain label
+   * Call this whenever tab, search text, or scan state changes.
+   */
+  function _syncLibRescanBtn() {
+    const btn  = document.getElementById('btn-lib-rescan');
+    const span = btn?.querySelector('span');
+    if (!btn) return;
+    if (_libRescanRunning) {
+      btn.style.display = '';
+      btn.classList.add('scanning');
+      btn.disabled = false;
+      if (span) span.textContent = UI.t('rescan_stop_btn');
+    } else {
+      btn.classList.remove('scanning');
+      if (span) span.textContent = UI.t('rescan_btn');
+      const q = (document.getElementById('lib-search-input')?.value || '').trim();
+      btn.style.display = (_currentLibTab === 'albums' && q) ? '' : 'none';
+    }
+  }
+
+  /**
    * Collect visible album folder IDs from the current search results,
    * warn if any songs have manual edits, confirm, then run the rescan.
    */
@@ -2007,7 +2030,13 @@ const App = (() => {
       const btn  = document.getElementById('btn-lib-rescan');
       const span = btn?.querySelector('span');
       if (span) span.textContent = UI.t('rescan_stop_btn') + '…';
-      if (btn)  btn.disabled = true; // prevent further taps while stopping
+      if (btn)  btn.disabled = true; // prevent rapid re-taps while draining
+      return;
+    }
+
+    // If a browse rescan is running, stop that too
+    if (_browseRescanRunning) {
+      _browseRescanAbort = true;
       return;
     }
 
@@ -2042,13 +2071,7 @@ const App = (() => {
     if (_libRescanRunning) return;
     _libRescanRunning = true;
     _libRescanAbort   = false;
-
-    const btn  = document.getElementById('btn-lib-rescan');
-    const span = btn?.querySelector('span');
-    const icon = document.getElementById('lib-rescan-icon');
-    // Keep button enabled so a second tap can abort; swap label to "Detener"
-    if (btn)  { btn.disabled = false; btn.classList.add('scanning'); }
-    if (span) span.textContent = UI.t('rescan_stop_btn');
+    _syncLibRescanBtn(); // show "Detener" immediately, stay visible across tab switches
 
     UI.showToast(`${UI.t('toast_rescan_start').replace('…', '')} (${folderIds.length})…`);
 
@@ -2085,9 +2108,7 @@ const App = (() => {
 
     _libRescanRunning = false;
     _libRescanAbort   = false;
-    // Restore button to its original state
-    if (btn)  { btn.classList.remove('scanning'); }
-    if (span) span.textContent = UI.t('rescan_btn');
+    _syncLibRescanBtn(); // restore button label/visibility based on current tab+search
 
     if (aborted) {
       UI.showToast(UI.t('toast_rescan_stopped'));
@@ -3746,9 +3767,8 @@ const App = (() => {
     });
 
     // Persist search text across tab switches — loaders re-apply it automatically.
-    // Only hide the rescan button (albums-only feature); don't clear the input.
-    const rescanBtn = document.getElementById('btn-lib-rescan');
-    if (rescanBtn) rescanBtn.style.display = 'none';
+    // Sync rescan button state — keeps it visible if a scan is currently running.
+    _syncLibRescanBtn();
 
     // Update placeholder
     UI.setLibSearchPlaceholder(LIB_TAB_PLACEHOLDERS[tab] || 'Buscar…');
@@ -6837,8 +6857,7 @@ const App = (() => {
     }
 
     // Show/hide batch-rescan button
-    const rescanBtn = document.getElementById('btn-lib-rescan');
-    if (rescanBtn) rescanBtn.style.display = (_currentLibTab === 'albums' && q) ? '' : 'none';
+    _syncLibRescanBtn();
   }
 
   async function _loadArtists() {
