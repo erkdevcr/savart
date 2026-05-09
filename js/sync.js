@@ -375,20 +375,25 @@ const Sync = (() => {
         // LWW per-item by accessedAt — keep whichever device accessed each song more recently.
         // Avoids wiping a song just played on this device (within the debounce window)
         // when an older push from another device arrives.
+        // savart_recents.json includes tombstones; _mergeRecents handles them correctly.
         const remote = (data || []).filter(r => r && r.id);
         if (!remote.length) break;
-        const local  = await DB.getRecents();
-        const map    = new Map();
-        for (const item of local)  map.set(item.id, item);
-        for (const item of remote) {
-          const ex = map.get(item.id);
-          if (!ex || (item.accessedAt || 0) > (ex.accessedAt || 0)) map.set(item.id, item);
-        }
-        const merged = Array.from(map.values())
-          .sort((a, b) => (b.accessedAt || 0) - (a.accessedAt || 0))
-          .slice(0, CONFIG.RECENTS_MAX);
+        const local = await DB.getRecentsAll(); // include local tombstones
+        const { merged, tombstoneRecords } = _mergeRecents(local, remote);
+
+        // Preserve local tombstones + apply new remote tombstones so deletions survive
+        // subsequent clearRecents() calls.
+        const week = Date.now() - 7 * 24 * 60 * 60 * 1000;
+        const localTombstones = local.filter(r => r.removedAt && r.removedAt > week);
+        const localMap = new Map(local.map(r => [r.id, r]));
+        const newRemoteTombstones = tombstoneRecords.filter(t => {
+          const l = localMap.get(t.id);
+          return !l || (!l.removedAt && t.removedAt > (l.accessedAt || 0));
+        }).map(t => ({ id: t.id, removedAt: t.removedAt }));
+
         await DB.clearRecents();
-        if (merged.length) await DB.bulkPutRecents(merged);
+        const allToWrite = [...merged, ...localTombstones, ...newRemoteTombstones];
+        if (allToWrite.length) await DB.bulkPutRecents(allToWrite);
         break;
       }
 
@@ -429,7 +434,7 @@ const Sync = (() => {
       case 'home': {
         // Atomic home snapshot: restore all home-relevant state from a single file.
         // LWW: the manifest guarantees this file is newer, so we overwrite local state.
-        const { pinned, pinnedOrder, recents, playcounts, playlists, history } = data || {};
+        const { pinned, pinnedOrder, recents, recentTombstones, playcounts, playlists, history } = data || {};
 
         if (pinned && typeof pinned === 'object') {
           // LWW per-item: remote wins for deletions & updates.
@@ -444,19 +449,32 @@ const Sync = (() => {
         }
 
         if (Array.isArray(recents) && recents.length) {
-          // Per-item LWW by accessedAt — same logic as case 'recents', with tombstones
-          const validRemote = recents.filter(r => r && r.id);
+          // Merge home-snapshot live items with any tombstones bundled in the snapshot.
+          // This lets readHome() honour deletions even when local IndexedDB is empty
+          // (e.g. after logout → login) and before init() pulls savart_recents.json.
+          const remoteTombstones = Array.isArray(recentTombstones) ? recentTombstones : [];
+          const validRemote = [...recents, ...remoteTombstones].filter(r => r && r.id);
           const local = await DB.getRecentsAll();
           const { merged: mergedR, tombstoneRecords } = _mergeRecents(local, validRemote);
-          // Apply remote tombstones locally
+
+          // Write the merged state to DB.
+          // IMPORTANT: after clearRecents() we write back both the live merged result
+          // AND all local tombstones still within their 7-day window.  Without this,
+          // clearRecents() would destroy the local tombstone and a subsequent init()
+          // merge with a stale savart_recents.json would resurrect the deleted item.
+          const week = Date.now() - 7 * 24 * 60 * 60 * 1000;
+          const localTombstones = local.filter(r => r.removedAt && r.removedAt > week);
+          // Also apply remote tombstones that aren't already local
           const localHomeMap = new Map(local.map(r => [r.id, r]));
-          const toTombstoneH = tombstoneRecords.filter(t => {
+          const newRemoteTombstones = tombstoneRecords.filter(t => {
             const l = localHomeMap.get(t.id);
-            return l && !l.removedAt && t.removedAt > (l.accessedAt || 0);
-          });
-          if (toTombstoneH.length) await DB.bulkPutRecents(toTombstoneH);
+            return !l || (!l.removedAt && t.removedAt > (l.accessedAt || 0));
+          }).map(t => ({ id: t.id, removedAt: t.removedAt }));
+
           await DB.clearRecents();
-          if (mergedR.length) await DB.bulkPutRecents(mergedR);
+          // Write live items + preserved tombstones in one batch
+          const allToWrite = [...mergedR, ...localTombstones, ...newRemoteTombstones];
+          if (allToWrite.length) await DB.bulkPutRecents(allToWrite);
         }
 
         if (Array.isArray(playcounts) && playcounts.length) {
@@ -779,25 +797,36 @@ const Sync = (() => {
       && !u.includes('googleusercontent.com') && !u.includes('googleapis.com');
     const cleanUrl = u => isExternal(u) ? u : null;
 
-    const [pinnedMeta, pinnedOrder, recents, playcounts, playlists, history] = await Promise.all([
+    const [pinnedMeta, pinnedOrder, allRecents, playcounts, playlists, history] = await Promise.all([
       DB.getState('pinnedMeta'),
       DB.getState('pinned'),
-      DB.getRecents(CONFIG.RECENTS_MAX),
+      DB.getRecentsAll(),          // ALL records including tombstones
       DB.getTopPlayed(CONFIG.TOP_PLAYED_MAX),
       DB.getPlaylists(),
       DB.getHistory(CONFIG.HISTORY_MAX),
     ]);
 
+    const week = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    // Separate live items and fresh tombstones
+    const recents = (allRecents || []).filter(r => !r.removedAt)
+      .sort((a, b) => (b.accessedAt || 0) - (a.accessedAt || 0))
+      .slice(0, CONFIG.RECENTS_MAX);
+    const recentTombstones = (allRecents || [])
+      .filter(r => r.removedAt && r.removedAt > week)
+      .map(r => ({ id: r.id, removedAt: r.removedAt }));
+
     const payload = {
       ts:          Date.now(),
       pinned:      pinnedMeta  || {},
       pinnedOrder: pinnedOrder || [],
-      recents: (recents || []).map(r => ({
+      recents: recents.map(r => ({
         id: r.id, name: r.name || null, displayName: r.displayName || r.name || null,
         artist: r.artist || null,
         type: r.type || 'song', folderId: r.folderId || null, mimeType: r.mimeType || null,
         thumbnailUrl: cleanUrl(r.thumbnailUrl), accessedAt: r.accessedAt ?? Date.now(),
       })),
+      // Tombstones let readHome() honour deletions even before init() runs.
+      recentTombstones,
       playcounts: (playcounts || []).map(m => ({
         id: m.id, name: m.name || null, displayName: m.displayName || m.name || null,
         artist: m.artist || null, folderId: m.folderId || null, playCount: m.playCount || 0,

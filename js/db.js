@@ -395,7 +395,12 @@ const DB = (() => {
    */
   async function bulkPutRecents(items) {
     if (!_db) return;
-    const valid = (items || []).filter(r => r && r.id).slice(0, CONFIG.RECENTS_MAX);
+    // Live items are capped at RECENTS_MAX; tombstones are exempt from the cap
+    // so they survive next to a full list and _trimRecents() can apply them later.
+    const all        = (items || []).filter(r => r && r.id);
+    const live       = all.filter(r => !r.removedAt).slice(0, CONFIG.RECENTS_MAX);
+    const tombstones = all.filter(r =>  r.removedAt);
+    const valid      = [...live, ...tombstones];
     if (!valid.length) return;
     await new Promise((resolve, reject) => {
       const tx    = _db.transaction('recents', 'readwrite');

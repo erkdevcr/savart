@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '2.4.7';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.4.7 — song-edit modal: fix LBL_ labels (add lbl_title/artist/album/year translations), blue border, better padding
+const APP_VERSION  = '2.4.9';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.4.9 — song-edit modal: fix padding (sp vars undefined), real 20px horizontal margin on header/body/footer
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
