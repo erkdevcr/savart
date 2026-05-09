@@ -2963,7 +2963,7 @@ const UI = (() => {
     rescanBtn.addEventListener('click', () => {
       if (typeof App === 'undefined') return;
       if (_albumBtnRunning) {
-        // Stop the running rescan
+        // Stop the running rescan — keep scanning class until .finally() clears it
         App.stopAlbumRescan();
         if (rescanSpan) rescanSpan.textContent = t('rescan_stopping_btn');
         rescanBtn.disabled = true;
@@ -2972,11 +2972,13 @@ const UI = (() => {
       // Start rescan
       _albumBtnRunning = true;
       rescanBtn.disabled = false;
+      rescanBtn.classList.add('scanning');
       if (rescanSpan) rescanSpan.textContent = t('rescan_stop_btn');
       rescanIcon.style.animation = 'spin 1s linear infinite';
       App.onAlbumRescan(songs, folderId).finally(() => {
         _albumBtnRunning = false;
         rescanBtn.disabled = false;
+        rescanBtn.classList.remove('scanning');
         rescanIcon.style.animation = '';
         if (rescanSpan) rescanSpan.textContent = t('rescan_btn');
       });
@@ -3477,11 +3479,13 @@ const UI = (() => {
       }
       _colBtnRunning = true;
       rescanBtn.disabled = false;
+      rescanBtn.classList.add('scanning');
       if (rescanSpan) rescanSpan.textContent = t('rescan_stop_btn');
       rescanIcon.style.animation = 'spin 1s linear infinite';
       App.onAlbumRescan(songs, folderId).finally(() => {
         _colBtnRunning = false;
         rescanBtn.disabled = false;
+        rescanBtn.classList.remove('scanning');
         rescanIcon.style.animation = '';
         if (rescanSpan) rescanSpan.textContent = t('rescan_btn');
       });
