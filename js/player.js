@@ -479,6 +479,11 @@ const Player = (() => {
       _audio.playbackRate = _tempo;
 
       _initAudioGraph();
+      // Explicitly resume AudioContext before every play — on Android with screen off
+      // the context may have been suspended during the async blob fetch.
+      if (_audioCtx?.state === 'suspended') {
+        await _audioCtx.resume().catch(() => {});
+      }
       // Set Media Session metadata before play so lock screen shows correct info
       _msSetMetadata(item);
       _msSetPlaybackState('playing');
@@ -539,11 +544,16 @@ const Player = (() => {
       return cached;
     }
 
-    // Download from Drive
+    // Download from Drive — retry once on failure (screen-off networks can hiccup)
     console.log('[Player] Downloading:', item.name);
-    const blob = await Drive.downloadFile(item.id, (loaded, total) => {
-      // Could emit download progress if needed
-    });
+    let blob = null;
+    try {
+      blob = await Drive.downloadFile(item.id);
+    } catch (firstErr) {
+      console.warn('[Player] Download failed, retrying in 1s…', firstErr?.message);
+      await new Promise(r => setTimeout(r, 1000));
+      blob = await Drive.downloadFile(item.id);
+    }
 
     // Cache it
     await DB.setCachedBlob(item.id, blob, item.mimeType);
@@ -581,6 +591,17 @@ const Player = (() => {
   /* ── Event handlers ─────────────────────────────────────── */
 
   function _handleEnded() {
+    // Resume AudioContext NOW — we are inside a trusted audio event context.
+    // On Android with screen off, the AudioContext gets suspended between tracks.
+    // Calling resume() here (synchronously, before any await) works because
+    // 'ended' is considered a user-initiated / trusted audio context event.
+    if (_audioCtx?.state === 'suspended') {
+      _audioCtx.resume().catch(() => {});
+    }
+    // Tell Android MediaSession we intend to keep playing — prevents the OS
+    // from treating the gap between tracks as a "pause" and killing playback.
+    _msSetPlaybackState('playing');
+
     if (_repeatMode === 'one') {
       _audio.currentTime = 0;
       play();
