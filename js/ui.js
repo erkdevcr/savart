@@ -3093,6 +3093,10 @@ const UI = (() => {
           if (field === 'artist') {
             const subEl = entity.querySelector('.lib-detail-entity-sub');
             if (subEl) subEl.textContent = [value, songs.length + ' canciones'].filter(Boolean).join(' · ');
+            // Update artist in every song row immediately
+            container.querySelectorAll('.top-list-item .top-list-artist').forEach(el => {
+              el.textContent = value;
+            });
           }
           if (field === 'album') {
             const nameEl = entity.querySelector('.lib-detail-entity-name');
@@ -3116,13 +3120,47 @@ const UI = (() => {
       try {
         await App.onAlbumEdit?.(folderId, { artist, album: albumVal, year, coverUrl }, songs.map(s => s.id));
         btn.textContent = t('saved_ok');
-        // Update the header display immediately
+        // ── Update header display immediately ─────────────────────
         const nameEl = entity.querySelector('.lib-detail-entity-name');
         const subEl  = entity.querySelector('.lib-detail-entity-sub');
         const yearEl = entity.querySelector('.lib-detail-entity-year');
-        if (nameEl && albumVal)  nameEl.textContent = albumVal;
-        if (subEl)               subEl.textContent  = [artist, `${songs.length} ${t('lbl_songs')}`].filter(Boolean).join(' · ');
-        if (yearEl && year)      yearEl.textContent  = `(${year})`;
+        const artEl  = entity.querySelector('.lib-detail-entity-art');
+        if (nameEl && albumVal) nameEl.textContent = albumVal;
+        if (subEl)              subEl.textContent  = [artist, `${songs.length} ${t('lbl_songs')}`].filter(Boolean).join(' · ');
+        if (year) {
+          if (yearEl) {
+            // Preserve format badge (it's a child <span>) while updating the year text
+            const badge = yearEl.querySelector('.album-format-badge');
+            yearEl.textContent = `(${year})`;
+            if (badge) { yearEl.appendChild(document.createTextNode(' ')); yearEl.appendChild(badge); }
+          } else {
+            // yearEl didn't exist yet (album had no year) — create it before nameEl
+            const newYearEl = document.createElement('div');
+            newYearEl.className = 'lib-detail-entity-year';
+            newYearEl.textContent = `(${year})`;
+            const infoEl = entity.querySelector('.lib-detail-entity-info');
+            if (infoEl && nameEl) infoEl.insertBefore(newYearEl, nameEl);
+          }
+        }
+        // Cover art
+        if (artEl && coverUrl) {
+          artEl.innerHTML = `<img src="${escHtml(coverUrl)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)">`;
+        }
+        // ── Update every song row in the list ─────────────────────
+        container.querySelectorAll('.top-list-item').forEach(row => {
+          if (artist) {
+            const artistEl = row.querySelector('.top-list-artist');
+            if (artistEl) artistEl.textContent = artist;
+          }
+          if (coverUrl) {
+            const thumb = row.querySelector('.top-list-thumb');
+            if (thumb) {
+              const eqBars = thumb.querySelector('.eq-bars');
+              thumb.innerHTML = `<img src="${escHtml(coverUrl)}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)">`;
+              if (eqBars) thumb.appendChild(eqBars);
+            }
+          }
+        });
         setTimeout(() => {
           btn.disabled = false; btn.textContent = t('save_btn');
           editPanel.classList.remove('open');
@@ -3624,6 +3662,18 @@ const UI = (() => {
         if (nameEl && name)     nameEl.textContent = name;
         if (artEl && coverUrl) {
           artEl.innerHTML = `<img src="${escHtml(coverUrl)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)">`;
+        }
+
+        // ── Update song row thumbnails immediately if cover changed ──
+        if (coverUrl) {
+          container.querySelectorAll('.top-list-item').forEach(row => {
+            const thumb = row.querySelector('.top-list-thumb');
+            if (thumb) {
+              const eqBars = thumb.querySelector('.eq-bars');
+              thumb.innerHTML = `<img src="${escHtml(coverUrl)}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)">`;
+              if (eqBars) thumb.appendChild(eqBars);
+            }
+          });
         }
 
         // ── Live-show the manual-edit dot in the back-row legend only ──
