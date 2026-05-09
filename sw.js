@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '2.2.8';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.2.8 — lib-back-header rescan button supports stop: shows "Detener" while running, "Deteniendo…" when stopping; _albumRescanAbort flag wired into _prefetchAndApplyFolderCovers
+const APP_VERSION  = '2.2.9';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.2.9 — player slides full-height behind bottom-nav (z-index:70 always on top); lib-back-header rescan stop support
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
