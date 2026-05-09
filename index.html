@@ -1126,7 +1126,11 @@
 <!-- Boot loading toast: hidden until _onTokenReady shows it, then auto-dismissed -->
 <div id="boot-toast" style="display:none;opacity:0">
   <div class="boot-toast-body">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="animation:bootSpin 1s linear infinite;flex-shrink:0"><path d="M21 12a9 9 0 1 1-9-9"/></svg>
+    <div class="boot-toast-wave">
+      <svg class="savart-wave-svg" viewBox="0 0 144 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M0 16 C6 8,18 8,24 16 C30 24,42 24,48 16 M48 16 C54 8,66 8,72 16 C78 24,90 24,96 16 M96 16 C102 8,114 8,120 16 C126 24,138 24,144 16" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
     <span data-i18n="boot_loading">Cargando datos de la nube…</span>
   </div>
   <div class="boot-toast-bar-track">

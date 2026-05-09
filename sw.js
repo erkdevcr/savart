@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '2.3.7';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.3.7 — browse rescan scanning:disabled keeps amber color (prevents UA stylesheet from overriding to grey in stopping state)
+const APP_VERSION  = '2.3.8';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.3.8 — boot toast: green→blue (#4A88F5), circular spinner→wave animation (reuses savart-wave-svg scroll)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
