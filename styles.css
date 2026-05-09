@@ -2221,9 +2221,14 @@ img { display: block; }
   display: none;
   flex-direction: column;
   overflow: hidden;
+  /* Slide-down dismiss animation (mobile only — overridden to static on desktop) */
+  transform: translateY(100%);
+  transition: transform 0.38s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform;
 }
 
-#player-expanded.visible { display: flex; }
+/* .visible is toggled by JS; display is also managed by JS for animation timing */
+#player-expanded.visible { transform: translateY(0); }
 
 /* ── Mobile top bar ──────────────────────────────────────── */
 .pexp-topbar {
@@ -2585,6 +2590,8 @@ img { display: block; }
     overflow-y: auto;
     z-index: auto;
     inset: auto;
+    transform: none !important;    /* kill slide animation — desktop is always visible */
+    transition: none !important;
   }
 
   /* Mobile topbar: hidden */

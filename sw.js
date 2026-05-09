@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '2.1.7';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.1.7 — silent keepalive audio loop keeps Android audio session alive between tracks
+const APP_VERSION  = '2.1.8';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.1.8 — expanded player slide-down dismiss animation on mobile
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

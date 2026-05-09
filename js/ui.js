@@ -780,7 +780,28 @@ const UI = (() => {
 
   function setExpandedPlayerVisible(open) {
     if (_isDesktop()) return; // Always visible as right panel on desktop
-    document.getElementById('player-expanded')?.classList.toggle('visible', open);
+    const ep = document.getElementById('player-expanded');
+    if (!ep) return;
+
+    if (open) {
+      // 1. Make element renderable (display: flex) while still off-screen (translateY(100%))
+      ep.style.display = 'flex';
+      // 2. Force a reflow so the browser registers the starting transform before we add .visible
+      //    Without this, going from display:none skips the transition entirely.
+      ep.offsetHeight; // eslint-disable-line no-unused-expressions
+      // 3. Add .visible → CSS transition fires: translateY(100%) → translateY(0)
+      ep.classList.add('visible');
+    } else {
+      // 1. Remove .visible → CSS transition fires: translateY(0) → translateY(100%)
+      ep.classList.remove('visible');
+      // 2. After the slide-down completes, hide from layout so it can't be tabbed to
+      const onEnd = () => {
+        if (!ep.classList.contains('visible')) {
+          ep.style.display = 'none';
+        }
+      };
+      ep.addEventListener('transitionend', onEnd, { once: true });
+    }
   }
 
   function isExpandedPlayerVisible() {
