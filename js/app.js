@@ -1862,6 +1862,7 @@ const App = (() => {
 
     _albumRescanRunning = true;
     _albumRescanAbort   = false;
+    if (folderId) _setRescanOverlay(folderId, true);
 
     try {
       UI.showToast(UI.t('toast_rescan_start'));
@@ -1899,6 +1900,7 @@ const App = (() => {
     } finally {
       _albumRescanRunning = false;
       _albumRescanAbort   = false;
+      if (folderId) _setRescanOverlay(folderId, false);
     }
   }
 
@@ -2188,6 +2190,51 @@ const App = (() => {
   }
 
   /**
+   * Show or hide the rescan-wave overlay on all three DOM surfaces for a folder:
+   *  1. Album card art (.home-card-art) in the library grid
+   *  2. Browse folder icon (.folder-icon) in the browse list
+   *  3. Album detail header art (.lib-detail-entity-art) — only when in detail view
+   *
+   * @param {string}  folderId
+   * @param {boolean} active   true = show overlay, false = remove it
+   */
+  function _setRescanOverlay(folderId, active) {
+    const OVERLAY_CLASS = 'rescan-wave-overlay';
+    const WAVE_HTML = `
+      <div class="rescan-wave-wrap">
+        <svg class="savart-wave-svg" viewBox="0 0 144 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M0 16 C6 8,18 8,24 16 C30 24,42 24,48 16 M48 16 C54 8,66 8,72 16 C78 24,90 24,96 16 M96 16 C102 8,114 8,120 16 C126 24,138 24,144 16" stroke="#4A88F5" stroke-width="2.5" stroke-linecap="round"/>
+        </svg>
+      </div>`;
+
+    function applyOverlay(el) {
+      if (!el) return;
+      el.querySelector('.' + OVERLAY_CLASS)?.remove();
+      if (active) {
+        const div = document.createElement('div');
+        div.className = OVERLAY_CLASS;
+        div.innerHTML = WAVE_HTML;
+        el.appendChild(div);
+      }
+    }
+
+    // 1. Album card art in library grid
+    applyOverlay(document.querySelector(
+      `#lib-detail-content .home-card[data-folder-id="${CSS.escape(folderId)}"] .home-card-art`
+    ));
+
+    // 2. Browse folder icon
+    applyOverlay(document.querySelector(
+      `.folder-row[data-id="${CSS.escape(folderId)}"] .folder-icon`
+    ));
+
+    // 3. Album detail header art (only if the detail pane is currently open)
+    if (_libInDetail) {
+      applyOverlay(document.querySelector('.lib-detail-entity-art'));
+    }
+  }
+
+  /**
    * Run the full rescan pipeline sequentially for a list of folder IDs.
    * Clears manual overrides before enriching so the guard doesn't block.
    */
@@ -2206,6 +2253,7 @@ const App = (() => {
     let aborted = false;
     for (const folderId of folderIds) {
       if (_libRescanAbort) { aborted = true; break; }
+      _setRescanOverlay(folderId, true);
       try {
         const page = await Drive.listFolderScan(folderId);
         const songs = page.audioFiles || [];
@@ -2230,6 +2278,8 @@ const App = (() => {
       } catch (err) {
         console.warn('[LibRescan] Error on folder', folderId, err);
         done++;
+      } finally {
+        _setRescanOverlay(folderId, false);
       }
     }
 
@@ -2289,6 +2339,7 @@ const App = (() => {
     if (btn)  { btn.disabled = false; btn.classList.add('scanning'); }
     if (span) span.textContent = UI.t('rescan_stop_btn');
     if (icon) icon.style.animation = 'spin 1s linear infinite';
+    if (_browseFolderId) _setRescanOverlay(_browseFolderId, true);
     try {
       UI.showToast(UI.t('toast_rescan_folder'));
 
@@ -2344,6 +2395,7 @@ const App = (() => {
     } finally {
       _browseRescanRunning = false;
       _browseRescanAbort   = false;
+      if (_browseFolderId) _setRescanOverlay(_browseFolderId, false);
       if (btn)  { btn.disabled = false; btn.classList.remove('scanning'); }
       if (span) span.textContent = UI.t('rescan_btn');
       if (icon) icon.style.animation = '';

@@ -1079,6 +1079,36 @@ img { display: block; }
   border: 1.5px solid var(--bg-card, #1a1a2e);
 }
 
+/* ── Rescan wave overlay ─────────────────────────────────── */
+/* Shown on .home-card-art, .lib-detail-entity-art, .folder-icon
+   while a rescan is actively processing that folder.          */
+.rescan-wave-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(8, 16, 31, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: inherit;
+  z-index: 4;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.rescan-wave-overlay .rescan-wave-wrap {
+  width: 75%;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, black 18%, black 82%, transparent 100%);
+  mask-image: linear-gradient(to right, transparent 0%, black 18%, black 82%, transparent 100%);
+}
+
+.rescan-wave-overlay .savart-wave-svg {
+  width: 300%;
+  height: auto;
+  display: block;
+  animation: savart-wave-scroll 0.75s linear infinite;
+}
+
 .folder-row-info {
   flex: 1;
   min-width: 0;
