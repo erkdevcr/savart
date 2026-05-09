@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '2.4.9';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.4.9 — song-edit modal: fix padding (sp vars undefined), real 20px horizontal margin on header/body/footer
+const APP_VERSION  = '2.5.2';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.5.2 — toasts: same style as boot toast (dark bg, blue border, blue text, glow)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
