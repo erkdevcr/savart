@@ -1092,10 +1092,16 @@ const App = (() => {
         }
       }
 
-      // 2c. Folder cover — generic fallback shared by all songs in the folder
+      // 2c. Folder cover — generic fallback shared by all songs in the folder.
+      // Track this separately so _propagateAlbumMeta only shares the folder-level
+      // art (not the track-specific ID3/Last.fm cover) with sibling songs.
+      let _folderCoverForSiblings = null;
       if (!meta.coverUrl) {
         const folderId = item.parents?.[0];
-        if (folderId) meta.coverUrl = await _getFolderCover(folderId);
+        if (folderId) {
+          meta.coverUrl = await _getFolderCover(folderId);
+          _folderCoverForSiblings = meta.coverUrl; // safe to propagate — shared by whole folder
+        }
       }
 
       /* ── FINALIZE ─────────────────────────────────────────────
@@ -1123,8 +1129,10 @@ const App = (() => {
         if (Object.keys(_persist).length > 0) DB.setMeta(item.id, _persist).catch(() => {});
       }
 
-      // Propagate enriched album/artist/year/cover to sibling songs in the same folder
-      _propagateAlbumMeta(item, meta).catch(() => {});
+      // Propagate album text + folder-level cover to sibling songs in the same folder.
+      // Track-specific covers (ID3, Last.fm, AudD) are intentionally NOT propagated —
+      // each song discovers its own cover through the prefetch pipelines.
+      _propagateAlbumMeta(item, meta, _folderCoverForSiblings).catch(() => {});
 
       _applyMeta(item, meta);
 
@@ -2466,9 +2474,10 @@ const App = (() => {
           const url = Meta.injectCover(song.id, dbMeta.coverBlob);
           if (url) { _updateHomeCardThumbnail(song.id, url); return; }
         }
-        // External URL persisted from Last.fm / AudD.io in a previous session
+        // External URL persisted from Last.fm / AudD.io in a previous session.
+        // Filter out blob: (session-only) and 'id3' sentinel (no real URL).
         const persistedUrl = dbMeta.coverUrl || dbMeta.thumbnailUrl;
-        if (persistedUrl && !persistedUrl.startsWith('blob:')) {
+        if (persistedUrl && !persistedUrl.startsWith('blob:') && persistedUrl !== 'id3') {
           _updateHomeCardThumbnail(song.id, persistedUrl);
         }
       } catch (_) {}
@@ -2582,11 +2591,32 @@ const App = (() => {
     if (!isId3 && img) {
       if (img.dataset.coverSrc === 'id3') return;  // ID3 cover protected
       img.src = coverUrl; // external replaces external
-    } else if (isId3 && img?.dataset.coverSrc === 'id3') {
-      return;  // already ID3, don't overwrite
+      return;
+    }
+    if (isId3 && img?.dataset.coverSrc === 'id3') return; // already ID3, don't overwrite
+
+    // Build img element without innerHTML — avoids wiping out the .eq-bars child
+    const newImg = document.createElement('img');
+    newImg.src = coverUrl;
+    newImg.alt = '';
+    newImg.loading = 'lazy';
+    newImg.style.cssText = 'width:100%;height:100%;object-fit:cover';
+    if (isId3) newImg.dataset.coverSrc = 'id3';
+    newImg.onerror = () => {
+      const ph = document.createElement('div');
+      ph.className = 'thumb-placeholder';
+      newImg.replaceWith(ph);
+    };
+
+    const ph = thumb.querySelector('.thumb-placeholder');
+    if (ph) {
+      ph.replaceWith(newImg);
+    } else if (img) {
+      img.replaceWith(newImg);
     } else {
-      const srcTag = isId3 ? ' data-cover-src="id3"' : '';
-      thumb.innerHTML = `<img src="${coverUrl}"${srcTag} alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display='none'">`;
+      // Insert before .eq-bars so the overlay stays on top
+      const eqBars = thumb.querySelector('.eq-bars');
+      eqBars ? thumb.insertBefore(newImg, eqBars) : thumb.appendChild(newImg);
     }
   }
 
@@ -2623,10 +2653,18 @@ const App = (() => {
     }
   }
 
-  /** Returns true if the home-card for this id already shows a cover <img>. */
+  /** Returns true if the home-card for this id already shows a VALID cover <img>.
+   *  Returns false for broken placeholders (src='id3' sentinel or failed loads). */
   function _homeCardHasCover(fileId) {
     const card = document.querySelector(`#screen-home .home-card[data-id="${CSS.escape(fileId)}"]`);
-    return !!(card && card.querySelector('.home-card-art img'));
+    if (!card) return false;
+    const img = card.querySelector('.home-card-art img');
+    if (!img) return false;
+    // getAttribute('src') is the raw value — 'id3' sentinel set during enrichment
+    // means the card has a broken placeholder, not a real cover.
+    const rawSrc = img.getAttribute('src');
+    if (!rawSrc || rawSrc === 'id3') return false;
+    return true;
   }
 
   /**
@@ -2866,10 +2904,12 @@ const App = (() => {
       pinnedSongs.forEach((p, i) => { if (pinnedMetaRecords[i]) pinnedMetaMap.set(p.id, pinnedMetaRecords[i]); });
 
       const _pick = (...vals) => vals.find(v => v && String(v).trim() !== '') || '';
-      // Only use persisted URLs that are NOT stale blob: URLs from a previous session.
+      // Only use persisted URLs that are NOT stale blob: URLs from a previous session,
+      // and NOT the 'id3' sentinel (used to mark songs with embedded ID3 art — the actual
+      // blob URL is recreated at session start via Meta.injectCover).
       // blob: URLs are session-scoped object URLs — they become invalid after page reload.
       // In-memory coverUrls (inMem.coverUrl) are always fresh within the current session.
-      const _safeUrl = u => (u && !u.startsWith('blob:')) ? u : null;
+      const _safeUrl = u => (u && !u.startsWith('blob:') && u !== 'id3') ? u : null;
 
       // Helper: stamp folderType on an item using the collection cache.
       // Called at enrichment time so context menus always have the correct label
@@ -6703,20 +6743,23 @@ const App = (() => {
    * @param {DriveItem} item  - the identified song (has .parents[0] = folderId)
    * @param {Object}    meta  - enriched metadata object (album, artist, year, coverUrl)
    */
-  async function _propagateAlbumMeta(item, meta) {
+  async function _propagateAlbumMeta(item, meta, folderCoverUrl = null) {
     const folderId = item.parents?.[0];
     if (!folderId) return;
 
     // Collections have intentionally diverse artists — propagating one track's
     // artist/album to all siblings would collapse artist diversity and cause the
-    // folder to be reclassified as an album after a rescan.  Cover art is still
-    // propagated (folder-level art is shared across all tracks).
+    // folder to be reclassified as an album after a rescan.  Only the folder-level
+    // cover (cover.jpg / folder.jpg discovered by _getFolderCover) is propagated
+    // to all tracks; track-specific covers (ID3, Last.fm, AudD) are NOT propagated
+    // to avoid showing one song's cover art on a different song's home card.
     const isCollection = isFolderCollection(folderId);
 
     const album    = isCollection ? null : (meta.album  || null);
     const artist   = isCollection ? null : (meta.artist || null);
     const year     = meta.year     || null;
-    const coverUrl = meta.coverUrl || null;
+    // Only propagate covers that came from the shared folder image, never track-specific art.
+    const coverUrl = folderCoverUrl || null;
     if (!album && !artist && !year && !coverUrl) return;
 
     try {

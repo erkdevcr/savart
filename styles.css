@@ -2238,13 +2238,13 @@ img { display: block; }
 #player-expanded {
   position: fixed;
   inset: 0;
-  bottom: 0; /* extends to screen bottom; bottom-nav floats on top via z-index:70 */
+  bottom: var(--bottom-nav-h); /* sit above the bottom-nav — nav stays always visible */
   z-index: 60;
   background: var(--bg-base);
   display: none;
   flex-direction: column;
   overflow: hidden;
-  /* Slide-down dismiss animation (mobile only — overridden to static on desktop) */
+  /* Slide-up from bottom-nav / slide-down to bottom-nav (mobile only) */
   transform: translateY(100%);
   transition: transform 0.38s cubic-bezier(0.4, 0, 0.2, 1);
   will-change: transform;
@@ -2520,8 +2520,7 @@ img { display: block; }
   align-items: center;
   justify-content: space-between;
   margin-bottom: 20px;
-  /* Pad below controls so they clear the floating bottom-nav bar */
-  padding-bottom: var(--bottom-nav-h);
+  padding-bottom: 8px; /* comfortable breathing room at panel bottom */
 }
 
 .pexp-ctrl-btn {

@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '2.2.5';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.2.5 — lib rescan stop button always visible and functional during scan
+const APP_VERSION  = '2.2.7';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.2.7 — mobile expanded player anchors above bottom-nav (bottom: --bottom-nav-h); nav stays visible during expand/collapse animation
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
