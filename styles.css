@@ -6336,16 +6336,19 @@ body.queue-open #mini-player { z-index: 65; }
 }
 
 /* ── Song-edit modal ──────────────────────────────────────── */
+#song-edit-modal .ds-modal-card {
+  border: 1.5px solid var(--accent, #4f8ef7);
+}
 .song-edit-modal-body {
-  padding: var(--sp-3) var(--sp-4) var(--sp-2);
+  padding: var(--sp-3) var(--sp-5) var(--sp-2);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 .song-edit-field {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
 }
 .song-edit-label {
   font-size: 11px;
@@ -6353,6 +6356,7 @@ body.queue-open #mini-player { z-index: 65; }
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;
+  padding-left: 2px;
 }
 /* Autocomplete wrapper inside the modal must span full width */
 #song-edit-modal .ac-wrap { width: 100%; }

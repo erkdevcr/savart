@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '2.4.6';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.4.6 — fix cover bleeding: stop propagating artist/album to siblings in _propagateAlbumMeta; guard Pass-6 Last.fm queries with trusted-source check
+const APP_VERSION  = '2.4.7';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.4.7 — song-edit modal: fix LBL_ labels (add lbl_title/artist/album/year translations), blue border, better padding
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
