@@ -7856,6 +7856,49 @@ const App = (() => {
   }
 
   /**
+   * Save individual song metadata edits (from the song-edit modal).
+   * Writes all changed fields to DB, updates every in-memory layer and
+   * visible UI surface immediately — no reload required.
+   *
+   * @param {string} songId
+   * @param {{displayName?:string, artist?:string, album?:string, year?:string, coverUrl?:string}} patch
+   */
+  async function onSongEdit(songId, patch) {
+    if (!songId) throw new Error('songId required');
+
+    const dbPatch = { manualAt: Date.now() };
+    if (patch.displayName) dbPatch.displayName  = patch.displayName;
+    if (patch.artist)      dbPatch.artist       = patch.artist;
+    if (patch.album)       dbPatch.album        = patch.album;
+    if (patch.year)        dbPatch.year         = patch.year;
+
+    // Cover URL — store as thumbnailUrl; also cache the blob for offline use
+    const newCoverUrl = patch.coverUrl && !patch.coverUrl.startsWith('blob:')
+      ? patch.coverUrl : null;
+    if (newCoverUrl) {
+      dbPatch.thumbnailUrl = newCoverUrl;
+      _cacheExternalCover(songId, newCoverUrl, true).catch(() => {});
+    }
+
+    await DB.setMeta(songId, dbPatch);
+
+    // Propagate to Meta cache + player queue + all visible surfaces
+    _liveMetaUpdate([songId], dbPatch);
+
+    // Also patch Meta cache title field (liveMetaUpdate uses 'displayName' → 'title')
+    if (patch.displayName && typeof Meta !== 'undefined') {
+      Meta.forcePatch(songId, { title: patch.displayName });
+    }
+
+    _invalidateSuggestionsCache();
+    if (typeof Sync !== 'undefined') Sync.push('metadata');
+    if (_browseFolderId) _updateBrowseLegend(_browseFolderId);
+
+    // Refresh home if visible so recents/top-played cards show updated info
+    if (UI.getCurrentView() === 'home') _loadHomeData().catch(() => {});
+  }
+
+  /**
    * Rename a single track's display name (from the album detail inline editor).
    * Writes to DB, patches in-memory caches, and syncs.
    * @param {string} songId
@@ -9785,6 +9828,7 @@ const App = (() => {
     _openCollectionEditModal,
     onAlbumRescan,
     stopAlbumRescan,
+    onSongEdit,
     onAlbumEdit,
     getMetaSuggestions,
     onAlbumPlay,

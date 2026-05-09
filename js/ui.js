@@ -318,6 +318,7 @@ const UI = (() => {
       lbl_manual_edit:         'Ajuste manual',
       ctx_move_to_albums:      'Mover a Álbumes',
       ctx_move_to_collections: 'Mover a Colecciones',
+      ctx_edit_song:           'Editar canción',
       ctx_edit_collection:     'Editar colección',
       lbl_collection:          'Colección',
       lbl_album_chip:          'Álbum',
@@ -621,6 +622,7 @@ const UI = (() => {
       lbl_manual_edit:         'Manual edit',
       ctx_move_to_albums:      'Move to Albums',
       ctx_move_to_collections: 'Move to Collections',
+      ctx_edit_song:           'Edit song',
       ctx_edit_collection:     'Edit collection',
       lbl_collection:          'Collection',
       lbl_album_chip:          'Album',
@@ -1785,6 +1787,8 @@ const UI = (() => {
       _addCtxDivider(menu);
       _addCtxItem(menu, iconStar(14),  t('add_fav'),     () => { App.onToggleStar(item);         hideContextMenu(); });
       _addCtxItem(menu, iconPlus(14),  t('add_to_pl'),  (e) => { hideContextMenu(); App.onShowPlaylistPicker(e, item); });
+      _addCtxDivider(menu);
+      _addCtxItem(menu, _iconEdit,     t('ctx_edit_song'), () => { hideContextMenu(); openSongEditModal(item); });
       if (item._playlistId) {
         _addCtxDivider(menu);
         _addCtxItem(menu, iconTrash(14), t('ctx_remove_from_pl'), () => { App.onRemoveFromPlaylist?.(item.id, item._playlistId); hideContextMenu(); });
@@ -1840,6 +1844,10 @@ const UI = (() => {
         App.onTogglePin(item);
         hideContextMenu();
       });
+      if (!isFolder) {
+        _addCtxDivider(menu);
+        _addCtxItem(menu, _iconEdit, t('ctx_edit_song'), () => { hideContextMenu(); openSongEditModal(item); });
+      }
     }
 
     if (type === 'top_played') {
@@ -1868,6 +1876,10 @@ const UI = (() => {
       );
       _addCtxItem(menu, iconPlus(14), t('add_to_pl'), (e) => { hideContextMenu(); App.onShowPlaylistPicker(e, item); });
       _addCtxItem(menu, iconPin(14),  t('ctx_pin_to_home'), () => { App.onTogglePin(item); hideContextMenu(); });
+      if (!isFolder) {
+        _addCtxDivider(menu);
+        _addCtxItem(menu, _iconEdit, t('ctx_edit_song'), () => { hideContextMenu(); openSongEditModal(item); });
+      }
       _addCtxDivider(menu);
       _addCtxItem(menu, iconTrash(14), t('ctx_remove_top_played'), () => { App.onRemoveFromTopPlayed?.(item); hideContextMenu(); });
     }
@@ -1928,6 +1940,8 @@ const UI = (() => {
       _addCtxItem(menu, iconStar(14),  t('ctx_mark_fav'),       () => { App.onToggleStar(item);       hideContextMenu(); });
       _addCtxItem(menu, iconPlus(14),  t('add_to_pl'),         (e) => { hideContextMenu(); App.onShowPlaylistPicker(e, item); });
       _addCtxItem(menu, iconPin(14),   t('ctx_pin_to_home'),    () => { App.onTogglePin(item);        hideContextMenu(); });
+      _addCtxDivider(menu);
+      _addCtxItem(menu, _iconEdit,     t('ctx_edit_song'),      () => { hideContextMenu(); openSongEditModal(item); });
       _addCtxItem(menu, iconTrash(14), t('ctx_remove_history'), () => { App.onRemoveFromHistory(item);hideContextMenu(); });
     }
 
@@ -1962,6 +1976,7 @@ const UI = (() => {
       _addCtxItem(menu, iconStar(14),  t('add_fav'),         () => { App.onToggleStar(item);       hideContextMenu(); });
       _addCtxItem(menu, iconPlus(14),  t('add_to_pl'),      (e) => { hideContextMenu(); App.onShowPlaylistPicker(e, item); });
       _addCtxDivider(menu);
+      _addCtxItem(menu, _iconEdit,     t('ctx_edit_song'),  () => { hideContextMenu(); openSongEditModal(item); });
       _addCtxItem(menu, iconTrash(14), t('ctx_remove_history'), () => { App.onRemoveFromHistoryItem(item); hideContextMenu(); });
     }
 
@@ -2032,6 +2047,93 @@ const UI = (() => {
     // Remove both dismiss listeners (whichever didn't fire first)
     document.removeEventListener('click',  hideContextMenu);
     document.removeEventListener('scroll', hideContextMenu, { capture: true });
+  }
+
+  /* ── Song edit modal ─────────────────────────────────────── */
+
+  let _songEditModalInit = false;
+  let _songEditCurrentId = null;
+
+  function openSongEditModal(item) {
+    if (!item?.id) return;
+    _songEditCurrentId = item.id;
+
+    const modal     = document.getElementById('song-edit-modal');
+    const nameInp   = document.getElementById('song-edit-name');
+    const artistInp = document.getElementById('song-edit-artist');
+    const albumInp  = document.getElementById('song-edit-album');
+    const yearInp   = document.getElementById('song-edit-year');
+    const coverInp  = document.getElementById('song-edit-cover');
+    if (!modal) return;
+
+    // Pre-fill with whatever data the item already has (context menu carries it)
+    nameInp.value   = item.displayName || item.name || '';
+    artistInp.value = item.artist      || '';
+    albumInp.value  = item.albumName   || item.album || '';
+    yearInp.value   = item.year        || '';
+    const safeThumb = (item.thumbnailUrl && !item.thumbnailUrl.startsWith('blob:') && item.thumbnailUrl !== 'id3')
+      ? item.thumbnailUrl : '';
+    coverInp.value  = safeThumb;
+
+    // Then enrich from DB (artist/album/year may be richer there)
+    if (typeof App !== 'undefined' && App.DB) {
+      App.DB.getMeta(item.id).then(m => {
+        if (!m || _songEditCurrentId !== item.id) return;
+        if (m.displayName)  nameInp.value   = m.displayName;
+        if (m.artist)       artistInp.value = m.artist;
+        if (m.album)        albumInp.value  = m.album;
+        if (m.year)         yearInp.value   = m.year;
+        const dbThumb = m.thumbnailUrl || m.coverUrl || '';
+        if (dbThumb && !dbThumb.startsWith('blob:') && dbThumb !== 'id3') {
+          coverInp.value = dbThumb;
+        }
+      }).catch(() => {});
+    }
+
+    modal.style.display = 'flex';
+    setTimeout(() => nameInp.focus(), 80);
+
+    // Wire up once
+    if (!_songEditModalInit) {
+      _songEditModalInit = true;
+
+      const _close = () => { modal.style.display = 'none'; _songEditCurrentId = null; };
+
+      document.getElementById('song-edit-backdrop')?.addEventListener('click', _close);
+      document.getElementById('btn-song-edit-cancel')?.addEventListener('click', _close);
+
+      document.getElementById('btn-song-edit-save')?.addEventListener('click', async () => {
+        const id = _songEditCurrentId;
+        if (!id) return;
+        const saveBtn = document.getElementById('btn-song-edit-save');
+        saveBtn.disabled = true;
+        saveBtn.textContent = t('saving');
+        try {
+          const patch = {
+            displayName: nameInp.value.trim()   || undefined,
+            artist:      artistInp.value.trim() || undefined,
+            album:       albumInp.value.trim()  || undefined,
+            year:        yearInp.value.trim()   || undefined,
+            coverUrl:    coverInp.value.trim()  || undefined,
+          };
+          await App.onSongEdit?.(id, patch);
+          saveBtn.textContent = t('saved_ok');
+          setTimeout(() => { _close(); saveBtn.disabled = false; saveBtn.textContent = t('confirm_btn'); }, 900);
+        } catch {
+          saveBtn.disabled = false;
+          saveBtn.textContent = t('confirm_btn');
+        }
+      });
+
+      // Keyboard: Escape closes
+      modal.addEventListener('keydown', e => { if (e.key === 'Escape') _close(); });
+
+      // Autocomplete for artist and album fields
+      if (typeof App !== 'undefined' && App.getMetaSuggestions) {
+        _attachAutocomplete(artistInp, () => App.getMetaSuggestions().then(s => s.artists));
+        _attachAutocomplete(albumInp,  () => App.getMetaSuggestions().then(s => s.albums));
+      }
+    }
   }
 
   /* ── Playlist picker ─────────────────────────────────────── */
@@ -4286,6 +4388,7 @@ const UI = (() => {
     // Context menu
     showContextMenu,
     hideContextMenu,
+    openSongEditModal,
     // Playlist picker
     showPlaylistPicker,
     hidePlaylistPicker,

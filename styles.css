@@ -6335,6 +6335,29 @@ body.queue-open #mini-player { z-index: 65; }
   align-self: center;
 }
 
+/* ── Song-edit modal ──────────────────────────────────────── */
+.song-edit-modal-body {
+  padding: var(--sp-3) var(--sp-4) var(--sp-2);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.song-edit-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.song-edit-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+/* Autocomplete wrapper inside the modal must span full width */
+#song-edit-modal .ac-wrap { width: 100%; }
+#song-edit-modal .ac-wrap .ds-artist-url-modal-input { width: 100%; box-sizing: border-box; }
+
 /* Mosaic inside a card scales perfectly */
 .home-card-art .lib-collection-art,
 .home-card-art > div[style*="grid"] {
