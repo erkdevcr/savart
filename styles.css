@@ -200,7 +200,6 @@ img { display: block; }
   display: flex;
   align-items: center;
   justify-content: space-around;
-  z-index: 20;
 }
 
 .nav-tab {
