@@ -1123,7 +1123,10 @@ const UI = (() => {
 
     el.innerHTML = `
       <span class="top-list-rank">${rank}</span>
-      <div class="top-list-thumb">${thumbHtml}</div>
+      <div class="top-list-thumb">
+        ${thumbHtml}
+        <div class="eq-bars"><div class="eq-bar"></div><div class="eq-bar"></div><div class="eq-bar"></div><div class="eq-bar"></div></div>
+      </div>
       <div class="top-list-info">
         <div class="top-list-title">${escHtml(title)}</div>
         ${metaLine ? `<div class="top-list-meta">${escHtml(metaLine)}</div>` : ''}
@@ -1257,7 +1260,10 @@ const UI = (() => {
 
     el.innerHTML = `
       <span class="top-list-rank">${rank}</span>
-      <div class="top-list-thumb">${thumbHtml}</div>
+      <div class="top-list-thumb">
+        ${thumbHtml}
+        <div class="eq-bars"><div class="eq-bar"></div><div class="eq-bar"></div><div class="eq-bar"></div><div class="eq-bar"></div></div>
+      </div>
       <div class="top-list-info">
         <div class="top-list-title">${escHtml(title)}</div>
         ${metaLine ? `<div class="top-list-meta">${escHtml(metaLine)}</div>` : ''}

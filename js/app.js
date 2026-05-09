@@ -2324,9 +2324,7 @@ const App = (() => {
    *   slots and never overwrite a previously set ID3 cover.
    */
   function _updateRowThumbnail(fileId, coverUrl, isId3 = false) {
-    const eid    = CSS.escape(fileId);
-    const srcTag = isId3 ? ' data-cover-src="id3"' : '';
-    const IMG    = `<img src="${coverUrl}"${srcTag} alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;border-radius:inherit" onerror="this.parentNode.innerHTML='<div class=\\'thumb-placeholder\\'></div>'">`;
+    const eid = CSS.escape(fileId);
 
     function _applyToThumb(thumb) {
       if (!thumb) return;
@@ -2337,7 +2335,32 @@ const App = (() => {
         return;
       }
       if (isId3 && img?.dataset.coverSrc === 'id3') return; // already ID3 — keep it
-      thumb.innerHTML = IMG;
+
+      // Build img element without innerHTML — avoids wiping out the .eq-bars child
+      const newImg = document.createElement('img');
+      newImg.src = coverUrl;
+      newImg.alt = '';
+      newImg.loading = 'lazy';
+      newImg.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:inherit';
+      if (isId3) newImg.dataset.coverSrc = 'id3';
+      newImg.onerror = () => {
+        // Swap broken img back to placeholder — keep .eq-bars intact
+        const ph = document.createElement('div');
+        ph.className = 'thumb-placeholder';
+        newImg.replaceWith(ph);
+      };
+
+      // Replace placeholder or broken img; never touch .eq-bars
+      const ph = thumb.querySelector('.thumb-placeholder');
+      if (ph) {
+        ph.replaceWith(newImg);
+      } else if (img) {
+        img.replaceWith(newImg);
+      } else {
+        // Nothing to replace — insert before eq-bars so it stays last
+        const eqBars = thumb.querySelector('.eq-bars');
+        eqBars ? thumb.insertBefore(newImg, eqBars) : thumb.appendChild(newImg);
+      }
     }
 
     // Browse view (.song-row → .song-thumb)
