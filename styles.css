@@ -1031,7 +1031,7 @@ img { display: block; }
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 16px;
+  padding: 10px 16px 10px 8px;
   cursor: pointer;
   transition: background 0.3s ease-out;
 }
@@ -2519,8 +2519,6 @@ img { display: block; }
   align-items: center;
   justify-content: space-between;
   margin-bottom: 20px;
-  /* Pad below controls so they clear the bottom-nav bar that floats on top */
-  padding-bottom: var(--bottom-nav-h);
 }
 
 .pexp-ctrl-btn {
@@ -2582,6 +2580,8 @@ img { display: block; }
   justify-content: space-around;
   border-top: 1px solid var(--bg-hover);
   padding-top: 12px;
+  /* Last element in the player — pad below to clear the floating bottom-nav on mobile */
+  padding-bottom: var(--bottom-nav-h);
 }
 
 .pexp-action-btn {
@@ -2695,7 +2695,8 @@ img { display: block; }
 
   .pexp-progress-wrap { padding: 6px 0 2px; }
   .pexp-times { margin-bottom: 12px; font-size: 11px; }
-  .pexp-controls { margin-bottom: 12px; padding-bottom: 0; } /* no floating nav on desktop */
+  .pexp-controls { margin-bottom: 12px; } /* no floating nav on desktop */
+  .pexp-actions  { padding-bottom: 0; }  /* no bottom-nav to clear on desktop */
 
   /* Slightly smaller play button to fit panel */
   .pexp-play-btn { width: 52px; height: 52px; }
@@ -3519,7 +3520,7 @@ body.queue-open #mini-player { z-index: 65; }
 
   .song-row,
   .folder-row {
-    padding: 8px 24px;
+    padding: 8px 24px 8px 12px;
   }
 
   /* Pinned grid: 3 columns on desktop */

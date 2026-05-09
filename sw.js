@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '2.3.2';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.3.2 — fix lib rescan btn: _libRescanRunning set synchronously in onLibRescan before fire-and-forget _doLibRescan; prevents race with async _loadAlbums/_syncLibRescanBtn
+const APP_VERSION  = '2.3.3';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.3.3 — reduce folder-row left padding (16→8px mobile, 24→12px desktop); move player padding-bottom from .pexp-controls to .pexp-actions so bottom-nav clears correctly
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
