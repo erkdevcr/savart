@@ -3358,12 +3358,14 @@ const App = (() => {
                 url = dbM?.thumbnailUrl || dbM?.coverUrl || null;
               } catch (_) {}
             }
-            // Skip sentinel ('id3'), ephemeral blob: URLs, and Drive thumbnail URLs
-            // (Drive requires auth header so they won't load in a plain <img>).
+            // Skip sentinel ('id3'), ephemeral blob: URLs, and googleapis.com API URLs
+            // (googleapis.com API endpoints require an auth header so they won't load
+            // in a plain <img>).  googleusercontent.com thumbnail URLs are CDN links
+            // that work fine in <img> without auth — they're the primary cover source.
             if (!url) continue;
             if (url === 'id3') continue;
             if (url.startsWith('blob:')) continue;
-            if (url.includes('googleusercontent.com') || url.includes('googleapis.com')) continue;
+            if (url.includes('googleapis.com') && !url.includes('googleusercontent.com')) continue;
             covers.push(url);
           }
           return { ...pl, resolvedCovers: covers };
