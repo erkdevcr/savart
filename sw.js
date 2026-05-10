@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.0.3';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.0.3 — _pushRecents/_pushHome cruzan metadata store; _softScanItems y _preScanBeforePlay re-pushean recents tras enriquecer
+const APP_VERSION  = '3.0.4';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.0.4 — _prefetchHomePlaylists: soft scan de items internos de playlists del inicio; UI.updatePlaylistHomeCardCovers actualiza mosaico en-place
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

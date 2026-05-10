@@ -3482,6 +3482,7 @@ const App = (() => {
       _prefetchHomeCovers(enrichedRecents).catch(() => {});
       _prefetchTopPlayedCovers(topPlayed).catch(() => {});
       _prefetchPinnedCovers(enrichedPinned).catch(() => {});
+      _prefetchHomePlaylists(enrichedPlaylists).catch(() => {});
 
       // Async: fix any items still with no name by fetching from Drive API
       _fixMissingNames(enrichedRecents, topPlayed).catch(() => {});
@@ -4713,6 +4714,103 @@ const App = (() => {
 
     // Pass 3: Drive API fallback — songs still without cover after scan
     await _driveThumbFallback(songs, _pinnedHasCover, _updatePinnedItemCover);
+  }
+
+  /**
+   * Background cover prefetch for Home playlist cards (the 2×2 mosaic grid).
+   *
+   * For each playlist on the home screen:
+   *   Pass 0 — read covers already in DB / in-memory cache (free, no network)
+   *   Pass 1 — for songs still without a cover and not yet scanned locally,
+   *             delegate to _softScanItems (download 1 MB head → parse ID3)
+   *   After each playlist: rebuild the mosaic in-place via UI.updatePlaylistHomeCardCovers
+   *
+   * Only 4 songs per playlist are examined (we need at most 4 tiles for the mosaic).
+   * Playlists that already have 4 resolved covers from _loadHomeData are skipped.
+   *
+   * @param {Object[]} playlists — enrichedPlaylists array from _loadHomeData
+   */
+  async function _prefetchHomePlaylists(playlists) {
+    if (!playlists.length || typeof Meta === 'undefined') return;
+
+    const _isUsable = url =>
+      url && url !== 'id3' && !url.startsWith('blob:') &&
+      !(url.includes('googleapis.com') && !url.includes('googleusercontent.com'));
+
+    for (const pl of playlists) {
+      try {
+        const songIds = (pl.songIds || []).slice(0, 16);
+        if (!songIds.length) continue;
+
+        // Pass 0: resolve what's already available (DB + in-memory) for the first 4 slots
+        const covers  = [];
+        const toScan  = []; // items missing a cover and not yet scanned on this device
+
+        for (const sid of songIds) {
+          if (covers.length >= 4 && toScan.length === 0) break;
+
+          // In-memory Meta cache (fastest — current session blobs)
+          const inMem = Meta.getCached(sid);
+          if (inMem?.coverUrl && _isUsable(inMem.coverUrl)) {
+            if (covers.length < 4) covers.push(inMem.coverUrl);
+            continue;
+          }
+
+          const dbM = await DB.getMeta(sid).catch(() => null);
+
+          // DB: embedded blob → inject object URL
+          if (dbM?.coverBlob) {
+            const injected = Meta.injectCover(sid, dbM.coverBlob);
+            if (injected && _isUsable(injected)) {
+              if (covers.length < 4) covers.push(injected);
+              continue;
+            }
+          }
+
+          // DB: external URL (Last.fm / Drive CDN / AudD)
+          const extUrl = dbM?.thumbnailUrl || dbM?.coverUrl || null;
+          if (_isUsable(extUrl)) {
+            if (covers.length < 4) covers.push(extUrl);
+            continue;
+          }
+
+          // No cover on this device yet — queue for scan if not already done
+          if (!dbM?.softScannedAt && !dbM?.rescannedAt && !dbM?.manualAt) {
+            if (covers.length < 4) toScan.push({ id: sid }); // only scan what we still need
+          }
+        }
+
+        // Pass 1: scan songs that have no cover and haven't been soft-scanned here
+        if (toScan.length > 0) {
+          await _softScanItems(toScan);
+
+          // Re-resolve covers for the just-scanned songs
+          for (const item of toScan) {
+            if (covers.length >= 4) break;
+            const inMem = Meta.getCached(item.id);
+            if (inMem?.coverUrl && _isUsable(inMem.coverUrl)) {
+              covers.push(inMem.coverUrl);
+              continue;
+            }
+            const dbM = await DB.getMeta(item.id).catch(() => null);
+            if (dbM?.coverBlob) {
+              const injected = Meta.injectCover(item.id, dbM.coverBlob);
+              if (injected && _isUsable(injected)) { covers.push(injected); continue; }
+            }
+            const extUrl = dbM?.thumbnailUrl || dbM?.coverUrl || null;
+            if (_isUsable(extUrl)) covers.push(extUrl);
+          }
+        }
+
+        // Update mosaic only if we found something new (avoid redundant repaints)
+        const existing = pl.resolvedCovers || [];
+        const changed  = covers.length > existing.length ||
+                         covers.some((u, i) => u !== existing[i]);
+        if (covers.length > 0 && changed && typeof UI !== 'undefined') {
+          UI.updatePlaylistHomeCardCovers(pl.id, covers);
+        }
+      } catch (_) { /* non-fatal — next playlist */ }
+    }
   }
 
   /** Patch the cover art of a pinned card for a given song id. */

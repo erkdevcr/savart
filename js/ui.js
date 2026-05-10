@@ -4064,6 +4064,21 @@ const UI = (() => {
     thumb.innerHTML = _buildMosaicThumb(covers, name);
   }
 
+  /**
+   * Rebuild the 2×2 mosaic on a home playlist card after background scanning
+   * resolves covers that weren't available when renderHome() ran.
+   * @param {string}   plId   — playlist id (matches card.dataset.plid)
+   * @param {string[]} covers — up to 4 resolved cover URLs
+   */
+  function updatePlaylistHomeCardCovers(plId, covers) {
+    const card = document.querySelector(`#screen-home .home-card[data-plid="${CSS.escape(plId)}"]`);
+    if (!card) return;
+    const art = card.querySelector('.home-card-art--mosaic');
+    if (!art) return;
+    const name = card.querySelector('.home-card-name')?.textContent || '';
+    art.innerHTML = _buildPlaylistMosaic(covers, name);
+  }
+
   /** Update the placeholder text in the library search input. */
   function setLibSearchPlaceholder(text) {
     const input = document.getElementById('lib-search-input');
@@ -4466,6 +4481,7 @@ const UI = (() => {
     renderLibraryCollectionDetail,
     renderPlaylists,
     updatePlaylistSidebarCover,
+    updatePlaylistHomeCardCovers,
     setLibSearchPlaceholder,
     // Search
     renderSearchResults,
