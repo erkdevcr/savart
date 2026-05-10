@@ -7036,19 +7036,39 @@ const App = (() => {
         if (folderIdSet.has(m.id)) existingMap.set(m.id, m);
       }
 
+      // Capture the currently-playing song ID so we can prioritise it.
+      // It may already have softScannedAt stamped (from _onBlobReady at play-start),
+      // but we always re-include it so the soft scan has a chance to verify/complete
+      // its metadata and update the browse row — fulfilling the "scan before/while
+      // playing" contract even if the play-start stamp beat us to the punch.
+      const currentTrackId = (typeof Player !== 'undefined') ? Player.getCurrentTrack()?.id : null;
+
       // Candidates: any file not yet soft-scanned AND not manually edited.
       // We intentionally ignore whether artist/album is already set — folder-name
       // inference (artistInferred) and stale data need to be replaced by real ID3.
       // rescannedAt = full manual rescan already done → skip (has authoritative data).
       // softScannedAt = already read real ID3 in a previous session → skip.
+      //   EXCEPTION: the currently-playing song is always a candidate regardless of
+      //   softScannedAt so the soft scan never silently bypasses the active track.
       const candidates = files.filter(f => {
         const m = existingMap.get(f.id);
-        if (!m) return true;                   // no data at all
-        if (m.manualAt)     return false;      // user manually edited → never touch
-        if (m.rescannedAt)  return false;      // full rescan done → authoritative
-        if (m.softScannedAt) return false;     // already soft-scanned → skip
-        return true;                           // anything else: scan to get real ID3
+        if (!m) return true;                               // no data at all
+        if (m.manualAt)   return false;                    // user manually edited → never touch
+        if (m.rescannedAt) return false;                   // full rescan done → authoritative
+        if (m.softScannedAt && f.id !== currentTrackId) return false; // already scanned (skip unless playing)
+        return true;                                       // anything else: scan to get real ID3
       });
+
+      // Always scan the currently-playing song first so its metadata appears in the
+      // browse row immediately — even before the rest of the folder is processed.
+      if (currentTrackId) {
+        const playingIdx = candidates.findIndex(f => f.id === currentTrackId);
+        if (playingIdx > 0) {
+          const [playing] = candidates.splice(playingIdx, 1);
+          candidates.unshift(playing);
+        }
+      }
+
       if (candidates.length === 0) return;
 
       console.log(`[SoftScan] ${folderId}: scanning ${candidates.length} candidates`);
@@ -7141,8 +7161,12 @@ const App = (() => {
           if (inBrowse()) UI.updateBrowseSongMeta(file.id, fallback?.artist || null, fallback?.album || null, null);
         }
 
-        // Yield between files — soft scan must never disrupt playback
-        await new Promise(r => setTimeout(r, 50));
+        // Yield between files — soft scan must never disrupt playback.
+        // Skip the delay for the currently-playing song (already at position 0)
+        // so its metadata appears in the browse row without any extra wait.
+        if (file.id !== currentTrackId) {
+          await new Promise(r => setTimeout(r, 50));
+        }
       }
 
       if (patched === 0) return;

@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '2.9.4';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.9.4 — sync: _bumpManifest live-read evita sobrescribir ts de otros dispositivos; _poll actualiza _remoteTs siempre; _pushRecents agrega artist + thumbnailLink
+const APP_VERSION  = '2.9.5';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.9.5 — softScan: canción en reproducción nunca se salta; se mueve al frente de la cola y se escanea sin yield
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
