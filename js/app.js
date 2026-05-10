@@ -1073,6 +1073,27 @@ const App = (() => {
         if (meta.coverUrl) UI.updateBrowseSongThumb?.(item.id, meta.coverUrl);
       }
 
+      // Priority soft scan: stamp softScannedAt immediately so the sequential
+      // _softScanFolder skips this file (it was already fully parsed while playing).
+      // Also write whatever ID3 text we have now, and update the browse row cover+text.
+      if (!dbMeta?.softScannedAt && !playManual) {
+        const _spPatch = { softScannedAt: Date.now() };
+        if (meta.title)  _spPatch.displayName    = meta.title;
+        if (meta.artist) { _spPatch.artist = meta.artist; _spPatch.artistInferred = false; }
+        if (meta.album)  _spPatch.album           = meta.album;
+        if (meta.year)   _spPatch.year            = meta.year;
+        DB.setMeta(item.id, _spPatch).catch(() => {});
+        // If this song's folder is currently open in Browse, refresh the row right now
+        const _spParent = item.parents?.[0];
+        if (_spParent && _browseFolderId === _spParent) {
+          const _spArtist  = meta.artist || dbMeta?.artist       || null;
+          const _spAlbum   = meta.album  || dbMeta?.album        || null;
+          const _spDisplay = meta.title  || dbMeta?.displayName  || null;
+          UI.updateBrowseSongMeta(item.id, _spArtist, _spAlbum, _spDisplay);
+          if (meta.coverUrl) _updateRowThumbnail(item.id, meta.coverUrl, !!meta.coverBlob);
+        }
+      }
+
       /* ── PASS 1 — IDENTIFICATION ──────────────────────────────
          Goal: assemble the best possible artist / title / album
          from every local source. AudD runs here if anything is
