@@ -38,6 +38,14 @@ const App = (() => {
   // cached (instantly loaded) tracks.
   let _loadingTimer = null;
 
+  /* ── Soft-scan session guard ─────────────────────────────── */
+  // IDs already soft-scanned in THIS session (cleared on page reload / new session).
+  // Prevents scanning the same item repeatedly when _loadHomeData is called multiple
+  // times per session (sync updates, tab focus, etc.) while still ensuring a fresh
+  // scan on every new app launch — satisfying the "siempre deben hacer soft scan
+  // al iniciar" requirement without unbounded network usage.
+  const _sessionScannedIds = new Set();
+
   /* ── Radio mode ──────────────────────────────────────────── */
   // Activated when the user plays a single song from Home, Search, or Library.
   // Automatically finds more songs by the same artist in Drive and appends
@@ -2828,24 +2836,30 @@ const App = (() => {
   }
 
   /**
-   * Soft-scan items that have never been scanned on THIS device.
+   * Soft-scan home/top-played/pinned items on every session start and every sync drop.
    *
-   * Runs for ALL home/top-played/pinned items regardless of whether they already
-   * have a cover visible — the goal is to stamp softScannedAt and populate full
-   * ID3 metadata in the DB so every surface shows consistent data.
+   * RULES (per spec):
+   *   • ALL items MUST be processed — no exceptions based on softScannedAt.
+   *   • Items with manualAt OR rescannedAt → SKIP scan, but MUST read DB and
+   *     apply data to DOM (mandatory "consult DB for changes").
+   *   • All other items → MUST do a fresh ID3 scan every session:
+   *       - Download 1 MB head (or use local cached blob)
+   *       - Parse ID3 tags
+   *       - REPLACE fields in DB from ID3 (not fill-only — "borrar los datos y
+   *         consultar la ID3")
+   *       - If ID3 has no cover, keep existing external URL (Last.fm/AudD)
+   *       - Paint result on every visible surface
    *
-   * Skips items with an authoritative scan record already in DB:
-   *   manualAt    — user manually edited → trust DB completely
-   *   rescannedAt — full folder rescan was done → trust DB completely
-   *   softScannedAt — already soft-scanned on THIS device → trust DB completely
+   * Session guard (_sessionScannedIds): prevents scanning the same item twice
+   * within a single app session (avoids redundant downloads when _loadHomeData
+   * is called multiple times per session from sync events). Cleared on page reload.
    *
    * @param {Object[]} items — array of items with .id
    */
   async function _softScanItems(items) {
-    if (!items.length || typeof Meta === 'undefined' || typeof Drive === 'undefined') return;
-    if (!Auth.isAuthenticated()) return;
+    if (!items.length || typeof Meta === 'undefined') return;
 
-    // Pre-fetch DB meta for all items so we can filter in one batch
+    // Pre-fetch DB meta for all items in one batch
     const metaEntries = await Promise.allSettled(
       items.map(item => DB.getMeta(item.id).catch(() => null))
     );
@@ -2855,50 +2869,74 @@ const App = (() => {
       metaMap.set(item.id, m);
     });
 
-    // Only items that have never been scanned on this device
-    const needScan = items.filter(item => {
+    const toScan  = [];  // needs fresh ID3 scan this session
+    const toApply = [];  // has rescannedAt/manualAt — skip scan, just apply DB to DOM
+
+    for (const item of items) {
       const m = metaMap.get(item.id);
-      if (m?.manualAt)      return false;  // user edited — DB is authoritative
-      if (m?.rescannedAt)   return false;  // full rescan done — DB is authoritative
-      if (m?.softScannedAt) return false;  // already soft-scanned here — DB is authoritative
-      return true;
-    });
+      if (m?.manualAt || m?.rescannedAt) {
+        toApply.push(item);                     // authoritative DB — mandatory DB read
+      } else if (!_sessionScannedIds.has(item.id)) {
+        _sessionScannedIds.add(item.id);        // reserve slot before async work
+        toScan.push(item);
+      }
+      // else: already scanned this session — skip until next app launch
+    }
 
-    if (!needScan.length) return;
+    // ── Mandatory DB-read path (rescannedAt / manualAt) ─────────────────────
+    // These items have authoritative data — paint whatever's in DB to DOM now.
+    toApply.forEach(item => _ensureCoverVisible(item.id, metaMap.get(item.id)));
 
-    const queue = [...needScan];
+    // ── ID3 scan path ────────────────────────────────────────────────────────
+    if (!toScan.length || typeof Drive === 'undefined' || !Auth.isAuthenticated()) {
+      if (typeof Sync !== 'undefined' && toApply.length) Sync.push('recents');
+      return;
+    }
+
+    const queue = [...toScan];
     async function worker() {
       while (queue.length > 0) {
         const item = queue.shift();
         try {
           const existing = metaMap.get(item.id) || null;
 
-          // Try local cached blob first (free, no network)
+          // Prefer local cached blob (free), fall back to Drive 1 MB head download
           let blob = await DB.getCachedBlob(item.id).catch(() => null);
-          // Fall back to Drive 1 MB head download
           if (!blob) blob = await Drive.downloadFileHead(item.id, 1024 * 1024).catch(() => null);
 
-          // Network failure — don't stamp softScannedAt so we retry next session
-          if (!blob) continue;
+          if (!blob) {
+            // Network failure — release session slot so next sync/load can retry
+            _sessionScannedIds.delete(item.id);
+            continue;
+          }
 
           const meta = await Meta.parse(item.id, blob).catch(() => null);
 
-          // Build fill-only patch — never overwrite fields the DB already has
+          // REPLACE patch — ID3 is the source of truth for these fields.
+          // FULL REPLACE from ID3 — clear existing data, apply only what the file says.
+          // Soft scan is strictly ID3-only: no Last.fm, no AudD, no Drive thumbnail.
+          // If the file has no title → displayName = null.
+          // If the file has no cover → coverBlob = null, thumbnailUrl = null.
+          // (External URLs from recognition services are discarded here; they are
+          //  re-applied only if the song goes through a full rescan or manual edit.)
+          //
+          // Guard: if meta === null the parse itself failed (corrupted header, network
+          // glitch after download, etc.) — in that case we do NOT wipe existing data,
+          // only stamp softScannedAt so we don't retry endlessly.
           const patch = { softScannedAt: Date.now() };
-          if (meta) {
-            if (meta.title  && !existing?.displayName) patch.displayName = meta.title;
-            if (meta.artist && !existing?.artist)      { patch.artist = meta.artist; patch.artistInferred = false; }
-            if (meta.album  && !existing?.album)       patch.album  = meta.album;
-            if (meta.year   && !existing?.year)        patch.year   = meta.year;
-            if (meta.coverBlob && !existing?.coverBlob) {
-              patch.coverBlob    = meta.coverBlob;
-              patch.thumbnailUrl = 'id3';
-            }
+          if (meta !== null) {
+            patch.displayName    = meta.title  || null;
+            patch.artist         = meta.artist || null;
+            patch.artistInferred = !meta.artist;
+            patch.album          = meta.album  || null;
+            patch.year           = meta.year   || null;
+            patch.coverBlob      = meta.coverBlob || null;
+            patch.thumbnailUrl   = meta.coverBlob ? 'id3' : null;
           }
 
           await DB.setMeta(item.id, { id: item.id, ...patch });
 
-          // Paint cover on every currently visible surface
+          // Paint cover on every visible surface
           if (meta?.coverUrl) {
             _updateHomeCardThumbnail(item.id, meta.coverUrl, true);
             _updateTopListThumb(item.id, meta.coverUrl, true);
@@ -2908,19 +2946,20 @@ const App = (() => {
               _updateTopListName(item.id, meta.title);
             }
           }
+          // No cover from ID3 → card stays with placeholder (correct: no external fallback)
 
           console.log(`[SoftScan] ${item.id}: done — artist=${patch.artist ?? '—'}, cover=${!!patch.coverBlob}`);
-        } catch (_) { /* non-fatal */ }
+        } catch (err) {
+          _sessionScannedIds.delete(item.id); // allow retry on next sync/load
+          console.warn('[SoftScan] error:', item.id, err?.message);
+        }
       }
     }
     // 2 parallel workers — head downloads are ~1 MB each
     await Promise.allSettled([worker(), worker()]);
 
-    // Re-push recents after enrichment so other devices immediately receive the
-    // thumbnailUrls and artist names discovered during background scanning —
+    // Re-push recents so other devices get the enriched metadata immediately,
     // without waiting for Device A to open the home screen.
-    // _pushRecents cross-references the metadata store, so it picks up everything
-    // written by the workers above.
     if (typeof Sync !== 'undefined') Sync.push('recents');
   }
 
