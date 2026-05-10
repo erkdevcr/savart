@@ -2877,9 +2877,22 @@ const App = (() => {
           const m = await DB.getMeta(song.id).catch(() => null);
           if ((m?.manualAt || 0) > 0) continue; // user has manual cover — skip
           const meta = await Meta.parse(song.id, blob);
-          if (meta?.coverUrl) {
+          if (!meta) continue;
+          // Enrich DB with full soft scan record (not just coverBlob) so next load
+          // is instant and all surfaces (home, top-played, queue) show correct data.
+          const patch = { softScannedAt: Date.now() };
+          if (meta.title  && !m?.displayName) patch.displayName = meta.title;
+          if (meta.artist && !m?.artist)      { patch.artist = meta.artist; patch.artistInferred = false; }
+          if (meta.album  && !m?.album)       patch.album  = meta.album;
+          if (meta.year   && !m?.year)        patch.year   = meta.year;
+          if (meta.coverBlob && !m?.coverBlob) {
+            patch.coverBlob    = meta.coverBlob;
+            patch.thumbnailUrl = 'id3';
+          }
+          DB.setMeta(song.id, { id: song.id, ...patch }).catch(() => {});
+          if (meta.coverUrl) {
             _updateHomeCardThumbnail(song.id, meta.coverUrl, true);
-            if (meta.coverBlob) DB.setMeta(song.id, { coverBlob: meta.coverBlob }).catch(() => {});
+            if (meta.title) _updateHomeCardName(song.id, meta.title);
           }
         } catch (_) { /* non-fatal */ }
       }
@@ -2936,9 +2949,21 @@ const App = (() => {
           const m = await DB.getMeta(item.id).catch(() => null);
           if ((m?.manualAt || 0) > 0) continue; // user has manual cover — skip
           const meta = await Meta.parse(item.id, blob);
-          if (meta?.coverUrl) {
-            _updateTopListThumb(item.id, meta.coverUrl, true);  // ID3 embedded
-            if (meta.coverBlob) DB.setMeta(item.id, { coverBlob: meta.coverBlob }).catch(() => {});
+          if (!meta) continue;
+          // Write full enrichment so all home surfaces and _preScanBeforePlay benefit
+          const patch = { softScannedAt: Date.now() };
+          if (meta.title  && !m?.displayName) patch.displayName = meta.title;
+          if (meta.artist && !m?.artist)      { patch.artist = meta.artist; patch.artistInferred = false; }
+          if (meta.album  && !m?.album)       patch.album  = meta.album;
+          if (meta.year   && !m?.year)        patch.year   = meta.year;
+          if (meta.coverBlob && !m?.coverBlob) {
+            patch.coverBlob    = meta.coverBlob;
+            patch.thumbnailUrl = 'id3';
+          }
+          DB.setMeta(item.id, { id: item.id, ...patch }).catch(() => {});
+          if (meta.coverUrl) {
+            _updateTopListThumb(item.id, meta.coverUrl, true);
+            if (meta.title) _updateTopListName(item.id, meta.title);
           }
         } catch (_) { /* non-fatal */ }
       }
@@ -3081,21 +3106,45 @@ const App = (() => {
         try {
           const dtMeta   = await DB.getMeta(item.id).catch(() => null);
           const dtManual = (dtMeta?.manualAt || 0) > 0;
+
           // ── Pass A: download ID3 header → parse embedded cover art ──────
-          if (!dtManual && typeof Meta !== 'undefined') {
-            const headBlob = await Drive.downloadFileHead(item.id).catch(() => null);
+          // Skip if already soft-scanned (we know there's no embedded art → avoid
+          // redundant 1 MB download; song without cover falls through to Pass B).
+          if (!dtManual && !dtMeta?.softScannedAt && typeof Meta !== 'undefined') {
+            const headBlob = await Drive.downloadFileHead(item.id, 1024 * 1024).catch(() => null);
             if (headBlob) {
               const meta = await Meta.parse(item.id, headBlob).catch(() => null);
+
+              // Build enrichment patch — only fill fields not already in DB so we
+              // never overwrite data that a more authoritative pass already set.
+              const patch = { softScannedAt: Date.now() };
+              if (meta) {
+                if (meta.title  && !dtMeta?.displayName) patch.displayName = meta.title;
+                if (meta.artist && !dtMeta?.artist)      { patch.artist = meta.artist; patch.artistInferred = false; }
+                if (meta.album  && !dtMeta?.album)       patch.album  = meta.album;
+                if (meta.year   && !dtMeta?.year)        patch.year   = meta.year;
+                if (meta.coverBlob && !dtMeta?.coverBlob) {
+                  patch.coverBlob    = meta.coverBlob;
+                  patch.thumbnailUrl = 'id3';
+                }
+              }
+              DB.setMeta(item.id, { id: item.id, ...patch }).catch(() => {});
+
               if (meta?.coverUrl) {
-                updateFn(item.id, meta.coverUrl);
-                // Persist coverBlob so future sessions skip this download
-                if (meta.coverBlob) {
-                  DB.setMeta(item.id, { coverBlob: meta.coverBlob }).catch(() => {});
+                updateFn(item.id, meta.coverUrl, true);
+                // Update name labels in every visible home surface
+                if (meta.title) {
+                  _updateHomeCardName(item.id, meta.title);
+                  _updateTopListName(item.id, meta.title);
                 }
                 continue; // got cover — skip Pass B
               }
+            } else {
+              // Download failed — still mark as attempted so we don't retry every load
+              DB.setMeta(item.id, { id: item.id, softScannedAt: Date.now() }).catch(() => {});
             }
           }
+
           // ── Pass B: Drive file metadata thumbnailLink (rarely set for audio) ──
           if (!dtManual) {
             const info = await Drive.getFileInfo(item.id).catch(() => null);
@@ -4372,18 +4421,27 @@ const App = (() => {
           // Pass 2: try cached audio blob first, then range request
           let blob = await DB.getCachedBlob(sid).catch(() => null);
           if (!blob && Auth.isAuthenticated()) {
-            blob = await Drive.downloadFileHead(sid).catch(() => null);
+            blob = await Drive.downloadFileHead(sid, 1024 * 1024).catch(() => null);
           }
           if (!blob) continue;
 
           const meta = await Meta.parse(sid, blob);
-          if (meta?.coverUrl) {
-            // Persist coverBlob so next session is instant (skip if user set manual cover)
-            if (meta.coverBlob) {
-              DB.getMeta(sid).then(sm => {
-                if (!((sm?.manualAt || 0) > 0)) DB.setMeta(sid, { coverBlob: meta.coverBlob }).catch(() => {});
-              }).catch(() => {});
+          if (!meta) continue;
+          // Write full enrichment (not just coverBlob) — benefits all home surfaces
+          const sm = await DB.getMeta(sid).catch(() => null);
+          if (!((sm?.manualAt || 0) > 0)) {
+            const patch = { softScannedAt: Date.now() };
+            if (meta.title  && !sm?.displayName) patch.displayName = meta.title;
+            if (meta.artist && !sm?.artist)      { patch.artist = meta.artist; patch.artistInferred = false; }
+            if (meta.album  && !sm?.album)       patch.album  = meta.album;
+            if (meta.year   && !sm?.year)        patch.year   = meta.year;
+            if (meta.coverBlob && !sm?.coverBlob) {
+              patch.coverBlob    = meta.coverBlob;
+              patch.thumbnailUrl = 'id3';
             }
+            DB.setMeta(sid, { id: sid, ...patch }).catch(() => {});
+          }
+          if (meta.coverUrl) {
             _updatePlaylistSidebarCover(pl.id, meta.coverUrl);
             found = true;
           }

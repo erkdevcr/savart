@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '2.9.8';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.9.8 — onBeforePlay: bloquea audio hasta que soft scan termine; _preScanBeforePlay en app.js
+const APP_VERSION  = '2.9.9';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.9.9 — prefetch passes escriben softScannedAt+metadata completo; _driveThumbFallback omite re-scan si ya tiene softScannedAt
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
