@@ -1104,7 +1104,7 @@ img { display: block; }
 }
 
 .rescan-wave-overlay .savart-wave-svg {
-  width: 400%;
+  width: 600%;
   height: auto;
   display: block;
   animation: savart-wave-scroll 0.75s linear infinite;
@@ -4861,7 +4861,7 @@ body.queue-open #mini-player { z-index: 65; }
 }
 
 .savart-wave-svg {
-  width: 400%;
+  width: 600%;
   height: auto;
   display: block;
   animation: savart-wave-scroll 0.75s linear infinite;
