@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '2.8.7';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.8.7 — fix: reset ID3 on playing song no longer kills player cover
+const APP_VERSION  = '2.8.8';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.8.8 — fix: 'id3' sentinel no longer corrupts Meta cache or home card covers
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

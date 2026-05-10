@@ -587,7 +587,10 @@ const App = (() => {
 
     const safeThumb = (() => {
       const u = track.thumbnailUrl || track.thumbnailLink || null;
-      return (u && u.startsWith('blob:')) ? (track.thumbnailLink || null) : u;
+      // Filter out both stale blob: URLs (session-only) and the 'id3' sentinel
+      // (not a real URL — just a marker meaning "use coverBlob from DB").
+      if (!u || u === 'id3' || u.startsWith('blob:')) return track.thumbnailLink || null;
+      return u;
     })();
 
     // Single DB read — DB is the authoritative source for display names, artist, etc.
@@ -606,18 +609,27 @@ const App = (() => {
       const bestAlbum  = dbMeta?.album       || track.albumName   || '';
       const bestYear   = dbMeta?.year        || track.year        || '';
       const _dbThumb   = dbMeta?.thumbnailUrl;
-      const bestThumb  = (_dbThumb && _dbThumb !== 'id3' && !_dbThumb.startsWith('blob:'))
+      let   bestThumb  = (_dbThumb && _dbThumb !== 'id3' && !_dbThumb.startsWith('blob:'))
                          ? _dbThumb : safeThumb;
+
+      // If the track has an embedded cover stored locally, inject it into the Meta
+      // cache right now — the player cover shows immediately without waiting for
+      // the full blob download and _onBlobReady to fire.
+      if (dbMeta?.coverBlob && typeof Meta !== 'undefined') {
+        const _injected = Meta.injectCover(track.id, dbMeta.coverBlob);
+        if (_injected) bestThumb = _injected;
+      }
 
       // Patch the Meta cache with DB values so subsequent _enrichTrack() calls
       // (e.g. _onPlayPause, queue navigation) return the correct enriched names.
+      // Guard coverUrl — never write the 'id3' sentinel into the cache as a real URL.
       if (typeof Meta !== 'undefined') {
         Meta.forcePatch(track.id, {
           title:    bestName   || undefined,
           artist:   bestArtist || undefined,
           album:    bestAlbum  || undefined,
           year:     bestYear   || undefined,
-          coverUrl: bestThumb  || undefined,
+          coverUrl: (bestThumb && bestThumb !== 'id3') ? bestThumb : undefined,
         });
       }
 
@@ -637,13 +649,17 @@ const App = (() => {
       }
 
       // Save to recents so Home shows it in "Canciones recientes"
+      // Use null for thumbnailUrl when the cover is an ephemeral Object URL (blob:)
+      // or the 'id3' sentinel — both are invalid across sessions.
+      const _recentThumb = (bestThumb && !bestThumb.startsWith('blob:') && bestThumb !== 'id3')
+        ? bestThumb : null;
       const recentData = {
         id:           track.id,
         name:         track.name,
         displayName:  bestName,
         type:         'song',
         artist:       bestArtist,
-        thumbnailUrl: bestThumb,
+        thumbnailUrl: _recentThumb,
         thumbnailLink: track.thumbnailLink || null,
         folderId:     track.parents?.[0]  || track.folderId || null,
       };
