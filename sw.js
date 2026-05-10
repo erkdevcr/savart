@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '2.9.9';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.9.9 — prefetch passes escriben softScannedAt+metadata completo; _driveThumbFallback omite re-scan si ya tiene softScannedAt
+const APP_VERSION  = '3.0.0';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.0.0 — sync thumbnailUrl fill-only; nunca borra covers existentes; 'id3' jamás se sincroniza
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

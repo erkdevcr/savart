@@ -463,9 +463,17 @@ const DB = (() => {
         const req = store.get(item.id);
         req.onsuccess = () => {
           const existing = req.result || { playCount: 0, starred: false };
-          const merged   = { ...existing, ...clean, id: item.id };
+          // thumbnailUrl — fill-only: synced records carry thumbnailUrl for convenience
+          // on new devices only — never overwrite an existing cover or blob.
+          const safeClean = { ...clean };
+          if ('thumbnailUrl' in safeClean) {
+            const hasExisting = (existing.thumbnailUrl && existing.thumbnailUrl !== 'id3')
+                             || existing.coverBlob;
+            if (hasExisting) delete safeClean.thumbnailUrl;
+          }
+          const merged   = { ...existing, ...safeClean, id: item.id };
           // Never restore playCount while the user has explicitly hidden the song
-          if (existing.hiddenFromTopPlayed && 'playCount' in clean) merged.playCount = 0;
+          if (existing.hiddenFromTopPlayed && 'playCount' in safeClean) merged.playCount = 0;
           store.put(merged);
         };
       }
@@ -499,7 +507,15 @@ const DB = (() => {
           // "hide" wins on either side: local OR remote hiddenFromTopPlayed → playCount stays 0
           const hidden   = existing.hiddenFromTopPlayed || item.hiddenFromTopPlayed || false;
           const maxCount = hidden ? 0 : Math.max(existing.playCount || 0, item.playCount || 0);
-          store.put({ ...existing, ...clean, id: item.id, playCount: maxCount,
+          // thumbnailUrl — fill-only: never overwrite an existing cover URL or blob.
+          // Synced playcounts carry thumbnailUrl only for display convenience on new devices.
+          const safeClean = { ...clean };
+          if ('thumbnailUrl' in safeClean) {
+            const hasExisting = (existing.thumbnailUrl && existing.thumbnailUrl !== 'id3')
+                             || existing.coverBlob;
+            if (hasExisting) delete safeClean.thumbnailUrl;
+          }
+          store.put({ ...existing, ...safeClean, id: item.id, playCount: maxCount,
                       ...(hidden ? { hiddenFromTopPlayed: true } : {}) });
         };
       }

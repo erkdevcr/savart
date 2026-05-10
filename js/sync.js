@@ -602,13 +602,17 @@ const Sync = (() => {
             if (remoteIsEnriched || !merged[f]) merged[f] = item[f];
           }
 
-          // thumbnailUrl — remote wins unless local was manually edited more recently.
-          // Exception: 'id3' sentinel never overwrites a real external URL on this device.
+          // thumbnailUrl — fill-only: only set if this device has no existing cover at all.
+          // Principle: DB is the source of truth on each device. Sync must never downgrade
+          // a cover (overwrite a good URL or local blob with a stale remote URL).
+          // Exceptions:
+          //   • manualAt guard already handled above — remote manual edit wins.
+          //   • 'id3' sentinel is never synced (filtered in all _push* functions),
+          //     so item.thumbnailUrl here is always a real external URL.
           if (item.thumbnailUrl && !localManualWins) {
-            const existingIsReal = merged.thumbnailUrl && merged.thumbnailUrl !== 'id3';
-            if (!(item.thumbnailUrl === 'id3' && existingIsReal)) {
-              merged.thumbnailUrl = item.thumbnailUrl;
-            }
+            const hasLocalCover = (merged.thumbnailUrl && merged.thumbnailUrl !== 'id3')
+                                || merged.coverBlob;   // local blob → always better than external URL
+            if (!hasLocalCover) merged.thumbnailUrl = item.thumbnailUrl;
           }
 
           // Derive CAA URL if mbReleaseMbid present and still no cover URL.
@@ -665,7 +669,7 @@ const Sync = (() => {
     await _writeFile(FILENAMES.favorites, starred.map(m => ({
       id: m.id, name: m.name || null, displayName: m.displayName || m.name || null,
       artist: m.artist || null, albumName: m.albumName || null, folderId: m.folderId || null,
-      thumbnailUrl: (m.thumbnailUrl && !m.thumbnailUrl.startsWith('blob:')) ? m.thumbnailUrl : null,
+      thumbnailUrl: (m.thumbnailUrl && !m.thumbnailUrl.startsWith('blob:') && m.thumbnailUrl !== 'id3') ? m.thumbnailUrl : null,
       starredAt: m.starredAt || now, // LWW: carry timestamp; existing items without starredAt get push-time
     })));
     console.log(`[Sync] Pushed favorites (${starred.length})`);
@@ -709,7 +713,9 @@ const Sync = (() => {
         type: r.type || 'song', folderId: r.folderId || null, mimeType: r.mimeType || null,
         // Prefer thumbnailUrl; fall back to thumbnailLink (Drive CDN, works in <img> without auth)
         // so device B can render a cover card even before it has scanned that song locally.
-        thumbnailUrl: (r.thumbnailUrl && !r.thumbnailUrl.startsWith('blob:'))
+        // 'id3' is a local-only sentinel (means "blob in IDB") — never sync it.
+        // Other devices can't render it and would store it as a literal broken URL.
+        thumbnailUrl: (r.thumbnailUrl && !r.thumbnailUrl.startsWith('blob:') && r.thumbnailUrl !== 'id3')
           ? r.thumbnailUrl
           : ((r.thumbnailLink && !r.thumbnailLink.startsWith('blob:')) ? r.thumbnailLink : null),
         accessedAt: r.accessedAt ?? Date.now(),
@@ -731,7 +737,7 @@ const Sync = (() => {
     await _writeFile(FILENAMES.playcounts, played.map(m => ({
       id: m.id, name: m.name || null, displayName: m.displayName || m.name || null,
       artist: m.artist || null, folderId: m.folderId || null, playCount: m.playCount || 0,
-      thumbnailUrl: (m.thumbnailUrl && !m.thumbnailUrl.startsWith('blob:')) ? m.thumbnailUrl : null,
+      thumbnailUrl: (m.thumbnailUrl && !m.thumbnailUrl.startsWith('blob:') && m.thumbnailUrl !== 'id3') ? m.thumbnailUrl : null,
       ...(m.hiddenFromTopPlayed ? { hiddenFromTopPlayed: true } : {}),
     })));
     console.log(`[Sync] Pushed playcounts (${played.length})`);
@@ -753,7 +759,7 @@ const Sync = (() => {
       displayName:  h.displayName  || h.name || null,
       artist:       h.artist       || null,
       folderId:     h.folderId     || null,
-      thumbnailUrl: (h.thumbnailUrl && !h.thumbnailUrl.startsWith('blob:')) ? h.thumbnailUrl : null,
+      thumbnailUrl: (h.thumbnailUrl && !h.thumbnailUrl.startsWith('blob:') && h.thumbnailUrl !== 'id3') ? h.thumbnailUrl : null,
       playedAt:     h.playedAt     ?? Date.now(),
     })));
     console.log(`[Sync] Pushed history (${history.length})`);
@@ -1216,13 +1222,12 @@ const Sync = (() => {
             if (remoteIsEnriched || !merged[f]) merged[f] = item[f];
           }
 
-          // thumbnailUrl — remote wins unless local was manually edited more recently.
-          // Exception: 'id3' sentinel never overwrites a real external URL on this device.
+          // thumbnailUrl — fill-only: only set if this device has no existing cover.
+          // Same rule as _applyRemote: DB is source of truth, sync never downgrades covers.
           if (item.thumbnailUrl && !localManualWins) {
-            const existingIsReal = merged.thumbnailUrl && merged.thumbnailUrl !== 'id3';
-            if (!(item.thumbnailUrl === 'id3' && existingIsReal)) {
-              merged.thumbnailUrl = item.thumbnailUrl;
-            }
+            const hasLocalCover = (merged.thumbnailUrl && merged.thumbnailUrl !== 'id3')
+                                || merged.coverBlob;
+            if (!hasLocalCover) merged.thumbnailUrl = item.thumbnailUrl;
           }
 
           if (merged.mbReleaseMbid && !merged.thumbnailUrl) {
