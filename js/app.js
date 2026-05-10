@@ -2571,7 +2571,7 @@ const App = (() => {
 
     if (meta.coverUrl) {
       _updateRowThumbnail(item.id, meta.coverUrl, true);
-      _updateHomeCardThumbnail(item.id, meta.coverUrl);
+      _updateHomeCardThumbnail(item.id, meta.coverUrl, true);
       _updateTopListThumb(item.id, meta.coverUrl, true);
       // Queue panel rows are also song-id keyed — update them too
       _updateQueueItemCover(item.id, meta.coverUrl);
@@ -2722,17 +2722,29 @@ const App = (() => {
    * @param {string} fileId
    * @param {string} coverUrl
    */
-  function _updateHomeCardThumbnail(fileId, coverUrl) {
+  function _updateHomeCardThumbnail(fileId, coverUrl, isId3 = false) {
     const card = document.querySelector(`#screen-home .home-card[data-id="${CSS.escape(fileId)}"]`);
     if (!card) return;
     const art = card.querySelector('.home-card-art');
     if (!art) return;
-    let img = art.querySelector('img');
-    if (img) {
+    const img = art.querySelector('img');
+    if (!isId3 && img) {
+      if (img.dataset.coverSrc === 'id3') return; // ID3 is always protected
       img.src = coverUrl;
-    } else {
-      art.innerHTML = `<img src="${coverUrl}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover">`;
+      return;
     }
+    if (isId3 && img?.dataset.coverSrc === 'id3') return; // already ID3 — keep it
+    const newImg = document.createElement('img');
+    newImg.src = coverUrl;
+    newImg.alt = '';
+    newImg.loading = 'lazy';
+    newImg.style.cssText = 'width:100%;height:100%;object-fit:cover';
+    if (isId3) newImg.dataset.coverSrc = 'id3';
+    newImg.onerror = () => { const ph = document.createElement('div'); ph.className = 'thumb-placeholder'; newImg.replaceWith(ph); };
+    const overlay = art.querySelector('.rescan-wave-overlay');
+    if (img) { img.replaceWith(newImg); }
+    else if (overlay) { art.insertBefore(newImg, overlay); }
+    else { art.appendChild(newImg); }
   }
 
   /**
@@ -2752,7 +2764,7 @@ const App = (() => {
         if (!dbMeta) return;
         if (dbMeta.coverBlob) {
           const url = Meta.injectCover(song.id, dbMeta.coverBlob);
-          if (url) { _updateHomeCardThumbnail(song.id, url); return; }
+          if (url) { _updateHomeCardThumbnail(song.id, url, true); return; }
         }
         // External URL persisted from Last.fm / AudD.io in a previous session.
         // Filter out blob: (session-only) and 'id3' sentinel (no real URL).
@@ -2766,7 +2778,7 @@ const App = (() => {
     // Pass 1: in-memory Meta cache (current session — instant, no DB call)
     songs.forEach(song => {
       const meta = Meta.getCached(song.id);
-      if (meta?.coverUrl) _updateHomeCardThumbnail(song.id, meta.coverUrl);
+      if (meta?.coverUrl) _updateHomeCardThumbnail(song.id, meta.coverUrl, true);
     });
 
     // Build stillNeed from actual DOM state — cards that Pass 0 or Pass 1 already
@@ -2786,7 +2798,7 @@ const App = (() => {
           if ((m?.manualAt || 0) > 0) continue; // user has manual cover — skip
           const meta = await Meta.parse(song.id, blob);
           if (meta?.coverUrl) {
-            _updateHomeCardThumbnail(song.id, meta.coverUrl);
+            _updateHomeCardThumbnail(song.id, meta.coverUrl, true);
             if (meta.coverBlob) DB.setMeta(song.id, { coverBlob: meta.coverBlob }).catch(() => {});
           }
         } catch (_) { /* non-fatal */ }
@@ -2818,7 +2830,7 @@ const App = (() => {
         }
         // External URL persisted from Last.fm / AudD.io in a previous session
         const persistedUrl = dbMeta.coverUrl || dbMeta.thumbnailUrl;
-        if (persistedUrl && !persistedUrl.startsWith('blob:')) {
+        if (persistedUrl && !persistedUrl.startsWith('blob:') && persistedUrl !== 'id3') {
           _updateTopListThumb(item.id, persistedUrl);
         }
       } catch (_) {}
@@ -3209,7 +3221,7 @@ const App = (() => {
           ...p,
           displayName:  _pick(dbMeta?.displayName, dbMeta?.name, inMem?.title,   p.displayName,  p.name),
           artist:       _pick(dbMeta?.artist,       inMem?.artist,  p.artist),
-          thumbnailUrl: _pick(_safeUrl(dbMeta?.thumbnailUrl), _safeUrl(dbMeta?.coverUrl), inMem?.coverUrl, _safeUrl(p.thumbnailUrl)),
+          thumbnailUrl: dbMeta?.coverBlob ? (inMem?.coverUrl || null) : _pick(_safeUrl(dbMeta?.thumbnailUrl), _safeUrl(dbMeta?.coverUrl), inMem?.coverUrl, _safeUrl(p.thumbnailUrl)),
           folderId:     dbMeta?.folderId || p.folderId || null,
           folderType:   _stampFolderType(p, dbMeta),
         };
@@ -3224,7 +3236,7 @@ const App = (() => {
           ...r,
           displayName:  _pick(dbMeta?.displayName, dbMeta?.name, inMem?.title,   r.displayName,  r.name),
           name:         _pick(dbMeta?.name,          r.name),
-          thumbnailUrl: _pick(_safeUrl(dbMeta?.thumbnailUrl), _safeUrl(dbMeta?.coverUrl), inMem?.coverUrl, _safeUrl(r.thumbnailUrl)),
+          thumbnailUrl: dbMeta?.coverBlob ? (inMem?.coverUrl || null) : _pick(_safeUrl(dbMeta?.thumbnailUrl), _safeUrl(dbMeta?.coverUrl), inMem?.coverUrl, _safeUrl(r.thumbnailUrl)),
           artist:       _pick(dbMeta?.artist,        inMem?.artist,   r.artist),
           folderId:     dbMeta?.folderId || r.folderId || null,
           folderType:   _stampFolderType(r, dbMeta),
@@ -3241,7 +3253,7 @@ const App = (() => {
           ...item,
           displayName:  _pick(dbMeta?.displayName,  dbMeta?.name,     inMem?.title,    item.displayName,  r?.displayName, r?.name, item.name),
           name:         _pick(dbMeta?.name,          item.name,        r?.name),
-          thumbnailUrl: _pick(_safeUrl(dbMeta?.thumbnailUrl), _safeUrl(dbMeta?.coverUrl), inMem?.coverUrl, _safeUrl(item.thumbnailUrl), _safeUrl(item.coverUrl), _safeUrl(r?.thumbnailUrl)),
+          thumbnailUrl: dbMeta?.coverBlob ? (inMem?.coverUrl || null) : _pick(_safeUrl(dbMeta?.thumbnailUrl), _safeUrl(dbMeta?.coverUrl), inMem?.coverUrl, _safeUrl(item.thumbnailUrl), _safeUrl(item.coverUrl), _safeUrl(r?.thumbnailUrl)),
           artist:       _pick(dbMeta?.artist,        inMem?.artist,    item.artist,     r?.artist),
           albumName:    _pick(dbMeta?.album,         inMem?.album,     item.albumName,  item.album,         r?.albumName),
           year:         _pick(dbMeta?.year,          inMem?.year,      item.year,       r?.year),
@@ -4475,11 +4487,11 @@ const App = (() => {
         if (!dbMeta) return;
         if (dbMeta.coverBlob) {
           const url = Meta.injectCover(item.id, dbMeta.coverBlob);
-          if (url) { _updatePinnedItemCover(item.id, url); return; }
+          if (url) { _updatePinnedItemCover(item.id, url, true); return; }
         }
         // External URL (Last.fm / MusicBrainz / AudD) — valid across sessions
         const extUrl = dbMeta.coverUrl || dbMeta.thumbnailUrl;
-        if (extUrl && !extUrl.startsWith('blob:')) {
+        if (extUrl && !extUrl.startsWith('blob:') && extUrl !== 'id3') {
           _updatePinnedItemCover(item.id, extUrl);
         }
       } catch (_) { /* non-fatal */ }
@@ -4488,7 +4500,7 @@ const App = (() => {
     // Pass 1: in-memory Meta cache (covers resolved this session — always fresh)
     songs.forEach(item => {
       const inMem = Meta.getCached(item.id);
-      if (inMem?.coverUrl) _updatePinnedItemCover(item.id, inMem.coverUrl);
+      if (inMem?.coverUrl) _updatePinnedItemCover(item.id, inMem.coverUrl, true);
     });
 
     // Pass 2: parse cached audio blobs for songs still without cover (2 workers)
@@ -4519,21 +4531,25 @@ const App = (() => {
   }
 
   /** Patch the cover art of a pinned card for a given song id. */
-  function _updatePinnedItemCover(id, url) {
+  function _updatePinnedItemCover(id, url, isId3 = false) {
     const art = document.querySelector(`.pinned-card-art[data-id="${CSS.escape(id)}"]`);
     if (!art) return;
-    // Inject or update the cover image
-    let img = art.querySelector('.pinned-art-img');
-    if (img) {
+    const img = art.querySelector('.pinned-art-img');
+    if (!isId3 && img) {
+      if (img.dataset.coverSrc === 'id3') return; // ID3 is always protected
       img.src = url;
+    } else if (isId3 && img?.dataset.coverSrc === 'id3') {
+      return; // already ID3 — keep it
     } else {
-      img = document.createElement('img');
-      img.className = 'pinned-art-img';
-      img.alt = '';
-      img.src = url;
-      art.insertBefore(img, art.firstChild);
+      const newImg = document.createElement('img');
+      newImg.className = 'pinned-art-img';
+      newImg.alt = '';
+      newImg.src = url;
+      if (isId3) newImg.dataset.coverSrc = 'id3';
+      newImg.onerror = () => newImg.remove();
+      if (img) { img.replaceWith(newImg); }
+      else { art.insertBefore(newImg, art.firstChild); }
     }
-    // Hide the music-note placeholder now that real art is loaded
     const icon = art.querySelector('.pinned-art-icon');
     if (icon) icon.style.display = 'none';
   }
