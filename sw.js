@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '2.5.7';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.5.7 — rescan overlay survives async cover injections (DOM insert vs innerHTML); re-stamps on every _renderAlbumPage
+const APP_VERSION  = '2.5.8';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.5.8 — rescan button re-enabled after stop (btn.disabled=false in _syncLibRescanBtn idle branch)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

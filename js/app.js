@@ -2153,6 +2153,7 @@ const App = (() => {
       btn.disabled = false;
       if (span) span.textContent = UI.t('rescan_stop_btn');
     } else {
+      btn.disabled = false; // always re-enable when idle (stop may have disabled it)
       btn.classList.remove('scanning');
       if (span) span.textContent = UI.t('rescan_btn');
       const q = (document.getElementById('lib-search-input')?.value || '').trim();
