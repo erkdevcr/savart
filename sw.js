@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '2.7.2';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.7.2 — force rescan: pass 0b injects coverBlob before network passes; stamps thumbnailUrl:'id3'
+const APP_VERSION  = '2.8.1';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.8.1 — context menu: capture phase para cerrar aunque haya stopPropagation
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

@@ -1201,6 +1201,16 @@ img { display: block; }
 .song-row:hover  { background: var(--item-hover); }
 .song-row:active { background: var(--item-tap); transition: background 0s; }
 
+/* Go-to-folder highlight: brief flash to mark the target song */
+.song-row.goto-highlight {
+  animation: goto-flash 2s ease-out forwards;
+}
+@keyframes goto-flash {
+  0%   { background: var(--accent-alpha, rgba(255,255,255,0.18)); }
+  60%  { background: var(--accent-alpha, rgba(255,255,255,0.18)); }
+  100% { background: transparent; }
+}
+
 .song-row.active .song-row-title {
   color: var(--accent);
 }
@@ -1910,10 +1920,28 @@ img { display: block; }
 .album-edit-actions {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
   margin-bottom: 6px;
   padding-bottom: 6px;
   border-bottom: 1px solid var(--border-color, rgba(255,255,255,0.08));
 }
+/* "Resetear ID3" — secondary action, pushed to the left */
+.album-edit-reset-id3-btn {
+  margin-right: auto;
+  background: transparent;
+  border: 1px solid var(--border, rgba(255,255,255,0.12));
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  padding: 5px 11px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.album-edit-reset-id3-btn:hover {
+  color: var(--text-secondary);
+  border-color: var(--text-secondary);
+}
+.album-edit-reset-id3-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 /* Entity header highlight while edit panel is open */
 .lib-detail-entity.album-editing {
   background: var(--bg-hover);
@@ -6387,6 +6415,17 @@ body.queue-open #mini-player { z-index: 65; }
 }
 #song-edit-modal .ds-modal-footer {
   padding: 10px 20px 12px;
+}
+/* "Resetear ID3" sits on the far left of the song-edit footer */
+.song-edit-reset-id3-btn {
+  margin-right: auto;
+  font-size: 12px;
+  color: var(--text-muted);
+  border-color: var(--border, rgba(255,255,255,0.12));
+}
+.song-edit-reset-id3-btn:hover {
+  color: var(--text-secondary);
+  border-color: var(--text-secondary);
 }
 .song-edit-modal-body {
   padding: 12px 20px 8px;

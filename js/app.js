@@ -572,6 +572,15 @@ const App = (() => {
     UI.setActiveSongRow(track?.id);
     document.title = track ? `${enriched.displayName} — Savart` : 'Savart';
 
+    // Keep the queue panel in sync: re-render + scroll to the now-playing item.
+    // _onQueueChange only fires on structural queue edits (add/remove/reorder),
+    // not on natural track advancement — so we refresh it here instead.
+    if (UI.isQueuePanelVisible?.()) {
+      const { queue } = Player.getQueue();
+      UI.renderQueuePanel(queue, index);
+      _prefetchQueueCovers(queue).catch(() => {});
+    }
+
     UI.setHeartActive(false); // reset while loading
 
     if (!track?.id) return;
@@ -2305,8 +2314,8 @@ const App = (() => {
     function waveHTML(showLabel) {
       return `
         <div class="rescan-wave-wrap">
-          <svg class="savart-wave-svg" viewBox="0 0 90 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M0 16 C3.75 8,11.25 8,15 16 C18.75 24,26.25 24,30 16 M30 16 C33.75 8,41.25 8,45 16 C48.75 24,56.25 24,60 16 M60 16 C63.75 8,71.25 8,75 16 C78.75 24,86.25 24,90 16" stroke="#4A88F5" stroke-width="2.5" stroke-linecap="round"/>
+          <svg class="savart-wave-svg" viewBox="0 0 120 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M0 16 C5 8,15 8,20 16 C25 24,35 24,40 16 M40 16 C45 8,55 8,60 16 C65 24,75 24,80 16 M80 16 C85 8,95 8,100 16 C105 24,115 24,120 16" stroke="#4A88F5" stroke-width="2.5" stroke-linecap="round"/>
           </svg>
         </div>
         ${showLabel ? `<span class="rescan-wave-label">${label}</span>` : ''}`;
@@ -3410,7 +3419,7 @@ const App = (() => {
     return chain;
   }
 
-  async function _openFolder(folder, appendToBreadcrumb = true) {
+  async function _openFolder(folder, appendToBreadcrumb = true, scrollToId = null) {
     UI.showView('browse');
 
     // Save current scroll position before leaving this folder (forward navigation).
@@ -3508,6 +3517,19 @@ const App = (() => {
       const activeSong = Player.getCurrentTrack();
       UI.renderFolderContents(result.folders, result.files, activeSong?.id);
       UI.setActiveSongRow(activeSong?.id ?? null);
+
+      // Scroll to and highlight a specific song (e.g. from "Go to Drive Folder")
+      if (scrollToId) {
+        requestAnimationFrame(() => {
+          const screen = document.getElementById('screen-browse');
+          const row = screen?.querySelector(`.song-row[data-id="${CSS.escape(scrollToId)}"]`);
+          if (row) {
+            row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+            row.classList.add('goto-highlight');
+            setTimeout(() => row.classList.remove('goto-highlight'), 2000);
+          }
+        });
+      }
 
       // Restore scroll position when navigating back (appendToBreadcrumb = false)
       if (!appendToBreadcrumb) {
@@ -3644,7 +3666,7 @@ const App = (() => {
       try {
         const folder = await Drive.getFileInfo(folderId);
         _breadcrumb = [];
-        _openFolder({ id: folder.id, name: folder.name });
+        _openFolder({ id: folder.id, name: folder.name }, true, item.id);
       } catch (err) {
         UI.showToast(UI.t('toast_folder_open_error'), 'error');
       }
@@ -3668,15 +3690,12 @@ const App = (() => {
    */
   function onSongClick(clickedSong, contextSongs = null) {
     if (UI.getCurrentView() === 'browse') {
-      // When search is active, build the queue from the visible search results —
-      // NOT from the folder's .item-list (which is still in the DOM but display:none).
-      // querySelectorAll ignores display:none for traversal, so we must pick the right
-      // container manually. If no search is active, use the full folder list as usual.
-      const searchInput    = document.getElementById('search-input');
-      const isSearchActive = !!(searchInput?.value?.trim());
-      const sourceEl = isSearchActive
-        ? document.getElementById('search-results')
-        : document.querySelector('#screen-browse .item-list');
+      // Always build the queue from the full folder list (.item-list), even when a
+      // search filter is active. The filtered results only show a visual subset but
+      // the user expects Prev/Next to follow the complete folder order, not jump
+      // between unrelated search hits. The .item-list stays in the DOM while search
+      // is active (just display:none) so we can still read all its rows.
+      const sourceEl = document.querySelector('#screen-browse .item-list');
       const rows     = Array.from(sourceEl?.querySelectorAll('.song-row:not(.wma)') || []);
       const ids      = rows.map(r => r.dataset.id);
       const allSongs = ids.map(id => _resolveItemById(id)).filter(Boolean);
@@ -4148,7 +4167,7 @@ const App = (() => {
     if (wrap) wrap.style.display = visible ? '' : 'none';
   }
 
-  function _setLibTab(tab) {
+  function _setLibTab(tab, skipLoad = false) {
     _currentLibTab = tab;
     _libInDetail        = false; // leaving any drill-down view
     _libDetailRestoreFn = null;  // explicit tab switch — no restore needed
@@ -4173,12 +4192,15 @@ const App = (() => {
     // Update placeholder
     UI.setLibSearchPlaceholder(LIB_TAB_PLACEHOLDERS[tab] || 'Buscar…');
 
-    // Load data
-    if (tab === 'favorites')   _loadStarred();
-    if (tab === 'artists')     _loadArtists();
-    if (tab === 'albums')      _loadAlbums();
-    if (tab === 'collections') _loadCollections();
-    if (tab === 'playlists')   _loadPlaylists();
+    // Load data (skipLoad = true when the caller will immediately drill into a detail
+    // view, e.g. onGoToAlbum — skipping the list render avoids a visible flash)
+    if (!skipLoad) {
+      if (tab === 'favorites')   _loadStarred();
+      if (tab === 'artists')     _loadArtists();
+      if (tab === 'albums')      _loadAlbums();
+      if (tab === 'collections') _loadCollections();
+      if (tab === 'playlists')   _loadPlaylists();
+    }
   }
 
   /**
@@ -8063,7 +8085,10 @@ const App = (() => {
     if (songs.length === 0) throw new Error('No songs found for album');
 
     const manualAt  = Date.now();
-    const newCoverUrl = (patch.coverUrl && !patch.coverUrl.startsWith('blob:')) ? patch.coverUrl : null;
+    // Guard: reject blob: Object URLs (ephemeral) and the 'id3' sentinel (not a real URL)
+    const newCoverUrl = (patch.coverUrl &&
+                         !patch.coverUrl.startsWith('blob:') &&
+                         patch.coverUrl !== 'id3') ? patch.coverUrl : null;
 
     for (const m of songs) {
       const update = { folderId, manualAt };
@@ -8080,6 +8105,20 @@ const App = (() => {
       for (const m of songs) {
         _cacheExternalCover(m.id, newCoverUrl, true).catch(() => {});
       }
+    } else {
+      // No external URL provided — for songs with embedded art, ensure thumbnailUrl:'id3'
+      // is correctly stamped (it may have been corrupted by a previous save of a blob: URL).
+      if (typeof Meta !== 'undefined') {
+        for (const m of songs) {
+          if (m.coverBlob && m.thumbnailUrl !== 'id3') {
+            await DB.setMeta(m.id, { thumbnailUrl: 'id3' }).catch(() => {});
+            const url = Meta.injectCover(m.id, m.coverBlob);
+            if (url) {
+              _updateRowThumbnail(m.id, url, true);
+            }
+          }
+        }
+      }
     }
 
     // Propagate edits to in-memory caches → miniplayer reflects changes instantly
@@ -8094,6 +8133,148 @@ const App = (() => {
     if (_browseFolderId) _updateBrowseLegend(_browseFolderId);
     _invalidateSuggestionsCache(); // new artist/album names now available as suggestions
     UI.showToast(`${songs.length} canciones actualizadas`);
+  }
+
+  /**
+   * Reset a single song's metadata to its raw ID3 values.
+   * Parses the file blob (from DB cache or Drive), writes ID3 fields to DB,
+   * clears manualAt so future enrichment can run, and updates all live UI surfaces.
+   * If the file has an embedded cover (coverBlob), stamps thumbnailUrl:'id3' so the
+   * blob takes priority over any stale external URL.
+   *
+   * @param {string} songId
+   */
+  async function onSongResetId3(songId) {
+    if (!songId) return;
+
+    // Evict session cache so Meta.parse gives a truly fresh parse with coverBlob
+    if (typeof Meta !== 'undefined') Meta.revoke(songId);
+
+    let id3 = null;
+    // Prefer the already-cached blob in IndexedDB (no network cost)
+    let blob = await DB.getCachedBlob(songId).catch(() => null);
+    // Fall back to downloading the file head from Drive
+    if (!blob && typeof Drive !== 'undefined' && typeof Auth !== 'undefined' && Auth.getValidToken?.()) {
+      blob = await Drive.downloadFileHead(songId).catch(() => null);
+    }
+    if (blob && typeof Meta !== 'undefined') {
+      id3 = await Meta.parse(songId, blob).catch(() => null);
+    }
+
+    const dbMeta = await DB.getMeta(songId).catch(() => null);
+
+    // Build DB patch — ID3 text fields + cover sentinel
+    const dbPatch = { manualAt: 0 }; // clear manual lock; enrichment passes may improve further
+    if (id3?.title)  dbPatch.displayName = id3.title;
+    if (id3?.artist) dbPatch.artist      = id3.artist;
+    if (id3?.album)  dbPatch.album       = id3.album;
+    if (id3?.year)   dbPatch.year        = id3.year;
+
+    const freshBlob    = id3?.coverBlob;
+    const existingBlob = dbMeta?.coverBlob;
+    if (freshBlob) {
+      dbPatch.coverBlob    = freshBlob;
+      dbPatch.thumbnailUrl = 'id3';
+    } else if (existingBlob) {
+      dbPatch.thumbnailUrl = 'id3'; // blob already in DB — ensure sentinel is set
+    } else {
+      dbPatch.thumbnailUrl = null; // no embedded art — clear stale external URL
+    }
+
+    await DB.setMeta(songId, dbPatch);
+
+    // Live-update text fields only — thumbnailUrl:'id3' must NOT go through _liveMetaUpdate
+    // (it would corrupt the Meta cache coverUrl with the literal string 'id3').
+    const livePatch = {};
+    if (dbPatch.displayName) livePatch.displayName = dbPatch.displayName;
+    if (dbPatch.artist)      livePatch.artist      = dbPatch.artist;
+    if (dbPatch.album)       livePatch.album       = dbPatch.album;
+    if (dbPatch.year)        livePatch.year        = dbPatch.year;
+    if (Object.keys(livePatch).length) _liveMetaUpdate([songId], livePatch);
+
+    // Update cover in all visible surfaces
+    const blobToUse = freshBlob || existingBlob;
+    if (blobToUse && typeof Meta !== 'undefined') {
+      // Meta.parse already injected coverUrl into cache if blob was freshly parsed;
+      // otherwise injectCover creates the Object URL now.
+      let coverUrl = id3?.coverUrl;
+      if (!coverUrl) coverUrl = Meta.injectCover(songId, blobToUse);
+      if (coverUrl) {
+        _updateRowThumbnail(songId, coverUrl, true);
+        _updateHomeCardThumbnail(songId, coverUrl, true);
+        Player.patchQueueItem?.(songId, { thumbnailUrl: coverUrl });
+      }
+    }
+
+    _invalidateSuggestionsCache();
+    if (typeof Sync !== 'undefined') Sync.push('metadata');
+    if (_browseFolderId) _updateBrowseLegend(_browseFolderId);
+  }
+
+  /**
+   * Reset metadata of all songs in an album or collection to their raw ID3 values.
+   * Uses the session Meta cache (no blob downloads — fast even for large albums).
+   * Songs with a persisted coverBlob get thumbnailUrl:'id3' stamped; others get
+   * thumbnailUrl:null so the next rescan can find a fresh cover.
+   * clears manualAt on all songs so enrichment passes can run freely again.
+   *
+   * @param {string}   folderId
+   * @param {string[]} [songIds] — explicit list from the current album/collection view
+   */
+  async function onAlbumResetId3(folderId, songIds) {
+    if (!folderId && !songIds?.length) throw new Error('folderId or songIds required');
+
+    const all = await DB.getAllMeta();
+    let songs;
+    if (songIds?.length) {
+      const idSet = new Set(songIds);
+      songs = all.filter(m => idSet.has(m.id));
+      if (folderId) {
+        const extra = all.filter(m => m.folderId === folderId && !idSet.has(m.id));
+        songs = [...songs, ...extra];
+      }
+    } else {
+      songs = all.filter(m => m.folderId === folderId);
+    }
+    if (songs.length === 0) throw new Error('No songs found');
+
+    for (const m of songs) {
+      const dbPatch = { manualAt: 0 };
+
+      // Restore text from session-cached ID3 parse if available
+      const cached = typeof Meta !== 'undefined' ? Meta.getCached(m.id) : null;
+      if (cached?.title)  dbPatch.displayName = cached.title;
+      if (cached?.artist) dbPatch.artist      = cached.artist;
+      if (cached?.album)  dbPatch.album       = cached.album;
+      if (cached?.year)   dbPatch.year        = cached.year;
+
+      // Cover — use persisted blob if available, otherwise clear stale URL
+      if (m.coverBlob) {
+        dbPatch.thumbnailUrl = 'id3';
+        if (typeof Meta !== 'undefined') {
+          let url = Meta.getCached(m.id)?.coverUrl;
+          if (!url) url = Meta.injectCover(m.id, m.coverBlob);
+          if (url) _updateRowThumbnail(m.id, url, true);
+        }
+      } else {
+        dbPatch.thumbnailUrl = null; // no embedded art — clear stale URL; rescan will fill
+      }
+
+      await DB.setMeta(m.id, dbPatch).catch(() => {});
+
+      // Live-update text (cover handled above via injectCover, not liveMetaUpdate)
+      const livePatch = {};
+      if (dbPatch.displayName) livePatch.displayName = dbPatch.displayName;
+      if (dbPatch.artist)      livePatch.artist      = dbPatch.artist;
+      if (dbPatch.album)       livePatch.album       = dbPatch.album;
+      if (dbPatch.year)        livePatch.year        = dbPatch.year;
+      if (Object.keys(livePatch).length) _liveMetaUpdate([m.id], livePatch);
+    }
+
+    _invalidateSuggestionsCache();
+    if (typeof Sync !== 'undefined') Sync.push('metadata');
+    if (_browseFolderId) _updateBrowseLegend(_browseFolderId);
+    UI.showToast?.(`${songs.length} ${UI.t('toast_reset_id3_done')}`);
   }
 
   /**
@@ -8556,26 +8737,25 @@ const App = (() => {
       return;
     }
 
-    // Route to Collections or Albums depending on the folder's classification
+    // Route to Collections or Albums depending on the folder's classification.
+    // skipLoad=true prevents _loadAlbums/_loadCollections from rendering the full
+    // list before onAlbumClick/onCollectionClick immediately replaces it with the
+    // detail view — eliminates the visible flash of all albums/collections.
     _navToLibrary();
     if (isFolderCollection(folderId)) {
-      // For collections: use the saved collection name (from DB), not the song's album tag.
-      // Songs from home/recents/pinned often lack the album field, which would cause the
-      // collection to open with the song's display name as its title.
       const saved = await DB.getCollection(folderId).catch(() => null);
       const meta  = (typeof Meta !== 'undefined') ? Meta.getCached(song.id) : null;
       const collectionName = saved?.name || song.album || meta?.album || '';
-      _setLibTab('collections');
+      _setLibTab('collections', true);
       onCollectionClick({ folderId, name: collectionName }).catch(err => console.warn('[App] onGoToAlbum→collection:', err));
     } else {
-      // For albums: derive name from song metadata (album tag is reliable here)
       const meta  = (typeof Meta !== 'undefined') ? Meta.getCached(song.id) : null;
       const descriptor = {
         folderId,
         name:   song.album  || meta?.album  || song.displayName || song.name || '',
         artist: song.artist || meta?.artist || '',
       };
-      _setLibTab('albums');
+      _setLibTab('albums', true);
       onAlbumClick(descriptor, null).catch(err => console.warn('[App] onGoToAlbum:', err));
     }
   }
@@ -8589,7 +8769,7 @@ const App = (() => {
     const folderId = folder.id || folder.folderId;
     if (!folderId) return;
     _navToLibrary();
-    _setLibTab('albums');
+    _setLibTab('albums', true); // skipLoad — go straight to detail without flashing the list
     onAlbumClick({ folderId, name: folder.name || '' }, null)
       .catch(err => console.warn('[App] onGoToLibraryAlbum:', err));
   }
@@ -8603,7 +8783,7 @@ const App = (() => {
     const folderId = folder.id || folder.folderId;
     if (!folderId) return;
     _navToLibrary();
-    _setLibTab('collections');
+    _setLibTab('collections', true); // skipLoad — go straight to detail
     onCollectionClick({ folderId, name: folder.name || '' })
       .catch(err => console.warn('[App] onGoToLibraryCollection:', err));
   }
@@ -8642,7 +8822,7 @@ const App = (() => {
         imageUrl:   storedImages[artistKey] || null,
       };
       _navToLibrary();
-      _setLibTab('artists');
+      _setLibTab('artists', true);
       onArtistClick(artist).catch(err => console.warn('[App] onGoToArtist:', err));
     } catch (err) {
       console.warn('[App] onGoToArtist:', err);
@@ -10070,7 +10250,9 @@ const App = (() => {
     onAlbumRescan,
     stopAlbumRescan,
     onSongEdit,
+    onSongResetId3,
     onAlbumEdit,
+    onAlbumResetId3,
     getMetaSuggestions,
     onAlbumPlay,
     onAlbumQueue,

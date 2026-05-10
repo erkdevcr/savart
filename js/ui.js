@@ -320,6 +320,8 @@ const UI = (() => {
       ctx_move_to_collections: 'Mover a Colecciones',
       ctx_edit_song:           'Editar canción',
       ctx_edit_collection:     'Editar colección',
+      btn_reset_id3:           'Resetear ID3',
+      toast_reset_id3_done:    'canciones reseteadas a ID3',
       lbl_collection:          'Colección',
       lbl_album_chip:          'Álbum',
       lbl_name:                'Nombre',
@@ -630,6 +632,8 @@ const UI = (() => {
       ctx_move_to_collections: 'Move to Collections',
       ctx_edit_song:           'Edit song',
       ctx_edit_collection:     'Edit collection',
+      btn_reset_id3:           'Reset ID3',
+      toast_reset_id3_done:    'songs reset to ID3',
       lbl_collection:          'Collection',
       lbl_album_chip:          'Album',
       lbl_name:                'Name',
@@ -2047,9 +2051,11 @@ const UI = (() => {
     menu.style.left = `${x}px`;
     menu.style.top  = `${y}px`;
 
-    // Click outside OR any scroll → dismiss
+    // Click outside OR any scroll → dismiss.
+    // Use capture phase for click so stopPropagation() in child handlers
+    // (album cards, folder rows, etc.) doesn't prevent the menu from closing.
     requestAnimationFrame(() => {
-      document.addEventListener('click',  hideContextMenu, { once: true });
+      document.addEventListener('click',  hideContextMenu, { once: true, capture: true });
       document.addEventListener('scroll', hideContextMenu, { once: true, capture: true, passive: true });
     });
   }
@@ -2057,7 +2063,7 @@ const UI = (() => {
   function hideContextMenu() {
     document.getElementById('context-menu')?.classList.remove('visible');
     // Remove both dismiss listeners (whichever didn't fire first)
-    document.removeEventListener('click',  hideContextMenu);
+    document.removeEventListener('click',  hideContextMenu, { capture: true });
     document.removeEventListener('scroll', hideContextMenu, { capture: true });
   }
 
@@ -2113,6 +2119,22 @@ const UI = (() => {
 
       document.getElementById('song-edit-backdrop')?.addEventListener('click', _close);
       document.getElementById('btn-song-edit-cancel')?.addEventListener('click', _close);
+
+      document.getElementById('btn-song-edit-reset-id3')?.addEventListener('click', async () => {
+        const id  = _songEditCurrentId;
+        if (!id) return;
+        const btn = document.getElementById('btn-song-edit-reset-id3');
+        btn.disabled = true;
+        btn.textContent = '…';
+        try {
+          await App.onSongResetId3?.(id);
+          btn.textContent = '✓ ID3';
+          setTimeout(() => { _close(); btn.disabled = false; btn.textContent = t('btn_reset_id3'); }, 900);
+        } catch {
+          btn.disabled = false;
+          btn.textContent = t('btn_reset_id3');
+        }
+      });
 
       document.getElementById('btn-song-edit-save')?.addEventListener('click', async () => {
         const id = _songEditCurrentId;
@@ -2564,6 +2586,10 @@ const UI = (() => {
         list.appendChild(_buildQueueItem(item, currentIndex + 1 + i, false));
       });
     }
+
+    // Scroll the now-playing item into view so it's always visible
+    const activeEl = list.querySelector('.queue-item.active');
+    if (activeEl) activeEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }
 
   function _buildQueueItem(item, queueIndex, isActive) {
@@ -3127,6 +3153,7 @@ const UI = (() => {
     editPanel.className = 'album-edit-panel'; // starts hidden (no .open class)
     editPanel.innerHTML = `
       <div class="album-edit-actions">
+        <button class="album-edit-reset-id3-btn">${t('btn_reset_id3')}</button>
         <button class="album-edit-save-btn">Guardar</button>
       </div>
       <div class="album-edit-row">
@@ -3145,7 +3172,9 @@ const UI = (() => {
       </div>
       <div class="album-edit-row">
         <label class="album-edit-label">Cover URL</label>
-        <input class="album-edit-input" data-field="coverUrl" value="${escHtml(album.coverUrl && !album.coverUrl.startsWith('blob:') ? album.coverUrl : '')}" placeholder="https://…">
+        <input class="album-edit-input" data-field="coverUrl"
+          value="${escHtml((album.coverUrl && !album.coverUrl.startsWith('blob:') && album.coverUrl !== 'id3') ? album.coverUrl : '')}"
+          placeholder="${(album.coverUrl && (album.coverUrl.startsWith('blob:') || album.coverUrl === 'id3')) ? '(Cover Embebida)' : 'https://…'}">
       </div>
       <div class="album-edit-row album-edit-row--track-btn">
         <button class="album-edit-track-btn">✎ Editar canciones</button>
@@ -3180,11 +3209,14 @@ const UI = (() => {
           editPanel.querySelector('[data-field="year"]').value = yearMatch ? yearMatch[1] : '';
         }
 
-        // Cover URL — read from the displayed img; skip blob: (ID3 embeds have no shareable URL)
+        // Cover URL — read from the displayed img; skip blob:/id3 (ID3 embeds have no shareable URL)
         const artImg = entity.querySelector('.lib-detail-entity-art img');
         const artSrc = artImg ? (artImg.getAttribute('src') || '') : '';
-        editPanel.querySelector('[data-field="coverUrl"]').value =
-          (artSrc && !artSrc.startsWith('blob:') && artSrc !== 'id3') ? artSrc : '';
+        const isEmbedded = artSrc.startsWith('blob:') || artSrc === 'id3';
+        const externalUrl = (artSrc && !isEmbedded) ? artSrc : '';
+        const coverInput = editPanel.querySelector('[data-field="coverUrl"]');
+        coverInput.value       = externalUrl;
+        coverInput.placeholder = (artSrc && !externalUrl) ? '(Cover Embebida)' : 'https://…';
 
         editPanel.querySelector('[data-field="artist"]').focus();
       }
@@ -3221,6 +3253,24 @@ const UI = (() => {
           btn.disabled = false; btn.textContent = orig;
         }
       });
+    });
+
+    // "Resetear ID3" — restore all songs to their embedded ID3 values
+    editPanel.querySelector('.album-edit-reset-id3-btn').addEventListener('click', async () => {
+      const btn  = editPanel.querySelector('.album-edit-reset-id3-btn');
+      const orig = btn.textContent;
+      btn.disabled = true; btn.textContent = '…';
+      try {
+        await App.onAlbumResetId3?.(folderId, songs.map(s => s.id));
+        btn.textContent = '✓ ID3';
+        setTimeout(() => {
+          btn.disabled = false; btn.textContent = orig;
+          editPanel.classList.remove('open');
+          entity.classList.remove('album-editing');
+        }, 1500);
+      } catch {
+        btn.disabled = false; btn.textContent = orig;
+      }
     });
 
     // Save → write to DB via App
@@ -3697,6 +3747,7 @@ const UI = (() => {
     editPanel.className = 'album-edit-panel'; // reuses album panel CSS
     editPanel.innerHTML = `
       <div class="album-edit-actions">
+        <button class="album-edit-reset-id3-btn">${t('btn_reset_id3')}</button>
         <button class="album-edit-save-btn">${t('save_btn')}</button>
       </div>
       <div class="album-edit-row">
@@ -3761,6 +3812,24 @@ const UI = (() => {
         setTimeout(() => { btn.disabled = false; btn.textContent = orig; }, 2500);
       } catch (err) {
         console.warn('[apply-all cover]', err);
+        btn.disabled = false; btn.textContent = orig;
+      }
+    });
+
+    // "Resetear ID3" — restore all songs in the collection to their embedded ID3 values
+    editPanel.querySelector('.album-edit-reset-id3-btn').addEventListener('click', async () => {
+      const btn  = editPanel.querySelector('.album-edit-reset-id3-btn');
+      const orig = btn.textContent;
+      btn.disabled = true; btn.textContent = '…';
+      try {
+        await App.onAlbumResetId3?.(folderId, songs.map(s => s.id));
+        btn.textContent = '✓ ID3';
+        setTimeout(() => {
+          btn.disabled = false; btn.textContent = orig;
+          editPanel.classList.remove('open');
+          entity.classList.remove('album-editing');
+        }, 1500);
+      } catch {
         btn.disabled = false; btn.textContent = orig;
       }
     });
@@ -4314,8 +4383,8 @@ const UI = (() => {
 
   const _WAVE_HTML = `<div class="savart-loading-overlay" aria-hidden="true">
     <div class="savart-wave-wrap">
-      <svg class="savart-wave-svg" viewBox="0 0 90 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M0 16 C3.75 8,11.25 8,15 16 C18.75 24,26.25 24,30 16 M30 16 C33.75 8,41.25 8,45 16 C48.75 24,56.25 24,60 16 M60 16 C63.75 8,71.25 8,75 16 C78.75 24,86.25 24,90 16"
+      <svg class="savart-wave-svg" viewBox="0 0 120 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M0 16 C5 8,15 8,20 16 C25 24,35 24,40 16 M40 16 C45 8,55 8,60 16 C65 24,75 24,80 16 M80 16 C85 8,95 8,100 16 C105 24,115 24,120 16"
               stroke="#4A88F5" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     </div>
