@@ -2828,9 +2828,101 @@ const App = (() => {
   }
 
   /**
+   * Soft-scan items that have never been scanned on THIS device.
+   *
+   * Runs for ALL home/top-played/pinned items regardless of whether they already
+   * have a cover visible — the goal is to stamp softScannedAt and populate full
+   * ID3 metadata in the DB so every surface shows consistent data.
+   *
+   * Skips items with an authoritative scan record already in DB:
+   *   manualAt    — user manually edited → trust DB completely
+   *   rescannedAt — full folder rescan was done → trust DB completely
+   *   softScannedAt — already soft-scanned on THIS device → trust DB completely
+   *
+   * @param {Object[]} items — array of items with .id
+   */
+  async function _softScanItems(items) {
+    if (!items.length || typeof Meta === 'undefined' || typeof Drive === 'undefined') return;
+    if (!Auth.isAuthenticated()) return;
+
+    // Pre-fetch DB meta for all items so we can filter in one batch
+    const metaEntries = await Promise.allSettled(
+      items.map(item => DB.getMeta(item.id).catch(() => null))
+    );
+    const metaMap = new Map();
+    items.forEach((item, i) => {
+      const m = metaEntries[i].status === 'fulfilled' ? metaEntries[i].value : null;
+      metaMap.set(item.id, m);
+    });
+
+    // Only items that have never been scanned on this device
+    const needScan = items.filter(item => {
+      const m = metaMap.get(item.id);
+      if (m?.manualAt)      return false;  // user edited — DB is authoritative
+      if (m?.rescannedAt)   return false;  // full rescan done — DB is authoritative
+      if (m?.softScannedAt) return false;  // already soft-scanned here — DB is authoritative
+      return true;
+    });
+
+    if (!needScan.length) return;
+
+    const queue = [...needScan];
+    async function worker() {
+      while (queue.length > 0) {
+        const item = queue.shift();
+        try {
+          const existing = metaMap.get(item.id) || null;
+
+          // Try local cached blob first (free, no network)
+          let blob = await DB.getCachedBlob(item.id).catch(() => null);
+          // Fall back to Drive 1 MB head download
+          if (!blob) blob = await Drive.downloadFileHead(item.id, 1024 * 1024).catch(() => null);
+
+          // Network failure — don't stamp softScannedAt so we retry next session
+          if (!blob) continue;
+
+          const meta = await Meta.parse(item.id, blob).catch(() => null);
+
+          // Build fill-only patch — never overwrite fields the DB already has
+          const patch = { softScannedAt: Date.now() };
+          if (meta) {
+            if (meta.title  && !existing?.displayName) patch.displayName = meta.title;
+            if (meta.artist && !existing?.artist)      { patch.artist = meta.artist; patch.artistInferred = false; }
+            if (meta.album  && !existing?.album)       patch.album  = meta.album;
+            if (meta.year   && !existing?.year)        patch.year   = meta.year;
+            if (meta.coverBlob && !existing?.coverBlob) {
+              patch.coverBlob    = meta.coverBlob;
+              patch.thumbnailUrl = 'id3';
+            }
+          }
+
+          await DB.setMeta(item.id, { id: item.id, ...patch });
+
+          // Paint cover on every currently visible surface
+          if (meta?.coverUrl) {
+            _updateHomeCardThumbnail(item.id, meta.coverUrl, true);
+            _updateTopListThumb(item.id, meta.coverUrl, true);
+            _updatePinnedItemCover(item.id, meta.coverUrl, true);
+            if (meta.title) {
+              _updateHomeCardName(item.id, meta.title);
+              _updateTopListName(item.id, meta.title);
+            }
+          }
+
+          console.log(`[SoftScan] ${item.id}: done — artist=${patch.artist ?? '—'}, cover=${!!patch.coverBlob}`);
+        } catch (_) { /* non-fatal */ }
+      }
+    }
+    // 2 parallel workers — head downloads are ~1 MB each
+    await Promise.allSettled([worker(), worker()]);
+  }
+
+  /**
    * Background cover prefetch for Home song cards.
+   * Pass 0: DB persisted covers (instant).
    * Pass 1: Meta in-memory cache (instant).
-   * Pass 2: IndexedDB cached blobs → parse ID3 (async, non-blocking).
+   * Pass 2: Soft scan via _softScanItems (all unscanned items, with Drive fallback).
+   * Pass 3: Drive thumbnail API for songs still without cover.
    * @param {Object[]} items — recents array from DB
    */
   async function _prefetchHomeCovers(items) {
@@ -2861,52 +2953,20 @@ const App = (() => {
       if (meta?.coverUrl) _updateHomeCardThumbnail(song.id, meta.coverUrl, true);
     });
 
-    // Build stillNeed from actual DOM state — cards that Pass 0 or Pass 1 already
-    // covered are excluded, avoiding redundant ID3 parses for songs we already handled.
-    const stillNeed = songs.filter(song => !_homeCardHasCover(song.id));
-    if (!stillNeed.length) return;
+    // Pass 2: soft scan — download ID3 header for every song not yet scanned on this
+    // device (regardless of whether it already has a cover from Pass 0/1 — we want
+    // softScannedAt stamped and all metadata fields populated).
+    await _softScanItems(songs);
 
-    // Pass 2: IndexedDB blobs → parse ID3 (2 parallel workers)
-    const queue = [...stillNeed];
-    async function worker() {
-      while (queue.length > 0) {
-        const song = queue.shift();
-        try {
-          const blob = await DB.getCachedBlob(song.id);
-          if (!blob) continue;
-          const m = await DB.getMeta(song.id).catch(() => null);
-          if ((m?.manualAt || 0) > 0) continue; // user has manual cover — skip
-          const meta = await Meta.parse(song.id, blob);
-          if (!meta) continue;
-          // Enrich DB with full soft scan record (not just coverBlob) so next load
-          // is instant and all surfaces (home, top-played, queue) show correct data.
-          const patch = { softScannedAt: Date.now() };
-          if (meta.title  && !m?.displayName) patch.displayName = meta.title;
-          if (meta.artist && !m?.artist)      { patch.artist = meta.artist; patch.artistInferred = false; }
-          if (meta.album  && !m?.album)       patch.album  = meta.album;
-          if (meta.year   && !m?.year)        patch.year   = meta.year;
-          if (meta.coverBlob && !m?.coverBlob) {
-            patch.coverBlob    = meta.coverBlob;
-            patch.thumbnailUrl = 'id3';
-          }
-          DB.setMeta(song.id, { id: song.id, ...patch }).catch(() => {});
-          if (meta.coverUrl) {
-            _updateHomeCardThumbnail(song.id, meta.coverUrl, true);
-            if (meta.title) _updateHomeCardName(song.id, meta.title);
-          }
-        } catch (_) { /* non-fatal */ }
-      }
-    }
-    await Promise.allSettled([worker(), worker()]);
-
-    // Pass 3: Drive API fallback — for songs still without cover after local passes
-    // (e.g. synced from another device: no local blob, no stored coverBlob)
+    // Pass 3: Drive API thumbnail fallback for songs still without cover after scan
     await _driveThumbFallback(songs, _homeCardHasCover, _updateHomeCardThumbnail);
   }
 
   /**
    * Background cover prefetch for Top Played list items.
-   * Reads cached blobs → parses ID3 → updates .top-list-item thumbnails.
+   * Pass 0: DB persisted covers. Pass 1: in-memory cache.
+   * Pass 2: soft scan via _softScanItems (all unscanned items).
+   * Pass 3: Drive thumbnail API fallback.
    * @param {Object[]} items — topPlayed array
    */
   async function _prefetchTopPlayedCovers(items) {
@@ -2935,42 +2995,10 @@ const App = (() => {
       if (meta?.coverUrl) _updateTopListThumb(item.id, meta.coverUrl, true);
     });
 
-    // Pass 2: IndexedDB cached blobs → parse ID3 (2 workers)
-    const stillNeed = items.filter(item => !_topListHasCover(item.id));
-    if (!stillNeed.length) return;
+    // Pass 2: soft scan — same logic as home: scan all items not yet scanned on this device
+    await _softScanItems(items);
 
-    const queue = [...stillNeed];
-    async function worker() {
-      while (queue.length > 0) {
-        const item = queue.shift();
-        try {
-          const blob = await DB.getCachedBlob(item.id);
-          if (!blob) continue;
-          const m = await DB.getMeta(item.id).catch(() => null);
-          if ((m?.manualAt || 0) > 0) continue; // user has manual cover — skip
-          const meta = await Meta.parse(item.id, blob);
-          if (!meta) continue;
-          // Write full enrichment so all home surfaces and _preScanBeforePlay benefit
-          const patch = { softScannedAt: Date.now() };
-          if (meta.title  && !m?.displayName) patch.displayName = meta.title;
-          if (meta.artist && !m?.artist)      { patch.artist = meta.artist; patch.artistInferred = false; }
-          if (meta.album  && !m?.album)       patch.album  = meta.album;
-          if (meta.year   && !m?.year)        patch.year   = meta.year;
-          if (meta.coverBlob && !m?.coverBlob) {
-            patch.coverBlob    = meta.coverBlob;
-            patch.thumbnailUrl = 'id3';
-          }
-          DB.setMeta(item.id, { id: item.id, ...patch }).catch(() => {});
-          if (meta.coverUrl) {
-            _updateTopListThumb(item.id, meta.coverUrl, true);
-            if (meta.title) _updateTopListName(item.id, meta.title);
-          }
-        } catch (_) { /* non-fatal */ }
-      }
-    }
-    await Promise.allSettled([worker(), worker()]);
-
-    // Pass 3: Drive API fallback — songs synced from another device with no local blob
+    // Pass 3: Drive API fallback — songs still without cover after scan
     await _driveThumbFallback(items, _topListHasCover, _updateTopListThumb);
   }
 
@@ -4673,30 +4701,10 @@ const App = (() => {
       if (inMem?.coverUrl) _updatePinnedItemCover(item.id, inMem.coverUrl, true);
     });
 
-    // Pass 2: parse cached audio blobs for songs still without cover (2 workers)
-    const stillNeed = songs.filter(item => !_pinnedHasCover(item.id));
-    if (stillNeed.length) {
-      const queue = [...stillNeed];
-      async function pinnedWorker() {
-        while (queue.length > 0) {
-          const item = queue.shift();
-          try {
-            const blob = await DB.getCachedBlob(item.id);
-            if (!blob) continue;
-            const m = await DB.getMeta(item.id).catch(() => null);
-            if ((m?.manualAt || 0) > 0) continue; // manual cover — skip ID3 parse
-            const meta = await Meta.parse(item.id, blob);
-            if (meta?.coverUrl) {
-              _updatePinnedItemCover(item.id, meta.coverUrl);
-              if (meta.coverBlob) DB.setMeta(item.id, { coverBlob: meta.coverBlob }).catch(() => {});
-            }
-          } catch (_) { /* non-fatal */ }
-        }
-      }
-      await Promise.allSettled([pinnedWorker(), pinnedWorker()]);
-    }
+    // Pass 2: soft scan — all pinned songs not yet scanned on this device
+    await _softScanItems(songs);
 
-    // Pass 3: Drive API fallback — songs from another device with no local blob
+    // Pass 3: Drive API fallback — songs still without cover after scan
     await _driveThumbFallback(songs, _pinnedHasCover, _updatePinnedItemCover);
   }
 
