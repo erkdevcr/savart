@@ -1340,6 +1340,32 @@ const App = (() => {
       }));
     }
 
+    // ── Pass 0b: ID3 blob priority — force mode only ──────────────────────────
+    // Before any network pass runs in force mode, inject persisted coverBlobs into
+    // the Meta in-memory cache and stamp thumbnailUrl:'id3' in DB. This ensures:
+    //   (a) DOM rows immediately show the correct embedded cover (not stale external URL)
+    //   (b) Meta.getCached is populated → _enrichTrack uses blob URL for the player
+    //   (c) thumbnailUrl:'id3' is written to DB → correct behaviour in future sessions
+    // This pass must run before the force pre-pass so Meta.getCached already has
+    // coverUrl when Meta.parse() is called (which would otherwise hit the cache and
+    // skip a fresh parse, losing the chance to stamp 'id3').
+    if (force && typeof Meta !== 'undefined') {
+      await Promise.allSettled(files.map(async file => {
+        try {
+          const m = await DB.getMeta(file.id).catch(() => null);
+          if (!m?.coverBlob) return;
+          if ((m.manualAt || 0) > 0) return; // respect manual cover
+          const url = Meta.injectCover(file.id, m.coverBlob);
+          if (url) {
+            _updateRowThumbnail(file.id, url, true);
+            if (m.thumbnailUrl !== 'id3') {
+              DB.setMeta(file.id, { thumbnailUrl: 'id3' }).catch(() => {});
+            }
+          }
+        } catch (_) {}
+      }));
+    }
+
     // ── Pass 0: Drive appProperties + IndexedDB (instant, no network) ─────────
     // 0a. appProperties.s_cover — synced cover from another device via Drive API
     // 0b. coverBlob             — ID3 embedded art saved locally (highest quality)
@@ -1423,7 +1449,11 @@ const App = (() => {
             }
             if (meta.coverUrl && !isManuallyEdited) {
               _updateRowThumbnail(file.id, meta.coverUrl, true);
-              if (meta.coverBlob) DB.setMeta(file.id, { coverBlob: meta.coverBlob }).catch(() => {});
+              if (meta.coverBlob) {
+                // Stamp thumbnailUrl:'id3' alongside coverBlob so future sessions
+                // and _enrichTrack know to prefer the embedded art over any external URL.
+                DB.setMeta(file.id, { coverBlob: meta.coverBlob, thumbnailUrl: 'id3' }).catch(() => {});
+              }
             }
             if (Player.getCurrentTrack()?.id === file.id) _applyMeta(file, meta);
           } catch (_) {}
