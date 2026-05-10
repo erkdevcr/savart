@@ -3358,10 +3358,13 @@ const App = (() => {
                 url = dbM?.thumbnailUrl || dbM?.coverUrl || null;
               } catch (_) {}
             }
-            // Skip Google Drive thumbnail URLs (require auth header, won't load in <img>)
-            if (url && !url.includes('googleusercontent.com') && !url.includes('googleapis.com')) {
-              covers.push(url);
-            }
+            // Skip sentinel ('id3'), ephemeral blob: URLs, and Drive thumbnail URLs
+            // (Drive requires auth header so they won't load in a plain <img>).
+            if (!url) continue;
+            if (url === 'id3') continue;
+            if (url.startsWith('blob:')) continue;
+            if (url.includes('googleusercontent.com') || url.includes('googleapis.com')) continue;
+            covers.push(url);
           }
           return { ...pl, resolvedCovers: covers };
         })

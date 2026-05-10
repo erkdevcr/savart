@@ -4073,13 +4073,20 @@ const UI = (() => {
   function _buildPlaylistMosaic(coverUrls, name) {
     const MOSAIC_COLORS = ['#2A3D6A','#2A4A2A','#4A2A2A','#3A2A4A','#1A3A4A','#4A3A1A'];
     const hash  = [...(name || '')].reduce((a, c) => a + c.charCodeAt(0), 0);
+    const noteIcon = iconMusicNote(13).replace(/"/g, "'"); // single-quote for onerror attr
     const cells = [0, 1, 2, 3].map(i => {
       const url = coverUrls[i];
+      const bg  = MOSAIC_COLORS[(hash + i) % MOSAIC_COLORS.length];
       if (url) {
-        return `<div class="mosaic-cell" style="background:#000"><img src="${url}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;display:block"></div>`;
+        // Music note sits behind the img; shows through if the image fails to load
+        return `<div class="mosaic-cell" style="background:${bg};position:relative;display:flex;align-items:center;justify-content:center">` +
+          `<div style="opacity:.25;color:#fff;pointer-events:none">${noteIcon}</div>` +
+          `<img src="${url}" alt="" loading="lazy" ` +
+               `style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block" ` +
+               `onerror="this.style.display='none'"></div>`;
       }
-      const bg = MOSAIC_COLORS[(hash + i) % MOSAIC_COLORS.length];
-      return `<div class="mosaic-cell" style="background:${bg}"></div>`;
+      return `<div class="mosaic-cell" style="background:${bg};display:flex;align-items:center;justify-content:center">` +
+        `<div style="opacity:.25;color:#fff">${noteIcon}</div></div>`;
     });
     return cells.join('');
   }

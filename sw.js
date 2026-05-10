@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '2.9.0';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.9.0 — reset ID3: limpia auddTried+mbTried+softScannedAt+todos los campos de texto
+const APP_VERSION  = '2.9.1';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.9.1 — playlist mosaic: filtra 'id3'/blob:, nota musical en celdas vacías y fallback de error
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
