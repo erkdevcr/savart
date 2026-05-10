@@ -350,6 +350,17 @@ const DB = (() => {
       .slice(0, limit);
   }
 
+  /**
+   * Same as getTopPlayed but includes songs hidden from the top-played list.
+   * Used by the sync playcounts merge so hidden items are treated as known local
+   * records — preventing the remote value from being re-upserted as if it were new.
+   */
+  async function getAllPlaycounts() {
+    const store   = _tx('metadata');
+    const entries = await _promisify(store.getAll());
+    return entries.filter(e => e.playCount > 0 || e.hiddenFromTopPlayed);
+  }
+
   /* ── State (key-value) ──────────────────────────────────── */
 
   /**
@@ -452,7 +463,10 @@ const DB = (() => {
         const req = store.get(item.id);
         req.onsuccess = () => {
           const existing = req.result || { playCount: 0, starred: false };
-          store.put({ ...existing, ...clean, id: item.id });
+          const merged   = { ...existing, ...clean, id: item.id };
+          // Never restore playCount while the user has explicitly hidden the song
+          if (existing.hiddenFromTopPlayed && 'playCount' in clean) merged.playCount = 0;
+          store.put(merged);
         };
       }
     });
@@ -1089,6 +1103,7 @@ const DB = (() => {
     toggleStar,
     getStarred,
     getTopPlayed,
+    getAllPlaycounts,
     // State
     getState,
     setState,

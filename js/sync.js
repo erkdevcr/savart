@@ -1070,7 +1070,9 @@ const Sync = (() => {
         if (!Array.isArray(remotePlaycounts) || remotePlaycounts.length === 0) return;
         const validRemote = remotePlaycounts.filter(r => r && r.id);
         if (!validRemote.length) return;
-        const local = await DB.getTopPlayed(10000);
+        // Use getAllPlaycounts (includes hidden) so removed items aren't re-upserted
+        // as if they were brand-new remote records by _mergePlaycounts.
+        const local = await DB.getAllPlaycounts();
         const { toUpsert } = _mergePlaycounts(local, validRemote);
         if (toUpsert.length) {
           await DB.bulkPutMeta(toUpsert);

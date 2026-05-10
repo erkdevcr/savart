@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '2.5.9';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.5.9 — hiddenFromTopPlayed flag survives sync; incrementPlayCount clears it
+const APP_VERSION  = '2.6.0';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.6.0 — hiddenFromTopPlayed: all sync paths blocked; getAllPlaycounts for init merge local source
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
