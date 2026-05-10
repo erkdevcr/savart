@@ -7077,23 +7077,31 @@ const App = (() => {
             continue;
           }
 
-          // Since we only reach here for files not yet soft-scanned and not manually
-          // edited, ID3 data always takes priority over any previously inferred values.
-          const patch = {};
-          patch.softScannedAt = Date.now(); // mark as soft-scanned regardless of what was found
+          // Reset then rewrite: soft scan acts like a mini ID3-reset for each candidate.
+          // Always write every text field — null if ID3 has nothing — so stale inferred
+          // values (folder-name artist, filename-based title, etc.) are cleared, not kept.
+          // Guards (manualAt, rescannedAt, softScannedAt) already filtered these out above.
+          const patch = {
+            softScannedAt:  Date.now(),           // mark as soft-scanned regardless of what was found
+            displayName:    parsed.title  || null, // null clears stale filename-based name
+            artist:         parsed.artist || null, // null clears stale folder-inferred artist
+            artistInferred: !parsed.artist,
+            album:          parsed.album  || null,
+            year:           parsed.year   || null,
+          };
 
-          if (parsed.title)  patch.displayName    = parsed.title;
-          if (parsed.artist) { patch.artist = parsed.artist; patch.artistInferred = false; }
-          if (parsed.album)  patch.album           = parsed.album;
-          if (parsed.year)   patch.year            = parsed.year;
+          // Cover: only write if the new parse found a blob; never clear an existing
+          // coverBlob just because a head-only parse didn't capture it.
           if (parsed.coverBlob && !existing?.coverBlob) {
-            patch.coverBlob = parsed.coverBlob;
-            if (!existing?.thumbnailUrl) patch.thumbnailUrl = 'id3';
+            patch.coverBlob    = parsed.coverBlob;
+            patch.thumbnailUrl = 'id3';
           }
 
-          const newArtist  = patch.artist      || existing?.artist      || null;
-          const newAlbum   = patch.album        || existing?.album       || null;
-          const newDisplay = patch.displayName  || existing?.displayName || null;
+          // patch already contains the authoritative values (null = "not in ID3").
+          // Do NOT fall back to existing — that would resurrect the stale data we just reset.
+          const newArtist  = patch.artist      ?? null;
+          const newAlbum   = patch.album        ?? null;
+          const newDisplay = patch.displayName  ?? null;
 
           await DB.setMeta(file.id, { id: file.id, ...patch });
           _cacheItem({ ...file, folderId,

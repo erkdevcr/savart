@@ -84,6 +84,7 @@ const Sync = (() => {
   async function _apiFetch(url, options = {}) {
     const res = await fetch(url, {
       ...options,
+      cache: 'no-store', // never serve stale manifest/file content from browser cache
       headers: {
         Authorization: `Bearer ${_token()}`,
         ...(options.headers || {}),
@@ -905,10 +906,15 @@ const Sync = (() => {
         const type = stale[i];
         const data = results[i].status === 'fulfilled' ? results[i].value : null;
         if (data !== null) {
-          await _applyRemote(type, data);
-          _localTs[type]  = manifest[type]; // mark as applied
-          _remoteTs[type] = manifest[type];
-          applied.push(type);
+          try {
+            await _applyRemote(type, data);
+            _localTs[type]  = manifest[type]; // mark as applied
+            _remoteTs[type] = manifest[type];
+            applied.push(type);
+          } catch (applyErr) {
+            // Non-fatal per type — log so failures are visible, then continue with next type
+            console.warn(`[Sync] _applyRemote(${type}) failed:`, applyErr?.message || applyErr);
+          }
         }
       }
 
@@ -917,6 +923,7 @@ const Sync = (() => {
       }
     } catch (err) {
       // Non-fatal — network issues, token expired, etc.
+      if (err?.message) console.warn('[Sync] poll error:', err.message);
     } finally {
       _polling = false;
     }

@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '2.8.8';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.8.8 — fix: 'id3' sentinel no longer corrupts Meta cache or home card covers
+const APP_VERSION  = '2.8.9';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.8.9 — sync: cache:no-store + resilient poll loop; soft scan: reset-then-rewrite
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
