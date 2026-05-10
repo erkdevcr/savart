@@ -1690,7 +1690,10 @@ const App = (() => {
         const url = await Lastfm.fetchCover(artist, album);
         if (!url) return;
         if (updateDom) _updateRowThumbnail(file.id, url);
-        DB.setMeta(file.id, { thumbnailUrl: url }).catch(() => {});
+        // Don't overwrite DB with Last.fm URL if the song already has ID3 embedded art —
+        // coverBlob is the authoritative local source; thumbnailUrl:'id3' is stamped in Pass 7.5.
+        const lfmDbCheck = await DB.getMeta(file.id).catch(() => null);
+        if (!lfmDbCheck?.coverBlob) DB.setMeta(file.id, { thumbnailUrl: url }).catch(() => {});
       } catch (_) { /* non-fatal */ }
     }));
 
@@ -6612,6 +6615,7 @@ const App = (() => {
             try {
               const sm = await DB.getMeta(id);
               if ((sm?.manualAt || 0) > 0) return; // respect manual cover
+              if (sm?.coverBlob) return;             // respect ID3 embedded art
               await DB.setMeta(id, { thumbnailUrl: url });
             } catch (_) {}
           }));
