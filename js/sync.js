@@ -751,8 +751,10 @@ const Sync = (() => {
       'manualAt',                                   // LWW guard: timestamp of last manual edit
       'rescannedAt',                                // folder rescan timestamp (folder records)
     ];
-    const isExternalUrl = u => u && !u.startsWith('blob:')
-      && !u.includes('googleusercontent.com') && !u.includes('googleapis.com');
+    // googleusercontent.com = Drive CDN thumbnailLinks — accessible in <img> without auth.
+    // googleapis.com       = Drive API download endpoints — require Bearer token, skip those.
+    const isExternalUrl = u => u && !u.startsWith('blob:') && u !== 'id3'
+      && !u.includes('googleapis.com');
 
     const all = await DB.getAllMeta();
     const toSync = all
@@ -789,8 +791,8 @@ const Sync = (() => {
       'mbTried', 'auddTried', 'mbReleaseMbid',
       'manualAt', 'rescannedAt',
     ];
-    const isExternalUrl = u => u && !u.startsWith('blob:')
-      && !u.includes('googleusercontent.com') && !u.includes('googleapis.com');
+    const isExternalUrl = u => u && !u.startsWith('blob:') && u !== 'id3'
+      && !u.includes('googleapis.com');
 
     const toSync = metas.map(m => {
       const rec = { id: m.id };
@@ -811,8 +813,10 @@ const Sync = (() => {
    * so boot reads can restore the entire home screen in a single API call.
    */
   async function _pushHome() {
-    const isExternal = u => u && !u.startsWith('blob:')
-      && !u.includes('googleusercontent.com') && !u.includes('googleapis.com');
+    // googleusercontent.com = Drive CDN thumbnails — work in <img> without auth, sync them.
+    // googleapis.com        = Drive API download endpoints — need Bearer token, skip.
+    const isExternal = u => u && !u.startsWith('blob:') && u !== 'id3'
+      && !u.includes('googleapis.com');
     const cleanUrl = u => isExternal(u) ? u : null;
 
     const [pinnedMeta, pinnedOrder, allRecents, playcounts, playlists, history] = await Promise.all([
@@ -841,7 +845,10 @@ const Sync = (() => {
         id: r.id, name: r.name || null, displayName: r.displayName || r.name || null,
         artist: r.artist || null,
         type: r.type || 'song', folderId: r.folderId || null, mimeType: r.mimeType || null,
-        thumbnailUrl: cleanUrl(r.thumbnailUrl), accessedAt: r.accessedAt ?? Date.now(),
+        // thumbnailLink is the Drive CDN URL (googleusercontent.com) — stable enough to sync
+        // so device B can show a cover even before it plays or browses the song.
+        thumbnailUrl: cleanUrl(r.thumbnailUrl) || cleanUrl(r.thumbnailLink) || null,
+        accessedAt: r.accessedAt ?? Date.now(),
       })),
       // Tombstones let readHome() honour deletions even before init() runs.
       recentTombstones,
