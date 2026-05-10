@@ -1889,7 +1889,10 @@ const App = (() => {
 
       await _patchAlbumDetailHeader(songs);
       // Mark folder as rescanned BEFORE pushHot so the dot syncs in the hot delta
-      if (folderId) await DB.setMeta(folderId, { rescannedAt: Date.now() }).catch(() => {});
+      if (folderId) {
+        await DB.setMeta(folderId, { rescannedAt: Date.now() }).catch(() => {});
+        _stampRescanDot(folderId); // show green dot on library card immediately
+      }
       if (typeof Sync !== 'undefined') {
         const hotItems = folderId ? [...songs, { id: folderId }] : songs;
         Sync.pushHot(hotItems).catch(() => {});
@@ -2107,8 +2110,9 @@ const App = (() => {
      library search bar while albums tab is active.
      ────────────────────────────────────────────────────────── */
 
-  let _libRescanRunning = false;
-  let _libRescanAbort   = false;
+  let _libRescanRunning        = false;
+  let _libRescanAbort          = false;
+  let _libRescanActiveFolderId = null;  // folderId currently being processed in _doLibRescan
   let _browseRescanRunning = false;
   let _browseRescanAbort   = false;
   let _albumRescanRunning  = false;
@@ -2200,37 +2204,67 @@ const App = (() => {
    */
   function _setRescanOverlay(folderId, active) {
     const OVERLAY_CLASS = 'rescan-wave-overlay';
-    const WAVE_HTML = `
-      <div class="rescan-wave-wrap">
-        <svg class="savart-wave-svg" viewBox="0 0 144 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M0 16 C6 8,18 8,24 16 C30 24,42 24,48 16 M48 16 C54 8,66 8,72 16 C78 24,90 24,96 16 M96 16 C102 8,114 8,120 16 C126 24,138 24,144 16" stroke="#4A88F5" stroke-width="2.5" stroke-linecap="round"/>
-        </svg>
-      </div>`;
+    const label = UI.t('scan_status_scanning');
 
-    function applyOverlay(el) {
+    function waveHTML(showLabel) {
+      return `
+        <div class="rescan-wave-wrap">
+          <svg class="savart-wave-svg" viewBox="0 0 144 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M0 16 C6 8,18 8,24 16 C30 24,42 24,48 16 M48 16 C54 8,66 8,72 16 C78 24,90 24,96 16 M96 16 C102 8,114 8,120 16 C126 24,138 24,144 16" stroke="#4A88F5" stroke-width="2.5" stroke-linecap="round"/>
+          </svg>
+        </div>
+        ${showLabel ? `<span class="rescan-wave-label">${label}</span>` : ''}`;
+    }
+
+    function applyOverlay(el, showLabel = false) {
       if (!el) return;
       el.querySelector('.' + OVERLAY_CLASS)?.remove();
       if (active) {
         const div = document.createElement('div');
         div.className = OVERLAY_CLASS;
-        div.innerHTML = WAVE_HTML;
+        div.innerHTML = waveHTML(showLabel);
         el.appendChild(div);
       }
     }
 
-    // 1. Album card art in library grid
+    // 1. Album card art in library grid — show label
     applyOverlay(document.querySelector(
       `#lib-detail-content .home-card[data-folder-id="${CSS.escape(folderId)}"] .home-card-art`
-    ));
+    ), true);
 
-    // 2. Browse folder icon
+    // 2. Browse folder icon — too small for label
     applyOverlay(document.querySelector(
       `.folder-row[data-id="${CSS.escape(folderId)}"] .folder-icon`
-    ));
+    ), false);
 
-    // 3. Album detail header art (only if the detail pane is currently open)
+    // 3. Album detail header art (only if the detail pane is currently open) — no label
     if (_libInDetail) {
-      applyOverlay(document.querySelector('.lib-detail-entity-art'));
+      applyOverlay(document.querySelector('.lib-detail-entity-art'), false);
+    }
+  }
+
+  /**
+   * Immediately stamp the green rescan dot on the album card in the library grid
+   * for a given folderId, without waiting for a full _loadAlbums() re-render.
+   * Called right after DB.setMeta(folderId, { rescannedAt }) is written.
+   */
+  function _stampRescanDot(folderId) {
+    const card = document.querySelector(
+      `#lib-detail-content .home-card[data-folder-id="${CSS.escape(folderId)}"]`
+    );
+    if (!card) return;
+    let yearEl = card.querySelector('.home-card-year');
+    if (!yearEl) {
+      yearEl = document.createElement('div');
+      yearEl.className = 'home-card-year';
+      const art = card.querySelector('.home-card-art');
+      if (art) art.after(yearEl);
+      else card.insertBefore(yearEl, card.querySelector('.home-card-name') || null);
+    }
+    if (!yearEl.querySelector('.album-rescan-dot')) {
+      const dot = document.createElement('span');
+      dot.className = 'album-rescan-dot';
+      yearEl.insertBefore(dot, yearEl.firstChild);
     }
   }
 
@@ -2253,6 +2287,7 @@ const App = (() => {
     let aborted = false;
     for (const folderId of folderIds) {
       if (_libRescanAbort) { aborted = true; break; }
+      _libRescanActiveFolderId = folderId;
       _setRescanOverlay(folderId, true);
       try {
         const page = await Drive.listFolderScan(folderId);
@@ -2271,6 +2306,7 @@ const App = (() => {
 
         await _prefetchAndApplyFolderCovers(folderId, songs, true);
         await DB.setMeta(folderId, { rescannedAt: Date.now() }).catch(() => {});
+        _stampRescanDot(folderId); // show green dot immediately on the card
         if (typeof Sync !== 'undefined') {
           Sync.pushHot([...songs, { id: folderId }]).catch(() => {});
         }
@@ -2279,6 +2315,7 @@ const App = (() => {
         console.warn('[LibRescan] Error on folder', folderId, err);
         done++;
       } finally {
+        _libRescanActiveFolderId = null;
         _setRescanOverlay(folderId, false);
       }
     }
@@ -2375,6 +2412,7 @@ const App = (() => {
       // Mark folder as rescanned BEFORE pushHot so rescannedAt syncs in the hot delta
       if (_browseFolderId) {
         await DB.setMeta(_browseFolderId, { rescannedAt: Date.now() }).catch(() => {});
+        _stampRescanDot(_browseFolderId); // show green dot on library card immediately
         _updateBrowseLegend(_browseFolderId);
       }
       if (typeof Sync !== 'undefined') {
@@ -3369,6 +3407,10 @@ const App = (() => {
       }
 
       if (result.folders.length > 0) _patchFolderDots(result.folders).catch(() => {});
+
+      // Re-stamp rescan wave overlay on any visible folder icon if a rescan is running
+      if (_browseRescanRunning && _browseFolderId) _setRescanOverlay(_browseFolderId, true);
+      if (_libRescanActiveFolderId) _setRescanOverlay(_libRescanActiveFolderId, true);
 
       // Lightweight movement reconciliation (fire-and-forget):
       // Detects files moved in Drive (folderId mismatch) without a full rescan.
@@ -7105,6 +7147,10 @@ const App = (() => {
         _libAlbumObserver.observe(sentinel);
       }
     }
+
+    // Re-stamp rescan wave overlay if a lib rescan is mid-flight
+    // (album cards were just re-rendered, erasing the overlay)
+    if (_libRescanActiveFolderId) _setRescanOverlay(_libRescanActiveFolderId, true);
 
     // Show/hide batch-rescan button
     _syncLibRescanBtn();

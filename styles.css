@@ -1087,6 +1087,7 @@ img { display: block; }
   inset: 0;
   background: rgba(8, 16, 31, 0.72);
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   border-radius: inherit;
@@ -1107,6 +1108,17 @@ img { display: block; }
   height: auto;
   display: block;
   animation: savart-wave-scroll 0.75s linear infinite;
+}
+
+.rescan-wave-label {
+  display: block;
+  margin-top: 7px;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: #4A88F5;
+  text-align: center;
+  white-space: nowrap;
 }
 
 .folder-row-info {
