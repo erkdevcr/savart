@@ -2976,7 +2976,13 @@ const App = (() => {
 
   function _topListHasCover(fileId) {
     const el = document.querySelector(`.top-list-item[data-id="${CSS.escape(fileId)}"]`);
-    return !!(el && el.querySelector('.top-list-thumb img'));
+    if (!el) return false;
+    const img = el.querySelector('.top-list-thumb img');
+    if (!img) return false;
+    if (img.style.display === 'none') return false;  // onerror hid the img → broken URL
+    const rawSrc = img.getAttribute('src');
+    if (!rawSrc || rawSrc === 'id3') return false;
+    return true;
   }
 
   function _updateTopListThumb(fileId, coverUrl, isId3 = false) {
@@ -3019,10 +3025,16 @@ const App = (() => {
 
   /* ── DOM helpers for song rows (Favorites / Playlist detail) ── */
 
-  /** Returns true if the .song-row for this id already shows a cover <img>. */
+  /** Returns true if the .song-row for this id already shows a VALID cover <img>. */
   function _songRowHasCover(fileId) {
     const row = document.querySelector(`.song-row[data-id="${CSS.escape(fileId)}"]`);
-    return !!(row && row.querySelector('.song-thumb img'));
+    if (!row) return false;
+    const img = row.querySelector('.song-thumb img');
+    if (!img) return false;
+    if (img.style.display === 'none') return false;  // onerror hid the img → broken URL
+    const rawSrc = img.getAttribute('src');
+    if (!rawSrc || rawSrc === 'id3') return false;
+    return true;
   }
 
   /** Inject (or replace) a cover image inside the .song-thumb of a .song-row. */
@@ -3057,6 +3069,7 @@ const App = (() => {
     if (!card) return false;
     const img = card.querySelector('.home-card-art img');
     if (!img) return false;
+    if (img.style.display === 'none') return false;  // onerror hid the img → broken URL
     // getAttribute('src') is the raw value — 'id3' sentinel set during enrichment
     // means the card has a broken placeholder, not a real cover.
     const rawSrc = img.getAttribute('src');
@@ -7273,47 +7286,88 @@ const App = (() => {
    *
    * @param {DriveItem} item - the track that is about to play
    */
+  /**
+   * Inject a known cover into every currently-visible surface for a song.
+   * Called from _preScanBeforePlay when a cover already exists in DB or was
+   * just written — ensures home cards, browse rows and top-list rows all reflect
+   * the cover without waiting for the next full _loadHomeData cycle.
+   */
+  function _ensureCoverVisible(fileId, dbMeta) {
+    if (!dbMeta) return;
+    if (dbMeta.coverBlob) {
+      const url = Meta.injectCover(fileId, dbMeta.coverBlob);
+      if (url) {
+        _updateHomeCardThumbnail(fileId, url, true);
+        _updateRowThumbnail(fileId, url, true);
+        _updateTopListThumb(fileId, url, true);
+      }
+    } else if (dbMeta.thumbnailUrl && dbMeta.thumbnailUrl !== 'id3') {
+      _updateHomeCardThumbnail(fileId, dbMeta.thumbnailUrl, false);
+      _updateRowThumbnail(fileId, dbMeta.thumbnailUrl, false);
+      _updateTopListThumb(fileId, dbMeta.thumbnailUrl, false);
+    }
+  }
+
   async function _preScanBeforePlay(item) {
     if (!item?.id) return;
     if (typeof Meta === 'undefined' || typeof Drive === 'undefined') return;
 
     try {
-      // Fast path — already scanned by any method
       const existing = await DB.getMeta(item.id).catch(() => null);
-      if (existing?.softScannedAt || existing?.manualAt || existing?.rescannedAt) return;
 
+      // ── Case 1: user manually edited → never overwrite; still paint cover if present ──
+      if (existing?.manualAt) {
+        _ensureCoverVisible(item.id, existing);
+        return;
+      }
+
+      // ── Case 2: this device already has a local cover ────────────────────────────
+      // coverBlob = embedded ID3 art stored in IDB (best quality, offline-capable).
+      // valid thumbnailUrl = external URL from Last.fm / AudD / Drive CDN.
+      // In both cases paint every visible surface and return — no network call needed.
+      // NOTE: rescannedAt is deliberately NOT a fast-path here — it is synced from
+      // other devices, so a song can arrive with rescannedAt but no local coverBlob.
+      const hasLocalBlob   = !!existing?.coverBlob;
+      const hasLocalUrl    = !!(existing?.thumbnailUrl && existing?.thumbnailUrl !== 'id3');
+      if (hasLocalBlob || hasLocalUrl) {
+        _ensureCoverVisible(item.id, existing);
+        return;
+      }
+
+      // ── Case 3: already soft-scanned on THIS device and found no embedded art ───
+      // softScannedAt is device-local (never synced) so this only fires when we
+      // genuinely scanned the song on this device and confirmed there's no ID3 cover.
+      if (existing?.softScannedAt) return;
+
+      // ── Slow path: download and scan ─────────────────────────────────────────────
       const folderId = item.parents?.[0] || item.folderId || null;
       const inBrowse = () => _browseFolderId === folderId;
 
-      // Show "Leyendo…" in the browse row immediately
       if (inBrowse()) UI.markBrowseSongScanning(item.id);
 
-      // Prefer cached blob (already in IndexedDB from a prior play), else fetch head
+      // Use cached blob if available; otherwise fetch first 1 MB (ID3 tags are at the top)
       let blob = await DB.getCachedBlob(item.id).catch(() => null);
       if (!blob) blob = await Drive.downloadFileHead(item.id, 1024 * 1024).catch(() => null);
 
       if (!blob) {
+        // Network failure — don't mark softScannedAt so we can retry next time
         if (inBrowse()) UI.updateBrowseSongMeta(item.id, existing?.artist || null, existing?.album || null, null);
         return;
       }
 
       const parsed = await Meta.parse(item.id, blob).catch(() => null);
 
-      if (!parsed) {
-        if (inBrowse()) UI.updateBrowseSongMeta(item.id, existing?.artist || null, existing?.album || null, null);
-        return;
-      }
-
+      // Mark as scanned regardless of whether we found anything
       const patch = {
         softScannedAt:  Date.now(),
-        displayName:    parsed.title  || null,
-        artist:         parsed.artist || null,
-        artistInferred: !parsed.artist,
-        album:          parsed.album  || null,
-        year:           parsed.year   || null,
+        displayName:    parsed?.title  || null,
+        artist:         parsed?.artist || null,
+        artistInferred: !parsed?.artist,
+        album:          parsed?.album  || null,
+        year:           parsed?.year   || null,
       };
 
-      if (parsed.coverBlob && !existing?.coverBlob) {
+      if (parsed?.coverBlob && !existing?.coverBlob) {
         patch.coverBlob    = parsed.coverBlob;
         patch.thumbnailUrl = 'id3';
       }
@@ -7325,16 +7379,22 @@ const App = (() => {
         ...(patch.displayName ? { displayName: patch.displayName } : {}),
       });
 
-      // Update visible browse row
+      // Update browse row name/artist
       if (inBrowse()) {
         UI.updateBrowseSongMeta(item.id, patch.artist, patch.album, patch.displayName);
-        if (patch.coverBlob && typeof Meta !== 'undefined') {
-          const coverUrl = Meta.injectCover(item.id, patch.coverBlob);
-          if (coverUrl) _updateRowThumbnail(item.id, coverUrl, true);
+      }
+
+      // Paint cover on EVERY visible surface (home card, browse row, top-list row)
+      if (patch.coverBlob) {
+        const coverUrl = Meta.injectCover(item.id, patch.coverBlob);
+        if (coverUrl) {
+          _updateHomeCardThumbnail(item.id, coverUrl, true);
+          _updateRowThumbnail(item.id, coverUrl, true);
+          _updateTopListThumb(item.id, coverUrl, true);
         }
       }
 
-      console.log(`[PreScan] ${item.id}: scanned before play — artist=${patch.artist}, album=${patch.album}`);
+      console.log(`[PreScan] ${item.id}: scanned before play — artist=${patch.artist}, album=${patch.album}, cover=${!!patch.coverBlob}`);
     } catch (err) {
       console.warn('[PreScan] Error:', err);
     }

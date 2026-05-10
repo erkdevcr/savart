@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.0.0';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.0.0 — sync thumbnailUrl fill-only; nunca borra covers existentes; 'id3' jamás se sincroniza
+const APP_VERSION  = '3.0.1';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.0.1 — hasCover detecta imgs ocultas/rotas (display:none); nunca devuelve true para URLs expiradas
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
