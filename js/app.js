@@ -8222,15 +8222,36 @@ const App = (() => {
 
     // Update cover in all visible surfaces
     const blobToUse = freshBlob || existingBlob;
+    let coverUrl = null; // hoisted so the player-update block below can read it
     if (blobToUse && typeof Meta !== 'undefined') {
       // Meta.parse already injected coverUrl into cache if blob was freshly parsed;
       // otherwise injectCover creates the Object URL now.
-      let coverUrl = id3?.coverUrl;
+      coverUrl = id3?.coverUrl;
       if (!coverUrl) coverUrl = Meta.injectCover(songId, blobToUse);
       if (coverUrl) {
         _updateRowThumbnail(songId, coverUrl, true);
         _updateHomeCardThumbnail(songId, coverUrl, true);
         Player.patchQueueItem?.(songId, { thumbnailUrl: coverUrl });
+      }
+    }
+
+    // Meta.revoke() above destroyed the Object URL the player's <img> was using,
+    // causing the cover to go blank immediately. If this song is still playing,
+    // push the new coverUrl (or null when there is no embedded art) directly to
+    // the player UI now so it never flickers blank.
+    {
+      const _ct = Player.getCurrentTrack?.();
+      if (_ct?.id === songId) {
+        const _ep = {
+          ..._ct,
+          ...(dbPatch.displayName ? { displayName: dbPatch.displayName } : {}),
+          ...(dbPatch.artist      ? { artist:      dbPatch.artist }      : {}),
+          ...(dbPatch.album       ? { albumName:   dbPatch.album }       : {}),
+          ...(dbPatch.year        ? { year:        dbPatch.year }        : {}),
+          thumbnailUrl: coverUrl,
+        };
+        UI.updateMiniPlayer?.(_ep, Player.isPlaying());
+        UI.updateExpandedPlayer?.(_ep, Player.isPlaying());
       }
     }
 

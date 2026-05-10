@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '2.8.6';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.8.6 — priority soft scan: song being played is stamped + browse row updated immediately
+const APP_VERSION  = '2.8.7';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.8.7 — fix: reset ID3 on playing song no longer kills player cover
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
