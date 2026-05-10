@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '2.9.3';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.9.3 — sync: permite googleusercontent.com en metadata/home/hot; recents thumbnailLink como fallback
+const APP_VERSION  = '2.9.4';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.9.4 — sync: _bumpManifest live-read evita sobrescribir ts de otros dispositivos; _poll actualiza _remoteTs siempre; _pushRecents agrega artist + thumbnailLink
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

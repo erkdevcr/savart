@@ -163,11 +163,24 @@ const Sync = (() => {
   /**
    * Update manifest timestamps for the given types and write to Drive.
    * Also updates _localTs so we don't re-pull our own changes.
+   *
+   * Does a live read of the manifest first so we don't overwrite timestamps
+   * that another device may have written since our last poll.  We take the
+   * MAX of the live value and our cached _remoteTs for every key so timestamps
+   * never roll backwards.
    */
   async function _bumpManifest(types) {
     const now = Date.now();
-    // Read current manifest first so we preserve other types' timestamps
-    const current = { ..._remoteTs };
+    // Live read to capture changes made by other devices since our last poll
+    let live = {};
+    try { live = await _readManifest(); } catch (_) {}
+    // Merge: for every known key take the higher of the live manifest and our
+    // cached _remoteTs to prevent accidentally rolling back another device's ts.
+    const current = {};
+    const allKeys = new Set([...Object.keys(live), ...Object.keys(_remoteTs)]);
+    for (const k of allKeys) {
+      current[k] = Math.max(live[k] || 0, _remoteTs[k] || 0);
+    }
     for (const t of types) {
       current[t] = now;
       _localTs[t] = now;
@@ -692,8 +705,13 @@ const Sync = (() => {
       .slice(0, CONFIG.RECENTS_MAX)
       .map(r => ({
         id: r.id, name: r.name || null, displayName: r.displayName || r.name || null,
+        artist: r.artist || null,
         type: r.type || 'song', folderId: r.folderId || null, mimeType: r.mimeType || null,
-        thumbnailUrl: (r.thumbnailUrl && !r.thumbnailUrl.startsWith('blob:')) ? r.thumbnailUrl : null,
+        // Prefer thumbnailUrl; fall back to thumbnailLink (Drive CDN, works in <img> without auth)
+        // so device B can render a cover card even before it has scanned that song locally.
+        thumbnailUrl: (r.thumbnailUrl && !r.thumbnailUrl.startsWith('blob:'))
+          ? r.thumbnailUrl
+          : ((r.thumbnailLink && !r.thumbnailLink.startsWith('blob:')) ? r.thumbnailLink : null),
         accessedAt: r.accessedAt ?? Date.now(),
       }));
 
@@ -894,6 +912,14 @@ const Sync = (() => {
 
       const manifest = await _readManifest();
       if (!manifest || !Object.keys(manifest).length) return;
+
+      // Always bring _remoteTs up to date (take MAX to prevent rollbacks).
+      // This keeps _bumpManifest's base accurate even for types that aren't stale
+      // on this device — so our next write doesn't accidentally zero out another
+      // device's timestamp for a type we haven't touched ourselves.
+      for (const [k, v] of Object.entries(manifest)) {
+        if ((v || 0) > (_remoteTs[k] || 0)) _remoteTs[k] = v;
+      }
 
       // Find types where remote is strictly newer than what we last saw
       const stale = Object.keys(FILENAMES).filter(type =>
