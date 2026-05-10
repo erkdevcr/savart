@@ -220,6 +220,13 @@ const Meta = (() => {
     // ── MP3 bitrate: scan first audio frame after ID3 tag ────
     result.bitrate = _mp3Bitrate(bytes, 10 + tagSize);
 
+    // ── TLEN → durationSec ───────────────────────────────────
+    if (result.tlen) {
+      const ms = parseInt(result.tlen, 10);
+      if (ms > 0) result.durationSec = ms / 1000;
+      delete result.tlen;
+    }
+
     return result;
   }
 
@@ -261,9 +268,12 @@ const Meta = (() => {
         result.channels      = channels;
         result.bitsPerSample = bitsPerSample;
 
-        if (sampleRate > 0 && totalSamples > 0 && fileSize > 0) {
+        if (sampleRate > 0 && totalSamples > 0) {
           const durationSec = totalSamples / sampleRate;
-          result.bitrate = Math.round((fileSize * 8) / (durationSec * 1000));
+          result.durationSec = durationSec;
+          if (fileSize > 0) {
+            result.bitrate = Math.round((fileSize * 8) / (durationSec * 1000));
+          }
         }
       }
 
@@ -352,10 +362,12 @@ const Meta = (() => {
 
   const _TEXT_FRAMES_V22 = {
     TT2: 'title', TP1: 'artist', TAL: 'album', TYE: 'year', TRK: 'track',
+    TLE: 'tlen',  // duration in milliseconds
   };
   const _TEXT_FRAMES_V23 = {
     TIT2: 'title', TPE1: 'artist', TPE2: 'artist',
     TALB: 'album', TYER: 'year',   TDRC: 'year', TRCK: 'track',
+    TLEN: 'tlen',  // duration in milliseconds
   };
 
   function _textKey(id, version) {

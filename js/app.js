@@ -2706,6 +2706,18 @@ const App = (() => {
     UI.updateExpandedPlayer(enriched, Player.isPlaying());
     // Refresh lock-screen / notification metadata with resolved ID3 info
     Player.updateMediaSessionArtwork(enriched);
+
+    // Persist accurate duration so Browse/Library can show it on next load.
+    // Only write when the audio element gave us a real duration that is
+    // meaningfully better than whatever is already in the DB.
+    if (audioDurMs > 0) {
+      const realDurSec = audioDurMs / 1000;
+      DB.getMeta(item.id).then(existing => {
+        // Skip if DB already has a duration within 2 s of the audio-element value
+        if (existing?.durationSec && Math.abs(existing.durationSec - realDurSec) < 2) return;
+        DB.setMeta(item.id, { durationSec: realDurSec }).catch(() => {});
+      }).catch(() => {});
+    }
   }
 
   /**
@@ -2944,6 +2956,12 @@ const App = (() => {
             patch.year           = meta.year   || null;
             patch.coverBlob      = meta.coverBlob || null;
             patch.thumbnailUrl   = meta.coverBlob ? 'id3' : null;
+            // Duration: prefer exact value from TLEN/FLAC; fallback: bitrate estimate
+            if (meta.durationSec > 0) {
+              patch.durationSec = meta.durationSec;
+            } else if (meta.bitrate > 0 && item.size > 0) {
+              patch.durationSec = Math.round((item.size * 8) / (meta.bitrate * 1000));
+            }
           }
 
           await DB.setMeta(item.id, { id: item.id, ...patch });
@@ -3702,6 +3720,12 @@ const App = (() => {
           // Also pick up persisted thumbnailUrl/coverBlob so _buildSongRow shows cover
           if (!f.thumbnailUrl && m.thumbnailUrl && m.thumbnailUrl !== 'id3') {
             f.thumbnailUrl = m.thumbnailUrl;
+          }
+          // Duration: prefer exact DB value; fallback: bitrate estimate from file size
+          if (m.durationSec > 0) {
+            f.durationSec = m.durationSec;
+          } else if (m.bitrate > 0 && f.size > 0) {
+            f.durationSec = Math.round((f.size * 8) / (m.bitrate * 1000));
           }
         });
       }
@@ -8444,6 +8468,8 @@ const App = (() => {
         track:        m.track        || '',
         thumbnailUrl: m.thumbnailUrl || m.coverUrl || null,
         folderId:     m.folderId     || null,
+        durationSec:  m.durationSec  || 0,
+        size:         m.size         || 0,
       });
 
       // Sort: by track number (ID3, e.g. "3" or "3/12"), then by name

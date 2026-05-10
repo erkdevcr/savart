@@ -1673,9 +1673,10 @@ const UI = (() => {
     // Three-line layout: title / artist · album / size · format
     const _ext      = (file.name || '').split('.').pop().toUpperCase();
     const _size     = file.size ? formatBytes(parseInt(file.size, 10)) : '';
+    const _dur      = file.durationSec > 0 ? formatTime(Math.round(file.durationSec)) : '';
     const _fileInfo = file.isWma
       ? t('format_unsupported')
-      : [_size, _ext].filter(Boolean).join(' · ');
+      : [_size, _ext, _dur].filter(Boolean).join(' · ');
     const _artist   = (file.artist || '').split(';')[0].trim(); // strip collaborators
     const _album    = (file.album  || '').trim();
     const _meta     = [_artist, _album].filter(Boolean).join(' · ');
@@ -2801,9 +2802,13 @@ const UI = (() => {
 
       const _ext    = (song.name || '').split('.').pop().toUpperCase();
       const _size   = song.size ? formatBytes(parseInt(song.size, 10)) : '';
+      const _dur    = song.durationSec > 0 ? formatTime(Math.round(song.durationSec)) : '';
       const _artist = song.artist || '';
       const _album  = song.albumName || '';
-      const _sub = [_artist, _album].filter(Boolean).join(' · ') || [_size, _ext].filter(Boolean).join(' · ');
+      const _artistAlbum = [_artist, _album].filter(Boolean).join(' · ');
+      const _sub = _artistAlbum
+        ? [_artistAlbum, _dur].filter(Boolean).join(' · ')
+        : [_size, _ext, _dur].filter(Boolean).join(' · ');
 
       row.innerHTML = `
         <div class="song-thumb">

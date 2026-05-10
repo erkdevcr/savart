@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.0.7';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.0.7 — Meta.parse(force): re-parsea blob completo para covers >1MB; _extractAll usa blob sin slice interno; _preScanBeforePlay reintenta con blob completo si softScannedAt sin coverBlob; _onBlobReady force-parse si blob grande y sin cover en cache
+const APP_VERSION  = '3.0.8';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.0.8 — durationSec: TLEN/FLAC STREAMINFO → meta.js; soft scan persiste; browse enrichment; _applyMeta persiste desde audio element; _buildSongRow y lib-song-row muestran duración
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
