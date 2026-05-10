@@ -1727,6 +1727,49 @@ const App = (() => {
       } catch (_) { /* non-fatal */ }
     }
 
+    // ── Pass 7.5: Final ID3 guarantee ─────────────────────────────────────────
+    // All external services have been tried. For any song still showing no cover:
+    // (a) coverBlob already in DB but DOM was never updated → show it + stamp.
+    // (b) No coverBlob anywhere → download file head, extract embedded art, save both
+    //     coverBlob and thumbnailUrl:'id3' so it survives future sessions and syncs.
+    // This is the authoritative last resort — runs regardless of which passes failed.
+    if (typeof Meta !== 'undefined') {
+      const uncoveredNow = files.filter(f => !_rowHasCover(f.id));
+      if (uncoveredNow.length > 0) {
+        const CONCURRENCY_ID3FB = 3;
+        const id3FbQueue = [...uncoveredNow];
+        async function id3FallbackWorker() {
+          while (id3FbQueue.length > 0) {
+            const file = id3FbQueue.shift();
+            if (_browseRescanAbort || _albumRescanAbort || _libRescanAbort) return;
+            try {
+              const m = await DB.getMeta(file.id).catch(() => null);
+              if ((m?.manualAt || 0) > 0) continue;
+              if (m?.coverBlob) {
+                // Case (a): blob already saved — just show it and stamp
+                const url = Meta.injectCover(file.id, m.coverBlob);
+                if (url) {
+                  _updateRowThumbnail(file.id, url, true);
+                  if (!_isStableCoverUrl(m?.thumbnailUrl) && m?.thumbnailUrl !== 'id3')
+                    DB.setMeta(file.id, { thumbnailUrl: 'id3' }).catch(() => {});
+                }
+                continue;
+              }
+              // Case (b): no blob — try extracting from audio file
+              let blob = await DB.getCachedBlob(file.id);
+              if (!blob) blob = await Drive.downloadFileHead(file.id);
+              if (!blob) continue;
+              const meta = await Meta.parse(file.id, blob);
+              if (!meta?.coverBlob) continue; // genuinely no embedded art
+              await DB.setMeta(file.id, { coverBlob: meta.coverBlob, thumbnailUrl: 'id3' }).catch(() => {});
+              if (meta.coverUrl) _updateRowThumbnail(file.id, meta.coverUrl, true);
+            } catch (_) {}
+          }
+        }
+        await Promise.allSettled(Array.from({ length: CONCURRENCY_ID3FB }, () => id3FallbackWorker()));
+      }
+    }
+
     // ── Pass 8: Stamp ID3-cover sentinel ──────────────────────────────────────
     // For songs that ended up with a coverBlob (ID3 embedded art) but NO external
     // thumbnailUrl, write thumbnailUrl:'id3' as a cross-device signal.
