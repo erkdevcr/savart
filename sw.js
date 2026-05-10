@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '2.9.5';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.9.5 — softScan: canción en reproducción nunca se salta; se mueve al frente de la cola y se escanea sin yield
+const APP_VERSION  = '2.9.8';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.9.8 — onBeforePlay: bloquea audio hasta que soft scan termine; _preScanBeforePlay en app.js
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

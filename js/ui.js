@@ -1072,10 +1072,12 @@ const UI = (() => {
     // For songs: show stored thumbnailUrl immediately; async cover injected later by _prefetchPinnedCovers.
     // For folders: always show folder icon over colored square (no cover art).
     const storedUrl = !isFolder ? (item.thumbnailUrl || item.thumbnailLink || null) : null;
-    const imgHtml   = storedUrl ? `<img class="pinned-art-img" src="${escHtml(storedUrl)}" alt="">` : '';
+    const imgHtml   = storedUrl ? `<img class="pinned-art-img" src="${escHtml(storedUrl)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display=''">` : '';
     const iconHtml  = isFolder
       ? `<div class="pinned-art-icon">${iconFolder(26)}</div>`
-      : (storedUrl ? '' : `<div class="pinned-art-icon">${iconMusicNote(24)}</div>`);
+      : storedUrl
+        ? `<div class="pinned-art-icon" style="display:none">${iconMusicNote(24)}</div>`
+        : `<div class="pinned-art-icon">${iconMusicNote(24)}</div>`;
 
     const artist = !isFolder ? (item.artist || '') : '';
 
@@ -1133,8 +1135,9 @@ const UI = (() => {
     const year    = meta?.year   || item.year    || '';
     const coverSrc = meta?.coverUrl || item.coverUrl || item.thumbnailUrl || item.thumbnailLink || '';
 
+    const _topFallback = `<div style="display:none;width:100%;height:100%;align-items:center;justify-content:center;color:var(--text-disabled)">${isFolder ? iconFolder(18) : iconMusicNote(18)}</div>`;
     const thumbHtml = coverSrc
-      ? `<img src="${coverSrc}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover">`
+      ? `<img src="${coverSrc}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">${_topFallback}`
       : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--text-disabled)">${isFolder ? iconFolder(18) : iconMusicNote(18)}</div>`;
 
     // Secondary line: artist | album · year (only non-empty parts)
@@ -1180,7 +1183,7 @@ const UI = (() => {
     card.innerHTML = `
       <div class="home-card-art">
         ${coverSrc
-          ? `<img src="${coverSrc}" alt="" loading="lazy" draggable="false">`
+          ? `<img src="${coverSrc}" alt="" loading="lazy" draggable="false" onerror="this.style.display='none';this.nextElementSibling.style.display=''"><div class="folder-icon-placeholder" style="display:none;color:var(--text-disabled)">${isFolder ? iconFolder(32) : iconMusicNote(28)}</div>`
           : isFolder
             ? `<div class="folder-icon-placeholder">${iconFolder(32)}</div>`
             : `<div class="folder-icon-placeholder" style="color:var(--text-disabled)">${iconMusicNote(28)}</div>`
@@ -1683,7 +1686,7 @@ const UI = (() => {
       ${numHtml}
       <div class="song-thumb">
         ${file.thumbnailUrl
-          ? `<img src="${file.thumbnailUrl}" alt="" loading="lazy">`
+          ? `<img src="${file.thumbnailUrl}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display=''"><div class="thumb-placeholder" style="display:none">${iconMusicNote(20)}</div>`
           : `<div class="thumb-placeholder">${iconMusicNote(20)}</div>`
         }
         <div class="eq-bars">
@@ -2805,7 +2808,7 @@ const UI = (() => {
       row.innerHTML = `
         <div class="song-thumb">
           ${song.thumbnailUrl
-            ? `<img src="${song.thumbnailUrl}" alt="">`
+            ? `<img src="${song.thumbnailUrl}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display=''"><div class="thumb-placeholder" style="display:none">${iconMusicNote(20)}</div>`
             : `<div class="thumb-placeholder">${iconMusicNote(20)}</div>`
           }
           <div class="eq-bars">
@@ -3130,13 +3133,14 @@ const UI = (() => {
     const hash   = [...(album.name || '')].reduce((a, c) => a + c.charCodeAt(0), 0);
     const albBg  = ALBUM_COLORS[Math.abs(hash) % ALBUM_COLORS.length];
 
+    const _artistSvg = `<svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>`;
     const entity = document.createElement('div');
     entity.className = 'lib-detail-entity';
     entity.innerHTML = `
       <div class="lib-detail-entity-art" style="background:${albBg};color:var(--text-secondary)">
         ${album.coverUrl
-          ? `<img src="${album.coverUrl}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)">`
-          : `<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 14.5c-2.49 0-4.5-2.01-4.5-4.5S9.51 7.5 12 7.5s4.5 2.01 4.5 4.5-2.01 4.5-4.5 4.5zm0-5.5c-.55 0-1 .45-1 1s.45 1 1 1 1-.45 1-1-.45-1-1-1z"/></svg>`
+          ? `<img src="${album.coverUrl}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)" onerror="this.style.display='none';this.nextElementSibling.style.display=''"><div style="display:none">${_artistSvg}</div>`
+          : _artistSvg
         }
       </div>
       <div class="lib-detail-entity-info">
@@ -3594,11 +3598,11 @@ const UI = (() => {
     // Cover: manual URL > mosaic > blob fallback > empty
     let artHtml;
     if (col.manualCoverUrl) {
-      artHtml = `<img src="${escHtml(col.manualCoverUrl)}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-md)">`;
+      artHtml = `<img src="${escHtml(col.manualCoverUrl)}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-md)" onerror="this.style.display='none'">`;
     } else if (col.mosaicUrls && col.mosaicUrls.length > 0) {
       artHtml = _buildMosaicThumb(col.mosaicUrls, col.name);
     } else if (col.blobUrl) {
-      artHtml = `<img src="${escHtml(col.blobUrl)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-md)">`;
+      artHtml = `<img src="${escHtml(col.blobUrl)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-md)" onerror="this.style.display='none'">`;
     } else {
       artHtml = `<svg width="44" height="38" viewBox="0 0 361.54 315.2" fill="currentColor" style="color:var(--text-muted)"><path d="M136.81,41.58C61.25,41.58,0,102.83,0,178.39s61.25,136.81,136.81,136.81,136.81-61.25,136.81-136.81S212.37,41.58,136.81,41.58ZM136.81,239.6c-33.8,0-61.21-27.4-61.21-61.21s27.4-61.21,61.21-61.21,61.21,27.4,61.21,61.21-27.4,61.21-61.21,61.21ZM136.81,191.78c-7.39,0-13.39-5.99-13.39-13.39s5.99-13.39,13.39-13.39,13.39,5.99,13.39,13.39-5.99,13.39-13.39,13.39ZM361.54,126.94c0,54.17-33.93,100.4-81.69,118.63,9.59-20.39,14.96-43.16,14.96-67.18,0-78.52-57.28-143.65-132.33-155.91C182.95,8.31,207.8,0,234.6,0c70.11,0,126.94,56.83,126.94,126.94Z"/></svg>`;
     }
@@ -3722,7 +3726,7 @@ const UI = (() => {
 
     let artHtml;
     if (collection.manualCoverUrl) {
-      artHtml = `<img src="${escHtml(collection.manualCoverUrl)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)">`;
+      artHtml = `<img src="${escHtml(collection.manualCoverUrl)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)" onerror="this.style.display='none'">`;
     } else if (_localMosaicUrls.length > 0) {
       artHtml = _buildMosaicThumb(_localMosaicUrls, collection.name);
     } else {

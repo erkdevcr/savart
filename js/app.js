@@ -172,6 +172,7 @@ const App = (() => {
       onQueueChange: _onQueueChange,
       onError:       _onPlayerError,
       onBlobReady:   _onBlobReady,
+      onBeforePlay:  _preScanBeforePlay,  // blocks audio until soft scan completes
     });
 
     // 5. Init auth
@@ -7036,11 +7037,10 @@ const App = (() => {
         if (folderIdSet.has(m.id)) existingMap.set(m.id, m);
       }
 
-      // Capture the currently-playing song ID so we can prioritise it.
-      // It may already have softScannedAt stamped (from _onBlobReady at play-start),
-      // but we always re-include it so the soft scan has a chance to verify/complete
-      // its metadata and update the browse row — fulfilling the "scan before/while
-      // playing" contract even if the play-start stamp beat us to the punch.
+      // Capture the currently-playing song ID so we can move it to the front
+      // of the candidates list if it's already a legitimate scan candidate.
+      // We do NOT force-include it when softScannedAt is set — that would trigger
+      // a redundant 1 MB download that competes with the audio stream.
       const currentTrackId = (typeof Player !== 'undefined') ? Player.getCurrentTrack()?.id : null;
 
       // Candidates: any file not yet soft-scanned AND not manually edited.
@@ -7048,15 +7048,13 @@ const App = (() => {
       // inference (artistInferred) and stale data need to be replaced by real ID3.
       // rescannedAt = full manual rescan already done → skip (has authoritative data).
       // softScannedAt = already read real ID3 in a previous session → skip.
-      //   EXCEPTION: the currently-playing song is always a candidate regardless of
-      //   softScannedAt so the soft scan never silently bypasses the active track.
       const candidates = files.filter(f => {
         const m = existingMap.get(f.id);
-        if (!m) return true;                               // no data at all
-        if (m.manualAt)   return false;                    // user manually edited → never touch
-        if (m.rescannedAt) return false;                   // full rescan done → authoritative
-        if (m.softScannedAt && f.id !== currentTrackId) return false; // already scanned (skip unless playing)
-        return true;                                       // anything else: scan to get real ID3
+        if (!m) return true;                   // no data at all
+        if (m.manualAt)     return false;      // user manually edited → never touch
+        if (m.rescannedAt)  return false;      // full rescan done → authoritative
+        if (m.softScannedAt) return false;     // already soft-scanned → skip
+        return true;                           // anything else: scan to get real ID3
       });
 
       // Always scan the currently-playing song first so its metadata appears in the
@@ -7201,6 +7199,86 @@ const App = (() => {
       if (typeof Sync !== 'undefined') Sync.push('metadata');
     } catch (err) {
       console.warn('[SoftScan] Error:', err);
+    }
+  }
+
+  /**
+   * Pre-play soft scan — called by the Player's onBeforePlay hook before audio
+   * is fetched.  Blocks playback until the song has been ID3-scanned at least once,
+   * so the miniplayer always shows real metadata from the very first play.
+   *
+   * Fast path: returns immediately if the song already has a scan stamp
+   * (softScannedAt / manualAt / rescannedAt) — no extra work needed.
+   *
+   * Slow path: fetches the first 1 MB (or uses a cached blob), parses ID3 tags,
+   * writes the result to DB, and updates the visible browse row if open.
+   *
+   * @param {DriveItem} item - the track that is about to play
+   */
+  async function _preScanBeforePlay(item) {
+    if (!item?.id) return;
+    if (typeof Meta === 'undefined' || typeof Drive === 'undefined') return;
+
+    try {
+      // Fast path — already scanned by any method
+      const existing = await DB.getMeta(item.id).catch(() => null);
+      if (existing?.softScannedAt || existing?.manualAt || existing?.rescannedAt) return;
+
+      const folderId = item.parents?.[0] || item.folderId || null;
+      const inBrowse = () => _browseFolderId === folderId;
+
+      // Show "Leyendo…" in the browse row immediately
+      if (inBrowse()) UI.markBrowseSongScanning(item.id);
+
+      // Prefer cached blob (already in IndexedDB from a prior play), else fetch head
+      let blob = await DB.getCachedBlob(item.id).catch(() => null);
+      if (!blob) blob = await Drive.downloadFileHead(item.id, 1024 * 1024).catch(() => null);
+
+      if (!blob) {
+        if (inBrowse()) UI.updateBrowseSongMeta(item.id, existing?.artist || null, existing?.album || null, null);
+        return;
+      }
+
+      const parsed = await Meta.parse(item.id, blob).catch(() => null);
+
+      if (!parsed) {
+        if (inBrowse()) UI.updateBrowseSongMeta(item.id, existing?.artist || null, existing?.album || null, null);
+        return;
+      }
+
+      const patch = {
+        softScannedAt:  Date.now(),
+        displayName:    parsed.title  || null,
+        artist:         parsed.artist || null,
+        artistInferred: !parsed.artist,
+        album:          parsed.album  || null,
+        year:           parsed.year   || null,
+      };
+
+      if (parsed.coverBlob && !existing?.coverBlob) {
+        patch.coverBlob    = parsed.coverBlob;
+        patch.thumbnailUrl = 'id3';
+      }
+
+      await DB.setMeta(item.id, { id: item.id, ...patch });
+      _cacheItem({ ...item,
+        ...(patch.artist      ? { artist:      patch.artist      } : {}),
+        ...(patch.album       ? { album:       patch.album       } : {}),
+        ...(patch.displayName ? { displayName: patch.displayName } : {}),
+      });
+
+      // Update visible browse row
+      if (inBrowse()) {
+        UI.updateBrowseSongMeta(item.id, patch.artist, patch.album, patch.displayName);
+        if (patch.coverBlob && typeof Meta !== 'undefined') {
+          const coverUrl = Meta.injectCover(item.id, patch.coverBlob);
+          if (coverUrl) _updateRowThumbnail(item.id, coverUrl, true);
+        }
+      }
+
+      console.log(`[PreScan] ${item.id}: scanned before play — artist=${patch.artist}, album=${patch.album}`);
+    } catch (err) {
+      console.warn('[PreScan] Error:', err);
     }
   }
 

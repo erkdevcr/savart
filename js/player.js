@@ -57,6 +57,7 @@ const Player = (() => {
   let _onQueueChange = null;  // (queue, index) => void
   let _onError       = null;  // (error) => void
   let _onBlobReady   = null;  // (driveItem, blob) => void — fires after blob is fetched & cached
+  let _onBeforePlay  = null;  // async (driveItem) => void — awaited before blob fetch (e.g. soft scan)
 
   /* ── Web Audio comment ─────────────────────────────────── */
   /*
@@ -71,13 +72,14 @@ const Player = (() => {
    * Call once on app startup.
    * @param {Object} callbacks
    */
-  function init({ onTrackChange, onPlayPause, onProgress, onQueueChange, onError, onBlobReady } = {}) {
+  function init({ onTrackChange, onPlayPause, onProgress, onQueueChange, onError, onBlobReady, onBeforePlay } = {}) {
     _onTrackChange = onTrackChange || (() => {});
     _onPlayPause   = onPlayPause   || (() => {});
     _onProgress    = onProgress    || (() => {});
     _onQueueChange = onQueueChange || (() => {});
     _onError       = onError       || (() => {});
     _onBlobReady   = onBlobReady   || null;
+    _onBeforePlay  = onBeforePlay  || null;
 
     _audio = new Audio();
     _audio.preload    = 'auto';
@@ -521,6 +523,12 @@ const Player = (() => {
 
     const item = _queue[_queueIndex];
     _onTrackChange(item, _queueIndex, _queue.length);
+
+    // Wait for the pre-play hook (e.g. soft scan) before fetching audio.
+    // _onTrackChange fires first so the miniplayer shows the song name immediately.
+    if (_onBeforePlay) {
+      try { await _onBeforePlay(item); } catch (_) {}
+    }
 
     try {
       const blob = await _getBlob(item);
