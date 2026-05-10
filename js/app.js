@@ -1822,7 +1822,18 @@ const App = (() => {
       // Only replace if there's no img yet, or the existing one is from a different source
       const existing = artEl.querySelector('img');
       if (!existing || existing.src !== coverUrl) {
-        artEl.innerHTML = `<img src="${coverUrl}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)">`;
+        // Insert surgically to preserve any .rescan-wave-overlay child
+        const newImg = document.createElement('img');
+        newImg.src = coverUrl;
+        newImg.alt = '';
+        newImg.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)';
+        if (existing) {
+          existing.replaceWith(newImg);
+        } else {
+          artEl.querySelector('svg')?.remove();
+          const overlay = artEl.querySelector('.rescan-wave-overlay');
+          overlay ? artEl.insertBefore(newImg, overlay) : artEl.appendChild(newImg);
+        }
       }
     }
 
@@ -1969,7 +1980,15 @@ const App = (() => {
           .find(c => c.dataset.folderId === item.folderId);
         const artEl = card?.querySelector('.home-card-art');
         if (artEl && !artEl.querySelector('img')) {
-          artEl.innerHTML = `<img src="${url}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-md)">`;
+          // Insert img surgically so any .rescan-wave-overlay child is preserved
+          const newImg = document.createElement('img');
+          newImg.src = url;
+          newImg.alt = '';
+          newImg.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:var(--radius-md)';
+          // Remove SVG placeholder if present; leave overlay untouched
+          artEl.querySelector('svg')?.remove();
+          const overlay = artEl.querySelector('.rescan-wave-overlay');
+          overlay ? artEl.insertBefore(newImg, overlay) : artEl.appendChild(newImg);
         }
       } catch (_) { /* non-fatal */ }
     }
@@ -2641,10 +2660,16 @@ const App = (() => {
     if (img) {
       img.src = coverUrl;
     } else {
-      // No cover yet — inject immediately
-      art.innerHTML = `<img src="${coverUrl}" alt="" loading="lazy"
-        style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-md)"
-        onerror="this.remove()">`;
+      // No cover yet — inject surgically to preserve any .rescan-wave-overlay child
+      const newImg = document.createElement('img');
+      newImg.src = coverUrl;
+      newImg.alt = '';
+      newImg.loading = 'lazy';
+      newImg.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:var(--radius-md)';
+      newImg.onerror = () => newImg.remove();
+      art.querySelector('svg')?.remove(); // remove SVG placeholder
+      const overlay = art.querySelector('.rescan-wave-overlay');
+      overlay ? art.insertBefore(newImg, overlay) : art.appendChild(newImg);
     }
   }
 

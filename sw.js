@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '2.5.6';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.5.6 — rescan overlay shows "Escaneando…" label below wave on album cards
+const APP_VERSION  = '2.5.7';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.5.7 — rescan overlay survives async cover injections (DOM insert vs innerHTML); re-stamps on every _renderAlbumPage
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
