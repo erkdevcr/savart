@@ -2272,8 +2272,8 @@ const App = (() => {
     function waveHTML(showLabel) {
       return `
         <div class="rescan-wave-wrap">
-          <svg class="savart-wave-svg" viewBox="0 0 60 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M0 16 C2.5 8,7.5 8,10 16 C12.5 24,17.5 24,20 16 M20 16 C22.5 8,27.5 8,30 16 C32.5 24,37.5 24,40 16 M40 16 C42.5 8,47.5 8,50 16 C52.5 24,57.5 24,60 16" stroke="#4A88F5" stroke-width="2.5" stroke-linecap="round"/>
+          <svg class="savart-wave-svg" viewBox="0 0 90 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M0 16 C3.75 8,11.25 8,15 16 C18.75 24,26.25 24,30 16 M30 16 C33.75 8,41.25 8,45 16 C48.75 24,56.25 24,60 16 M60 16 C63.75 8,71.25 8,75 16 C78.75 24,86.25 24,90 16" stroke="#4A88F5" stroke-width="2.5" stroke-linecap="round"/>
           </svg>
         </div>
         ${showLabel ? `<span class="rescan-wave-label">${label}</span>` : ''}`;
