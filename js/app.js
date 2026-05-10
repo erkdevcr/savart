@@ -7069,6 +7069,12 @@ const App = (() => {
           // Update visible Browse row immediately — title, artist · album
           if (inBrowse()) {
             UI.updateBrowseSongMeta(file.id, newArtist, newAlbum, newDisplay);
+            // Paint cover immediately — same session as the blob extraction,
+            // so we can inject it right now without waiting for the end-of-scan batch.
+            if (patch.coverBlob && typeof Meta !== 'undefined') {
+              const coverUrl = Meta.injectCover(file.id, patch.coverBlob);
+              if (coverUrl) _updateRowThumbnail(file.id, coverUrl, true);
+            }
           }
 
           // Update live artist set and chip in real-time
