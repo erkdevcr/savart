@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '2.5.8';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.5.8 — rescan button re-enabled after stop (btn.disabled=false in _syncLibRescanBtn idle branch)
+const APP_VERSION  = '2.5.9';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.5.9 — hiddenFromTopPlayed flag survives sync; incrementPlayCount clears it
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

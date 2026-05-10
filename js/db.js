@@ -298,6 +298,8 @@ const DB = (() => {
   async function incrementPlayCount(fileId) {
     const meta = await getMeta(fileId) || { id: fileId, playCount: 0, starred: false };
     meta.playCount = (meta.playCount || 0) + 1;
+    // Re-surface the song if it was previously hidden from top-played
+    delete meta.hiddenFromTopPlayed;
     return setMeta(fileId, meta);
   }
 
@@ -343,7 +345,7 @@ const DB = (() => {
     const store   = _tx('metadata');
     const entries = await _promisify(store.getAll());
     return entries
-      .filter(e => e.playCount > 0)
+      .filter(e => e.playCount > 0 && !e.hiddenFromTopPlayed)
       .sort((a, b) => b.playCount - a.playCount)
       .slice(0, limit);
   }
@@ -480,7 +482,11 @@ const DB = (() => {
         const req = store.get(item.id);
         req.onsuccess = () => {
           const existing  = req.result || { playCount: 0 };
-          const maxCount  = Math.max(existing.playCount || 0, item.playCount || 0);
+          // If user explicitly hid this song from top-played, keep playCount at 0
+          // so the remote value doesn't restore it through sync.
+          const maxCount  = existing.hiddenFromTopPlayed
+            ? 0
+            : Math.max(existing.playCount || 0, item.playCount || 0);
           store.put({ ...existing, ...clean, id: item.id, playCount: maxCount });
         };
       }

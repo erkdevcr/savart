@@ -3680,8 +3680,9 @@ const App = (() => {
   }
 
   async function onRemoveFromTopPlayed(item) {
-    // Reset playCount to 0 so the item drops out of getTopPlayed()
-    await DB.setMeta(item.id, { playCount: 0 }).catch(() => {});
+    // Set hiddenFromTopPlayed so sync can't restore it via Math.max on playCount.
+    // playCount is zeroed so legacy getTopPlayed callers also exclude it.
+    await DB.setMeta(item.id, { playCount: 0, hiddenFromTopPlayed: true }).catch(() => {});
     UI.showToast(UI.t('toast_removed_top_played'));
     _loadHomeData();
   }
