@@ -496,12 +496,11 @@ const DB = (() => {
         const req = store.get(item.id);
         req.onsuccess = () => {
           const existing  = req.result || { playCount: 0 };
-          // If user explicitly hid this song from top-played, keep playCount at 0
-          // so the remote value doesn't restore it through sync.
-          const maxCount  = existing.hiddenFromTopPlayed
-            ? 0
-            : Math.max(existing.playCount || 0, item.playCount || 0);
-          store.put({ ...existing, ...clean, id: item.id, playCount: maxCount });
+          // "hide" wins on either side: local OR remote hiddenFromTopPlayed → playCount stays 0
+          const hidden   = existing.hiddenFromTopPlayed || item.hiddenFromTopPlayed || false;
+          const maxCount = hidden ? 0 : Math.max(existing.playCount || 0, item.playCount || 0);
+          store.put({ ...existing, ...clean, id: item.id, playCount: maxCount,
+                      ...(hidden ? { hiddenFromTopPlayed: true } : {}) });
         };
       }
     });

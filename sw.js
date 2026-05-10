@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '2.8.3';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.8.3 — colección header: mosaico 4 covers de songs enriquecidos (incluye blob:/ID3)
+const APP_VERSION  = '2.8.4';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.8.4 — remove from top played: sync multi-dispositivo con hiddenFromTopPlayed
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

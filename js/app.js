@@ -3792,6 +3792,7 @@ const App = (() => {
     await DB.setMeta(item.id, { playCount: 0, hiddenFromTopPlayed: true }).catch(() => {});
     UI.showToast(UI.t('toast_removed_top_played'));
     _loadHomeData();
+    if (typeof Sync !== 'undefined') Sync.push('playcounts'); // propagate hide to other devices
   }
 
   async function onRemoveFromHistory(item) {

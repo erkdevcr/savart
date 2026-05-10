@@ -277,14 +277,28 @@ const Sync = (() => {
     for (const item of local)  map.set(item.id, { ...item });
     for (const item of remote) {
       const ex = map.get(item.id);
-      if (!ex) { map.set(item.id, { ...item }); }
-      else { map.set(item.id, { ...ex, ...item, playCount: Math.max(ex.playCount || 0, item.playCount || 0) }); }
+      if (!ex) {
+        map.set(item.id, { ...item });
+      } else {
+        // "hide" is permanent — if either side flagged hiddenFromTopPlayed, it wins.
+        const hidden = !!(ex.hiddenFromTopPlayed || item.hiddenFromTopPlayed);
+        map.set(item.id, {
+          ...ex, ...item,
+          playCount: hidden ? 0 : Math.max(ex.playCount || 0, item.playCount || 0),
+          ...(hidden ? { hiddenFromTopPlayed: true } : {}),
+        });
+      }
     }
     const merged   = Array.from(map.values());
     const localMap = new Map(local.map(m => [m.id, m]));
     return {
       merged,
-      toUpsert: merged.filter(m => { const l = localMap.get(m.id); return !l || m.playCount > (l.playCount || 0); }),
+      toUpsert: merged.filter(m => {
+        const l = localMap.get(m.id);
+        if (!l) return true;                                          // new remote item
+        if (m.hiddenFromTopPlayed && !l.hiddenFromTopPlayed) return true; // hide from remote
+        return m.playCount > (l.playCount || 0);                     // higher remote count
+      }),
     };
   }
 
@@ -692,11 +706,14 @@ const Sync = (() => {
   }
 
   async function _pushPlaycounts() {
-    const played = await DB.getTopPlayed(10000);
+    // getAllPlaycounts includes songs hidden from top-played so other devices
+    // receive the hiddenFromTopPlayed flag and can hide them locally too.
+    const played = await DB.getAllPlaycounts();
     await _writeFile(FILENAMES.playcounts, played.map(m => ({
       id: m.id, name: m.name || null, displayName: m.displayName || m.name || null,
       artist: m.artist || null, folderId: m.folderId || null, playCount: m.playCount || 0,
       thumbnailUrl: (m.thumbnailUrl && !m.thumbnailUrl.startsWith('blob:')) ? m.thumbnailUrl : null,
+      ...(m.hiddenFromTopPlayed ? { hiddenFromTopPlayed: true } : {}),
     })));
     console.log(`[Sync] Pushed playcounts (${played.length})`);
   }
@@ -801,7 +818,7 @@ const Sync = (() => {
       DB.getState('pinnedMeta'),
       DB.getState('pinned'),
       DB.getRecentsAll(),          // ALL records including tombstones
-      DB.getTopPlayed(CONFIG.TOP_PLAYED_MAX),
+      DB.getAllPlaycounts(),   // includes hidden songs so other devices get hiddenFromTopPlayed
       DB.getPlaylists(),
       DB.getHistory(CONFIG.HISTORY_MAX),
     ]);
@@ -831,6 +848,7 @@ const Sync = (() => {
         id: m.id, name: m.name || null, displayName: m.displayName || m.name || null,
         artist: m.artist || null, folderId: m.folderId || null, playCount: m.playCount || 0,
         thumbnailUrl: cleanUrl(m.thumbnailUrl),
+        ...(m.hiddenFromTopPlayed ? { hiddenFromTopPlayed: true } : {}),
       })),
       playlists: (playlists || []),
       history: (history || []).map(h => ({
