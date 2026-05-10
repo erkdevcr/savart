@@ -8215,12 +8215,22 @@ const App = (() => {
 
     const dbMeta = await DB.getMeta(songId).catch(() => null);
 
-    // Build DB patch — ID3 text fields + cover sentinel
-    const dbPatch = { manualAt: 0 }; // clear manual lock; enrichment passes may improve further
-    if (id3?.title)  dbPatch.displayName = id3.title;
-    if (id3?.artist) dbPatch.artist      = id3.artist;
-    if (id3?.album)  dbPatch.album       = id3.album;
-    if (id3?.year)   dbPatch.year        = id3.year;
+    // Build DB patch — reset enrichment state, then rewrite from ID3 only.
+    // Explicitly null every enrichment field so stale Last.fm / AudD values
+    // don't survive the reset. auddTried/mbTried cleared so enrichment reruns
+    // on next play with fresh identity data. softScannedAt cleared so soft scan
+    // can re-read this song in the next folder open.
+    const dbPatch = {
+      manualAt:     0,
+      auddTried:    false,
+      mbTried:      false,
+      softScannedAt: null,
+      // Reset all text — overwritten below if ID3 has them
+      displayName:  id3?.title  || null,
+      artist:       id3?.artist || null,
+      album:        id3?.album  || null,
+      year:         id3?.year   || null,
+    };
 
     const freshBlob    = id3?.coverBlob;
     const existingBlob = dbMeta?.coverBlob;
@@ -8312,30 +8322,40 @@ const App = (() => {
     if (songs.length === 0) throw new Error('No songs found');
 
     for (const m of songs) {
-      const dbPatch = { manualAt: 0 };
-
-      // Restore text from session-cached ID3 parse if available
+      // Restore text from session-cached ID3 parse if available.
+      // Session cache may be null for songs never played this session — that is fine:
+      // we explicitly null every enrichment field so stale Last.fm / AudD values
+      // are cleared. auddTried/mbTried cleared so enrichment reruns on next play.
+      // softScannedAt cleared so soft scan re-reads this song on next folder open.
       const cached = typeof Meta !== 'undefined' ? Meta.getCached(m.id) : null;
-      if (cached?.title)  dbPatch.displayName = cached.title;
-      if (cached?.artist) dbPatch.artist      = cached.artist;
-      if (cached?.album)  dbPatch.album       = cached.album;
-      if (cached?.year)   dbPatch.year        = cached.year;
 
-      // Cover — use persisted blob if available, otherwise clear stale URL
+      const dbPatch = {
+        manualAt:      0,
+        auddTried:     false,
+        mbTried:       false,
+        softScannedAt: null,
+        // Reset all text — overwritten below only if session ID3 cache has them
+        displayName:   cached?.title  || null,
+        artist:        cached?.artist || null,
+        album:         cached?.album  || null,
+        year:          cached?.year   || null,
+      };
+
+      // Cover — use persisted blob if available, otherwise clear stale external URL
       if (m.coverBlob) {
         dbPatch.thumbnailUrl = 'id3';
         if (typeof Meta !== 'undefined') {
-          let url = Meta.getCached(m.id)?.coverUrl;
+          let url = cached?.coverUrl;
           if (!url) url = Meta.injectCover(m.id, m.coverBlob);
           if (url) _updateRowThumbnail(m.id, url, true);
         }
       } else {
-        dbPatch.thumbnailUrl = null; // no embedded art — clear stale URL; rescan will fill
+        dbPatch.thumbnailUrl = null; // no embedded art — clear stale external URL; rescan/play will refill
       }
 
       await DB.setMeta(m.id, dbPatch).catch(() => {});
 
-      // Live-update text (cover handled above via injectCover, not liveMetaUpdate)
+      // Live-update text surfaces (cover handled above via injectCover)
       const livePatch = {};
       if (dbPatch.displayName) livePatch.displayName = dbPatch.displayName;
       if (dbPatch.artist)      livePatch.artist      = dbPatch.artist;
