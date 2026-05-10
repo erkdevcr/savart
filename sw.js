@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.0.2';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.0.2 — _softScanItems: todos los items del inicio hacen soft scan al cargar, excepto manualAt/rescannedAt/softScannedAt
+const APP_VERSION  = '3.0.3';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.0.3 — _pushRecents/_pushHome cruzan metadata store; _softScanItems y _preScanBeforePlay re-pushean recents tras enriquecer
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

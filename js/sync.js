@@ -703,23 +703,33 @@ const Sync = (() => {
     const week = Date.now() - 7 * 24 * 60 * 60 * 1000;
 
     // Live items (up to RECENTS_MAX)
-    const live = all
+    const liveRaw = all
       .filter(r => !r.removedAt)
       .sort((a, b) => b.accessedAt - a.accessedAt)
-      .slice(0, CONFIG.RECENTS_MAX)
-      .map(r => ({
-        id: r.id, name: r.name || null, displayName: r.displayName || r.name || null,
-        artist: r.artist || null,
+      .slice(0, CONFIG.RECENTS_MAX);
+
+    // Cross-reference the metadata store so cover URLs discovered AFTER addRecent
+    // (e.g. by _preScanBeforePlay or _softScanItems) are included in the push.
+    // The recents store records the thumbnail at play-time; the metadata store is
+    // always the authoritative, up-to-date source.
+    const metaRecords = await Promise.all(liveRaw.map(r => DB.getMeta(r.id).catch(() => null)));
+
+    const _safeUrl = u => (u && !u.startsWith('blob:') && u !== 'id3') ? u : null;
+
+    const live = liveRaw.map((r, i) => {
+      const m = metaRecords[i];
+      return {
+        id: r.id, name: r.name || null,
+        displayName: m?.displayName || r.displayName || r.name || null,
+        artist:      m?.artist      || r.artist      || null,
         type: r.type || 'song', folderId: r.folderId || null, mimeType: r.mimeType || null,
-        // Prefer thumbnailUrl; fall back to thumbnailLink (Drive CDN, works in <img> without auth)
-        // so device B can render a cover card even before it has scanned that song locally.
-        // 'id3' is a local-only sentinel (means "blob in IDB") — never sync it.
-        // Other devices can't render it and would store it as a literal broken URL.
-        thumbnailUrl: (r.thumbnailUrl && !r.thumbnailUrl.startsWith('blob:') && r.thumbnailUrl !== 'id3')
-          ? r.thumbnailUrl
-          : ((r.thumbnailLink && !r.thumbnailLink.startsWith('blob:')) ? r.thumbnailLink : null),
+        // thumbnailUrl: metadata store wins (most up-to-date) → recents record → thumbnailLink fallback
+        // 'id3' is local-only (blob in IDB) — never sync it.
+        thumbnailUrl: _safeUrl(m?.thumbnailUrl) || _safeUrl(r.thumbnailUrl)
+                   || _safeUrl(r.thumbnailLink)  || null,
         accessedAt: r.accessedAt ?? Date.now(),
-      }));
+      };
+    });
 
     // Tombstones from the last 7 days (so other devices can honour the deletion)
     const tombstones = all
@@ -854,26 +864,38 @@ const Sync = (() => {
 
     const week = Date.now() - 7 * 24 * 60 * 60 * 1000;
     // Separate live items and fresh tombstones
-    const recents = (allRecents || []).filter(r => !r.removedAt)
+    const recentsLive = (allRecents || []).filter(r => !r.removedAt)
       .sort((a, b) => (b.accessedAt || 0) - (a.accessedAt || 0))
       .slice(0, CONFIG.RECENTS_MAX);
     const recentTombstones = (allRecents || [])
       .filter(r => r.removedAt && r.removedAt > week)
       .map(r => ({ id: r.id, removedAt: r.removedAt }));
 
+    // Cross-reference the metadata store so covers found after addRecent
+    // (e.g. by _preScanBeforePlay / _softScanItems) are included in the snapshot.
+    const recentMetaRecords = await Promise.all(
+      recentsLive.map(r => DB.getMeta(r.id).catch(() => null))
+    );
+
     const payload = {
       ts:          Date.now(),
       pinned:      pinnedMeta  || {},
       pinnedOrder: pinnedOrder || [],
-      recents: recents.map(r => ({
-        id: r.id, name: r.name || null, displayName: r.displayName || r.name || null,
-        artist: r.artist || null,
-        type: r.type || 'song', folderId: r.folderId || null, mimeType: r.mimeType || null,
-        // thumbnailLink is the Drive CDN URL (googleusercontent.com) — stable enough to sync
-        // so device B can show a cover even before it plays or browses the song.
-        thumbnailUrl: cleanUrl(r.thumbnailUrl) || cleanUrl(r.thumbnailLink) || null,
-        accessedAt: r.accessedAt ?? Date.now(),
-      })),
+      recents: recentsLive.map((r, i) => {
+        const m = recentMetaRecords[i];
+        return {
+          id: r.id, name: r.name || null,
+          displayName: m?.displayName || r.displayName || r.name || null,
+          artist:      m?.artist      || r.artist      || null,
+          type: r.type || 'song', folderId: r.folderId || null, mimeType: r.mimeType || null,
+          // metadata store wins for thumbnailUrl — it's updated by scans/recognition
+          // after the recent was originally added; recents store may still be stale.
+          // Drive CDN thumbnailLink is stable across sessions and works in <img> without auth.
+          thumbnailUrl: cleanUrl(m?.thumbnailUrl) || cleanUrl(r.thumbnailUrl)
+                     || cleanUrl(r.thumbnailLink) || null,
+          accessedAt: r.accessedAt ?? Date.now(),
+        };
+      }),
       // Tombstones let readHome() honour deletions even before init() runs.
       recentTombstones,
       playcounts: (playcounts || []).map(m => ({

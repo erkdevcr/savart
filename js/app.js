@@ -2915,6 +2915,13 @@ const App = (() => {
     }
     // 2 parallel workers — head downloads are ~1 MB each
     await Promise.allSettled([worker(), worker()]);
+
+    // Re-push recents after enrichment so other devices immediately receive the
+    // thumbnailUrls and artist names discovered during background scanning —
+    // without waiting for Device A to open the home screen.
+    // _pushRecents cross-references the metadata store, so it picks up everything
+    // written by the workers above.
+    if (typeof Sync !== 'undefined') Sync.push('recents');
   }
 
   /**
@@ -7401,6 +7408,13 @@ const App = (() => {
           _updateTopListThumb(item.id, coverUrl, true);
         }
       }
+
+      // Re-push recents so other devices get the enriched metadata (artist, name)
+      // and the cover URL if it's an external URL — even if the recent was originally
+      // pushed with a null thumbnail (because the scan hadn't finished yet at addRecent time).
+      // _pushRecents now cross-references the metadata store, so this push carries the
+      // freshly written softScannedAt patch including any external thumbnailUrl.
+      if (typeof Sync !== 'undefined') Sync.push('recents');
 
       console.log(`[PreScan] ${item.id}: scanned before play — artist=${patch.artist}, album=${patch.album}, cover=${!!patch.coverBlob}`);
     } catch (err) {
