@@ -1066,10 +1066,16 @@ const App = (() => {
     try {
       let meta = await Meta.parse(item.id, blob);
 
-      // If Meta.parse returned from cache (e.g. soft scan parsed a 1MB head) with no
-      // coverUrl, try the DB coverBlob — soft scan saves it even when the image frame
-      // was too large for the head. Meta.injectCover creates the object URL and updates
-      // the session cache so subsequent lookups also find it.
+      // If the cache returned a result with no cover (e.g. soft scan parsed a 1MB head
+      // that didn't reach the APIC frame) and we now have a larger blob (the full audio
+      // file), force a fresh full-file parse so covers embedded beyond 1MB are found.
+      // This is the primary fix for large embedded cover art (>1MB APIC frames).
+      if (!meta.coverUrl && !meta.coverBlob && blob.size > 1024 * 1024) {
+        const fullMeta = await Meta.parse(item.id, blob, true).catch(() => null);
+        if (fullMeta?.coverUrl) meta = fullMeta;
+      }
+
+      // Fallback: try DB coverBlob (e.g. stored by a previous session's _onBlobReady).
       if (!meta.coverUrl) {
         const dbCover = await DB.getMeta(item.id).catch(() => null);
         if (dbCover?.coverBlob) {
@@ -2900,8 +2906,10 @@ const App = (() => {
         try {
           const existing = metaMap.get(item.id) || null;
 
-          // Prefer local cached blob (free), fall back to Drive 1 MB head download
+          // Prefer local cached blob (free, full file — best quality).
+          // Fall back to a 1MB head download (enough for most embedded cover art).
           let blob = await DB.getCachedBlob(item.id).catch(() => null);
+          const blobIsFullFile = !!blob;  // cached = full audio file, not a head slice
           if (!blob) blob = await Drive.downloadFileHead(item.id, 1024 * 1024).catch(() => null);
 
           if (!blob) {
@@ -2910,7 +2918,11 @@ const App = (() => {
             continue;
           }
 
-          const meta = await Meta.parse(item.id, blob).catch(() => null);
+          // Force re-parse when we have the full cached audio file — it may contain
+          // cover art beyond the 2MB head boundary, and bypasses any stale 1MB cache.
+          const meta = blobIsFullFile
+            ? await Meta.parse(item.id, blob, true).catch(() => null)
+            : await Meta.parse(item.id, blob).catch(() => null);
 
           // REPLACE patch — ID3 is the source of truth for these fields.
           // FULL REPLACE from ID3 — clear existing data, apply only what the file says.
@@ -7486,10 +7498,29 @@ const App = (() => {
         return;
       }
 
-      // ── Case 3: already soft-scanned on THIS device and found no embedded art ───
-      // softScannedAt is device-local (never synced) so this only fires when we
-      // genuinely scanned the song on this device and confirmed there's no ID3 cover.
-      if (existing?.softScannedAt) return;
+      // ── Case 3: already soft-scanned on THIS device ──────────────────────────────
+      // The soft scan only downloads a 1MB head — if the APIC frame extends beyond that
+      // boundary the cover is missed. When the full audio blob is now available in cache
+      // (because the user is about to play the song), we get a second chance to find it.
+      if (existing?.softScannedAt) {
+        if (!existing?.coverBlob) {
+          // Soft scan found no cover — try the full cached blob (if available) to catch
+          // large embedded cover art that exceeds the 1MB head download.
+          const cachedBlob = await DB.getCachedBlob(item.id).catch(() => null);
+          if (cachedBlob && cachedBlob.size > 1024 * 1024) {
+            // Force re-parse of the full file (bypass cache from the 1MB soft scan).
+            const fullParsed = await Meta.parse(item.id, cachedBlob, true).catch(() => null);
+            if (fullParsed?.coverBlob) {
+              await DB.setMeta(item.id, { coverBlob: fullParsed.coverBlob, thumbnailUrl: 'id3' }).catch(() => {});
+              _ensureCoverVisible(item.id, { ...existing, coverBlob: fullParsed.coverBlob });
+              console.log('[PreScan] Full-blob cover found for', item.id);
+            }
+          }
+        } else {
+          _ensureCoverVisible(item.id, existing);
+        }
+        return;
+      }
 
       // ── Slow path: download and scan ─────────────────────────────────────────────
       const folderId = item.parents?.[0] || item.folderId || null;
@@ -7497,8 +7528,10 @@ const App = (() => {
 
       if (inBrowse()) UI.markBrowseSongScanning(item.id);
 
-      // Use cached blob if available; otherwise fetch first 1 MB (ID3 tags are at the top)
+      // Prefer full cached blob (best quality, no network).
+      // Fall back to 1MB head download (standard size for ID3 tag parsing).
       let blob = await DB.getCachedBlob(item.id).catch(() => null);
+      const blobIsFullFile = !!blob;
       if (!blob) blob = await Drive.downloadFileHead(item.id, 1024 * 1024).catch(() => null);
 
       if (!blob) {
@@ -7507,7 +7540,11 @@ const App = (() => {
         return;
       }
 
-      const parsed = await Meta.parse(item.id, blob).catch(() => null);
+      // If the full audio file is cached, force re-parse so we bypass any stale 1MB
+      // head result that may have missed a cover extending past the 1MB boundary.
+      const parsed = blobIsFullFile
+        ? await Meta.parse(item.id, blob, true).catch(() => null)
+        : await Meta.parse(item.id, blob).catch(() => null);
 
       // Mark as scanned regardless of whether we found anything
       const patch = {

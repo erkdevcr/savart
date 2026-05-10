@@ -39,12 +39,24 @@ const Meta = (() => {
 
   /**
    * Parse metadata from a Blob. Caches result by fileId.
-   * @param {string} fileId
-   * @param {Blob}   blob
+   * @param {string}  fileId
+   * @param {Blob}    blob
+   * @param {boolean} [force=false] — bypass cache and re-parse (use when a larger
+   *   blob is available than what was originally parsed, e.g. full file after 1MB head).
    * @returns {Promise<{ title, artist, album, year, track, coverUrl }>}
    */
-  async function parse(fileId, blob) {
-    if (_cache.has(fileId)) return _cache.get(fileId);
+  async function parse(fileId, blob, force = false) {
+    if (!force && _cache.has(fileId)) return _cache.get(fileId);
+
+    // When force-re-parsing, revoke the old object URL so we don't leak it.
+    if (force) {
+      const old = _cache.get(fileId);
+      if (old?.coverUrl) {
+        URL.revokeObjectURL(old.coverUrl);
+        _objectUrls.delete(old.coverUrl);
+      }
+      _cache.delete(fileId);
+    }
 
     let result = {};
     try {
@@ -85,10 +97,11 @@ const Meta = (() => {
   /* ── Main extractor ─────────────────────────────────────── */
 
   async function _extractAll(blob) {
-    // Read first 1MB — enough for any reasonable ID3 tag + embedded art
-    const headBlob  = blob.slice(0, Math.min(1 * 1024 * 1024, blob.size));
-    const buf       = await headBlob.arrayBuffer();
-    const bytes     = new Uint8Array(buf);
+    // Caller controls the blob size — use whatever data was passed in full.
+    // Soft scan passes a 1MB head download; _onBlobReady can pass the full file,
+    // ensuring covers embedded beyond the 1MB boundary are found and stored.
+    const buf   = await blob.arrayBuffer();
+    const bytes = new Uint8Array(buf);
 
     if (bytes.length < 4) return {};
 
