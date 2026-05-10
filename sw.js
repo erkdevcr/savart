@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '2.6.9';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.6.9 — Last.fm passes skip DB write when coverBlob exists
+const APP_VERSION  = '2.7.0';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 2.7.0 — wave λ=20px, 1.5 visible cycles, viewBox 60px
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
