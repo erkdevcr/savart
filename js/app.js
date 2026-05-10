@@ -2229,8 +2229,8 @@ const App = (() => {
     function waveHTML(showLabel) {
       return `
         <div class="rescan-wave-wrap">
-          <svg class="savart-wave-svg" viewBox="0 0 144 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M0 16 C2 8,6 8,8 16 C10 24,14 24,16 16 M16 16 C18 8,22 8,24 16 C26 24,30 24,32 16 M32 16 C34 8,38 8,40 16 C42 24,46 24,48 16 M48 16 C50 8,54 8,56 16 C58 24,62 24,64 16 M64 16 C66 8,70 8,72 16 C74 24,78 24,80 16 M80 16 C82 8,86 8,88 16 C90 24,94 24,96 16 M96 16 C98 8,102 8,104 16 C106 24,110 24,112 16 M112 16 C114 8,118 8,120 16 C122 24,126 24,128 16 M128 16 C130 8,134 8,136 16 C138 24,142 24,144 16" stroke="#4A88F5" stroke-width="2.5" stroke-linecap="round"/>
+          <svg class="savart-wave-svg" viewBox="0 0 120 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M0 16 C2.5 8,7.5 8,10 16 C12.5 24,17.5 24,20 16 M20 16 C22.5 8,27.5 8,30 16 C32.5 24,37.5 24,40 16 M40 16 C42.5 8,47.5 8,50 16 C52.5 24,57.5 24,60 16 M60 16 C62.5 8,67.5 8,70 16 C72.5 24,77.5 24,80 16 M80 16 C82.5 8,87.5 8,90 16 C92.5 24,97.5 24,100 16 M100 16 C102.5 8,107.5 8,110 16 C112.5 24,117.5 24,120 16" stroke="#4A88F5" stroke-width="2.5" stroke-linecap="round"/>
           </svg>
         </div>
         ${showLabel ? `<span class="rescan-wave-label">${label}</span>` : ''}`;
