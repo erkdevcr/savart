@@ -3673,16 +3673,22 @@ const UI = (() => {
     card.dataset.searchKey = norm(col.name);
     if (col.folderId) card.dataset.folderId = col.folderId;
 
-    // Cover: manual URL > mosaic > blob fallback > empty
+    // Cover: manual URL → single image; everything else → 2×2 mosaic (same as home playlists).
+    // Empty mosaic slots show a colored cell with a note icon; blob covers are injected async
+    // into the first empty cell by _patchGridBlobCovers after render.
     let artHtml;
+    let artClass = 'home-card-art lib-collection-art';
+    let artStyle = `background:${colBg}`;
+
     if (col.manualCoverUrl) {
-      artHtml = `<img src="${escHtml(col.manualCoverUrl)}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-md)" onerror="this.style.display='none'">`;
-    } else if (col.mosaicUrls && col.mosaicUrls.length > 0) {
-      artHtml = _buildMosaicThumb(col.mosaicUrls, col.name);
-    } else if (col.blobUrl) {
-      artHtml = `<img src="${escHtml(col.blobUrl)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-md)" onerror="this.style.display='none'">`;
+      artHtml = `<img src="${escHtml(col.manualCoverUrl)}" alt="" loading="lazy"` +
+        ` style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-md)"` +
+        ` onerror="this.style.display='none'">`;
     } else {
-      artHtml = `<svg width="44" height="38" viewBox="0 0 361.54 315.2" fill="currentColor" style="color:var(--text-muted)"><path d="M136.81,41.58C61.25,41.58,0,102.83,0,178.39s61.25,136.81,136.81,136.81,136.81-61.25,136.81-136.81S212.37,41.58,136.81,41.58ZM136.81,239.6c-33.8,0-61.21-27.4-61.21-61.21s27.4-61.21,61.21-61.21,61.21,27.4,61.21,61.21-27.4,61.21-61.21,61.21ZM136.81,191.78c-7.39,0-13.39-5.99-13.39-13.39s5.99-13.39,13.39-13.39,13.39,5.99,13.39,13.39-5.99,13.39-13.39,13.39ZM361.54,126.94c0,54.17-33.93,100.4-81.69,118.63,9.59-20.39,14.96-43.16,14.96-67.18,0-78.52-57.28-143.65-132.33-155.91C182.95,8.31,207.8,0,234.6,0c70.11,0,126.94,56.83,126.94,126.94Z"/></svg>`;
+      const urls = (col.mosaicUrls || []).slice(0, 4);
+      artHtml   = _buildPlaylistMosaic(urls, col.name);
+      artClass += ' home-card-art--mosaic';
+      artStyle  = ''; // mosaic cells carry their own background colors
     }
 
     const hasMeta = col.rescannedAt || col.hasManual || col.format;
@@ -3698,7 +3704,7 @@ const UI = (() => {
     const artistLabel = col.artistCount ? `${col.artistCount} artistas` : '';
 
     card.innerHTML = `
-      <div class="home-card-art lib-collection-art" style="background:${colBg}"${col.manualCoverUrl ? ' data-manual-cover="1"' : ''}>${artHtml}</div>
+      <div class="${artClass}"${artStyle ? ` style="${artStyle}"` : ''}${col.manualCoverUrl ? ' data-manual-cover="1"' : ''}>${artHtml}</div>
       <button class="home-card-more collection-card-more" aria-label="Más opciones">${iconDots(14)}</button>
       ${metaHtml}
       <div class="home-card-name">${escHtml(col.name)}</div>
@@ -4174,19 +4180,17 @@ const UI = (() => {
     const MOSAIC_COLORS = ['#2A3D6A','#2A4A2A','#4A2A2A','#3A2A4A','#1A3A4A','#4A3A1A'];
     const hash  = [...(name || '')].reduce((a, c) => a + c.charCodeAt(0), 0);
     const noteIcon = iconMusicNote(13).replace(/"/g, "'"); // single-quote for onerror attr
+    // All cells share the same structure — CSS (.home-card-art--mosaic .mosaic-cell) handles
+    // position:relative and flex centering so we don't need inline equivalents.
+    // The note icon sits behind the img and shows through when the image fails to load.
     const cells = [0, 1, 2, 3].map(i => {
       const url = coverUrls[i];
       const bg  = MOSAIC_COLORS[(hash + i) % MOSAIC_COLORS.length];
-      if (url) {
-        // Music note sits behind the img; shows through if the image fails to load
-        return `<div class="mosaic-cell" style="background:${bg};position:relative;display:flex;align-items:center;justify-content:center">` +
-          `<div style="opacity:.25;color:#fff;pointer-events:none">${noteIcon}</div>` +
-          `<img src="${url}" alt="" loading="lazy" ` +
-               `style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block" ` +
-               `onerror="this.style.display='none'"></div>`;
-      }
-      return `<div class="mosaic-cell" style="background:${bg};display:flex;align-items:center;justify-content:center">` +
-        `<div style="opacity:.25;color:#fff">${noteIcon}</div></div>`;
+      const img = url
+        ? `<img src="${url}" alt="" loading="lazy" onerror="this.style.display='none'">`
+        : '';
+      return `<div class="mosaic-cell" style="background:${bg}">` +
+        `<div style="opacity:.25;color:#fff;pointer-events:none">${noteIcon}</div>${img}</div>`;
     });
     return cells.join('');
   }

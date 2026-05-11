@@ -2147,8 +2147,21 @@ const App = (() => {
         const card  = Array.from(grid.querySelectorAll('.home-card'))
           .find(c => c.dataset.folderId === item.folderId);
         const artEl = card?.querySelector('.home-card-art');
-        if (artEl && !artEl.querySelector('img')) {
-          // Insert img surgically so any .rescan-wave-overlay child is preserved
+        if (!artEl) continue;
+
+        if (artEl.classList.contains('home-card-art--mosaic')) {
+          // Mosaic card (collections): inject blob into first cell that has no image yet.
+          // The cell already has position:relative from CSS so the absolute img works.
+          const firstCell = artEl.querySelector('.mosaic-cell');
+          if (firstCell && !firstCell.querySelector('img')) {
+            const newImg = document.createElement('img');
+            newImg.src = url;
+            newImg.alt = '';
+            newImg.addEventListener('error', () => { newImg.style.display = 'none'; });
+            firstCell.appendChild(newImg);
+          }
+        } else if (!artEl.querySelector('img')) {
+          // Non-mosaic card (albums): replace SVG placeholder with single image
           const newImg = document.createElement('img');
           newImg.src = url;
           newImg.alt = '';

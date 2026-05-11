@@ -827,11 +827,17 @@ img { display: block; }
 }
 
 .home-card-art--mosaic .mosaic-cell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 100%;
   height: 100%;
 }
 
 .home-card-art--mosaic .mosaic-cell img {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
