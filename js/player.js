@@ -56,8 +56,9 @@ const Player = (() => {
   let _onProgress    = null;  // (currentTime, duration) => void
   let _onQueueChange = null;  // (queue, index) => void
   let _onError       = null;  // (error) => void
-  let _onBlobReady   = null;  // (driveItem, blob) => void — fires after blob is fetched & cached
-  let _onBeforePlay  = null;  // async (driveItem) => void — awaited before blob fetch (e.g. soft scan)
+  let _onBlobReady      = null;  // (driveItem, blob) => void — fires after blob is fetched & cached
+  let _onBeforePlay     = null;  // async (driveItem) => void — awaited before blob fetch (e.g. soft scan)
+  let _onDurationReady  = null;  // (driveItem, durationSec) => void — fires on loadedmetadata with real duration
 
   /* ── Web Audio comment ─────────────────────────────────── */
   /*
@@ -72,14 +73,15 @@ const Player = (() => {
    * Call once on app startup.
    * @param {Object} callbacks
    */
-  function init({ onTrackChange, onPlayPause, onProgress, onQueueChange, onError, onBlobReady, onBeforePlay } = {}) {
-    _onTrackChange = onTrackChange || (() => {});
-    _onPlayPause   = onPlayPause   || (() => {});
-    _onProgress    = onProgress    || (() => {});
-    _onQueueChange = onQueueChange || (() => {});
-    _onError       = onError       || (() => {});
-    _onBlobReady   = onBlobReady   || null;
-    _onBeforePlay  = onBeforePlay  || null;
+  function init({ onTrackChange, onPlayPause, onProgress, onQueueChange, onError, onBlobReady, onBeforePlay, onDurationReady } = {}) {
+    _onTrackChange    = onTrackChange    || (() => {});
+    _onPlayPause      = onPlayPause      || (() => {});
+    _onProgress       = onProgress       || (() => {});
+    _onQueueChange    = onQueueChange    || (() => {});
+    _onError          = onError          || (() => {});
+    _onBlobReady      = onBlobReady      || null;
+    _onBeforePlay     = onBeforePlay     || null;
+    _onDurationReady  = onDurationReady  || null;
 
     _audio = new Audio();
     _audio.preload    = 'auto';
@@ -101,6 +103,15 @@ const Player = (() => {
       _msUpdatePositionState();
     });
     _audio.addEventListener('durationchange', _msUpdatePositionState);
+    _audio.addEventListener('loadedmetadata', () => {
+      // Fire once the browser has parsed the audio headers and duration is accurate.
+      // This is the only reliable moment to capture duration — timeupdate can carry
+      // stale values from the previous track during the brief transition window.
+      if (_onDurationReady && isFinite(_audio.duration) && _audio.duration > 0) {
+        const item = _queue[_queueIndex];
+        if (item) _onDurationReady(item, _audio.duration);
+      }
+    });
 
     // Resume AudioContext when page comes back from background/lock screen
     document.addEventListener('visibilitychange', () => {

@@ -174,13 +174,14 @@ const App = (() => {
 
     // 4. Init player
     Player.init({
-      onTrackChange: _onTrackChange,
-      onPlayPause:   _onPlayPause,
-      onProgress:    _onProgress,
-      onQueueChange: _onQueueChange,
-      onError:       _onPlayerError,
-      onBlobReady:   _onBlobReady,
-      onBeforePlay:  _preScanBeforePlay,  // blocks audio until soft scan completes
+      onTrackChange:   _onTrackChange,
+      onPlayPause:     _onPlayPause,
+      onProgress:      _onProgress,
+      onQueueChange:   _onQueueChange,
+      onError:         _onPlayerError,
+      onBlobReady:     _onBlobReady,
+      onBeforePlay:    _preScanBeforePlay,  // blocks audio until soft scan completes
+      onDurationReady: _onDurationReady,    // fires on loadedmetadata with accurate duration
     });
 
     // 5. Init auth
@@ -585,10 +586,6 @@ const App = (() => {
   /* ── Player events ───────────────────────────────────────── */
 
   function _onTrackChange(track, index, total) {
-    // Reset duration guard so _onProgress can save for the new track.
-    // Must happen here — not on album open — to avoid timing mismatch
-    // where the first timeupdate still carries the previous track's duration.
-    _durationSavedForId = null;
     // Show loading spinner (delayed 120ms to avoid flash for cached tracks)
     _startLoadingSpinner();
     // Initial sync display — uses in-memory Meta cache (may still show filename
@@ -780,25 +777,19 @@ const App = (() => {
 
   // Track which song ID has already had its duration persisted this session
   // so we don't write to DB on every timeupdate tick.
-  let _durationSavedForId = null;
+  // _onDurationReady: fires once per track via the player's loadedmetadata event.
+  // audio.duration is guaranteed accurate at that point — no stale values possible.
+  function _onDurationReady(track, durationSec) {
+    if (!(durationSec > 0)) return;
+    DB.setMeta(track.id, { durationSec }).catch(() => {});
+    UI.updateBrowseSongDuration(track.id, durationSec);
+    UI.updateLibrarySongDuration(track.id, durationSec);
+  }
 
   function _onProgress(currentTime, duration) {
     UI.updateProgress(currentTime, duration);
     if (UI.isExpandedPlayerVisible()) {
       UI.updateExpandedPlayerProgress(currentTime, duration);
-    }
-
-    // Save duration once the audio has been playing for 3+ seconds on the current
-    // track. Waiting avoids capturing a stale duration from the previous track
-    // that the audio element may still hold during the initial load transition.
-    if (isFinite(duration) && duration > 0 && currentTime >= 3) {
-      const track = Player.getCurrentTrack();
-      if (track && track.id !== _durationSavedForId) {
-        _durationSavedForId = track.id;
-        DB.setMeta(track.id, { durationSec: duration }).catch(() => {});
-        UI.updateBrowseSongDuration(track.id, duration);
-        UI.updateLibrarySongDuration(track.id, duration);
-      }
     }
   }
 
@@ -8582,9 +8573,9 @@ const App = (() => {
       _scrollDetailToTop();
 
       // If a song from this album is already playing, paint its duration immediately.
-      // Do NOT reset _durationSavedForId here — the reset happens in _onTrackChange
-      // to avoid a timing race where the first timeupdate after a track change
-      // still carries the previous track's audio.duration.
+      // Paint duration immediately if a song is already playing.
+      // _onDurationReady already saved+painted when loadedmetadata fired,
+      // but the album may have been opened after that — re-paint from the player.
       const nowPlaying = Player.getCurrentTrack();
       if (nowPlaying) {
         const dur = Player.getDuration();
