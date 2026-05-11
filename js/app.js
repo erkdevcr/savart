@@ -2917,8 +2917,9 @@ const App = (() => {
       metaMap.set(item.id, m);
     });
 
-    const toScan  = [];  // needs fresh ID3 scan this session
-    const toApply = [];  // has rescannedAt/manualAt — skip scan, just apply DB to DOM
+    const toScan   = [];  // needs fresh ID3 scan this session
+    const toApply  = [];  // has rescannedAt/manualAt — skip scan, just apply DB to DOM
+    const toPaint  = [];  // already scanned this session — just ensure cover is visible in DOM
 
     for (const item of items) {
       const m = metaMap.get(item.id);
@@ -2927,13 +2928,20 @@ const App = (() => {
       } else if (!_sessionScannedIds.has(item.id)) {
         _sessionScannedIds.add(item.id);        // reserve slot before async work
         toScan.push(item);
+      } else {
+        // Already scanned this session (e.g. home scan ran before history opened).
+        // Don't re-download, but DO paint covers from DB/Meta cache into the new DOM
+        // (e.g. history screen renders after home scan wrote coverBlob to DB).
+        toPaint.push(item);
       }
-      // else: already scanned this session — skip until next app launch
     }
 
     // ── Mandatory DB-read path (rescannedAt / manualAt) ─────────────────────
     // These items have authoritative data — paint whatever's in DB to DOM now.
     toApply.forEach(item => _ensureCoverVisible(item.id, metaMap.get(item.id)));
+
+    // ── Already-scanned path — paint cover from DB meta or in-memory cache ──
+    toPaint.forEach(item => _ensureCoverVisible(item.id, metaMap.get(item.id)));
 
     // ── ID3 scan path ────────────────────────────────────────────────────────
     if (!toScan.length || typeof Drive === 'undefined' || !Auth.isAuthenticated()) {
@@ -4118,9 +4126,20 @@ const App = (() => {
 
       const _pick = (...vals) => vals.find(v => v && String(v).trim() !== '') || '';
 
+      const _safeUrl = u => (u && !u.startsWith('blob:') && u !== 'id3') ? u : null;
+
       const items = raw.map((item, i) => {
         const dbMeta  = metaRecords[i];
         const inMem   = (typeof Meta !== 'undefined') ? Meta.getCached(item.id) : null;
+        // Inject coverBlob into Meta cache synchronously so the first render
+        // already shows the embedded cover — same pattern as _loadHomeData 3.4.8
+        let coverUrl = inMem?.coverUrl || null;
+        if (!coverUrl && dbMeta?.coverBlob && typeof Meta !== 'undefined') {
+          coverUrl = Meta.injectCover(item.id, dbMeta.coverBlob) || null;
+        }
+        if (!coverUrl) {
+          coverUrl = _pick(_safeUrl(dbMeta?.thumbnailUrl), _safeUrl(dbMeta?.coverUrl), _safeUrl(item.thumbnailUrl)) || null;
+        }
         return {
           ...item,
           // dbMeta (metadata store) reflects the latest rescan result — always
@@ -4129,13 +4148,13 @@ const App = (() => {
           displayName:  _pick(inMem?.title,    dbMeta?.displayName, item.displayName,  item.name, dbMeta?.name),
           artist:       _pick(inMem?.artist,   dbMeta?.artist,      item.artist),
           albumName:    _pick(inMem?.album,     dbMeta?.album,       item.albumName),
-          thumbnailUrl: _pick(inMem?.coverUrl, dbMeta?.thumbnailUrl, dbMeta?.coverUrl, item.thumbnailUrl),
+          thumbnailUrl: coverUrl,
         };
       });
 
       UI.renderHistory(items);
       UI.setActiveSongRow(Player.getCurrentTrack()?.id ?? null);
-      // Async: apply covers from DB coverBlobs
+      // Async: soft scan + Drive fallback for items without cover yet
       _prefetchTopPlayedCovers(items).catch(() => {});
     } catch (err) {
       console.error('[App] Load history error:', err);
