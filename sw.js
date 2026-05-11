@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.1.2';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.1.2 — duración alineada a la derecha: song-row-fileinfo-left + song-row-fileinfo-dur con flex space-between; lib-song-row igual
+const APP_VERSION  = '3.1.3';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.1.3 — Library album: fetchea durationMs en background por folderId; updateLibrarySongDuration pinta filas; _applyDurationToRow compartido
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

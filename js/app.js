@@ -8566,6 +8566,34 @@ const App = (() => {
         const folderId = enriched.find(s => s.folderId)?.folderId || null;
         _prefetchAndApplyFolderCovers(folderId, enriched).catch(() => {});
       }
+
+      // Background: fetch durationMs from Drive for songs missing durationSec in DB.
+      // Group by folderId → one listFolder call per unique folder → store + paint rows.
+      const missingDur = enriched.filter(s => !(s.durationSec > 0));
+      if (missingDur.length > 0 && Auth.getValidToken() && typeof Drive !== 'undefined') {
+        const byFolder = new Map();
+        missingDur.forEach(s => {
+          if (s.folderId) {
+            if (!byFolder.has(s.folderId)) byFolder.set(s.folderId, []);
+            byFolder.get(s.folderId).push(s.id);
+          }
+        });
+        (async () => {
+          for (const [fid, ids] of byFolder) {
+            try {
+              const { files } = await Drive.listFolder(fid).catch(() => ({ files: [] }));
+              for (const f of (files || [])) {
+                if (!ids.includes(f.id) || !(f.durationMs > 0)) continue;
+                const durSec = f.durationMs / 1000;
+                DB.setMeta(f.id, { id: f.id, durationSec: durSec }).catch(() => {});
+                _itemCache.set(f.id, { ..._itemCache.get(f.id), ...f });
+                // Paint the row if still in the library detail view
+                UI.updateLibrarySongDuration(f.id, durSec);
+              }
+            } catch (_) { /* non-fatal */ }
+          }
+        })();
+      }
     } catch (err) {
       console.error('[App] onAlbumClick error:', err);
     }

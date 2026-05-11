@@ -1551,21 +1551,33 @@ const UI = (() => {
    * @param {string} fileId
    * @param {number} durationSec
    */
-  function updateBrowseSongDuration(fileId, durationSec) {
-    if (!(durationSec > 0)) return;
-    const screen = document.getElementById('screen-browse');
-    if (!screen) return;
-    const row = screen.querySelector(`.song-row[data-id="${CSS.escape(fileId)}"]`);
-    if (!row) return;
+  function _applyDurationToRow(row, durationSec) {
     const infoEl = row.querySelector('.song-row-fileinfo');
     if (!infoEl) return;
-    // If a duration span already exists, update it; otherwise create one
     let durSpan = infoEl.querySelector('.song-row-fileinfo-dur');
     if (durSpan) return; // already painted
     durSpan = document.createElement('span');
     durSpan.className = 'song-row-fileinfo-dur';
     durSpan.textContent = formatTime(Math.round(durationSec));
     infoEl.appendChild(durSpan);
+  }
+
+  function updateLibrarySongDuration(fileId, durationSec) {
+    if (!(durationSec > 0)) return;
+    const container = document.getElementById('lib-detail-content');
+    if (!container) return;
+    const row = container.querySelector(`.song-row[data-id="${CSS.escape(fileId)}"]`);
+    if (!row) return;
+    _applyDurationToRow(row, durationSec);
+  }
+
+  function updateBrowseSongDuration(fileId, durationSec) {
+    if (!(durationSec > 0)) return;
+    const screen = document.getElementById('screen-browse');
+    if (!screen) return;
+    const row = screen.querySelector(`.song-row[data-id="${CSS.escape(fileId)}"]`);
+    if (!row) return;
+    _applyDurationToRow(row, durationSec);
   }
 
   /**
@@ -4500,6 +4512,7 @@ const UI = (() => {
     updateBrowseSongMeta,
     updateBrowseSongThumb,
     updateBrowseSongDuration,
+    updateLibrarySongDuration,
     setActiveSongRow,
     showLoading,
     // Library
