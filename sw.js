@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.1.9';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.1.9 — fix CSS.escape bug en updateLibrarySongDuration (IDs Drive que empiezan con dígito)
+const APP_VERSION  = '3.2.0';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.2.0 — un solo origen de durationSec (audio real); siempre guarda sin condiciones; top-list-dur en favoritos
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

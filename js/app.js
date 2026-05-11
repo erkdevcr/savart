@@ -769,21 +769,14 @@ const App = (() => {
       UI.updateExpandedPlayerProgress(currentTime, duration);
     }
 
-    // First timeupdate with a real duration → persist to DB and paint rows.
-    // Painting always runs (row may not have had duration yet even if DB did).
-    // DB write only runs when value is missing or meaningfully different.
+    // First timeupdate with a real duration → always persist to DB and paint rows.
     if (isFinite(duration) && duration > 0) {
       const track = Player.getCurrentTrack();
       if (track && track.id !== _durationSavedForId) {
         _durationSavedForId = track.id;
-        // Always paint both views immediately
+        DB.setMeta(track.id, { durationSec: duration }).catch(() => {});
         UI.updateBrowseSongDuration(track.id, duration);
         UI.updateLibrarySongDuration(track.id, duration);
-        // Persist to DB only if needed
-        DB.getMeta(track.id).then(existing => {
-          if (existing?.durationSec && Math.abs(existing.durationSec - duration) < 2) return;
-          DB.setMeta(track.id, { durationSec: duration }).catch(() => {});
-        }).catch(() => {});
       }
     }
   }
@@ -2729,19 +2722,12 @@ const App = (() => {
     // Refresh lock-screen / notification metadata with resolved ID3 info
     Player.updateMediaSessionArtwork(enriched);
 
-    // Persist accurate duration so Browse/Library can show it on next load.
-    // Only write when the audio element gave us a real duration that is
-    // meaningfully better than whatever is already in the DB.
+    // Persist real audio duration to DB and paint visible rows.
     if (audioDurMs > 0) {
       const realDurSec = audioDurMs / 1000;
-      // Paint rows immediately (independent of DB state)
+      DB.setMeta(item.id, { durationSec: realDurSec }).catch(() => {});
       UI.updateBrowseSongDuration(item.id, realDurSec);
       UI.updateLibrarySongDuration(item.id, realDurSec);
-      // Persist to DB only if value is missing or meaningfully different
-      DB.getMeta(item.id).then(existing => {
-        if (existing?.durationSec && Math.abs(existing.durationSec - realDurSec) < 2) return;
-        DB.setMeta(item.id, { durationSec: realDurSec }).catch(() => {});
-      }).catch(() => {});
     }
   }
 
@@ -2981,13 +2967,11 @@ const App = (() => {
             patch.year           = meta.year   || null;
             patch.coverBlob      = meta.coverBlob || null;
             patch.thumbnailUrl   = meta.coverBlob ? 'id3' : null;
-            // Duration: TLEN/FLAC > bitrate-estimate > Drive API videoMediaMetadata
+            // Duration: only from TLEN ID3 frame or FLAC STREAMINFO (reliable).
+            // Bitrate estimation and durationMs from Drive API are not persisted
+            // as they are unreliable — real duration is saved when the song plays.
             if (meta.durationSec > 0) {
               patch.durationSec = meta.durationSec;
-            } else if (meta.bitrate > 0 && item.size > 0) {
-              patch.durationSec = Math.round((item.size * 8) / (meta.bitrate * 1000));
-            } else if (item.durationMs > 0) {
-              patch.durationSec = item.durationMs / 1000;
             }
           }
 
@@ -3756,13 +3740,8 @@ const App = (() => {
             // Prefer exact DB value
             if (m.durationSec > 0) f.durationSec = m.durationSec;
           }
-          // f.durationMs comes from Drive API videoMediaMetadata — always present for audio.
-          // Use it when DB has nothing, and persist it so Library can show it too.
-          // Runs for both new files (no DB record) and existing records missing durationSec.
-          if (!(f.durationSec > 0) && f.durationMs > 0) {
-            f.durationSec = f.durationMs / 1000;
-            DB.setMeta(f.id, { id: f.id, durationSec: f.durationSec }).catch(() => {});
-          }
+          // durationMs from Drive API is unreliable for audio — do not persist it as durationSec.
+          // Real duration is captured from the audio element when the song plays (_onProgress).
         });
       }
 
@@ -8602,33 +8581,8 @@ const App = (() => {
         _prefetchAndApplyFolderCovers(folderId, enriched).catch(() => {});
       }
 
-      // Background: fetch durationMs from Drive for songs missing durationSec in DB.
-      // Group by folderId → one listFolder call per unique folder → store + paint rows.
-      const missingDur = enriched.filter(s => !(s.durationSec > 0));
-      if (missingDur.length > 0 && Auth.getValidToken() && typeof Drive !== 'undefined') {
-        const byFolder = new Map();
-        missingDur.forEach(s => {
-          if (s.folderId) {
-            if (!byFolder.has(s.folderId)) byFolder.set(s.folderId, []);
-            byFolder.get(s.folderId).push(s.id);
-          }
-        });
-        (async () => {
-          for (const [fid, ids] of byFolder) {
-            try {
-              const { files } = await Drive.listFolder(fid).catch(() => ({ files: [] }));
-              for (const f of (files || [])) {
-                if (!ids.includes(f.id) || !(f.durationMs > 0)) continue;
-                const durSec = f.durationMs / 1000;
-                DB.setMeta(f.id, { id: f.id, durationSec: durSec }).catch(() => {});
-                _itemCache.set(f.id, { ..._itemCache.get(f.id), ...f });
-                // Paint the row if still in the library detail view
-                UI.updateLibrarySongDuration(f.id, durSec);
-              }
-            } catch (_) { /* non-fatal */ }
-          }
-        })();
-      }
+      // Duration is captured from the audio element when each song plays (_onProgress).
+      // No Drive API durationMs fallback — it is unreliable for audio files.
     } catch (err) {
       console.error('[App] onAlbumClick error:', err);
     }
