@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.3.8';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.3.8 — browse search: onSongClick usa #search-results como cola cuando hay búsqueda activa; renderFolderContents oculta lista si search activo al terminar carga async
+const APP_VERSION  = '3.3.9';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.3.9 — softScanFolder: reset completo de ID3 incluyendo cover; limpia thumbnailUrl/coverUrl externos usando bulkWriteMeta para no perder nulls
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

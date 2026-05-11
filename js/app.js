@@ -7403,33 +7403,37 @@ const App = (() => {
             continue;
           }
 
-          // Reset then rewrite: soft scan acts like a mini ID3-reset for each candidate.
-          // Always write every text field — null if ID3 has nothing — so stale inferred
-          // values (folder-name artist, filename-based title, etc.) are cleared, not kept.
-          // Guards (manualAt, rescannedAt, softScannedAt) already filtered these out above.
+          // Full ID3 reset: replace ALL metadata with what the ID3 tag says.
+          // null = "not in ID3" and MUST overwrite stale inferred values, external URLs, etc.
+          // Guards (manualAt / rescannedAt) were already filtered out above — these items
+          // are never in the candidates list, so we never touch manually-edited songs.
+          //
+          // Cover: always replace, including clearing external URLs (Last.fm / AudD).
+          //   • ID3 has cover  → coverBlob = blob, thumbnailUrl = 'id3', coverUrl = null
+          //   • ID3 has no cover → coverBlob = null, thumbnailUrl = null, coverUrl = null
+          //
+          // We use DB.bulkWriteMeta (direct IndexedDB put) instead of DB.setMeta because
+          // setMeta strips null values before merging — that would leave stale URLs intact.
+          // By spreading existing first and then the patch, null values are stored literally
+          // and overwrite the old data.
           const patch = {
-            softScannedAt:  Date.now(),           // mark as soft-scanned regardless of what was found
-            displayName:    parsed.title  || null, // null clears stale filename-based name
-            artist:         parsed.artist || null, // null clears stale folder-inferred artist
+            softScannedAt:  Date.now(),
+            displayName:    parsed.title  || null,
+            artist:         parsed.artist || null,
             artistInferred: !parsed.artist,
             album:          parsed.album  || null,
             year:           parsed.year   || null,
+            coverBlob:      parsed.coverBlob || null,
+            thumbnailUrl:   parsed.coverBlob ? 'id3' : null,
+            coverUrl:       null,
           };
 
-          // Cover: only write if the new parse found a blob; never clear an existing
-          // coverBlob just because a head-only parse didn't capture it.
-          if (parsed.coverBlob && !existing?.coverBlob) {
-            patch.coverBlob    = parsed.coverBlob;
-            patch.thumbnailUrl = 'id3';
-          }
-
-          // patch already contains the authoritative values (null = "not in ID3").
-          // Do NOT fall back to existing — that would resurrect the stale data we just reset.
           const newArtist  = patch.artist      ?? null;
           const newAlbum   = patch.album        ?? null;
           const newDisplay = patch.displayName  ?? null;
 
-          await DB.setMeta(file.id, { id: file.id, ...patch });
+          // Direct put so null values actually clear existing fields in IndexedDB.
+          await DB.bulkWriteMeta([{ ...(existing || {}), ...patch, id: file.id }]);
           _cacheItem({ ...file, folderId,
             ...(newArtist  ? { artist:      newArtist  } : {}),
             ...(newAlbum   ? { album:       newAlbum   } : {}),
