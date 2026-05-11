@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.4.7';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.4.7 — colecciones: top-list-artist muestra "artista - album"
+const APP_VERSION  = '3.4.8';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.4.8 — home: inyecta coverBlob en Meta cache al enriquecer (primer render ya muestra cover embebida)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

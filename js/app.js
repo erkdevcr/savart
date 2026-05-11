@@ -3494,6 +3494,18 @@ const App = (() => {
         return isFolderCollection(fid) ? 'collection' : 'album';
       };
 
+      // Helper: resolve a cover URL for enrichment — injects blob into Meta cache
+      // synchronously (URL.createObjectURL is sync) so the FIRST render already
+      // has the cover, without waiting for _prefetchHomeCovers Pass 0.
+      const _resolveCoverUrl = (id, dbMeta, inMem, ...fallbacks) => {
+        if (dbMeta?.coverBlob) {
+          return inMem?.coverUrl
+            || (typeof Meta !== 'undefined' ? Meta.injectCover(id, dbMeta.coverBlob) : null)
+            || null;
+        }
+        return _pick(...fallbacks);
+      };
+
       const enrichedPinned = pinned.map(p => {
         if (p.type === 'folder' || p.isFolder) return p;
         const dbMeta = pinnedMetaMap.get(p.id);
@@ -3502,7 +3514,7 @@ const App = (() => {
           ...p,
           displayName:  _pick(dbMeta?.displayName, dbMeta?.name, inMem?.title,   p.displayName,  p.name),
           artist:       _pick(dbMeta?.artist,       inMem?.artist,  p.artist),
-          thumbnailUrl: dbMeta?.coverBlob ? (inMem?.coverUrl || null) : _pick(_safeUrl(dbMeta?.thumbnailUrl), _safeUrl(dbMeta?.coverUrl), inMem?.coverUrl, _safeUrl(p.thumbnailUrl), _safeUrl(p.thumbnailLink)),
+          thumbnailUrl: _resolveCoverUrl(p.id, dbMeta, inMem, _safeUrl(dbMeta?.thumbnailUrl), _safeUrl(dbMeta?.coverUrl), inMem?.coverUrl, _safeUrl(p.thumbnailUrl), _safeUrl(p.thumbnailLink)),
           folderId:     dbMeta?.folderId || p.folderId || null,
           folderType:   _stampFolderType(p, dbMeta),
         };
@@ -3517,7 +3529,7 @@ const App = (() => {
           ...r,
           displayName:  _pick(dbMeta?.displayName, dbMeta?.name, inMem?.title,   r.displayName,  r.name),
           name:         _pick(dbMeta?.name,          r.name),
-          thumbnailUrl: dbMeta?.coverBlob ? (inMem?.coverUrl || null) : _pick(_safeUrl(dbMeta?.thumbnailUrl), _safeUrl(dbMeta?.coverUrl), inMem?.coverUrl, _safeUrl(r.thumbnailUrl), _safeUrl(r.thumbnailLink)),
+          thumbnailUrl: _resolveCoverUrl(r.id, dbMeta, inMem, _safeUrl(dbMeta?.thumbnailUrl), _safeUrl(dbMeta?.coverUrl), inMem?.coverUrl, _safeUrl(r.thumbnailUrl), _safeUrl(r.thumbnailLink)),
           artist:       _pick(dbMeta?.artist,        inMem?.artist,   r.artist),
           folderId:     dbMeta?.folderId || r.folderId || null,
           folderType:   _stampFolderType(r, dbMeta),
@@ -3534,7 +3546,7 @@ const App = (() => {
           ...item,
           displayName:  _pick(dbMeta?.displayName,  dbMeta?.name,     inMem?.title,    item.displayName,  r?.displayName, r?.name, item.name),
           name:         _pick(dbMeta?.name,          item.name,        r?.name),
-          thumbnailUrl: dbMeta?.coverBlob ? (inMem?.coverUrl || null) : _pick(_safeUrl(dbMeta?.thumbnailUrl), _safeUrl(dbMeta?.coverUrl), inMem?.coverUrl, _safeUrl(item.thumbnailUrl), _safeUrl(item.coverUrl), _safeUrl(r?.thumbnailUrl), _safeUrl(r?.thumbnailLink)),
+          thumbnailUrl: _resolveCoverUrl(item.id, dbMeta, inMem, _safeUrl(dbMeta?.thumbnailUrl), _safeUrl(dbMeta?.coverUrl), inMem?.coverUrl, _safeUrl(item.thumbnailUrl), _safeUrl(item.coverUrl), _safeUrl(r?.thumbnailUrl), _safeUrl(r?.thumbnailLink)),
           artist:       _pick(dbMeta?.artist,        inMem?.artist,    item.artist,     r?.artist),
           albumName:    _pick(dbMeta?.album,         inMem?.album,     item.albumName,  item.album,         r?.albumName),
           year:         _pick(dbMeta?.year,          inMem?.year,      item.year,       r?.year),
