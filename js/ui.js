@@ -1545,6 +1545,28 @@ const UI = (() => {
   }
 
   /**
+   * Append the resolved duration to the .song-row-fileinfo cell of a browse row.
+   * Called by soft scan after storing durationSec so rows update without needing
+   * a folder re-open.
+   * @param {string} fileId
+   * @param {number} durationSec
+   */
+  function updateBrowseSongDuration(fileId, durationSec) {
+    if (!(durationSec > 0)) return;
+    const screen = document.getElementById('screen-browse');
+    if (!screen) return;
+    const row = screen.querySelector(`.song-row[data-id="${CSS.escape(fileId)}"]`);
+    if (!row) return;
+    const infoEl = row.querySelector('.song-row-fileinfo');
+    if (!infoEl) return;
+    const text = infoEl.textContent;
+    // Avoid duplicating: if a time string (digits:digits) is already present, skip
+    if (/\d:\d\d/.test(text)) return;
+    const dur = formatTime(Math.round(durationSec));
+    infoEl.textContent = text ? `${text} · ${dur}` : dur;
+  }
+
+  /**
    * Update the album/collection chip in the Browse header in real-time.
    * @param {'album'|'collection'|null} type
    */
@@ -4471,6 +4493,7 @@ const UI = (() => {
     markBrowseSongScanning,
     updateBrowseSongMeta,
     updateBrowseSongThumb,
+    updateBrowseSongDuration,
     setActiveSongRow,
     showLoading,
     // Library

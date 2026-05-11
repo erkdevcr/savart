@@ -2716,6 +2716,8 @@ const App = (() => {
         // Skip if DB already has a duration within 2 s of the audio-element value
         if (existing?.durationSec && Math.abs(existing.durationSec - realDurSec) < 2) return;
         DB.setMeta(item.id, { durationSec: realDurSec }).catch(() => {});
+        // Also paint the browse row immediately (no need to re-open folder)
+        UI.updateBrowseSongDuration(item.id, realDurSec);
       }).catch(() => {});
     }
   }
@@ -2975,6 +2977,11 @@ const App = (() => {
               _updateHomeCardName(item.id, meta.title);
               _updateTopListName(item.id, meta.title);
             }
+          }
+
+          // Paint duration in the browse row (if it's currently visible)
+          if (patch.durationSec && typeof UI !== 'undefined') {
+            UI.updateBrowseSongDuration(item.id, patch.durationSec);
           }
           // No cover from ID3 → card stays with placeholder (correct: no external fallback)
 
