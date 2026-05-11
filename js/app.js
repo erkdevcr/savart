@@ -8156,8 +8156,11 @@ const App = (() => {
         if (!_isCollectionFolder(f, savedColMap)) return;
         colIds.add(folderId);
         const saved   = savedColMap.get(folderId) || {};
-        // Name priority: user override → Drive folder name → most-common album tag → folderId
-        const name    = saved.name || folderNameMap.get(folderId) || _top(f.albumCounts) || folderId;
+        // Name: only use the saved name when the user explicitly edited it (manualAt > 0).
+        // Default is always the Drive folder name so renames in Drive are reflected automatically.
+        const name    = (saved.manualAt && saved.name)
+                      ? saved.name
+                      : folderNameMap.get(folderId) || _top(f.albumCounts) || folderId;
         const format  = _top(f.formatCounts) || null;
         const songCount   = Math.max(f.taggedCount, folderSongCount.get(folderId) || 0);
         const rescannedAt = rescannedMap.get(folderId) || null;
