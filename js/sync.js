@@ -615,6 +615,12 @@ const Sync = (() => {
             if (!hasLocalCover) merged.thumbnailUrl = item.thumbnailUrl;
           }
 
+          // durationSec: take the larger non-zero value — it's a physical property of
+          // the file so both devices should converge to the same reading eventually.
+          if (item.durationSec > 0 && item.durationSec > (merged.durationSec || 0)) {
+            merged.durationSec = item.durationSec;
+          }
+
           // Derive CAA URL if mbReleaseMbid present and still no cover URL.
           if (merged.mbReleaseMbid && !merged.thumbnailUrl) {
             merged.thumbnailUrl = `https://coverartarchive.org/release/${merged.mbReleaseMbid}/front-250`;
@@ -784,6 +790,7 @@ const Sync = (() => {
       'mbTried', 'auddTried', 'mbReleaseMbid',      // enrichment flags / IDs
       'manualAt',                                   // LWW guard: timestamp of last manual edit
       'rescannedAt',                                // folder rescan timestamp (folder records)
+      'durationSec',                                // audio duration — captured on first play
     ];
     // googleusercontent.com = Drive CDN thumbnailLinks — accessible in <img> without auth.
     // googleapis.com       = Drive API download endpoints — require Bearer token, skip those.
@@ -824,6 +831,7 @@ const Sync = (() => {
       'artist', 'album', 'year',
       'mbTried', 'auddTried', 'mbReleaseMbid',
       'manualAt', 'rescannedAt',
+      'durationSec',
     ];
     const isExternalUrl = u => u && !u.startsWith('blob:') && u !== 'id3'
       && !u.includes('googleapis.com');
