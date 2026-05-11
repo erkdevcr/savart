@@ -7350,13 +7350,21 @@ const App = (() => {
       // We intentionally ignore whether artist/album is already set — folder-name
       // inference (artistInferred) and stale data need to be replaced by real ID3.
       // rescannedAt = full manual rescan already done → skip (has authoritative data).
-      // softScannedAt = already read real ID3 in a previous session → skip.
+      // softScannedAt = already read real ID3 in a previous session → skip,
+      //   UNLESS the record still carries a stale external cover URL that needs clearing.
       const candidates = files.filter(f => {
         const m = existingMap.get(f.id);
         if (!m) return true;                   // no data at all
         if (m.manualAt)     return false;      // user manually edited → never touch
         if (m.rescannedAt)  return false;      // full rescan done → authoritative
-        if (m.softScannedAt) return false;     // already soft-scanned → skip
+        if (m.softScannedAt) {
+          // Previously soft-scanned but may still carry a stale external URL
+          // (set before this fix landed). Re-scan to clear it.
+          const hasExternalUrl =
+            (m.thumbnailUrl && m.thumbnailUrl !== 'id3' && !m.thumbnailUrl.startsWith('blob:')) ||
+            (m.coverUrl     && !m.coverUrl.startsWith('blob:'));
+          return hasExternalUrl;              // re-scan only if stale URL present
+        }
         return true;                           // anything else: scan to get real ID3
       });
 

@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.3.9';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.3.9 — softScanFolder: reset completo de ID3 incluyendo cover; limpia thumbnailUrl/coverUrl externos usando bulkWriteMeta para no perder nulls
+const APP_VERSION  = '3.4.0';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.4.0 — softScanFolder: re-escanea canciones ya marcadas con softScannedAt si aún tienen una URL externa de cover, para limpiarla
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
