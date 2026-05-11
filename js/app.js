@@ -7457,6 +7457,20 @@ const App = (() => {
             if (patch.coverBlob && typeof Meta !== 'undefined') {
               const coverUrl = Meta.injectCover(file.id, patch.coverBlob);
               if (coverUrl) _updateRowThumbnail(file.id, coverUrl, true);
+            } else {
+              // No ID3 cover → clear whatever was showing (stale external URL now gone from DB).
+              // Also purge the Meta in-memory cache so _prefetchAndApplyFolderCovers
+              // Pass 1 doesn't re-inject an old blob URL for this song.
+              if (typeof Meta !== 'undefined') Meta.revoke(file.id);
+              const _eid = CSS.escape(file.id);
+              const _row = document.querySelector(`#screen-browse .song-row[data-id="${_eid}"]`);
+              const _img = _row?.querySelector('.song-thumb img');
+              if (_img) {
+                // Restore placeholder — _rowHasCover will now return false for this song
+                const _ph = document.createElement('div');
+                _ph.className = 'thumb-placeholder';
+                _img.replaceWith(_ph);
+              }
             }
           }
 
