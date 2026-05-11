@@ -8581,6 +8581,18 @@ const App = (() => {
       UI.setActiveSongRow(Player.getCurrentTrack()?.id ?? null);
       _scrollDetailToTop();
 
+      // If a song from this album is already playing, paint its duration immediately.
+      // Also reset _durationSavedForId so the next _onProgress tick will paint
+      // all newly-rendered rows that are missing duration.
+      _durationSavedForId = null;
+      const nowPlaying = Player.getCurrentTrack();
+      if (nowPlaying) {
+        const dur = Player.getDuration();
+        if (isFinite(dur) && dur > 0) {
+          UI.updateLibrarySongDuration(nowPlaying.id, dur);
+        }
+      }
+
       // Background cover + metadata enrichment for songs in this album.
       // Uses the same multi-pass pipeline as the browse folder view:
       // DB → ID3 blob parse → Last.fm → folder cover.jpg
