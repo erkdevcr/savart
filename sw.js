@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.2.4';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.2.4 — top-list-dur en renderAlbumDetail y renderStarredSongs llena desde song.durationSec al renderizar
+const APP_VERSION  = '3.2.5';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.2.5 — durationSec en toMap de onCollectionClick; .top-list-dur color text-muted
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

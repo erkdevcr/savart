@@ -8216,6 +8216,7 @@ const App = (() => {
         track:        m.track       || '',
         thumbnailUrl: m.thumbnailUrl || m.coverUrl || null,
         folderId:     m.folderId    || null,
+        durationSec:  m.durationSec > 0 ? m.durationSec : 0,
       });
 
       const sorted = songs.map(toMap).sort((a, b) =>

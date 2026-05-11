@@ -717,7 +717,7 @@ img { display: block; }
 
 .top-list-dur {
   font-size: 10px;
-  color: var(--text-disabled);
+  color: var(--text-muted);
   white-space: nowrap;
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
