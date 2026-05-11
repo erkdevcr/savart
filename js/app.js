@@ -8206,18 +8206,24 @@ const App = (() => {
         };
       }
 
-      const toMap = m => ({
-        id:           m.id,
-        name:         m.name        || m.id,
-        displayName:  m.displayName || m.name || m.id,
-        artist:       m.artist      || '',
-        album:        m.album       || '',
-        year:         m.year        || '',
-        track:        m.track       || '',
-        thumbnailUrl: m.thumbnailUrl || m.coverUrl || null,
-        folderId:     m.folderId    || null,
-        durationSec:  m.durationSec > 0 ? m.durationSec : 0,
-      });
+      const toMap = m => {
+        const cached = _itemCache.get(m.id);
+        const durSec = m.durationSec > 0 ? m.durationSec
+                     : (cached?.durationMs > 0 ? cached.durationMs / 1000 : 0);
+        return {
+          id:           m.id,
+          name:         m.name        || m.id,
+          displayName:  m.displayName || m.name || m.id,
+          artist:       m.artist      || '',
+          album:        m.album       || '',
+          year:         m.year        || '',
+          track:        m.track       || '',
+          thumbnailUrl: m.thumbnailUrl || m.coverUrl || null,
+          folderId:     m.folderId    || null,
+          durationSec:  durSec,
+          size:         m.size        || cached?.size || 0,
+        };
+      };
 
       const sorted = songs.map(toMap).sort((a, b) =>
         (a.displayName || a.name).localeCompare(b.displayName || b.name)
