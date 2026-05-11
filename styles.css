@@ -715,6 +715,15 @@ img { display: block; }
   margin-top: 1px;
 }
 
+.top-list-dur {
+  font-size: 10px;
+  color: var(--text-disabled);
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  margin-right: 6px;
+}
+
 .top-list-meta {
   font-size: 11px;
   color: var(--text-muted);

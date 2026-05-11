@@ -1566,8 +1566,16 @@ const UI = (() => {
     if (!(durationSec > 0)) return;
     const container = document.getElementById('lib-detail-content');
     if (!container) return;
-    const row = container.querySelector(`.song-row[data-id="${CSS.escape(fileId)}"]`);
+    // Album detail uses top-list-item; playlist detail uses song-row
+    const row = container.querySelector(`[data-id="${CSS.escape(fileId)}"]`);
     if (!row) return;
+    // top-list-item path
+    const durSpan = row.querySelector('.top-list-dur');
+    if (durSpan) {
+      if (!durSpan.textContent) durSpan.textContent = formatTime(Math.round(durationSec));
+      return;
+    }
+    // song-row path (playlists)
     _applyDurationToRow(row, durationSec);
   }
 
@@ -3951,6 +3959,8 @@ const UI = (() => {
       row.dataset.id        = song.id;
       row.dataset.searchKey = norm(song.displayName || song.name || '');
 
+      const _durSec = song.durationSec > 0 ? song.durationSec : (song.durationMs > 0 ? song.durationMs / 1000 : 0);
+      const _durStr = _durSec > 0 ? formatTime(Math.round(_durSec)) : '';
       row.innerHTML = `
         <div class="top-list-rank">${i + 1}</div>
         <div class="top-list-thumb">
@@ -3964,6 +3974,7 @@ const UI = (() => {
           <div class="top-list-title">${escHtml(song.displayName || song.name || '')}</div>
           <div class="top-list-artist">${escHtml([song.artist, song.album].filter(Boolean).join(' — '))}</div>
         </div>
+        ${_durStr ? `<span class="top-list-dur">${escHtml(_durStr)}</span>` : '<span class="top-list-dur"></span>'}
         <button class="btn-more" aria-label="Más opciones">${iconDots()}</button>
       `;
 
