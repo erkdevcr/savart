@@ -1293,12 +1293,26 @@ img { display: block; }
 }
 
 .song-row-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 11px;
   color: var(--text-muted);
+  margin-top: 2px;
+  min-width: 0;
+}
+.song-row-meta-left {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  margin-top: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.song-row-meta-dur {
+  color: var(--text-secondary);
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
 }
 
 .song-row-fileinfo {

@@ -1712,7 +1712,7 @@ const UI = (() => {
     row.className = 'song-row' + (isActive ? ' active' : '') + (file.isWma ? ' wma' : '');
     row.dataset.id = file.id;
 
-    // Three-line layout: title / artist · album / size · format
+    // Three-line layout: title / artist · album · dur / size · format
     const _ext    = (file.name || '').split('.').pop().toUpperCase();
     const _size   = file.size ? formatBytes(parseInt(file.size, 10)) : '';
     const _durSec = file.durationSec > 0 ? file.durationSec
@@ -1742,9 +1742,11 @@ const UI = (() => {
       </div>
       <div class="song-row-info">
         <div class="song-row-title">${escHtml(file.displayName || file.name)}</div>
-        <div class="song-row-meta">${escHtml(_meta)}</div>
+        <div class="song-row-meta">
+          <span class="song-row-meta-left">${escHtml(_meta)}</span>${_dur ? `<span class="song-row-meta-dur">${escHtml(_dur)}</span>` : ''}
+        </div>
         <div class="song-row-fileinfo">
-          <span class="song-row-fileinfo-left">${escHtml(_left)}</span>${_dur ? `<span class="song-row-fileinfo-dur">${escHtml(_dur)}</span>` : ''}
+          <span class="song-row-fileinfo-left">${escHtml(_left)}</span>
         </div>
       </div>
       ${file.isWma ? `<span class="wma-badge">WMA</span>` : ''}
