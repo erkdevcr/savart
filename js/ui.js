@@ -1695,7 +1695,10 @@ const UI = (() => {
     // Three-line layout: title / artist · album / size · format
     const _ext      = (file.name || '').split('.').pop().toUpperCase();
     const _size     = file.size ? formatBytes(parseInt(file.size, 10)) : '';
-    const _dur      = file.durationSec > 0 ? formatTime(Math.round(file.durationSec)) : '';
+    const _durSec   = file.durationSec > 0 ? file.durationSec
+                    : file.durationMs  > 0 ? file.durationMs / 1000
+                    : 0;
+    const _dur      = _durSec > 0 ? formatTime(Math.round(_durSec)) : '';
     const _fileInfo = file.isWma
       ? t('format_unsupported')
       : [_size, _ext, _dur].filter(Boolean).join(' · ');

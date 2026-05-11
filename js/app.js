@@ -3728,11 +3728,15 @@ const App = (() => {
           if (!f.thumbnailUrl && m.thumbnailUrl && m.thumbnailUrl !== 'id3') {
             f.thumbnailUrl = m.thumbnailUrl;
           }
-          // Duration: prefer exact DB value; fallback: bitrate estimate from file size
+          // Duration: prefer exact DB value; fallback to Drive API durationMs (already on f)
           if (m.durationSec > 0) {
             f.durationSec = m.durationSec;
-          } else if (m.bitrate > 0 && f.size > 0) {
-            f.durationSec = Math.round((f.size * 8) / (m.bitrate * 1000));
+          }
+          // f.durationMs comes from Drive API videoMediaMetadata — always present for audio.
+          // Use it when DB has no durationSec, and persist it so Library can show it too.
+          if (!(f.durationSec > 0) && f.durationMs > 0) {
+            f.durationSec = f.durationMs / 1000;
+            DB.setMeta(f.id, { durationSec: f.durationSec }).catch(() => {});
           }
         });
       }
