@@ -1583,7 +1583,16 @@ const UI = (() => {
     if (!screen) return;
     const row = screen.querySelector(`.song-row[data-id="${CSS.escape(fileId)}"]`);
     if (!row) return;
-    _applyDurationToRow(row, durationSec);
+    // Browse rows use .song-row-meta-dur (middle line), not .song-row-fileinfo-dur
+    const metaEl = row.querySelector('.song-row-meta');
+    if (!metaEl) return;
+    let durSpan = metaEl.querySelector('.song-row-meta-dur');
+    if (!durSpan) {
+      durSpan = document.createElement('span');
+      durSpan.className = 'song-row-meta-dur';
+      metaEl.appendChild(durSpan);
+    }
+    durSpan.textContent = formatTime(Math.round(durationSec));
   }
 
   /**
