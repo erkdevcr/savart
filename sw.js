@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.3.5';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.3.1 — mosaico playlist: _isUsable bloqueaba blob: de Meta.injectCover; ahora usa coverBlob en ambos pasos
+const APP_VERSION  = '3.3.6';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.3.6 — browse search: CSS class search-active garantiza ocultamiento de .item-list incluso cuando se crea después del toggle
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

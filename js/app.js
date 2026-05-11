@@ -3670,10 +3670,12 @@ const App = (() => {
     const searchInp = document.getElementById('search-input');
     if (searchInp?.value) {
       searchInp.value = '';
+      const browseScreen  = document.getElementById('screen-browse');
       const searchResults = document.getElementById('search-results');
       const browseList    = document.querySelector('#screen-browse .item-list:not(#search-results)');
       const filters       = document.querySelector('.browse-search-filters');
       const clearBtn      = document.getElementById('btn-search-clear');
+      if (browseScreen)  browseScreen.classList.remove('search-active');
       if (searchResults) { searchResults.style.display = 'none'; searchResults.innerHTML = ''; }
       if (browseList)    browseList.style.display    = '';
       if (filters)       filters.style.display       = 'none';
@@ -9667,10 +9669,12 @@ const App = (() => {
       if (inp && inp.value) {
         inp.value = '';
         // Use the same toggle helper defined in index.html inline script
+        const browseScreen  = document.getElementById('screen-browse');
         const browseList    = document.querySelector('#screen-browse .item-list:not(#search-results)');
         const searchResults = document.getElementById('search-results');
         const filters       = document.querySelector('.browse-search-filters');
         const clearBtn      = document.getElementById('btn-search-clear');
+        if (browseScreen)  browseScreen.classList.remove('search-active');
         if (browseList)    browseList.style.display    = '';
         if (searchResults) { searchResults.style.display = 'none'; searchResults.innerHTML = ''; }
         if (filters)       filters.style.display       = 'none';

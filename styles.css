@@ -1036,6 +1036,15 @@ img { display: block; }
   padding: 4px 0;
 }
 
+/* Browse search: hide folder list while search is active.
+   Using a CSS class rather than just inline display:none so the rule
+   applies even when .item-list is created *after* the class is set
+   (async folder load race). pointer-events:none is an extra safety net. */
+#screen-browse.search-active .item-list:not(#search-results) {
+  display: none !important;
+  pointer-events: none;
+}
+
 .folder-row {
   display: flex;
   align-items: center;

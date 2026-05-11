@@ -1256,16 +1256,20 @@
 
   // ── Browse search: toggle between folder list and Drive-wide results ──
   function _toggleBrowseSearch(hasText) {
+    const browseScreen  = document.getElementById('screen-browse');
     const browseList    = document.querySelector('#screen-browse .item-list:not(#search-results)');
     const searchResults = document.getElementById('search-results');
     const filters       = document.querySelector('.browse-search-filters');
     const clearBtn      = document.getElementById('btn-search-clear');
     if (hasText) {
+      // CSS class hides .item-list even if it is created *after* this call
+      if (browseScreen)  browseScreen.classList.add('search-active');
       if (browseList)    browseList.style.display    = 'none';
       if (searchResults) searchResults.style.display = '';
       if (filters)       filters.style.display       = '';
       if (clearBtn)      clearBtn.style.display      = '';
     } else {
+      if (browseScreen)  browseScreen.classList.remove('search-active');
       if (browseList)    browseList.style.display    = '';
       if (searchResults) { searchResults.style.display = 'none'; searchResults.innerHTML = ''; }
       if (filters)       filters.style.display       = 'none';
