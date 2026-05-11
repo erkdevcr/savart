@@ -769,17 +769,20 @@ const App = (() => {
       UI.updateExpandedPlayerProgress(currentTime, duration);
     }
 
-    // First timeupdate with a real duration → persist and paint rows.
-    // This catches the case where _applyMeta ran before loadedmetadata fired.
+    // First timeupdate with a real duration → persist to DB and paint rows.
+    // Painting always runs (row may not have had duration yet even if DB did).
+    // DB write only runs when value is missing or meaningfully different.
     if (isFinite(duration) && duration > 0) {
       const track = Player.getCurrentTrack();
       if (track && track.id !== _durationSavedForId) {
         _durationSavedForId = track.id;
+        // Always paint both views immediately
+        UI.updateBrowseSongDuration(track.id, duration);
+        UI.updateLibrarySongDuration(track.id, duration);
+        // Persist to DB only if needed
         DB.getMeta(track.id).then(existing => {
           if (existing?.durationSec && Math.abs(existing.durationSec - duration) < 2) return;
           DB.setMeta(track.id, { durationSec: duration }).catch(() => {});
-          UI.updateBrowseSongDuration(track.id, duration);
-          UI.updateLibrarySongDuration(track.id, duration);
         }).catch(() => {});
       }
     }
@@ -2731,13 +2734,13 @@ const App = (() => {
     // meaningfully better than whatever is already in the DB.
     if (audioDurMs > 0) {
       const realDurSec = audioDurMs / 1000;
+      // Paint rows immediately (independent of DB state)
+      UI.updateBrowseSongDuration(item.id, realDurSec);
+      UI.updateLibrarySongDuration(item.id, realDurSec);
+      // Persist to DB only if value is missing or meaningfully different
       DB.getMeta(item.id).then(existing => {
-        // Skip if DB already has a duration within 2 s of the audio-element value
         if (existing?.durationSec && Math.abs(existing.durationSec - realDurSec) < 2) return;
         DB.setMeta(item.id, { durationSec: realDurSec }).catch(() => {});
-        // Paint whichever view is currently showing this song
-        UI.updateBrowseSongDuration(item.id, realDurSec);
-        UI.updateLibrarySongDuration(item.id, realDurSec);
       }).catch(() => {});
     }
   }
