@@ -335,6 +335,21 @@ const App = (() => {
   /* ── Auth events ─────────────────────────────────────────── */
 
   function _onTokenReady() {
+    // One-time migration: reset all durationSec values that may have been saved
+    // with a wrong value (v < 3.2.0 bug: stale audio.duration from previous track).
+    // Setting to 0 is equivalent to "not set" since all checks use durationSec > 0.
+    const _durMigKey = 'savart_dur_migration_v320';
+    if (!localStorage.getItem(_durMigKey)) {
+      localStorage.setItem(_durMigKey, '1');
+      DB.getAllMeta().then(all => {
+        const withDur = all.filter(m => m.durationSec > 0);
+        console.log(`[Migration] Resetting durationSec for ${withDur.length} records (v3.2.0 fix)`);
+        Promise.all(withDur.map(m =>
+          DB.setMeta(m.id, { durationSec: 0 }).catch(() => {})
+        )).catch(() => {});
+      }).catch(() => {});
+    }
+
     // If silent re-auth completed, clean up reconnecting UI before transition
     const reconnecting = document.getElementById('login-reconnecting');
     if (reconnecting) reconnecting.style.display = 'none';
@@ -570,6 +585,10 @@ const App = (() => {
   /* ── Player events ───────────────────────────────────────── */
 
   function _onTrackChange(track, index, total) {
+    // Reset duration guard so _onProgress can save for the new track.
+    // Must happen here — not on album open — to avoid timing mismatch
+    // where the first timeupdate still carries the previous track's duration.
+    _durationSavedForId = null;
     // Show loading spinner (delayed 120ms to avoid flash for cached tracks)
     _startLoadingSpinner();
     // Initial sync display — uses in-memory Meta cache (may still show filename
@@ -769,8 +788,10 @@ const App = (() => {
       UI.updateExpandedPlayerProgress(currentTime, duration);
     }
 
-    // First timeupdate with a real duration → always persist to DB and paint rows.
-    if (isFinite(duration) && duration > 0) {
+    // Save duration once the audio has been playing for 3+ seconds on the current
+    // track. Waiting avoids capturing a stale duration from the previous track
+    // that the audio element may still hold during the initial load transition.
+    if (isFinite(duration) && duration > 0 && currentTime >= 3) {
       const track = Player.getCurrentTrack();
       if (track && track.id !== _durationSavedForId) {
         _durationSavedForId = track.id;
@@ -8561,9 +8582,9 @@ const App = (() => {
       _scrollDetailToTop();
 
       // If a song from this album is already playing, paint its duration immediately.
-      // Also reset _durationSavedForId so the next _onProgress tick will paint
-      // all newly-rendered rows that are missing duration.
-      _durationSavedForId = null;
+      // Do NOT reset _durationSavedForId here — the reset happens in _onTrackChange
+      // to avoid a timing race where the first timeupdate after a track change
+      // still carries the previous track's audio.duration.
       const nowPlaying = Player.getCurrentTrack();
       if (nowPlaying) {
         const dur = Player.getDuration();
