@@ -4012,10 +4012,13 @@ const App = (() => {
    * Called when rendering song rows.
    * @param {DriveItem} item
    */
-  function _cacheItem(item) {
+  function _cacheItem(item, skipDbPersist = false) {
     _itemCache.set(item.id, item);
     // Persist Drive thumbnailLink to DB so playlists/favorites can show covers across sessions.
     // Skip if the user has manually set a custom cover (manualAt > 0) — we must not overwrite it.
+    // skipDbPersist = true when the caller (e.g. _softScanFolder) just wrote a definitive DB
+    // record via bulkWriteMeta and must not have it overwritten by this async DB.setMeta.
+    if (skipDbPersist) return;
     const thumb = item.thumbnailLink || item.thumbnailUrl;
     if (thumb && !thumb.startsWith('blob:')) {
       DB.getMeta(item.id).then(m => {
@@ -7442,11 +7445,17 @@ const App = (() => {
 
           // Direct put so null values actually clear existing fields in IndexedDB.
           await DB.bulkWriteMeta([{ ...(existing || {}), ...patch, id: file.id }]);
+          // skipDbPersist=true: bulkWriteMeta just wrote a definitive record — _cacheItem
+          // must NOT call DB.setMeta afterward (it would re-write file.thumbnailLink/thumbnailUrl
+          // and undo the null we just stored).
+          // thumbnailUrl is explicitly set to patch.thumbnailUrl (null or 'id3') so the
+          // in-memory item reflects the authoritative post-scan state.
           _cacheItem({ ...file, folderId,
+            thumbnailUrl: patch.thumbnailUrl,
             ...(newArtist  ? { artist:      newArtist  } : {}),
             ...(newAlbum   ? { album:       newAlbum   } : {}),
             ...(newDisplay ? { displayName: newDisplay } : {}),
-          });
+          }, true);
           patched++;
 
           // Update visible Browse row immediately — title, artist · album

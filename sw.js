@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.4.1';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.4.1 — softScanFolder: limpia thumbnail del DOM y Meta cache cuando no hay cover ID3 (complemento al fix del candidatos con softScannedAt)
+const APP_VERSION  = '3.4.2';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.4.2 — _cacheItem: añade skipDbPersist para que softScanFolder no re-escriba thumbnailUrl en DB después de bulkWriteMeta; in-memory item ahora refleja thumbnailUrl correcto post-scan
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
