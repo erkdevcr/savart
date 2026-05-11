@@ -1565,17 +1565,17 @@ const UI = (() => {
   function updateLibrarySongDuration(fileId, durationSec) {
     if (!(durationSec > 0)) return;
     const container = document.getElementById('lib-detail-content');
+    console.log('[LibDur] container:', !!container, 'fileId:', fileId, 'dur:', durationSec);
     if (!container) return;
-    // Album detail uses top-list-item; playlist detail uses song-row
     const row = container.querySelector(`[data-id="${CSS.escape(fileId)}"]`);
+    console.log('[LibDur] row found:', !!row, 'selector:', `[data-id="${CSS.escape(fileId)}"]`);
     if (!row) return;
-    // top-list-item path
     const durSpan = row.querySelector('.top-list-dur');
+    console.log('[LibDur] durSpan found:', !!durSpan, 'textContent:', JSON.stringify(durSpan?.textContent));
     if (durSpan) {
-      if (!durSpan.textContent) durSpan.textContent = formatTime(Math.round(durationSec));
+      durSpan.textContent = formatTime(Math.round(durationSec));
       return;
     }
-    // song-row path (playlists)
     _applyDurationToRow(row, durationSec);
   }
 
