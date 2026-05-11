@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.4.5';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.4.5 — softScan: usa existing.coverBlob como fallback cuando Meta.parse retorna desde caché sin coverBlob; cover se pinta en el row inmediatamente al escanear cada canción
+const APP_VERSION  = '3.4.7';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.4.7 — colecciones: top-list-artist muestra album (fallback: artist)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

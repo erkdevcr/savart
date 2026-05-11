@@ -8877,10 +8877,11 @@ const App = (() => {
 
   /**
    * Reset metadata of all songs in an album or collection to their raw ID3 values.
-   * Uses the session Meta cache (no blob downloads — fast even for large albums).
-   * Songs with a persisted coverBlob get thumbnailUrl:'id3' stamped; others get
-   * thumbnailUrl:null so the next rescan can find a fresh cover.
-   * clears manualAt on all songs so enrichment passes can run freely again.
+   * Mirrors onSongResetId3 exactly, but applied to every song in the album.
+   * For each song: revokes session cache, downloads blob from DB cache or Drive,
+   * does a fresh Meta.parse, writes all ID3 fields + cover to DB, and updates
+   * every live UI surface (browse row, home card, player if currently playing).
+   * Songs are processed in small batches to avoid blocking for large albums.
    *
    * @param {string}   folderId
    * @param {string[]} [songIds] — explicit list from the current album/collection view
@@ -8902,47 +8903,91 @@ const App = (() => {
     }
     if (songs.length === 0) throw new Error('No songs found');
 
-    for (const m of songs) {
-      // Restore text from session-cached ID3 parse if available.
-      // Session cache may be null for songs never played this session — that is fine:
-      // we explicitly null every enrichment field so stale Last.fm / AudD values
-      // are cleared. auddTried/mbTried cleared so enrichment reruns on next play.
-      // softScannedAt cleared so soft scan re-reads this song on next folder open.
-      const cached = typeof Meta !== 'undefined' ? Meta.getCached(m.id) : null;
+    const hasToken = typeof Auth !== 'undefined' && Auth.getValidToken?.();
+    const canDrive = typeof Drive !== 'undefined' && hasToken;
 
-      const dbPatch = {
-        manualAt:      0,
-        auddTried:     false,
-        mbTried:       false,
-        softScannedAt: null,
-        // Reset all text — overwritten below only if session ID3 cache has them
-        displayName:   cached?.title  || null,
-        artist:        cached?.artist || null,
-        album:         cached?.album  || null,
-        year:          cached?.year   || null,
-      };
+    // Process songs in batches of 3 to avoid blocking on large albums
+    const BATCH = 3;
+    for (let i = 0; i < songs.length; i += BATCH) {
+      const batch = songs.slice(i, i + BATCH);
+      await Promise.all(batch.map(async (m) => {
 
-      // Cover — use persisted blob if available, otherwise clear stale external URL
-      if (m.coverBlob) {
-        dbPatch.thumbnailUrl = 'id3';
-        if (typeof Meta !== 'undefined') {
-          let url = cached?.coverUrl;
-          if (!url) url = Meta.injectCover(m.id, m.coverBlob);
-          if (url) _updateRowThumbnail(m.id, url, true);
+        // 1. Evict session cache so Meta.parse gives a truly fresh parse with coverBlob
+        if (typeof Meta !== 'undefined') Meta.revoke(m.id);
+
+        // 2. Get the raw audio blob — prefer already-cached, fall back to Drive download
+        let blob = await DB.getCachedBlob(m.id).catch(() => null);
+        if (!blob && canDrive) {
+          blob = await Drive.downloadFileHead(m.id).catch(() => null);
         }
-      } else {
-        dbPatch.thumbnailUrl = null; // no embedded art — clear stale external URL; rescan/play will refill
-      }
 
-      await DB.setMeta(m.id, dbPatch).catch(() => {});
+        // 3. Fresh ID3 parse (coverBlob is only returned by a live parse, not from Meta cache)
+        let id3 = null;
+        if (blob && typeof Meta !== 'undefined') {
+          id3 = await Meta.parse(m.id, blob).catch(() => null);
+        }
 
-      // Live-update text surfaces (cover handled above via injectCover)
-      const livePatch = {};
-      if (dbPatch.displayName) livePatch.displayName = dbPatch.displayName;
-      if (dbPatch.artist)      livePatch.artist      = dbPatch.artist;
-      if (dbPatch.album)       livePatch.album       = dbPatch.album;
-      if (dbPatch.year)        livePatch.year        = dbPatch.year;
-      if (Object.keys(livePatch).length) _liveMetaUpdate([m.id], livePatch);
+        // 4. Build DB patch — same shape as onSongResetId3
+        const dbPatch = {
+          manualAt:      0,
+          auddTried:     false,
+          mbTried:       false,
+          softScannedAt: null,
+          displayName:   id3?.title  || null,
+          artist:        id3?.artist || null,
+          album:         id3?.album  || null,
+          year:          id3?.year   || null,
+        };
+
+        const freshBlob    = id3?.coverBlob;
+        const existingBlob = m.coverBlob;
+        if (freshBlob) {
+          dbPatch.coverBlob    = freshBlob;
+          dbPatch.thumbnailUrl = 'id3';
+        } else if (existingBlob) {
+          dbPatch.thumbnailUrl = 'id3'; // blob already in DB — ensure sentinel is set
+        } else {
+          dbPatch.thumbnailUrl = null; // no embedded art — clear stale external URL
+        }
+
+        await DB.setMeta(m.id, dbPatch).catch(() => {});
+
+        // 5. Live-update text fields (thumbnailUrl:'id3' must NOT go through _liveMetaUpdate)
+        const livePatch = {};
+        if (dbPatch.displayName) livePatch.displayName = dbPatch.displayName;
+        if (dbPatch.artist)      livePatch.artist      = dbPatch.artist;
+        if (dbPatch.album)       livePatch.album       = dbPatch.album;
+        if (dbPatch.year)        livePatch.year        = dbPatch.year;
+        if (Object.keys(livePatch).length) _liveMetaUpdate([m.id], livePatch);
+
+        // 6. Update cover in all visible surfaces
+        const blobToUse = freshBlob || existingBlob;
+        let coverUrl = null;
+        if (blobToUse && typeof Meta !== 'undefined') {
+          coverUrl = id3?.coverUrl;
+          if (!coverUrl) coverUrl = Meta.injectCover(m.id, blobToUse);
+          if (coverUrl) {
+            _updateRowThumbnail(m.id, coverUrl, true);
+            _updateHomeCardThumbnail(m.id, coverUrl, true);
+            Player.patchQueueItem?.(m.id, { thumbnailUrl: coverUrl });
+          }
+        }
+
+        // 7. If this song is currently playing, refresh mini/expanded player immediately
+        const _ct = Player.getCurrentTrack?.();
+        if (_ct?.id === m.id) {
+          const _ep = {
+            ..._ct,
+            ...(dbPatch.displayName ? { displayName: dbPatch.displayName } : {}),
+            ...(dbPatch.artist      ? { artist:      dbPatch.artist }      : {}),
+            ...(dbPatch.album       ? { albumName:   dbPatch.album }       : {}),
+            ...(dbPatch.year        ? { year:        dbPatch.year }        : {}),
+            thumbnailUrl: coverUrl,
+          };
+          UI.updateMiniPlayer?.(_ep, Player.isPlaying());
+          UI.updateExpandedPlayer?.(_ep, Player.isPlaying());
+        }
+      }));
     }
 
     _invalidateSuggestionsCache();

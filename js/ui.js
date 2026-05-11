@@ -4003,7 +4003,7 @@ const UI = (() => {
         </div>
         <div class="top-list-info">
           <div class="top-list-title">${escHtml(song.displayName || song.name || '')}</div>
-          <div class="top-list-artist">${escHtml([song.artist, song.album].filter(Boolean).join(' — '))}</div>
+          <div class="top-list-artist">${escHtml(song.album || song.artist || '')}</div>
         </div>
         ${_durStr ? `<span class="top-list-dur">${escHtml(_durStr)}</span>` : '<span class="top-list-dur"></span>'}
         <button class="btn-more" aria-label="Más opciones">${iconDots()}</button>
