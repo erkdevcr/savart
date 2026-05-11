@@ -784,6 +784,10 @@ const App = (() => {
     if (!(durationSec > 0)) return;
     UI.updateBrowseSongDuration(track.id, durationSec);
     UI.updateLibrarySongDuration(track.id, durationSec);
+    // Sync durationSec to other devices. Debounce is 2000ms — the DB write in
+    // player.js _playCurrentTrack (which happens after play() resolves, ~100ms after
+    // loadedmetadata) will have committed well before the sync push reads from DB.
+    if (typeof Sync !== 'undefined') Sync.push('metadata');
   }
 
   function _onProgress(currentTime, duration) {
