@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.4.9';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.4.9 — history: inyecta coverBlob al enriquecer; _softScanItems: toPaint bucket pinta covers en DOM para items ya escaneados en sesión
+const APP_VERSION  = '3.5.0';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.0 — _softScanItems: Meta.revoke antes de parsear + force=true siempre + bulkWriteMeta para limpiar URLs stale + actualiza todos los surfaces igual que onSongResetId3
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

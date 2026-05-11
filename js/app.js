@@ -2968,20 +2968,21 @@ const App = (() => {
             continue;
           }
 
-          // Force re-parse when we have the full cached audio file — it may contain
-          // cover art beyond the 2MB head boundary, and bypasses any stale 1MB cache.
-          const meta = blobIsFullFile
-            ? await Meta.parse(item.id, blob, true).catch(() => null)
-            : await Meta.parse(item.id, blob).catch(() => null);
+          // Always revoke any stale/partial Meta cache entry (e.g. a minimal
+          // {coverUrl} set by Meta.injectCover in Pass 0) before parsing.
+          // Without this, Meta.parse returns the cached stub instead of doing a
+          // real ID3 parse, so title/artist/coverBlob all come back null.
+          Meta.revoke(item.id);
+
+          // Always force=true so we get a real parse with all fields including
+          // coverBlob — never rely on a stale cache hit.
+          const meta = await Meta.parse(item.id, blob, true).catch(() => null);
 
           // REPLACE patch — ID3 is the source of truth for these fields.
           // FULL REPLACE from ID3 — clear existing data, apply only what the file says.
           // Soft scan is strictly ID3-only: no Last.fm, no AudD, no Drive thumbnail.
           // If the file has no title → displayName = null.
           // If the file has no cover → coverBlob = null, thumbnailUrl = null.
-          // (External URLs from recognition services are discarded here; they are
-          //  re-applied only if the song goes through a full rescan or manual edit.)
-          //
           // Guard: if meta === null the parse itself failed (corrupted header, network
           // glitch after download, etc.) — in that case we do NOT wipe existing data,
           // only stamp softScannedAt so we don't retry endlessly.
@@ -2994,32 +2995,49 @@ const App = (() => {
             patch.year           = meta.year   || null;
             patch.coverBlob      = meta.coverBlob || null;
             patch.thumbnailUrl   = meta.coverBlob ? 'id3' : null;
+            patch.coverUrl       = null; // clear stale external URL (Last.fm/AudD)
             // Duration: only from TLEN ID3 frame or FLAC STREAMINFO (reliable).
-            // Bitrate estimation and durationMs from Drive API are not persisted
-            // as they are unreliable — real duration is saved when the song plays.
-            if (meta.durationSec > 0) {
-              patch.durationSec = meta.durationSec;
-            }
+            if (meta.durationSec > 0) patch.durationSec = meta.durationSec;
           }
 
-          await DB.setMeta(item.id, { id: item.id, ...patch });
+          // Use bulkWriteMeta (direct put, no null-stripping) so null fields
+          // actually clear stale external URLs — same strategy as _softScanFolder.
+          // Spread existing first so we keep playCount/starred/etc., then patch
+          // overwrites with fresh ID3 data (including explicit nulls).
+          await DB.bulkWriteMeta([{ ...existing, id: item.id, ...patch }]);
 
-          // Paint cover on every visible surface
-          if (meta?.coverUrl) {
-            _updateHomeCardThumbnail(item.id, meta.coverUrl, true);
-            _updateTopListThumb(item.id, meta.coverUrl, true);
-            _updatePinnedItemCover(item.id, meta.coverUrl, true);
-            if (meta.title) {
-              _updateHomeCardName(item.id, meta.title);
-              _updateTopListName(item.id, meta.title);
-            }
+          // Resolve cover URL for DOM update
+          const coverUrl = meta?.coverUrl
+            || (meta?.coverBlob ? Meta.injectCover(item.id, meta.coverBlob) : null)
+            || null;
+
+          // Paint cover + text on every visible surface
+          if (coverUrl) {
+            _updateHomeCardThumbnail(item.id, coverUrl, true);
+            _updateTopListThumb(item.id, coverUrl, true);
+            _updatePinnedItemCover(item.id, coverUrl, true);
+            _updateRowThumbnail(item.id, coverUrl, true);
+            Player.patchQueueItem?.(item.id, { thumbnailUrl: coverUrl });
+          }
+          if (meta?.title) {
+            _updateHomeCardName(item.id, meta.title);
+            _updateTopListName(item.id, meta.title);
+          }
+
+          // Live-update text in any open detail panel (library / browse)
+          if (meta !== null) {
+            const livePatch = {};
+            if (patch.displayName) livePatch.displayName = patch.displayName;
+            if (patch.artist)      livePatch.artist      = patch.artist;
+            if (patch.album)       livePatch.album       = patch.album;
+            if (patch.year)        livePatch.year        = patch.year;
+            if (Object.keys(livePatch).length) _liveMetaUpdate([item.id], livePatch);
           }
 
           // Paint duration in the browse row (if it's currently visible)
           if (patch.durationSec && typeof UI !== 'undefined') {
             UI.updateBrowseSongDuration(item.id, patch.durationSec);
           }
-          // No cover from ID3 → card stays with placeholder (correct: no external fallback)
 
           console.log(`[SoftScan] ${item.id}: done — artist=${patch.artist ?? '—'}, cover=${!!patch.coverBlob}`);
         } catch (err) {
