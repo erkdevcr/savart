@@ -1264,6 +1264,12 @@ const Sync = (() => {
             merged.thumbnailUrl = `https://coverartarchive.org/release/${merged.mbReleaseMbid}/front-250`;
           }
 
+          // durationSec: take the larger non-zero value — physical property of the file,
+          // both devices converge to the same reading. Same rule as _applyRemote.
+          if (item.durationSec > 0 && item.durationSec > (merged.durationSec || 0)) {
+            merged.durationSec = item.durationSec;
+          }
+
           const changed = Object.keys(merged).some(k => merged[k] !== ex[k])
                        || Object.keys(ex).some(k => merged[k] !== ex[k]);
           if (changed) toWrite.push(merged);

@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.3.6';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.3.6 — browse search: CSS class search-active garantiza ocultamiento de .item-list incluso cuando se crea después del toggle
+const APP_VERSION  = '3.3.7';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.3.7 — sync init merge: durationSec faltaba en el merge de metadata del init(), solo se aplicaba en live poll
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
