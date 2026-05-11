@@ -3530,27 +3530,27 @@ const App = (() => {
       const enrichedPlaylists = await Promise.all(
         rawPlaylists.slice(0, 12).map(async pl => {
           const covers = [];
+          const seen   = new Set();
           const songIds = pl.songIds || [];
-          for (const sid of songIds.slice(0, 16)) {
+          for (const sid of songIds.slice(0, 24)) {
             if (covers.length >= 4) break;
-            // Check in-memory Meta cache first (fastest, includes blob URLs)
+            // In-memory Meta cache: blob: URLs from the current session are valid
             const inMem = (typeof Meta !== 'undefined') ? Meta.getCached(sid) : null;
             let url = inMem?.coverUrl || null;
-            // Fall back to DB metadata for external URLs
+            // Fall back to DB for persistent external URLs only
             if (!url) {
               try {
                 const dbM = await DB.getMeta(sid);
-                url = dbM?.thumbnailUrl || dbM?.coverUrl || null;
+                let dbUrl = dbM?.thumbnailUrl || dbM?.coverUrl || null;
+                // Strip sentinels and stale session blob URLs stored in DB
+                if (dbUrl === 'id3' || dbUrl?.startsWith('blob:')) dbUrl = null;
+                // Strip raw googleapis.com API URLs (need auth header, fail in <img>)
+                if (dbUrl?.includes('googleapis.com') && !dbUrl.includes('googleusercontent.com')) dbUrl = null;
+                url = dbUrl;
               } catch (_) {}
             }
-            // Skip sentinel ('id3'), ephemeral blob: URLs, and googleapis.com API URLs
-            // (googleapis.com API endpoints require an auth header so they won't load
-            // in a plain <img>).  googleusercontent.com thumbnail URLs are CDN links
-            // that work fine in <img> without auth — they're the primary cover source.
-            if (!url) continue;
-            if (url === 'id3') continue;
-            if (url.startsWith('blob:')) continue;
-            if (url.includes('googleapis.com') && !url.includes('googleusercontent.com')) continue;
+            if (!url || seen.has(url)) continue;
+            seen.add(url);
             covers.push(url);
           }
           return { ...pl, resolvedCovers: covers };
@@ -8936,6 +8936,8 @@ const App = (() => {
       // Load full playlist from DB to get fresh songIds
       const fullPl = await DB.getPlaylist(pl.id).catch(() => pl);
       const songIds = (fullPl || pl).songIds || [];
+      // Stamp last-played timestamp so the home screen keeps recent playlists first
+      if (pl.id) DB.updatePlaylist(pl.id, { lastPlayedAt: Date.now() }).catch(() => {});
       if (songIds.length === 0) {
         UI.renderPlaylistDetail([], pl.name);
         UI.setActiveSongRow(Player.getCurrentTrack()?.id ?? null);

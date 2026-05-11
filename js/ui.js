@@ -40,7 +40,7 @@ const UI = (() => {
       recents:          'Recientes',
       recents_folders:  'Carpetas recientes',
       recents_songs:    'Canciones recientes',
-      recent_playlists: 'Playlists',
+      recent_playlists: 'Playlists recientes',
       top_played:       'Más reproducidas',
       // ── Home empty states ──────────────────────────────────
       empty_pinned:          'Fija carpetas desde el menú ··· para verlas aquí.',
@@ -352,7 +352,7 @@ const UI = (() => {
       recents:          'Recents',
       recents_folders:  'Recent folders',
       recents_songs:    'Recent songs',
-      recent_playlists: 'Playlists',
+      recent_playlists: 'Recent playlists',
       top_played:       'Most played',
       // ── Home empty states ──────────────────────────────────
       empty_pinned:          'Pin folders from the ··· menu to see them here.',

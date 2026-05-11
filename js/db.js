@@ -622,7 +622,12 @@ const DB = (() => {
   async function getPlaylists() {
     const store = _tx('playlists');
     const pls   = await _promisify(store.getAll());
-    return pls.sort((a, b) => b.updatedAt - a.updatedAt);
+    // Sort by most recent activity: lastPlayedAt takes priority over updatedAt
+    return pls.sort((a, b) => {
+      const ta = Math.max(a.lastPlayedAt || 0, a.updatedAt || 0);
+      const tb = Math.max(b.lastPlayedAt || 0, b.updatedAt || 0);
+      return tb - ta;
+    });
   }
 
   /**
