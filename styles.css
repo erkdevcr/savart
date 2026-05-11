@@ -1293,12 +1293,24 @@ img { display: block; }
 }
 
 .song-row-fileinfo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
   font-size: 10px;
   color: var(--text-disabled);
+  margin-top: 1px;
+}
+.song-row-fileinfo-left {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  margin-top: 1px;
+  min-width: 0;
+}
+.song-row-fileinfo-dur {
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
 }
 
 .wma-badge {

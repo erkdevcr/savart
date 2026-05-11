@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.1.1';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.1.1 — Library durationSec: onAlbumClick usa _itemCache (Drive durationMs) + DB; soft scan persiste durationMs; browse enrich arregla skip de archivos sin DB
+const APP_VERSION  = '3.1.2';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.1.2 — duración alineada a la derecha: song-row-fileinfo-left + song-row-fileinfo-dur con flex space-between; lib-song-row igual
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
