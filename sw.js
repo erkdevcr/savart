@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.0.8';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.0.8 — durationSec: TLEN/FLAC STREAMINFO → meta.js; soft scan persiste; browse enrichment; _applyMeta persiste desde audio element; _buildSongRow y lib-song-row muestran duración
+const APP_VERSION  = '3.0.9';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.0.9 — UI.updateBrowseSongDuration: pinta duración en fila de browse en tiempo real tras soft scan o primer play
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
