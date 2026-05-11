@@ -393,9 +393,24 @@ const Sync = (() => {
       }
 
       case 'pinned': {
-        const meta = data || {};
-        await DB.setState('pinnedMeta', meta);
-        await DB.setState('pinned', Object.keys(meta));
+        // Support both old format (plain meta dict) and new format ({ meta, order }).
+        const remoteMeta  = (data?.meta ?? data) || {};
+        const remoteOrder = Array.isArray(data?.order) ? data.order : Object.keys(remoteMeta);
+
+        // Use _mergePinned (per-item LWW by pinnedAt) instead of a pure overwrite so
+        // simultaneous pins on two devices don't lose each other's items.
+        const localMeta   = (await DB.getState('pinnedMeta')) || {};
+        // Remote wins for deletions (items absent from remote with older pinnedAt than
+        // the remote file was last written — heuristic: use max remote pinnedAt as ts).
+        const remoteTs    = Math.max(0, ...Object.values(remoteMeta).map(v => v?.pinnedAt || 0));
+        const mergedPinned = _mergePinned(localMeta, remoteMeta, remoteTs);
+
+        // Preserve order: remote order first, then any local-only pins appended.
+        const localOnlyIds = Object.keys(mergedPinned).filter(id => !remoteMeta[id]);
+        const finalOrder   = [...remoteOrder, ...localOnlyIds];
+
+        await DB.setState('pinnedMeta', mergedPinned);
+        await DB.setState('pinned', finalOrder);
         break;
       }
 
@@ -688,8 +703,9 @@ const Sync = (() => {
   }
 
   async function _pushPinned() {
-    const raw  = (await DB.getState('pinnedMeta')) || {};
-    const now  = Date.now();
+    const raw   = (await DB.getState('pinnedMeta')) || {};
+    const order = (await DB.getState('pinned'))     || [];
+    const now   = Date.now();
     const clean = {};
     for (const [id, item] of Object.entries(raw)) {
       clean[id] = {
@@ -700,7 +716,9 @@ const Sync = (() => {
         thumbnailUrl: (item.thumbnailUrl && !item.thumbnailUrl.startsWith('blob:')) ? item.thumbnailUrl : null,
       };
     }
-    await _writeFile(FILENAMES.pinned, clean);
+    // Include pinnedOrder so the receiving device can restore drag order.
+    // Wrap as { meta, order } object — backward-compatible: old clients ignore order.
+    await _writeFile(FILENAMES.pinned, { meta: clean, order });
     console.log(`[Sync] Pushed pinned (${Object.keys(clean).length})`);
   }
 
@@ -895,6 +913,7 @@ const Sync = (() => {
           id: r.id, name: r.name || null,
           displayName: m?.displayName || r.displayName || r.name || null,
           artist:      m?.artist      || r.artist      || null,
+          album:       m?.album       || r.album       || null,
           type: r.type || 'song', folderId: r.folderId || null, mimeType: r.mimeType || null,
           // metadata store wins for thumbnailUrl — it's updated by scans/recognition
           // after the recent was originally added; recents store may still be stale.
@@ -915,7 +934,8 @@ const Sync = (() => {
       playlists: (playlists || []),
       history: (history || []).map(h => ({
         id: h.id, name: h.name || null, displayName: h.displayName || h.name || null,
-        artist: h.artist || null, folderId: h.folderId || null,
+        artist: h.artist || null, album: h.album || h.albumName || null,
+        folderId: h.folderId || null,
         thumbnailUrl: cleanUrl(h.thumbnailUrl), playedAt: h.playedAt ?? Date.now(),
       })),
     };

@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.0';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.0 — _softScanItems: Meta.revoke antes de parsear + force=true siempre + bulkWriteMeta para limpiar URLs stale + actualiza todos los surfaces igual que onSongResetId3
+const APP_VERSION  = '3.5.1';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.1 — sync: pinned.json incluye order + case pinned usa _mergePinned LWW; home snapshot agrega album a recents e history
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
