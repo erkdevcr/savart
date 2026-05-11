@@ -9,7 +9,7 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.3.4';
+const APP_VERSION  = '3.3.5';
 const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.3.1 — mosaico playlist: _isUsable bloqueaba blob: de Meta.injectCover; ahora usa coverBlob en ambos pasos
 
 /* Base path — auto-detected from sw.js location.
