@@ -1565,13 +1565,11 @@ const UI = (() => {
   function updateLibrarySongDuration(fileId, durationSec) {
     if (!(durationSec > 0)) return;
     const container = document.getElementById('lib-detail-content');
-    console.log('[LibDur] container:', !!container, 'fileId:', fileId, 'dur:', durationSec);
     if (!container) return;
-    const row = container.querySelector(`[data-id="${CSS.escape(fileId)}"]`);
-    console.log('[LibDur] row found:', !!row, 'selector:', `[data-id="${CSS.escape(fileId)}"]`);
+    // Use dataset lookup to avoid CSS.escape issues with Drive IDs starting with digits
+    const row = [...container.querySelectorAll('[data-id]')].find(el => el.dataset.id === fileId);
     if (!row) return;
     const durSpan = row.querySelector('.top-list-dur');
-    console.log('[LibDur] durSpan found:', !!durSpan, 'textContent:', JSON.stringify(durSpan?.textContent));
     if (durSpan) {
       durSpan.textContent = formatTime(Math.round(durationSec));
       return;
