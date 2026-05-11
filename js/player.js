@@ -588,7 +588,10 @@ const Player = (() => {
         folderId:     item.parents?.[0] || null,
       }).catch(() => {});
 
-      // Increment play count and persist display fields for Top Played section
+      // Increment play count and persist display fields for Top Played section.
+      // durationSec is included here — _audio.duration is accurate at this point
+      // because loadedmetadata always fires before play() can resolve.
+      // Combining into one write prevents race conditions with _onDurationReady.
       DB.incrementPlayCount(item.id).catch(() => {});
       DB.setMeta(item.id, {
         name:         item.name,
@@ -598,6 +601,8 @@ const Player = (() => {
         album:        item.albumName || item.album || '',
         year:         item.year      || '',
         folderId:     item.parents?.[0] || null,
+        ...(isFinite(_audio.duration) && _audio.duration > 0
+          ? { durationSec: _audio.duration } : {}),
       }).catch(() => {});
 
       // Save playback state

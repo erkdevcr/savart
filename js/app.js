@@ -778,10 +778,10 @@ const App = (() => {
   // Track which song ID has already had its duration persisted this session
   // so we don't write to DB on every timeupdate tick.
   // _onDurationReady: fires once per track via the player's loadedmetadata event.
-  // audio.duration is guaranteed accurate at that point — no stale values possible.
+  // audio.duration is accurate here. DB save happens in _playCurrentTrack (player.js)
+  // as part of the same setMeta write — no separate DB call needed here.
   function _onDurationReady(track, durationSec) {
     if (!(durationSec > 0)) return;
-    DB.setMeta(track.id, { durationSec }).catch(() => {});
     UI.updateBrowseSongDuration(track.id, durationSec);
     UI.updateLibrarySongDuration(track.id, durationSec);
   }
@@ -2710,12 +2710,11 @@ const App = (() => {
     const currentTrack = Player.getCurrentTrack();
     if (currentTrack?.id !== item.id) return;
 
-    // Update mini-player and expanded player with cover art + richer names
-    // ui.js reads thumbnailUrl, artist, albumName, year — map ID3 fields accordingly
-    // By the time _applyMeta runs the audio element has the real duration —
-    // use it as fallback when Drive API didn't return videoMediaMetadata.durationMillis.
-    const audioDur    = Player.getDuration(); // seconds, finite once blob is loaded
-    const audioDurMs  = (isFinite(audioDur) && audioDur > 0) ? Math.round(audioDur * 1000) : 0;
+    // Update mini-player and expanded player with cover art + richer names.
+    // NOTE: _applyMeta runs from _onBlobReady which fires BEFORE _audio.src changes,
+    // so Player.getDuration() still returns the previous track's duration here.
+    // Duration is handled exclusively by _onDurationReady (loadedmetadata) and
+    // player.js DB.setMeta (after play() resolves) — not here.
     const enriched = {
       ...item,
       displayName:   title,
@@ -2726,21 +2725,12 @@ const App = (() => {
       bitrate:       meta.bitrate      ?? item.bitrate      ?? null,
       sampleRate:    meta.sampleRate   ?? item.sampleRate   ?? null,
       bitsPerSample: meta.bitsPerSample ?? item.bitsPerSample ?? null,
-      // Prefer real audio-element duration; fall back to Drive API field
-      durationMs:    audioDurMs || item.durationMs || 0,
+      durationMs:    item.durationMs || 0,
     };
     UI.updateMiniPlayer(enriched, Player.isPlaying());
     UI.updateExpandedPlayer(enriched, Player.isPlaying());
     // Refresh lock-screen / notification metadata with resolved ID3 info
     Player.updateMediaSessionArtwork(enriched);
-
-    // Persist real audio duration to DB and paint visible rows.
-    if (audioDurMs > 0) {
-      const realDurSec = audioDurMs / 1000;
-      DB.setMeta(item.id, { durationSec: realDurSec }).catch(() => {});
-      UI.updateBrowseSongDuration(item.id, realDurSec);
-      UI.updateLibrarySongDuration(item.id, realDurSec);
-    }
   }
 
   /**
