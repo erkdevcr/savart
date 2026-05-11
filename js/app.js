@@ -2958,11 +2958,13 @@ const App = (() => {
             patch.year           = meta.year   || null;
             patch.coverBlob      = meta.coverBlob || null;
             patch.thumbnailUrl   = meta.coverBlob ? 'id3' : null;
-            // Duration: prefer exact value from TLEN/FLAC; fallback: bitrate estimate
+            // Duration: TLEN/FLAC > bitrate-estimate > Drive API videoMediaMetadata
             if (meta.durationSec > 0) {
               patch.durationSec = meta.durationSec;
             } else if (meta.bitrate > 0 && item.size > 0) {
               patch.durationSec = Math.round((item.size * 8) / (meta.bitrate * 1000));
+            } else if (item.durationMs > 0) {
+              patch.durationSec = item.durationMs / 1000;
             }
           }
 
@@ -3718,25 +3720,25 @@ const App = (() => {
       if (result.files.length > 0) {
         const dbMetas = await Promise.allSettled(result.files.map(f => DB.getMeta(f.id)));
         dbMetas.forEach((res, i) => {
-          if (res.status !== 'fulfilled' || !res.value) return;
-          const m = res.value;
+          const m = (res.status === 'fulfilled') ? res.value : null;
           const f = result.files[i];
-          if (m.artist)      f.artist      = m.artist;
-          if (m.album)       f.album       = m.album;
-          if (m.displayName) f.displayName = m.displayName;
-          // Also pick up persisted thumbnailUrl/coverBlob so _buildSongRow shows cover
-          if (!f.thumbnailUrl && m.thumbnailUrl && m.thumbnailUrl !== 'id3') {
-            f.thumbnailUrl = m.thumbnailUrl;
-          }
-          // Duration: prefer exact DB value; fallback to Drive API durationMs (already on f)
-          if (m.durationSec > 0) {
-            f.durationSec = m.durationSec;
+          if (m) {
+            if (m.artist)      f.artist      = m.artist;
+            if (m.album)       f.album       = m.album;
+            if (m.displayName) f.displayName = m.displayName;
+            // Also pick up persisted thumbnailUrl/coverBlob so _buildSongRow shows cover
+            if (!f.thumbnailUrl && m.thumbnailUrl && m.thumbnailUrl !== 'id3') {
+              f.thumbnailUrl = m.thumbnailUrl;
+            }
+            // Prefer exact DB value
+            if (m.durationSec > 0) f.durationSec = m.durationSec;
           }
           // f.durationMs comes from Drive API videoMediaMetadata — always present for audio.
-          // Use it when DB has no durationSec, and persist it so Library can show it too.
+          // Use it when DB has nothing, and persist it so Library can show it too.
+          // Runs for both new files (no DB record) and existing records missing durationSec.
           if (!(f.durationSec > 0) && f.durationMs > 0) {
             f.durationSec = f.durationMs / 1000;
-            DB.setMeta(f.id, { durationSec: f.durationSec }).catch(() => {});
+            DB.setMeta(f.id, { id: f.id, durationSec: f.durationSec }).catch(() => {});
           }
         });
       }
@@ -8469,19 +8471,26 @@ const App = (() => {
         songs = [...tagged, ...extra];
       }
 
-      const toMap = m => ({
-        id:           m.id,
-        name:         m.name         || m.id,
-        displayName:  m.displayName  || m.name || m.id,
-        artist:       m.artist       || '',
-        album:        m.album        || '',
-        year:         m.year         || '',
-        track:        m.track        || '',
-        thumbnailUrl: m.thumbnailUrl || m.coverUrl || null,
-        folderId:     m.folderId     || null,
-        durationSec:  m.durationSec  || 0,
-        size:         m.size         || 0,
-      });
+      const toMap = m => {
+        // _itemCache holds Drive API objects (with durationMs) for any file
+        // that was browsed or played in this session — use as live fallback.
+        const cached = _itemCache.get(m.id);
+        const durSec = m.durationSec > 0 ? m.durationSec
+                     : (cached?.durationMs > 0 ? cached.durationMs / 1000 : 0);
+        return {
+          id:           m.id,
+          name:         m.name         || m.id,
+          displayName:  m.displayName  || m.name || m.id,
+          artist:       m.artist       || '',
+          album:        m.album        || '',
+          year:         m.year         || '',
+          track:        m.track        || '',
+          thumbnailUrl: m.thumbnailUrl || m.coverUrl || null,
+          folderId:     m.folderId     || null,
+          durationSec:  durSec,
+          size:         m.size         || cached?.size || 0,
+        };
+      };
 
       // Sort: by track number (ID3, e.g. "3" or "3/12"), then by name
       const sorted = songs.map(toMap).sort((a, b) => {
