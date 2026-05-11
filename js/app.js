@@ -759,10 +759,29 @@ const App = (() => {
     UI.setActiveSongRow(track?.id ?? null);
   }
 
+  // Track which song ID has already had its duration persisted this session
+  // so we don't write to DB on every timeupdate tick.
+  let _durationSavedForId = null;
+
   function _onProgress(currentTime, duration) {
     UI.updateProgress(currentTime, duration);
     if (UI.isExpandedPlayerVisible()) {
       UI.updateExpandedPlayerProgress(currentTime, duration);
+    }
+
+    // First timeupdate with a real duration → persist and paint rows.
+    // This catches the case where _applyMeta ran before loadedmetadata fired.
+    if (isFinite(duration) && duration > 0) {
+      const track = Player.getCurrentTrack();
+      if (track && track.id !== _durationSavedForId) {
+        _durationSavedForId = track.id;
+        DB.getMeta(track.id).then(existing => {
+          if (existing?.durationSec && Math.abs(existing.durationSec - duration) < 2) return;
+          DB.setMeta(track.id, { durationSec: duration }).catch(() => {});
+          UI.updateBrowseSongDuration(track.id, duration);
+          UI.updateLibrarySongDuration(track.id, duration);
+        }).catch(() => {});
+      }
     }
   }
 
@@ -2716,8 +2735,9 @@ const App = (() => {
         // Skip if DB already has a duration within 2 s of the audio-element value
         if (existing?.durationSec && Math.abs(existing.durationSec - realDurSec) < 2) return;
         DB.setMeta(item.id, { durationSec: realDurSec }).catch(() => {});
-        // Also paint the browse row immediately (no need to re-open folder)
+        // Paint whichever view is currently showing this song
         UI.updateBrowseSongDuration(item.id, realDurSec);
+        UI.updateLibrarySongDuration(item.id, realDurSec);
       }).catch(() => {});
     }
   }
