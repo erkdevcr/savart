@@ -3530,27 +3530,31 @@ const App = (() => {
         };
       });
 
-      // Resolve covers for recent playlists (first 4 unique non-Google cover URLs per playlist)
+      // Resolve covers for recent playlists (first 4 unique usable URLs per playlist).
+      // Priority per song: in-memory blob (session) → DB coverBlob inject → DB external URL.
+      const _isUsableExt = u => u && u !== 'id3' && !u.startsWith('blob:')
+        && !(u.includes('googleapis.com') && !u.includes('googleusercontent.com'));
       const enrichedPlaylists = await Promise.all(
         rawPlaylists.slice(0, 12).map(async pl => {
           const covers = [];
           const seen   = new Set();
-          const songIds = pl.songIds || [];
-          for (const sid of songIds.slice(0, 24)) {
+          for (const sid of (pl.songIds || []).slice(0, 24)) {
             if (covers.length >= 4) break;
-            // In-memory Meta cache: blob: URLs from the current session are valid
+            // 1. In-memory Meta cache — blob: from this session is valid
             const inMem = (typeof Meta !== 'undefined') ? Meta.getCached(sid) : null;
             let url = inMem?.coverUrl || null;
-            // Fall back to DB for persistent external URLs only
+            // 2. DB coverBlob → inject object URL (valid for this session)
             if (!url) {
               try {
                 const dbM = await DB.getMeta(sid);
-                let dbUrl = dbM?.thumbnailUrl || dbM?.coverUrl || null;
-                // Strip sentinels and stale session blob URLs stored in DB
-                if (dbUrl === 'id3' || dbUrl?.startsWith('blob:')) dbUrl = null;
-                // Strip raw googleapis.com API URLs (need auth header, fail in <img>)
-                if (dbUrl?.includes('googleapis.com') && !dbUrl.includes('googleusercontent.com')) dbUrl = null;
-                url = dbUrl;
+                if (dbM?.coverBlob && typeof Meta !== 'undefined') {
+                  url = Meta.injectCover(sid, dbM.coverBlob) || null;
+                }
+                // 3. DB external URL
+                if (!url) {
+                  const ext = dbM?.thumbnailUrl || dbM?.coverUrl || null;
+                  url = _isUsableExt(ext) ? ext : null;
+                }
               } catch (_) {}
             }
             if (!url || seen.has(url)) continue;
@@ -4829,76 +4833,71 @@ const App = (() => {
   async function _prefetchHomePlaylists(playlists) {
     if (!playlists.length || typeof Meta === 'undefined') return;
 
-    const _isUsable = url =>
+    // External URLs that work in <img> without auth token
+    const _isUsableExt = url =>
       url && url !== 'id3' && !url.startsWith('blob:') &&
       !(url.includes('googleapis.com') && !url.includes('googleusercontent.com'));
 
+    // Resolve one cover for a single song id. Priority:
+    //   1. In-memory Meta cache (blob: from current session — always valid)
+    //   2. DB coverBlob → inject into Meta → blob: URL (valid this session)
+    //   3. DB external URL (googleusercontent.com, Last.fm, etc.)
+    // Returns null if nothing found.
+    const _resolveOne = async (sid) => {
+      const inMem = Meta.getCached(sid);
+      if (inMem?.coverUrl) return inMem.coverUrl; // blob: or ext — both valid in session
+
+      const dbM = await DB.getMeta(sid).catch(() => null);
+      if (!dbM) return null;
+
+      if (dbM.coverBlob) {
+        const injected = Meta.injectCover(sid, dbM.coverBlob);
+        if (injected) return injected; // blob: URL — valid this session
+      }
+
+      const extUrl = dbM.thumbnailUrl || dbM.coverUrl || null;
+      return _isUsableExt(extUrl) ? extUrl : null;
+    };
+
     for (const pl of playlists) {
       try {
-        const songIds = (pl.songIds || []).slice(0, 16);
+        const songIds = (pl.songIds || []).slice(0, 24);
         if (!songIds.length) continue;
 
-        // Pass 0: resolve what's already available (DB + in-memory) for the first 4 slots
-        const covers  = [];
-        const toScan  = []; // items missing a cover and not yet scanned on this device
+        const covers = [];
+        const seen   = new Set();
+        const toScan = []; // songs with no cover at all — may need soft scan
 
         for (const sid of songIds) {
           if (covers.length >= 4 && toScan.length === 0) break;
 
-          // In-memory Meta cache (fastest — current session blobs)
-          const inMem = Meta.getCached(sid);
-          if (inMem?.coverUrl && _isUsable(inMem.coverUrl)) {
-            if (covers.length < 4) covers.push(inMem.coverUrl);
+          const url = await _resolveOne(sid);
+          if (url && !seen.has(url)) {
+            seen.add(url);
+            if (covers.length < 4) covers.push(url);
             continue;
           }
 
-          const dbM = await DB.getMeta(sid).catch(() => null);
-
-          // DB: embedded blob → inject object URL
-          if (dbM?.coverBlob) {
-            const injected = Meta.injectCover(sid, dbM.coverBlob);
-            if (injected && _isUsable(injected)) {
-              if (covers.length < 4) covers.push(injected);
-              continue;
+          // No cover found — queue for soft scan if never scanned on this device
+          if (covers.length < 4) {
+            const dbM = await DB.getMeta(sid).catch(() => null);
+            if (dbM && !dbM.softScannedAt && !dbM.rescannedAt && !dbM.manualAt) {
+              toScan.push({ id: sid });
             }
-          }
-
-          // DB: external URL (Last.fm / Drive CDN / AudD)
-          const extUrl = dbM?.thumbnailUrl || dbM?.coverUrl || null;
-          if (_isUsable(extUrl)) {
-            if (covers.length < 4) covers.push(extUrl);
-            continue;
-          }
-
-          // No cover on this device yet — queue for scan if not already done
-          if (!dbM?.softScannedAt && !dbM?.rescannedAt && !dbM?.manualAt) {
-            if (covers.length < 4) toScan.push({ id: sid }); // only scan what we still need
           }
         }
 
-        // Pass 1: scan songs that have no cover and haven't been soft-scanned here
+        // Pass 1: soft-scan songs with no cover, then re-resolve
         if (toScan.length > 0) {
           await _softScanItems(toScan);
-
-          // Re-resolve covers for the just-scanned songs
           for (const item of toScan) {
             if (covers.length >= 4) break;
-            const inMem = Meta.getCached(item.id);
-            if (inMem?.coverUrl && _isUsable(inMem.coverUrl)) {
-              covers.push(inMem.coverUrl);
-              continue;
-            }
-            const dbM = await DB.getMeta(item.id).catch(() => null);
-            if (dbM?.coverBlob) {
-              const injected = Meta.injectCover(item.id, dbM.coverBlob);
-              if (injected && _isUsable(injected)) { covers.push(injected); continue; }
-            }
-            const extUrl = dbM?.thumbnailUrl || dbM?.coverUrl || null;
-            if (_isUsable(extUrl)) covers.push(extUrl);
+            const url = await _resolveOne(item.id);
+            if (url && !seen.has(url)) { seen.add(url); covers.push(url); }
           }
         }
 
-        // Update mosaic only if we found something new (avoid redundant repaints)
+        // Update mosaic only if we found something new
         const existing = pl.resolvedCovers || [];
         const changed  = covers.length > existing.length ||
                          covers.some((u, i) => u !== existing[i]);
