@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.3.7';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.3.7 — sync init merge: durationSec faltaba en el merge de metadata del init(), solo se aplicaba en live poll
+const APP_VERSION  = '3.3.8';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.3.8 — browse search: onSongClick usa #search-results como cola cuando hay búsqueda activa; renderFolderContents oculta lista si search activo al terminar carga async
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

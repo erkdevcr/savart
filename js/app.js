@@ -3933,24 +3933,46 @@ const App = (() => {
    */
   function onSongClick(clickedSong, contextSongs = null) {
     if (UI.getCurrentView() === 'browse') {
-      // Always build the queue from the full folder list (.item-list), even when a
-      // search filter is active. The filtered results only show a visual subset but
-      // the user expects Prev/Next to follow the complete folder order, not jump
-      // between unrelated search hits. The .item-list stays in the DOM while search
-      // is active (just display:none) so we can still read all its rows.
-      const sourceEl = document.querySelector('#screen-browse .item-list');
-      const rows     = Array.from(sourceEl?.querySelectorAll('.song-row:not(.wma)') || []);
-      const ids      = rows.map(r => r.dataset.id);
-      const allSongs = ids.map(id => _resolveItemById(id)).filter(Boolean);
+      const searchTerm = document.getElementById('search-input')?.value.trim();
 
-      _resetRadio();
-      if (allSongs.length > 0) {
-        const startIdx = allSongs.findIndex(s => s.id === clickedSong.id);
-        Player.setQueue(allSongs, startIdx >= 0 ? startIdx : 0);
+      if (searchTerm) {
+        // Search is active: build queue from the search results so the clicked song
+        // actually plays and Prev/Next cycles through the other results.
+        // Do NOT use .item-list here — those are the folder items behind the results,
+        // and the clicked song may not exist in that folder at all.
+        const resultsEl = document.getElementById('search-results');
+        const rows      = Array.from(resultsEl?.querySelectorAll('.song-row:not(.wma)') || []);
+        const allSongs  = rows.map(r => _resolveItemById(r.dataset.id)).filter(Boolean);
+
+        _resetRadio();
+        if (allSongs.length > 0) {
+          const startIdx = allSongs.findIndex(s => s.id === clickedSong.id);
+          Player.setQueue(allSongs, startIdx >= 0 ? startIdx : 0);
+        } else {
+          // Fallback: radio mode from the single clicked song
+          _radioModeActive = true;
+          _radioQueuedIds  = new Set([clickedSong.id]);
+          _radioArtist     = _guessArtistFromItem(clickedSong) || null;
+          Player.setQueue([clickedSong], 0);
+        }
+
       } else {
-        _radioModeActive = true;
-        _radioQueuedIds  = new Set([clickedSong.id]);
-        Player.setQueue([clickedSong], 0);
+        // No search active: build queue from the full folder list so Prev/Next follows
+        // the complete folder order (same behaviour as before).
+        const sourceEl = document.querySelector('#screen-browse .item-list');
+        const rows     = Array.from(sourceEl?.querySelectorAll('.song-row:not(.wma)') || []);
+        const ids      = rows.map(r => r.dataset.id);
+        const allSongs = ids.map(id => _resolveItemById(id)).filter(Boolean);
+
+        _resetRadio();
+        if (allSongs.length > 0) {
+          const startIdx = allSongs.findIndex(s => s.id === clickedSong.id);
+          Player.setQueue(allSongs, startIdx >= 0 ? startIdx : 0);
+        } else {
+          _radioModeActive = true;
+          _radioQueuedIds  = new Set([clickedSong.id]);
+          Player.setQueue([clickedSong], 0);
+        }
       }
 
     } else if (contextSongs?.length > 0) {

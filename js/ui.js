@@ -1455,6 +1455,15 @@ const UI = (() => {
     }
     list.innerHTML = '';
 
+    // If a search is currently active (user typed while the async folder load was in flight),
+    // keep the list hidden so it never shows behind the search results.
+    const _searchNow = document.getElementById('search-input')?.value.trim();
+    if (_searchNow) {
+      list.style.display = 'none';
+      screen.classList.add('search-active'); // ensure CSS class is also in sync
+      return;
+    }
+
     if (folders.length === 0 && files.length === 0) {
       list.innerHTML = `<div class="empty-state">${iconFolder(36)}<p>${t('empty_folder')}</p></div>`;
       return;
