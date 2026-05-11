@@ -2721,6 +2721,8 @@ const UI = (() => {
       const _artist = song.artist || '';
       const _album  = song.albumName || song.album || '';
       const _sub    = [_artist, _album].filter(Boolean).join(' — ');
+      const _favDurSec = song.durationSec > 0 ? song.durationSec : (song.durationMs > 0 ? song.durationMs / 1000 : 0);
+      const _favDurStr = _favDurSec > 0 ? formatTime(Math.round(_favDurSec)) : '';
 
       row.innerHTML = `
         <div class="top-list-rank">${i + 1}</div>
@@ -2735,7 +2737,7 @@ const UI = (() => {
           <div class="top-list-title">${escHtml(song.displayName || song.name || '')}</div>
           ${_sub ? `<div class="top-list-artist">${escHtml(_sub)}</div>` : ''}
         </div>
-        <span class="top-list-dur"></span>
+        ${_favDurStr ? `<span class="top-list-dur">${escHtml(_favDurStr)}</span>` : '<span class="top-list-dur"></span>'}
         <button class="lib-star-btn active" aria-label="Quitar de favoritas" style="margin-right:4px;color:var(--accent);background:none;border:none;cursor:pointer;display:flex;align-items:center;flex-shrink:0">
           <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
         </button>
@@ -3467,6 +3469,9 @@ const UI = (() => {
       row.dataset.id = song.id;
       row.dataset.searchKey = norm((song.displayName || song.name || ''));
 
+      const _durSec = song.durationSec > 0 ? song.durationSec : (song.durationMs > 0 ? song.durationMs / 1000 : 0);
+      const _durStr = _durSec > 0 ? formatTime(Math.round(_durSec)) : '';
+
       row.innerHTML = `
         <div class="top-list-rank">${i + 1}</div>
         <div class="top-list-thumb">
@@ -3480,6 +3485,7 @@ const UI = (() => {
           <div class="top-list-title">${escHtml(song.displayName || song.name || '')}</div>
           <div class="top-list-artist">${escHtml(song.artist || '')}</div>
         </div>
+        ${_durStr ? `<span class="top-list-dur">${escHtml(_durStr)}</span>` : '<span class="top-list-dur"></span>'}
         <button class="btn-more" aria-label="Más opciones">${iconDots()}</button>
       `;
 
