@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.4.4';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.4.4 — colecciones: cover siempre en grilla 2x2 igual que playlists del inicio; CSS unificado para mosaic-cell; _patchGridBlobCovers inyecta en primera celda vacía
+const APP_VERSION  = '3.4.5';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.4.5 — softScan: usa existing.coverBlob como fallback cuando Meta.parse retorna desde caché sin coverBlob; cover se pinta en el row inmediatamente al escanear cada canción
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

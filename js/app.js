@@ -7440,6 +7440,16 @@ const App = (() => {
           // setMeta strips null values before merging — that would leave stale URLs intact.
           // By spreading existing first and then the patch, null values are stored literally
           // and overwrite the old data.
+          // coverBlob priority:
+          //   1. parsed.coverBlob — fresh extraction from the audio blob (best case)
+          //   2. existing.coverBlob — blob already in DB from a previous full play/parse.
+          //      Meta.parse returns from in-memory cache on cache-hits and strips coverBlob
+          //      before caching, so parsed.coverBlob is undefined on a cache-hit even when
+          //      the file does have a cover. Falling back to existing.coverBlob prevents
+          //      incorrectly clearing a valid blob that was saved in a prior session.
+          //   3. null — file genuinely has no embedded cover (or was never fully parsed)
+          const coverBlobToUse = parsed.coverBlob ?? existing?.coverBlob ?? null;
+
           const patch = {
             softScannedAt:  Date.now(),
             displayName:    parsed.title  || null,
@@ -7447,8 +7457,8 @@ const App = (() => {
             artistInferred: !parsed.artist,
             album:          parsed.album  || null,
             year:           parsed.year   || null,
-            coverBlob:      parsed.coverBlob || null,
-            thumbnailUrl:   parsed.coverBlob ? 'id3' : null,
+            coverBlob:      coverBlobToUse,
+            thumbnailUrl:   coverBlobToUse ? 'id3' : null,
             coverUrl:       null,
           };
 
@@ -7471,16 +7481,16 @@ const App = (() => {
           }, true);
           patched++;
 
-          // Update visible Browse row immediately — title, artist · album
+          // Update visible Browse row immediately — title, artist · album + cover
           if (inBrowse()) {
             UI.updateBrowseSongMeta(file.id, newArtist, newAlbum, newDisplay);
-            // Paint cover immediately — same session as the blob extraction,
-            // so we can inject it right now without waiting for the end-of-scan batch.
             if (patch.coverBlob && typeof Meta !== 'undefined') {
+              // Paint cover immediately. Meta.injectCover reuses the cached blob URL when
+              // available (avoiding a duplicate createObjectURL call) or creates a new one.
               const coverUrl = Meta.injectCover(file.id, patch.coverBlob);
               if (coverUrl) _updateRowThumbnail(file.id, coverUrl, true);
             } else {
-              // No ID3 cover → clear whatever was showing (stale external URL now gone from DB).
+              // File has no embedded cover — clear any stale external URL from the DOM.
               // Also purge the Meta in-memory cache so _prefetchAndApplyFolderCovers
               // Pass 1 doesn't re-inject an old blob URL for this song.
               if (typeof Meta !== 'undefined') Meta.revoke(file.id);
