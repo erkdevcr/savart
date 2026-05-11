@@ -10,7 +10,7 @@
    ============================================================ */
 
 const APP_VERSION  = '3.4.7';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.4.7 — colecciones: top-list-artist muestra album (fallback: artist)
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.4.7 — colecciones: top-list-artist muestra "artista - album"
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
