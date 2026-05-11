@@ -2941,7 +2941,27 @@ const App = (() => {
     toApply.forEach(item => _ensureCoverVisible(item.id, metaMap.get(item.id)));
 
     // ── Already-scanned path — paint cover from DB meta or in-memory cache ──
-    toPaint.forEach(item => _ensureCoverVisible(item.id, metaMap.get(item.id)));
+    // Priority: Meta session cache (fresh Object URL) → DB coverBlob → external URL.
+    // If no cover is found anywhere AND softScannedAt was never written (scan was
+    // interrupted before completing), remove the item from the session guard and
+    // re-queue it for a real scan — covers must always show for embedded-art items.
+    toPaint.forEach(item => {
+      const m      = metaMap.get(item.id);
+      const cached = (typeof Meta !== 'undefined') ? Meta.getCached(item.id) : null;
+      if (cached?.coverUrl || m?.coverBlob) {
+        // Cover available — paint all visible surfaces now
+        _ensureCoverVisible(item.id, m);
+      } else if (!m?.softScannedAt) {
+        // Guard was set but scan never completed (interrupted / network error before DB write).
+        // Remove from session guard so it joins toScan and gets a proper retry.
+        _sessionScannedIds.delete(item.id);
+        toScan.push(item);
+      } else {
+        // Scan completed (softScannedAt set), confirmed no embedded cover — apply any
+        // external URL from DB (Last.fm / AudD) or leave placeholder; no re-download.
+        _ensureCoverVisible(item.id, m);
+      }
+    });
 
     // ── ID3 scan path ────────────────────────────────────────────────────────
     if (!toScan.length || typeof Drive === 'undefined' || !Auth.isAuthenticated()) {
