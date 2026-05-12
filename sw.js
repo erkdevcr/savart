@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.11';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.11 — fix: sync thumbnailUrl/coverUrl fill-only logic ignored remote manual edits (manualAt); now overwrites when remoteManualAt > 0
+const APP_VERSION  = '3.5.12';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.12 — fix: _prefetchAndApplyFolderCovers Pass 0 coverBlob path overwrote manual thumbnailUrl (manualAt > 0) on every folder open
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

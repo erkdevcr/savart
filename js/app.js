@@ -1502,6 +1502,19 @@ const App = (() => {
           }
           const dbMeta = await DB.getMeta(file.id);
           if (!dbMeta) return;
+          // Manual-edit guard: if the user explicitly set a cover URL (manualAt > 0),
+          // that choice always wins over the embedded blob.  Without this guard the
+          // blob path (isId3=true) would silently overwrite the manual URL every time
+          // the folder is opened, causing the cover to revert on every session start.
+          const _manualUrl = ((dbMeta.manualAt || 0) > 0)
+            && dbMeta.thumbnailUrl
+            && !dbMeta.thumbnailUrl.startsWith('blob:')
+            && dbMeta.thumbnailUrl !== 'id3'
+            ? dbMeta.thumbnailUrl : null;
+          if (_manualUrl) {
+            _updateRowThumbnail(file.id, _manualUrl);
+            return;
+          }
           if (dbMeta.coverBlob && typeof Meta !== 'undefined') {
             const url = Meta.injectCover(file.id, dbMeta.coverBlob);
             if (url) { _updateRowThumbnail(file.id, url, true); return; }
