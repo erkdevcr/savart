@@ -2178,7 +2178,12 @@ const UI = (() => {
     }
 
     modal.style.display = 'flex';
-    setTimeout(() => nameInp.focus(), 80);
+    // Only auto-focus on non-touch devices — on mobile this triggers the virtual
+    // keyboard immediately, pushing the modal off-screen before the user has tapped
+    // any field. On touch devices the user taps the field they want to edit.
+    if (!('ontouchstart' in window) && window.innerWidth > 600) {
+      setTimeout(() => nameInp.focus(), 80);
+    }
 
     // Wire up once
     if (!_songEditModalInit) {
