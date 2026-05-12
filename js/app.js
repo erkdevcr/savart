@@ -1228,12 +1228,16 @@ const App = (() => {
             if (!meta.title    && result.title)    meta.title    = result.title;
             if (!meta.artist   && result.artist)   meta.artist   = result.artist;
             if (!meta.album    && result.album)    meta.album    = result.album;
-            // Persist everything AudD found
+            // Persist everything AudD found.
+            // thumbnailUrl: only write when the user has NOT manually set a cover
+            // (playManual = manualAt > 0).  AudD is auto-enrichment — it must never
+            // overwrite a deliberate manual choice, even when the user edited only
+            // artist/title and left the cover intact.
             const update = { auddTried: true };
-            if (result.title)    update.displayName  = result.title;
-            if (result.artist)   update.artist       = result.artist;
-            if (result.album)    update.album        = result.album;
-            if (result.coverUrl) update.thumbnailUrl = result.coverUrl;
+            if (result.title)                   update.displayName  = result.title;
+            if (result.artist)                  update.artist       = result.artist;
+            if (result.album)                   update.album        = result.album;
+            if (result.coverUrl && !playManual) update.thumbnailUrl = result.coverUrl;
             DB.setMeta(item.id, update).catch(() => {});
           }
         } catch (_) { /* network / API error — non-fatal */ }
@@ -7737,6 +7741,36 @@ const App = (() => {
           // existingMap was built.  A stale map entry would make coverBlobToUse = null
           // and incorrectly clear a cover that was just stored by a concurrent parse.
           const existing = await DB.getMeta(file.id).catch(() => null) ?? existingMap.get(file.id) ?? null;
+
+          // Secondary race-condition guard: manualAt / rescannedAt may have been written
+          // to DB AFTER existingMap was built (e.g. user edited a track while the folder
+          // was already open and the soft scan was in progress).  The candidates filter
+          // used the stale snapshot and included this track; the fresh read above now
+          // shows the true state.  Do NOT scan or overwrite — just clear the "Leyendo…"
+          // indicator and apply whatever is already in DB to the DOM row.
+          if ((existing?.manualAt || 0) > 0 || (existing?.rescannedAt || 0) > 0) {
+            if (inBrowse()) {
+              UI.updateBrowseSongMeta(file.id,
+                existing?.artist      || null,
+                existing?.album       || null,
+                existing?.displayName || null);
+              // Paint cover from DB if row doesn't have one yet
+              const _rg  = document.querySelector(`#screen-browse .song-row[data-id="${CSS.escape(file.id)}"]`);
+              if (_rg && !_rg.querySelector('.song-thumb img')) {
+                const _mu = ((existing?.manualAt || 0) > 0)
+                  && existing?.thumbnailUrl
+                  && !existing.thumbnailUrl.startsWith('blob:')
+                  && existing.thumbnailUrl !== 'id3'
+                  ? existing.thumbnailUrl : null;
+                const _cu = _mu
+                  || (existing?.coverBlob && typeof Meta !== 'undefined'
+                      ? Meta.injectCover(file.id, existing.coverBlob) : null)
+                  || existing?.coverUrl || existing?.thumbnailUrl || null;
+                if (_cu) _updateRowThumbnail(file.id, _cu, existing?.thumbnailUrl === 'id3');
+              }
+            }
+            continue;
+          }
 
           // Use cached blob (from prior play) or fetch just the first 256 KB
           let blob = await DB.getCachedBlob(file.id).catch(() => null);
