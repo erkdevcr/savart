@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.19';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.19 — home screen flicker + scroll reset fix: _loadHomeData debounced (350ms) on sync/track-start calls; renderHome saves/restores scroll positions (vertical + per-section horizontal) via requestAnimationFrame
+const APP_VERSION  = '3.5.20';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.20 — year "Apply to All" added: album-edit-panel, collection-edit-panel (+ year field added to collection), song-edit-modal; collection Save also writes year per-song; _songEditCurrentItem tracks full item ref for folderId lookup
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

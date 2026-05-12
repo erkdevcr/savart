@@ -2168,12 +2168,14 @@ const UI = (() => {
 
   /* ── Song edit modal ─────────────────────────────────────── */
 
-  let _songEditModalInit = false;
-  let _songEditCurrentId = null;
+  let _songEditModalInit    = false;
+  let _songEditCurrentId   = null;
+  let _songEditCurrentItem = null; // full item ref — needed for folderId in "Apply to All"
 
   function openSongEditModal(item) {
     if (!item?.id) return;
-    _songEditCurrentId = item.id;
+    _songEditCurrentId   = item.id;
+    _songEditCurrentItem = item;
 
     const modal     = document.getElementById('song-edit-modal');
     const nameInp   = document.getElementById('song-edit-name');
@@ -2219,7 +2221,7 @@ const UI = (() => {
     if (!_songEditModalInit) {
       _songEditModalInit = true;
 
-      const _close = () => { modal.style.display = 'none'; _songEditCurrentId = null; };
+      const _close = () => { modal.style.display = 'none'; _songEditCurrentId = null; _songEditCurrentItem = null; };
 
       document.getElementById('song-edit-backdrop')?.addEventListener('click', _close);
       document.getElementById('btn-song-edit-cancel')?.addEventListener('click', _close);
@@ -2260,6 +2262,25 @@ const UI = (() => {
         } catch {
           saveBtn.disabled = false;
           saveBtn.textContent = t('confirm_btn');
+        }
+      });
+
+      // "Apply to All" for year — applies the entered year to every song in the same album.
+      // Uses the folderId stored on _songEditCurrentItem (set alongside _songEditCurrentId).
+      document.getElementById('btn-song-edit-year-apply')?.addEventListener('click', async () => {
+        const year = yearInp.value.trim();
+        if (!year) return;
+        const folderId = _songEditCurrentItem?.folderId || _songEditCurrentItem?.parents?.[0] || null;
+        if (!folderId) { UI.showToast?.(t('lbl_album') + ' ?', 'error'); return; }
+        const btn  = document.getElementById('btn-song-edit-year-apply');
+        const orig = btn.textContent;
+        btn.disabled = true; btn.textContent = '…';
+        try {
+          await App.onAlbumEdit?.(folderId, { year }, null);
+          btn.textContent = '✓';
+          setTimeout(() => { btn.disabled = false; btn.textContent = orig; }, 1500);
+        } catch {
+          btn.disabled = false; btn.textContent = orig;
         }
       });
 
@@ -3281,7 +3302,8 @@ const UI = (() => {
       </div>
       <div class="album-edit-row">
         <label class="album-edit-label">${t('lbl_year')}</label>
-        <input class="album-edit-input" data-field="year" value="${escHtml(album.year || '')}" placeholder="${t('lbl_year')}" style="max-width:80px">
+        <input class="album-edit-input" data-field="year" value="${escHtml(album.year || '')}" placeholder="${t('lbl_year_ph')}" style="max-width:80px">
+        <button class="album-edit-apply-btn" data-apply="year" title="${t('lbl_apply_to_all')}">${t('lbl_apply_to_all')}</button>
       </div>
       <div class="album-edit-row">
         <label class="album-edit-label">${t('lbl_cover_url')}</label>
@@ -3919,6 +3941,11 @@ const UI = (() => {
         <input class="album-edit-input" data-field="name" value="${escHtml(collection.name || '')}" placeholder="${t('lbl_name')}">
       </div>
       <div class="album-edit-row">
+        <label class="album-edit-label">${t('lbl_year')}</label>
+        <input class="album-edit-input" data-field="year" value="${escHtml(collection.year || '')}" placeholder="${t('lbl_year_ph')}" style="max-width:80px">
+        <button class="album-edit-apply-btn" data-apply="year" title="${t('lbl_apply_to_all')}">${t('lbl_apply_to_all')}</button>
+      </div>
+      <div class="album-edit-row">
         <label class="album-edit-label">Cover URL</label>
         <input class="album-edit-input" data-field="coverUrl" value="${escHtml(prefillCoverUrl)}" placeholder="https://…">
         <button class="album-edit-apply-btn" data-apply="coverUrl" title="${t('lbl_apply_to_all')}">${t('lbl_apply_to_all')}</button>
@@ -3932,52 +3959,59 @@ const UI = (() => {
       if (isOpen) editPanel.querySelector('[data-field="name"]').focus();
     });
 
-    // "Aplicar a todas" — apply cover URL to ALL songs in the collection (override existing)
-    editPanel.querySelector('.album-edit-apply-btn').addEventListener('click', async () => {
-      const coverUrl = editPanel.querySelector('[data-field="coverUrl"]').value.trim();
-      if (!coverUrl || !folderId) return;
-      const btn  = editPanel.querySelector('.album-edit-apply-btn');
-      const orig = btn.textContent;
-      btn.disabled = true; btn.textContent = '…';
-      try {
-        // Use songs already in scope; fall back to DB query if empty
-        let targets = songs.length > 0 ? songs : [];
-        if (targets.length === 0) {
-          const all = await DB.getAllMeta();
-          targets = all.filter(m => m.folderId === folderId);
-        }
-        // If still empty (unscanned collection) and Drive is available, seed minimal records
-        if (targets.length === 0 && typeof Drive !== 'undefined' && typeof Auth !== 'undefined' && Auth.getValidToken()) {
-          const driveResult = await Drive.listFolderAll(folderId).catch(() => null);
-          const audioFiles  = (driveResult?.files || []).filter(f =>
-            f.mimeType?.startsWith('audio/') ||
-            /\.(mp3|m4a|flac|ogg|wav|aac|opus)$/i.test(f.name || '')
-          );
-          for (const f of audioFiles) {
-            await DB.setMeta(f.id, { id: f.id, folderId, name: f.name || f.id, mimeType: f.mimeType || null }).catch(() => {});
-          }
-          const refreshed = await DB.getAllMeta();
-          targets = refreshed.filter(m => m.folderId === folderId);
-        }
-
-        // Apply to every target — no hasOwn guard, this is an intentional override
-        // manualAt is set so enrichment passes (Discogs, Last.fm, MB, soft scan) treat
-        // these songs as user-owned and never overwrite the cover they just received.
-        const nowTs = Date.now();
-        let applied = 0;
-        for (const m of targets) {
-          await DB.setMeta(m.id, { thumbnailUrl: coverUrl, manualAt: nowTs }).catch(() => {});
-          applied++;
-          // Also update the thumbnail in the visible song row
-          const thumb = container.querySelector(`.top-list-item[data-id="${CSS.escape(m.id)}"] .top-list-thumb`);
-          if (thumb) thumb.innerHTML = `<img src="${escHtml(coverUrl)}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)">`;
-        }
-        btn.textContent = `✓ ${applied}`;
-        setTimeout(() => { btn.disabled = false; btn.textContent = orig; }, 2500);
-      } catch (err) {
-        console.warn('[apply-all cover]', err);
-        btn.disabled = false; btn.textContent = orig;
+    // Helper: resolve the full list of songs in this collection, seeding DB records
+    // if the collection hasn't been scanned yet.
+    async function _getCollectionTargets() {
+      let targets = songs.length > 0 ? songs : [];
+      if (targets.length === 0) {
+        const all = await DB.getAllMeta();
+        targets = all.filter(m => m.folderId === folderId);
       }
+      if (targets.length === 0 && typeof Drive !== 'undefined' && typeof Auth !== 'undefined' && Auth.getValidToken()) {
+        const driveResult = await Drive.listFolderAll(folderId).catch(() => null);
+        const audioFiles  = (driveResult?.files || []).filter(f =>
+          f.mimeType?.startsWith('audio/') ||
+          /\.(mp3|m4a|flac|ogg|wav|aac|opus)$/i.test(f.name || '')
+        );
+        for (const f of audioFiles) {
+          await DB.setMeta(f.id, { id: f.id, folderId, name: f.name || f.id, mimeType: f.mimeType || null }).catch(() => {});
+        }
+        const refreshed = await DB.getAllMeta();
+        targets = refreshed.filter(m => m.folderId === folderId);
+      }
+      return targets;
+    }
+
+    // "Aplicar a todas" — applies year or cover URL to every song in the collection.
+    editPanel.querySelectorAll('.album-edit-apply-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const field = btn.dataset.apply; // 'year' | 'coverUrl'
+        const value = editPanel.querySelector(`[data-field="${field}"]`)?.value.trim();
+        if (!value || !folderId) return;
+        const orig = btn.textContent;
+        btn.disabled = true; btn.textContent = '…';
+        try {
+          const targets = await _getCollectionTargets();
+          const nowTs   = Date.now();
+          let applied   = 0;
+          for (const m of targets) {
+            if (field === 'coverUrl') {
+              await DB.setMeta(m.id, { thumbnailUrl: value, manualAt: nowTs }).catch(() => {});
+              const thumb = container.querySelector(`.top-list-item[data-id="${CSS.escape(m.id)}"] .top-list-thumb`);
+              if (thumb) thumb.innerHTML = `<img src="${escHtml(value)}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)">`;
+            } else {
+              // year and any future text fields
+              await DB.setMeta(m.id, { [field]: value, manualAt: nowTs }).catch(() => {});
+            }
+            applied++;
+          }
+          btn.textContent = `✓ ${applied}`;
+          setTimeout(() => { btn.disabled = false; btn.textContent = orig; }, 2500);
+        } catch (err) {
+          console.warn('[col apply-all]', err);
+          btn.disabled = false; btn.textContent = orig;
+        }
+      });
     });
 
     // "Resetear ID3" — restore all songs in the collection to their embedded ID3 values
@@ -3998,17 +4032,25 @@ const UI = (() => {
       }
     });
 
-    // Save → persist name + coverUrl to DB, update header in-place
+    // Save → persist name + year + coverUrl to DB, update header in-place
     editPanel.querySelector('.album-edit-save-btn').addEventListener('click', async () => {
       const btn      = editPanel.querySelector('.album-edit-save-btn');
       const name     = editPanel.querySelector('[data-field="name"]').value.trim();
+      const year     = editPanel.querySelector('[data-field="year"]').value.trim();
       const coverUrl = editPanel.querySelector('[data-field="coverUrl"]').value.trim();
       btn.disabled = true; btn.textContent = t('saving');
       try {
         await DB.saveCollection(folderId, {
           ...(name     ? { name }     : {}),
+          ...(year     ? { year }     : {}),
           ...(coverUrl ? { coverUrl } : {}),
         });
+        // Write year to all songs in the collection so individual tracks carry it
+        if (year) {
+          const targets = await _getCollectionTargets();
+          const nowTs   = Date.now();
+          await Promise.all(targets.map(m => DB.setMeta(m.id, { year, manualAt: nowTs }).catch(() => {})));
+        }
         btn.textContent = t('saved_ok');
 
         // ── Update header display immediately ──────────────────
