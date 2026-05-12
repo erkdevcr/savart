@@ -8154,12 +8154,17 @@ const App = (() => {
     const folderSongCount = new Map();
     const rescannedMap    = new Map();
     const folderNameMap   = new Map(); // folderId → Drive folder name (stored on first browse)
+    const folderCoverMap  = new Map(); // folderId → manually-set album-level cover URL
 
     all.forEach(m => {
       if (m.folderId) folderSongCount.set(m.folderId, (folderSongCount.get(m.folderId) || 0) + 1);
       if (m.rescannedAt) rescannedMap.set(m.id, m.rescannedAt);
       // Folder meta records have no folderId (their id IS the folderId)
       if (!m.folderId && m.name) folderNameMap.set(m.id, m.name);
+      // Folder-level cover URL: set via "album edit → Guardar" without "Apply to All".
+      // Stored on the folder's own metadata record (id === folderId) so it doesn't
+      // pollute individual songs' thumbnailUrl and is immune to soft-scan overwrites.
+      if (!m.folderId && _isStableCoverUrl(m.coverUrl)) folderCoverMap.set(m.id, m.coverUrl);
     });
 
     const folderMap = new Map();
@@ -8202,7 +8207,7 @@ const App = (() => {
       if ((m.manualAt || 0) > 0) f.hasManual = true;
     });
 
-    return { all, folderMap, folderSongCount, rescannedMap, savedColMap, folderNameMap };
+    return { all, folderMap, folderSongCount, rescannedMap, savedColMap, folderNameMap, folderCoverMap };
   }
 
   /** Rebuild the in-memory cache of collection folder IDs (fire-and-forget). */
@@ -8485,7 +8490,7 @@ const App = (() => {
   async function _loadAlbums() {
     if (_libInDetail) return; // don't replace a drill-down view
     try {
-      const { folderMap, folderSongCount, rescannedMap, savedColMap } = await _buildFolderMap();
+      const { folderMap, folderSongCount, rescannedMap, savedColMap, folderCoverMap } = await _buildFolderMap();
 
       const _top = map => map.size > 0
         ? [...map.entries()].sort((a, b) => b[1] - a[1])[0][0]
@@ -8506,7 +8511,9 @@ const App = (() => {
           const year      = _top(f.yearCounts);
           const format    = _top(f.formatCounts) || null;
           const songCount = Math.max(f.taggedCount, folderSongCount.get(f.folderId) || 0);
-          const coverUrl  = _top(f.coverUrlCounts) || null;
+          // Folder-level cover takes priority: set via album-edit "Guardar" without "Apply to All".
+          // Falls back to the most common external thumbnailUrl across songs.
+          const coverUrl  = folderCoverMap.get(f.folderId) || _top(f.coverUrlCounts) || null;
           // blobId passed for async cover injection after render (no sync blob load here)
           const blobId    = !coverUrl ? (f.blobId || null) : null;
           const rescannedAt = rescannedMap.get(f.folderId) || null;
@@ -8708,6 +8715,13 @@ const App = (() => {
       const _folderMetaRec  = _albumFolderId ? all.find(m => m.id === _albumFolderId) : null;
       const _albumHasManual = songs.some(s => (s.manualAt || 0) > 0);
 
+      // Folder-level cover takes priority over any individual song cover.
+      // This is set via "album edit → Guardar" (without "Apply to All") and stored
+      // on the folder's own metadata record so it's immune to soft-scan overwrites.
+      if (!freshCoverUrl && _isStableCoverUrl(_folderMetaRec?.coverUrl)) {
+        freshCoverUrl = _folderMetaRec.coverUrl;
+      }
+
       const freshAlbum = {
         ...album,
         name:        _topEntry(freshAlbumCounts)  || album.name     || '',
@@ -8766,7 +8780,20 @@ const App = (() => {
    *   the DB (e.g. added before Deep Scan ran), and a pure folderId filter would miss them.
    *   Falls back to folderId-only filter when songIds is not passed (legacy callers).
    */
-  async function onAlbumEdit(folderId, patch, songIds = null) {
+  /**
+   * @param {string}        folderId
+   * @param {Object}        patch        - { artist, album, year, coverUrl }
+   * @param {string[]|null} songIds      - explicit song ID list (preferred over folderId-only filter)
+   * @param {Object}        options
+   * @param {boolean}       [options.applyCoverToAll=false]
+   *   When true, the coverUrl is also written to every song's individual thumbnailUrl.
+   *   When false (default), coverUrl is stored only as a folder-level cover on the
+   *   folder's own metadata record — it shows in the album header and library card
+   *   but does NOT overwrite individual songs' thumbnails (important: embedded ID3
+   *   covers would silently ignore an external thumbnailUrl anyway, so this separation
+   *   makes the intended behaviour explicit and avoids confusing soft-scan overwrites).
+   */
+  async function onAlbumEdit(folderId, patch, songIds = null, options = {}) {
     if (!folderId && !songIds?.length) throw new Error('folderId or songIds required');
     const all  = await DB.getAllMeta();
     let songs;
@@ -8792,21 +8819,36 @@ const App = (() => {
                          !patch.coverUrl.startsWith('blob:') &&
                          patch.coverUrl !== 'id3') ? patch.coverUrl : null;
 
+    // ── Folder-level cover (always) ───────────────────────────────────────────
+    // Store coverUrl on the folder's own metadata record (id === folderId).
+    // This is the "album header cover" — shown in the album detail header and
+    // library grid card, immune to soft-scan overwrites on individual songs.
+    if (newCoverUrl && folderId) {
+      await DB.setMeta(folderId, { coverUrl: newCoverUrl, manualAt }).catch(() => {});
+    }
+
+    // ── Individual songs ──────────────────────────────────────────────────────
     for (const m of songs) {
       const update = { folderId, manualAt };
-      if (patch.artist)  update.artist       = patch.artist;
-      if (patch.album)   update.album        = patch.album;
-      if (patch.year)    update.year         = patch.year;
-      if (newCoverUrl)   update.thumbnailUrl = newCoverUrl;
+      if (patch.artist)  update.artist = patch.artist;
+      if (patch.album)   update.album  = patch.album;
+      if (patch.year)    update.year   = patch.year;
+      // Apply thumbnailUrl to individual songs ONLY when explicitly requested.
+      // Without "Apply to All": songs keep their current thumbnailUrl / embedded covers.
+      if (newCoverUrl && options.applyCoverToAll) update.thumbnailUrl = newCoverUrl;
       await DB.setMeta(m.id, update);
     }
 
-    // If a new cover URL was set manually, fetch & cache it as a blob for offline use.
-    // force=true overwrites any previously cached blob (user chose a new image).
+    // ── Cover caching ─────────────────────────────────────────────────────────
     if (newCoverUrl) {
-      for (const m of songs) {
-        _cacheExternalCover(m.id, newCoverUrl, true).catch(() => {});
+      if (options.applyCoverToAll) {
+        // Cache for every song (offline availability for all covers)
+        for (const m of songs) {
+          _cacheExternalCover(m.id, newCoverUrl, true).catch(() => {});
+        }
       }
+      // Always cache on the folder record itself (used for album header / grid card)
+      _cacheExternalCover(folderId, newCoverUrl, true).catch(() => {});
     } else {
       // No external URL provided — for songs with embedded art, ensure thumbnailUrl:'id3'
       // is correctly stamped (it may have been corrupted by a previous save of a blob: URL).
@@ -8823,12 +8865,15 @@ const App = (() => {
       }
     }
 
-    // Propagate edits to in-memory caches → miniplayer reflects changes instantly
+    // ── Live update ───────────────────────────────────────────────────────────
+    // Propagate text edits to in-memory caches → miniplayer reflects changes instantly.
+    // Cover URL: only propagate to individual home-card/queue surfaces if applyCoverToAll,
+    // since without it the home items still show their own embedded covers.
     const liveDbPatch = {};
-    if (patch.artist)  liveDbPatch.artist       = patch.artist;
-    if (patch.album)   liveDbPatch.album        = patch.album;
-    if (patch.year)    liveDbPatch.year         = patch.year;
-    if (newCoverUrl)   liveDbPatch.thumbnailUrl = newCoverUrl;
+    if (patch.artist)                         liveDbPatch.artist       = patch.artist;
+    if (patch.album)                          liveDbPatch.album        = patch.album;
+    if (patch.year)                           liveDbPatch.year         = patch.year;
+    if (newCoverUrl && options.applyCoverToAll) liveDbPatch.thumbnailUrl = newCoverUrl;
     _liveMetaUpdate(songs.map(m => m.id), liveDbPatch);
 
     if (typeof Sync !== 'undefined') Sync.push('metadata');

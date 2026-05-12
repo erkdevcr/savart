@@ -1135,15 +1135,19 @@ const Sync = (() => {
       await _mergeStep('pinned', async () => {
         if (!remotePinned || typeof remotePinned !== 'object') return;
         const localMeta = (await DB.getState('pinnedMeta')) || {};
+        // Support new { meta, order } format (from _pushPinned 3.5.1+) and old plain-dict format.
+        // IMPORTANT: do NOT pass the whole remotePinned object to _mergePinned — it expects
+        // a plain { id: item } dict, not { meta: {...}, order: [...] }.
+        const remoteMeta  = (remotePinned?.meta ?? remotePinned) || {};
+        const remoteOrder = Array.isArray(remotePinned?.order) ? remotePinned.order : Object.keys(remoteMeta);
         // _mergePinned: remote is base (deletions respected).
         // Local-only items kept only if pinnedAt > remote manifest timestamp
         // (i.e., pinned offline after the remote was last written).
-        const merged  = _mergePinned(localMeta, remotePinned, _remoteTs.pinned || 0);
-        const mergedIds = Object.keys(merged);
+        const merged      = _mergePinned(localMeta, remoteMeta, _remoteTs.pinned || 0);
+        const mergedIds   = Object.keys(merged);
         await DB.setState('pinnedMeta', merged);
         // Order: remote order first, then any local-only additions at the end
-        const remoteOrder  = Object.keys(remotePinned);
-        const localOnlyIds = mergedIds.filter(id => !remotePinned[id]);
+        const localOnlyIds = mergedIds.filter(id => !remoteMeta[id]);
         await DB.setState('pinned', [...remoteOrder, ...localOnlyIds]);
         console.log(`[Sync] Merged pinned: ${mergedIds.length} items (remote: ${remoteOrder.length}, local-only: ${localOnlyIds.length})`);
       });

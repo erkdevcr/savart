@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.2';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.2 — _softScanItems toPaint: retry scan si no hay cover y softScannedAt no fue escrito (scan interrumpido)
+const APP_VERSION  = '3.5.3';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.3 — fix pinned lost (init() unwrap { meta, order }); album cover URL: folder-level cover + "Apply to All" button
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

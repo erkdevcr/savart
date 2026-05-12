@@ -3253,6 +3253,7 @@ const UI = (() => {
         <input class="album-edit-input" data-field="coverUrl"
           value="${escHtml((album.coverUrl && !album.coverUrl.startsWith('blob:') && album.coverUrl !== 'id3') ? album.coverUrl : '')}"
           placeholder="${(album.coverUrl && (album.coverUrl.startsWith('blob:') || album.coverUrl === 'id3')) ? '(Cover Embebida)' : 'https://…'}">
+        <button class="album-edit-apply-btn" data-apply="cover" title="Aplicar URL a todas las canciones individualmente">Aplicar a todas</button>
       </div>
       <div class="album-edit-row album-edit-row--track-btn">
         <button class="album-edit-track-btn">✎ Editar canciones</button>
@@ -3296,17 +3297,41 @@ const UI = (() => {
         coverInput.value       = externalUrl;
         coverInput.placeholder = (artSrc && !externalUrl) ? '(Cover Embebida)' : 'https://…';
 
+        // Reset "Apply to All" cover state on each open
+        _pendingApplyCoverToAll = false;
+        const coverApplyBtn = editPanel.querySelector('[data-apply="cover"]');
+        if (coverApplyBtn) {
+          coverApplyBtn.textContent = 'Aplicar a todas';
+          coverApplyBtn.classList.remove('album-edit-apply-btn--active');
+          coverApplyBtn.disabled = false;
+        }
+
         editPanel.querySelector('[data-field="artist"]').focus();
       }
     });
 
-    // "Aplicar a todas" — applies just artist or album field to every track
+    // Track whether the user clicked "Aplicar a todas" for the cover URL field.
+    // Reset on each panel open so toggling doesn't persist across separate edit sessions.
+    let _pendingApplyCoverToAll = false;
+
+    // "Aplicar a todas" — applies just artist or album field to every track;
+    //   for 'cover': marks the intent so "Guardar" also writes thumbnailUrl to all songs.
     editPanel.querySelectorAll('.album-edit-apply-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
-        const field    = btn.dataset.apply;           // 'artist' | 'album'
-        const inputEl  = editPanel.querySelector(`[data-field="${field}"]`);
+        const field    = btn.dataset.apply;           // 'artist' | 'album' | 'cover'
+        const inputEl  = editPanel.querySelector(`[data-field="${field === 'cover' ? 'coverUrl' : field}"]`);
         const value    = inputEl?.value.trim();
         if (!value) return;
+
+        // Cover: don't save immediately — mark the intent so "Guardar" knows to apply to all.
+        if (field === 'cover') {
+          _pendingApplyCoverToAll = true;
+          btn.textContent = '✓ A todas las canciones';
+          btn.classList.add('album-edit-apply-btn--active');
+          btn.disabled = true;
+          return;
+        }
+
         btn.disabled = true;
         const orig = btn.textContent;
         btn.textContent = '…';
@@ -3358,9 +3383,10 @@ const UI = (() => {
       const albumVal = editPanel.querySelector('[data-field="album"]').value.trim();
       const year     = editPanel.querySelector('[data-field="year"]').value.trim();
       const coverUrl = editPanel.querySelector('[data-field="coverUrl"]').value.trim();
+      const applyCoverToAll = _pendingApplyCoverToAll;
       btn.disabled = true; btn.textContent = t('saving');
       try {
-        await App.onAlbumEdit?.(folderId, { artist, album: albumVal, year, coverUrl }, songs.map(s => s.id));
+        await App.onAlbumEdit?.(folderId, { artist, album: albumVal, year, coverUrl }, songs.map(s => s.id), { applyCoverToAll });
         btn.textContent = t('saved_ok');
         // ── Update header display immediately ─────────────────────
         const nameEl = entity.querySelector('.lib-detail-entity-name');
@@ -3394,7 +3420,9 @@ const UI = (() => {
             const artistEl = row.querySelector('.top-list-artist');
             if (artistEl) artistEl.textContent = artist;
           }
-          if (coverUrl) {
+          // Only replace individual song thumbnails when "Apply to All" was requested.
+          // Without it the header art already updated above; song rows keep their own covers.
+          if (coverUrl && applyCoverToAll) {
             const thumb = row.querySelector('.top-list-thumb');
             if (thumb) {
               const eqBars = thumb.querySelector('.eq-bars');
@@ -3403,6 +3431,8 @@ const UI = (() => {
             }
           }
         });
+        // Reset the "apply to all" flag now that save is done
+        _pendingApplyCoverToAll = false;
         setTimeout(() => {
           btn.disabled = false; btn.textContent = t('save_btn');
           editPanel.classList.remove('open');
