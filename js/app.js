@@ -2791,7 +2791,7 @@ const App = (() => {
         img.src = coverUrl;
         return;
       }
-      if (isId3 && img?.dataset.coverSrc === 'id3') return; // already ID3 — keep it
+      if (isId3 && img?.dataset.coverSrc === 'id3') { img.src = coverUrl; return; } // refresh session URL
 
       // Build img element without innerHTML — avoids wiping out the .eq-bars child
       const newImg = document.createElement('img');
@@ -2887,7 +2887,7 @@ const App = (() => {
       img.src = coverUrl;
       return;
     }
-    if (isId3 && img?.dataset.coverSrc === 'id3') return; // already ID3 — keep it
+    if (isId3 && img?.dataset.coverSrc === 'id3') { img.src = coverUrl; return; } // refresh session URL
     const newImg = document.createElement('img');
     newImg.src = coverUrl;
     newImg.alt = '';
@@ -3004,6 +3004,29 @@ const App = (() => {
             // Network failure — release session slot so next sync/load can retry
             _sessionScannedIds.delete(item.id);
             continue;
+          }
+
+          // ── ID3 tag-size check ─────────────────────────────────────────────────
+          // If the full ID3 tag extends beyond the 1 MB we downloaded, the APIC
+          // (cover art) frame may be truncated — the parser will hit the frame
+          // boundary guard and skip it, so no cover is found even though the file
+          // has embedded art.  Read the 10-byte ID3 header, decode the synchsafe
+          // tag-size field, and fetch exactly that many bytes if necessary.
+          // Only runs when we don't already have the full file in cache.
+          if (!blobIsFullFile && blob.size >= 10) {
+            try {
+              const hdr = new Uint8Array(await blob.slice(0, 10).arrayBuffer());
+              if (hdr[0] === 0x49 && hdr[1] === 0x44 && hdr[2] === 0x33) { // 'ID3'
+                const tagSize = ((hdr[6] & 0x7f) << 21) | ((hdr[7] & 0x7f) << 14)
+                              | ((hdr[8] & 0x7f) << 7)  |  (hdr[9] & 0x7f);
+                const needed  = 10 + tagSize;
+                if (needed > blob.size) {
+                  console.log(`[SoftScan] ID3 tag is ${needed} bytes, fetching full tag for ${item.id}`);
+                  const bigger = await Drive.downloadFileHead(item.id, needed + 1024).catch(() => null);
+                  if (bigger) blob = bigger;
+                }
+              }
+            } catch (_) { /* non-fatal — continue with whatever blob we have */ }
           }
 
           // Always revoke any stale/partial Meta cache entry (e.g. a minimal
@@ -3244,12 +3267,23 @@ const App = (() => {
     );
 
     const withBlob  = []; // coverBlob in DB  → instant refresh, no network
-    const needsScan = []; // thumbnailUrl='id3' but no blob → needs head-download
+    const needsScan = []; // thumbnailUrl='id3' but no blob, OR previously scanned with no
+                          // cover found (softScannedAt set, coverBlob null) — may have been
+                          // missed due to large APIC frame exceeding the old 1MB head limit.
 
     unique.forEach((item, i) => {
       const m = metaResults[i].status === 'fulfilled' ? metaResults[i].value : null;
-      if (m?.coverBlob)                 withBlob.push({ item, dbMeta: m });
-      else if (m?.thumbnailUrl === 'id3') needsScan.push(item);
+      if (m?.coverBlob) {
+        withBlob.push({ item, dbMeta: m });
+      } else if (m?.thumbnailUrl === 'id3') {
+        // Sentinel set but blob missing (e.g. different device synced the flag without the blob)
+        needsScan.push(item);
+      } else if (m?.softScannedAt && !m?.thumbnailUrl && !m?.coverUrl) {
+        // Was scanned before but no cover was stored. The APIC frame may have extended
+        // beyond the 1MB head that was downloaded at scan time. Re-scan with the new
+        // tag-size-aware logic (which extends the download if needed).
+        needsScan.push(item);
+      }
     });
 
     if (!withBlob.length && !needsScan.length) return;
@@ -3389,7 +3423,7 @@ const App = (() => {
       img.src = coverUrl; // external replaces external
       return;
     }
-    if (isId3 && img?.dataset.coverSrc === 'id3') return; // already ID3, don't overwrite
+    if (isId3 && img?.dataset.coverSrc === 'id3') { img.src = coverUrl; return; } // refresh session URL
 
     // Build img element without innerHTML — avoids wiping out the .eq-bars child
     const newImg = document.createElement('img');
@@ -3441,7 +3475,7 @@ const App = (() => {
       if (img.dataset.coverSrc === 'id3') return;  // ID3 cover protected
       img.src = url;
     } else if (isId3 && img?.dataset.coverSrc === 'id3') {
-      return;  // already ID3, don't overwrite
+      img.src = url; // refresh session URL — same embedded cover, new blob: URL
     } else {
       // Remove placeholder icon if present
       const ph = thumb.querySelector('.thumb-placeholder');
@@ -5234,7 +5268,7 @@ const App = (() => {
       if (img.dataset.coverSrc === 'id3') return; // ID3 is always protected
       img.src = url;
     } else if (isId3 && img?.dataset.coverSrc === 'id3') {
-      return; // already ID3 — keep it
+      img.src = url; // refresh session URL — same embedded cover, new blob: URL
     } else {
       const newImg = document.createElement('img');
       newImg.className = 'pinned-art-img';
@@ -7941,6 +7975,22 @@ const App = (() => {
         // Network failure — don't mark softScannedAt so we can retry next time
         if (inBrowse()) UI.updateBrowseSongMeta(item.id, existing?.artist || null, existing?.album || null, null);
         return;
+      }
+
+      // ── ID3 tag-size check (same as _softScanItems) ───────────────────────────
+      if (!blobIsFullFile && blob.size >= 10) {
+        try {
+          const hdr = new Uint8Array(await blob.slice(0, 10).arrayBuffer());
+          if (hdr[0] === 0x49 && hdr[1] === 0x44 && hdr[2] === 0x33) {
+            const tagSize = ((hdr[6] & 0x7f) << 21) | ((hdr[7] & 0x7f) << 14)
+                          | ((hdr[8] & 0x7f) << 7)  |  (hdr[9] & 0x7f);
+            const needed  = 10 + tagSize;
+            if (needed > blob.size) {
+              const bigger = await Drive.downloadFileHead(item.id, needed + 1024).catch(() => null);
+              if (bigger) blob = bigger;
+            }
+          }
+        } catch (_) {}
       }
 
       // If the full audio file is cached, force re-parse so we bypass any stale 1MB
