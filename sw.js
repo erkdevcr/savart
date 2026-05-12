@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.9';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.9 — fix: ID3 cover guard was blocking session URL refresh causing covers to break after _bootId3Refresh
+const APP_VERSION  = '3.5.10';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.10 — fix: _softScanFolder used stale existingMap causing coverBlobToUse=null race when _onBlobReady ran concurrently; added data-cover-src guard
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

@@ -7720,7 +7720,10 @@ const App = (() => {
         if (inBrowse()) UI.markBrowseSongScanning(file.id);
 
         try {
-          const existing = existingMap.get(file.id) || null;
+          // Fresh DB read — _onBlobReady may have written coverBlob to DB after
+          // existingMap was built.  A stale map entry would make coverBlobToUse = null
+          // and incorrectly clear a cover that was just stored by a concurrent parse.
+          const existing = await DB.getMeta(file.id).catch(() => null) ?? existingMap.get(file.id) ?? null;
 
           // Use cached blob (from prior play) or fetch just the first 256 KB
           let blob = await DB.getCachedBlob(file.id).catch(() => null);
@@ -7804,15 +7807,23 @@ const App = (() => {
               // File has no embedded cover — clear any stale external URL from the DOM.
               // Also purge the Meta in-memory cache so _prefetchAndApplyFolderCovers
               // Pass 1 doesn't re-inject an old blob URL for this song.
-              if (typeof Meta !== 'undefined') Meta.revoke(file.id);
+              //
+              // Race-condition guard: if the DOM img already carries data-cover-src='id3',
+              // a concurrent _onBlobReady (or prior scan pass) confirmed this file DOES
+              // have an embedded cover — our parsed.coverBlob came back null only because
+              // Meta.parse returned from cache (coverBlob is always stripped from cache).
+              // Don't revoke or clear in that case; the cover is still valid.
               const _eid = CSS.escape(file.id);
               const _row = document.querySelector(`#screen-browse .song-row[data-id="${_eid}"]`);
               const _img = _row?.querySelector('.song-thumb img');
-              if (_img) {
-                // Restore placeholder — _rowHasCover will now return false for this song
-                const _ph = document.createElement('div');
-                _ph.className = 'thumb-placeholder';
-                _img.replaceWith(_ph);
+              if (_img?.dataset.coverSrc !== 'id3') {
+                if (typeof Meta !== 'undefined') Meta.revoke(file.id);
+                if (_img) {
+                  // Restore placeholder — _rowHasCover will now return false for this song
+                  const _ph = document.createElement('div');
+                  _ph.className = 'thumb-placeholder';
+                  _img.replaceWith(_ph);
+                }
               }
             }
           }
