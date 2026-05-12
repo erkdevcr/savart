@@ -399,7 +399,12 @@ const Sync = (() => {
 
         // Use _mergePinned (per-item LWW by pinnedAt) instead of a pure overwrite so
         // simultaneous pins on two devices don't lose each other's items.
-        const localMeta   = (await DB.getState('pinnedMeta')) || {};
+        let localMeta = (await DB.getState('pinnedMeta')) || {};
+        // Unwrap if still in the corrupted { meta, order } wrapper format
+        if (localMeta && typeof localMeta.meta === 'object' && !Array.isArray(localMeta.meta)
+            && Array.isArray(localMeta.order)) {
+          localMeta = localMeta.meta || {};
+        }
         // Remote wins for deletions (items absent from remote with older pinnedAt than
         // the remote file was last written — heuristic: use max remote pinnedAt as ts).
         const remoteTs    = Math.max(0, ...Object.values(remoteMeta).map(v => v?.pinnedAt || 0));
@@ -482,7 +487,12 @@ const Sync = (() => {
         if (pinned && typeof pinned === 'object') {
           // LWW per-item: remote wins for deletions & updates.
           // Local-only items kept only if pinnedAt > remote home timestamp (offline addition).
-          const localMeta = (await DB.getState('pinnedMeta')) || {};
+          let localMeta = (await DB.getState('pinnedMeta')) || {};
+          // Unwrap if still in the corrupted wrapper format
+          if (localMeta && typeof localMeta.meta === 'object' && !Array.isArray(localMeta.meta)
+              && Array.isArray(localMeta.order)) {
+            localMeta = localMeta.meta || {};
+          }
           const remoteHomeTs = data.ts || 0;
           const mergedPinned = _mergePinned(localMeta, pinned, remoteHomeTs);
           const remoteOrder  = Array.isArray(pinnedOrder) ? pinnedOrder : Object.keys(pinned);
@@ -703,11 +713,19 @@ const Sync = (() => {
   }
 
   async function _pushPinned() {
-    const raw   = (await DB.getState('pinnedMeta')) || {};
-    const order = (await DB.getState('pinned'))     || [];
+    let raw   = (await DB.getState('pinnedMeta')) || {};
+    let order = (await DB.getState('pinned'))     || [];
+    // Guard: if IndexedDB still holds the 3.5.1-corrupted wrapper, unwrap it before pushing.
+    // (DB.getPinnedFolders auto-repairs on read, but _pushPinned reads raw via getState.)
+    if (raw && typeof raw.meta === 'object' && !Array.isArray(raw.meta) && Array.isArray(raw.order)) {
+      const savedOrder = raw.order; // save before overwriting raw
+      raw   = raw.meta || {};
+      order = savedOrder.filter(id => raw[id]); // drop 'meta'/'order' wrapper keys
+    }
     const now   = Date.now();
     const clean = {};
     for (const [id, item] of Object.entries(raw)) {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) continue; // skip wrapper keys
       clean[id] = {
         ...item,
         // Backfill pinnedAt for items pinned before the field was added —
@@ -879,7 +897,7 @@ const Sync = (() => {
       && !u.includes('googleapis.com');
     const cleanUrl = u => isExternal(u) ? u : null;
 
-    const [pinnedMeta, pinnedOrder, allRecents, playcounts, playlists, history] = await Promise.all([
+    let [pinnedMeta, pinnedOrder, allRecents, playcounts, playlists, history] = await Promise.all([
       DB.getState('pinnedMeta'),
       DB.getState('pinned'),
       DB.getRecentsAll(),          // ALL records including tombstones
@@ -887,6 +905,12 @@ const Sync = (() => {
       DB.getPlaylists(),
       DB.getHistory(CONFIG.HISTORY_MAX),
     ]);
+    // Unwrap corrupted format if present
+    if (pinnedMeta && typeof pinnedMeta.meta === 'object' && !Array.isArray(pinnedMeta.meta)
+        && Array.isArray(pinnedMeta.order)) {
+      pinnedOrder = pinnedMeta.order;
+      pinnedMeta  = pinnedMeta.meta || {};
+    }
 
     const week = Date.now() - 7 * 24 * 60 * 60 * 1000;
     // Separate live items and fresh tombstones
@@ -1134,7 +1158,12 @@ const Sync = (() => {
       // ── Merge pinned ──────────────────────────────────────
       await _mergeStep('pinned', async () => {
         if (!remotePinned || typeof remotePinned !== 'object') return;
-        const localMeta = (await DB.getState('pinnedMeta')) || {};
+        let localMeta = (await DB.getState('pinnedMeta')) || {};
+        // Unwrap if still in the corrupted wrapper format
+        if (localMeta && typeof localMeta.meta === 'object' && !Array.isArray(localMeta.meta)
+            && Array.isArray(localMeta.order)) {
+          localMeta = localMeta.meta || {};
+        }
         // Support new { meta, order } format (from _pushPinned 3.5.1+) and old plain-dict format.
         // IMPORTANT: do NOT pass the whole remotePinned object to _mergePinned — it expects
         // a plain { id: item } dict, not { meta: {...}, order: [...] }.

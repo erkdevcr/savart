@@ -765,7 +765,26 @@ const DB = (() => {
    * @returns {Promise<Object[]>}
    */
   async function getPinnedFolders() {
-    const meta = await getState('pinnedMeta') || {};
+    let meta = await getState('pinnedMeta') || {};
+
+    // ── Auto-repair for the 3.5.1 sync bug ───────────────────────────────────
+    // That version's init() passed the whole { meta: {...}, order: [...] } wrapper
+    // object directly to _mergePinned instead of unwrapping .meta first, so the
+    // corrupted wrapper got written to IndexedDB as `pinnedMeta`.
+    //
+    // Detection: the object has BOTH a 'meta' key that is a non-array plain object
+    // AND an 'order' key that is an array — no legitimate pinned-item record would
+    // have those exact key names simultaneously.
+    if (meta && typeof meta.meta === 'object' && !Array.isArray(meta.meta)
+        && Array.isArray(meta.order)) {
+      console.warn('[DB] pinnedMeta corruption detected — auto-repairing (3.5.1 format bug)…');
+      const repaired = meta.meta || {};
+      const repairedOrder = meta.order.filter(id => repaired[id]); // drop 'meta'/'order' entries
+      await setState('pinnedMeta', repaired);
+      await setState('pinned', repairedOrder);
+      meta = repaired;
+    }
+
     return Object.values(meta);
   }
 

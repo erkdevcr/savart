@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.3';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.3 — fix pinned lost (init() unwrap { meta, order }); album cover URL: folder-level cover + "Apply to All" button
+const APP_VERSION  = '3.5.4';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.4 — auto-repair corrupted pinnedMeta (3.5.1 bug): DB + all sync paths now unwrap { meta, order } wrapper
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
