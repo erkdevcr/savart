@@ -9211,7 +9211,7 @@ const App = (() => {
     if (typeof Sync !== 'undefined') Sync.push('metadata');
     if (_browseFolderId) _updateBrowseLegend(_browseFolderId);
     _invalidateSuggestionsCache(); // new artist/album names now available as suggestions
-    UI.showToast(`${songs.length} canciones actualizadas`);
+    UI.showToast(`${songs.length} ${UI.t('lbl_songs_updated')}`);
   }
 
   /**

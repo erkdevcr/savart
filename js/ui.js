@@ -332,6 +332,7 @@ const UI = (() => {
       lbl_year_ph:             '2024',
       lbl_cover_url:           'Cover URL',
       lbl_apply_to_all:        'Aplicar a todas',
+      lbl_embedded_cover:      '(Cover Embebida)',
       toast_moved_to_albums:      'Movido a Álbumes',
       toast_moved_to_collections: 'Movido a Colecciones',
     },
@@ -644,6 +645,7 @@ const UI = (() => {
       lbl_year_ph:             '2024',
       lbl_cover_url:           'Cover URL',
       lbl_apply_to_all:        'Apply to all',
+      lbl_embedded_cover:      '(Embedded Cover)',
       toast_moved_to_albums:      'Moved to Albums',
       toast_moved_to_collections: 'Moved to Collections',
     },
@@ -3237,31 +3239,31 @@ const UI = (() => {
     editPanel.innerHTML = `
       <div class="album-edit-actions">
         <button class="album-edit-reset-id3-btn">${t('btn_reset_id3')}</button>
-        <button class="album-edit-save-btn">Guardar</button>
+        <button class="album-edit-save-btn">${t('save_btn')}</button>
       </div>
       <div class="album-edit-row">
-        <label class="album-edit-label">Artista</label>
-        <input class="album-edit-input" data-field="artist" value="${escHtml(album.artist || '')}" placeholder="Artista">
-        <button class="album-edit-apply-btn" data-apply="artist" title="Aplicar a todas las canciones">Aplicar a todas</button>
+        <label class="album-edit-label">${t('lbl_artist')}</label>
+        <input class="album-edit-input" data-field="artist" value="${escHtml(album.artist || '')}" placeholder="${t('lbl_artist')}">
+        <button class="album-edit-apply-btn" data-apply="artist" title="${t('lbl_apply_to_all')}">${t('lbl_apply_to_all')}</button>
       </div>
       <div class="album-edit-row">
-        <label class="album-edit-label">Álbum</label>
-        <input class="album-edit-input" data-field="album" value="${escHtml(album.name || '')}" placeholder="Álbum">
-        <button class="album-edit-apply-btn" data-apply="album" title="Aplicar a todas las canciones">Aplicar a todas</button>
+        <label class="album-edit-label">${t('lbl_album')}</label>
+        <input class="album-edit-input" data-field="album" value="${escHtml(album.name || '')}" placeholder="${t('lbl_album')}">
+        <button class="album-edit-apply-btn" data-apply="album" title="${t('lbl_apply_to_all')}">${t('lbl_apply_to_all')}</button>
       </div>
       <div class="album-edit-row">
-        <label class="album-edit-label">Año</label>
-        <input class="album-edit-input" data-field="year" value="${escHtml(album.year || '')}" placeholder="Año" style="max-width:80px">
+        <label class="album-edit-label">${t('lbl_year')}</label>
+        <input class="album-edit-input" data-field="year" value="${escHtml(album.year || '')}" placeholder="${t('lbl_year')}" style="max-width:80px">
       </div>
       <div class="album-edit-row">
-        <label class="album-edit-label">Cover URL</label>
+        <label class="album-edit-label">${t('lbl_cover_url')}</label>
         <input class="album-edit-input" data-field="coverUrl"
           value="${escHtml((album.coverUrl && !album.coverUrl.startsWith('blob:') && album.coverUrl !== 'id3') ? album.coverUrl : '')}"
-          placeholder="${(album.coverUrl && (album.coverUrl.startsWith('blob:') || album.coverUrl === 'id3')) ? '(Cover Embebida)' : 'https://…'}">
-        <button class="album-edit-apply-btn" data-apply="cover" title="Aplicar URL a todas las canciones individualmente">Aplicar a todas</button>
+          placeholder="${(album.coverUrl && (album.coverUrl.startsWith('blob:') || album.coverUrl === 'id3')) ? t('lbl_embedded_cover') : 'https://…'}">
+        <button class="album-edit-apply-btn" data-apply="cover" title="${t('lbl_apply_to_all')}">${t('lbl_apply_to_all')}</button>
       </div>
       <div class="album-edit-row album-edit-row--track-btn">
-        <button class="album-edit-track-btn">✎ Editar canciones</button>
+        <button class="album-edit-track-btn">${t('edit_tracks_btn')}</button>
       </div>`;
 
     // Toggle edit panel on ⋮ click — mark entity while open, unmark on close
@@ -3300,13 +3302,13 @@ const UI = (() => {
         const externalUrl = (artSrc && !isEmbedded) ? artSrc : '';
         const coverInput = editPanel.querySelector('[data-field="coverUrl"]');
         coverInput.value       = externalUrl;
-        coverInput.placeholder = (artSrc && !externalUrl) ? '(Cover Embebida)' : 'https://…';
+        coverInput.placeholder = (artSrc && !externalUrl) ? t('lbl_embedded_cover') : 'https://…';
 
         // Reset "Apply to All" cover state on each open
         _pendingApplyCoverToAll = false;
         const coverApplyBtn = editPanel.querySelector('[data-apply="cover"]');
         if (coverApplyBtn) {
-          coverApplyBtn.textContent = 'Aplicar a todas';
+          coverApplyBtn.textContent = t('lbl_apply_to_all');
           coverApplyBtn.classList.remove('album-edit-apply-btn--active');
           coverApplyBtn.disabled = false;
         }
@@ -3316,11 +3318,16 @@ const UI = (() => {
     });
 
     // Track whether the user clicked "Aplicar a todas" for the cover URL field.
+    // Set to true after a successful immediate save so "Guardar" also re-applies
+    // (in case the user typed a different URL afterwards).
     // Reset on each panel open so toggling doesn't persist across separate edit sessions.
     let _pendingApplyCoverToAll = false;
 
-    // "Aplicar a todas" — applies just artist or album field to every track;
-    //   for 'cover': marks the intent so "Guardar" also writes thumbnailUrl to all songs.
+    // "Aplicar a todas" — writes a single field to every track immediately.
+    // All three fields (artist, album, cover) behave identically:
+    //   • button shows '…' while saving, then '✓', then restores
+    //   • onAlbumEdit shows a toast with the number of songs updated
+    //   • cover also sets _pendingApplyCoverToAll so "Guardar" re-applies if URL changed
     editPanel.querySelectorAll('.album-edit-apply-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
         const field    = btn.dataset.apply;           // 'artist' | 'album' | 'cover'
@@ -3328,34 +3335,33 @@ const UI = (() => {
         const value    = inputEl?.value.trim();
         if (!value) return;
 
-        // Cover: don't save immediately — mark the intent so "Guardar" knows to apply to all.
-        if (field === 'cover') {
-          _pendingApplyCoverToAll = true;
-          btn.textContent = '✓ A todas las canciones';
-          btn.classList.add('album-edit-apply-btn--active');
-          btn.disabled = true;
-          return;
-        }
-
         btn.disabled = true;
         const orig = btn.textContent;
         btn.textContent = '…';
         try {
-          await App.onAlbumEdit?.(folderId, { [field]: value }, songs.map(s => s.id));
+          if (field === 'cover') {
+            // Save cover URL to every song + folder record immediately.
+            // applyCoverToAll:true writes thumbnailUrl on each individual song so
+            // covers survive session restarts (not just the in-memory live update).
+            await App.onAlbumEdit?.(folderId, { coverUrl: value }, songs.map(s => s.id), { applyCoverToAll: true });
+            _pendingApplyCoverToAll = true;
+            btn.classList.add('album-edit-apply-btn--active');
+          } else {
+            await App.onAlbumEdit?.(folderId, { [field]: value }, songs.map(s => s.id));
+            // Refresh header display for artist / album fields
+            if (field === 'artist') {
+              const subEl = entity.querySelector('.lib-detail-entity-sub');
+              if (subEl) subEl.textContent = [value, songs.length + ' canciones'].filter(Boolean).join(' · ');
+              container.querySelectorAll('.top-list-item .top-list-artist').forEach(el => {
+                el.textContent = value;
+              });
+            }
+            if (field === 'album') {
+              const nameEl = entity.querySelector('.lib-detail-entity-name');
+              if (nameEl) nameEl.textContent = value;
+            }
+          }
           btn.textContent = '✓';
-          // also refresh header display for artist sub-line
-          if (field === 'artist') {
-            const subEl = entity.querySelector('.lib-detail-entity-sub');
-            if (subEl) subEl.textContent = [value, songs.length + ' canciones'].filter(Boolean).join(' · ');
-            // Update artist in every song row immediately
-            container.querySelectorAll('.top-list-item .top-list-artist').forEach(el => {
-              el.textContent = value;
-            });
-          }
-          if (field === 'album') {
-            const nameEl = entity.querySelector('.lib-detail-entity-name');
-            if (nameEl) nameEl.textContent = value;
-          }
           setTimeout(() => { btn.disabled = false; btn.textContent = orig; }, 1500);
         } catch {
           btn.disabled = false; btn.textContent = orig;

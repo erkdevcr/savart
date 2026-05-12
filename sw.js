@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.14';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.14 — fix: _softScanItems worker used stale metaMap for bulkWriteMeta, silently erasing manualAt+thumbnailUrl written by concurrent "Apply to All"; added fresh DB read + secondary manualAt/rescannedAt guard (same pattern as _softScanFolder 3.5.13)
+const APP_VERSION  = '3.5.16';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.16 — i18n: album-edit-panel template and related strings now use t() keys (was hardcoded Spanish); added lbl_embedded_cover key (es/en); onAlbumEdit toast uses UI.t('lbl_songs_updated')
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
