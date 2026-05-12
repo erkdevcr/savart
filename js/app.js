@@ -6771,92 +6771,284 @@ const App = (() => {
     ].join('');
   }
 
-  /* ── Build folder row (for needs-attention list) ─────────── */
+  /* ── Build folder row — styled as lib-detail-entity ─────── */
 
   function _dsBuildFolderRow(folder) {
-    const dotCls  = _dsDotClass(folder);
-    const ignored = folder.status === 'ignored';
+    const ignored   = folder.status === 'ignored';
+    const songs     = folder.songs || [];
+    const songCount = songs.length;
     const pathParts = folder.path.split(' › ');
-    const leaf      = pathParts.pop();
-    const parentStr = pathParts.length ? pathParts.join(' › ') + ' › ' : '';
+    const leaf      = pathParts[pathParts.length - 1];
+
+    // Derive album-level values from song metadata in the session
+    const albumName  = songs.find(s => s.album)?.album   || folder.name;
+    const artistName = songs.find(s => s.artist)?.artist || '';
+    const yearVal    = songs.find(s => s.year)?.year     || '';
+
+    // Format badge from first song's MIME type
+    const mime   = songs[0]?.mimeType || '';
+    const format = mime.includes('flac')                         ? 'FLAC'
+                 : mime.includes('ogg')                          ? 'OGG'
+                 : mime.includes('aac')                          ? 'AAC'
+                 : mime.includes('wav')                          ? 'WAV'
+                 : (mime.includes('mpeg') || mime.includes('mp3')) ? 'MP3'
+                 : '';
+
+    // Folder-type chip
+    const ftKey   = isFolderCollection(folder.id) ? 'collection'
+                  : songCount === 1               ? 'single'
+                  : songCount <= 4               ? 'ep'
+                  : 'lp';
+    const ftLabel = { collection: 'Collection', single: 'Single', ep: 'EP', lp: 'LP' }[ftKey] || '';
+
+    // Cover from session data (stable URL only; _dsLoadCoverForRow fills it async from DB)
+    const coverSrc = (songs.find(s => s.thumbnailLink || s.coverUrl)?.thumbnailLink
+                   || songs.find(s => s.thumbnailLink || s.coverUrl)?.coverUrl
+                   || '').replace(/^blob:.*/, '');
+
+    const musicSvg = `<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>`;
+    const artHtml  = coverSrc
+      ? `<img src="${_escHtml(coverSrc)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)" onerror="this.style.display='none';this.nextElementSibling.style.display=''"><div style="display:none">${musicSvg}</div>`
+      : musicSvg;
+
+    const yearLine = [
+      ftLabel ? `<span class="album-format-badge">${_escHtml(ftLabel)}</span>` : '',
+      yearVal ? `(${_escHtml(yearVal)})`                                        : '',
+      format  ? `<span class="album-format-badge">${_escHtml(format)}</span>`  : '',
+    ].filter(Boolean).join(' ');
+
+    const subLine = [
+      artistName ? _escHtml(artistName) : '',
+      `${songCount} canc.`,
+    ].filter(Boolean).join(' · ');
+
+    const missingChips = _dsMissingChips(folder);
+
+    // Background colour derived from folder id (matches album card hue)
+    const hue   = [...(folder.id || '')].reduce((h, c) => h + c.charCodeAt(0), 0) % 360;
+    const albBg = `hsl(${hue},30%,28%)`;
 
     const row = document.createElement('div');
-    row.className = 'ds-folder-row' + (ignored ? ' ds-ignored' : '');
+    row.className = 'ds-folder-row' + (ignored ? ' ds-ignored' : '') + (folder.attended ? ' ds-attended' : '');
     row.dataset.folderId = folder.id;
 
     row.innerHTML = `
-      <div class="ds-folder-header">
-        <button class="ds-row-menu-btn" title="Más opciones"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg></button>
-        <div class="ds-status-dot ${dotCls}"></div>
-        <div class="ds-folder-path">
-          <span class="ds-folder-parent">${_escHtml(parentStr)}</span><span class="ds-folder-leaf">${_escHtml(leaf)}</span>
+      <div class="ds-folder-entity lib-detail-entity">
+        <div class="lib-detail-entity-art" style="background:${albBg};color:var(--text-secondary)">
+          ${artHtml}
         </div>
-        <div class="ds-missing-chips">${_dsMissingChips(folder)}</div>
-        <button class="ds-ignore-btn" title="${ignored ? 'Designorar' : 'Ignorar'}">${ignored ? '↩' : '✕'}</button>
-        <svg class="ds-chevron" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+        <div class="lib-detail-entity-info">
+          ${yearLine ? `<div class="lib-detail-entity-year">${yearLine}</div>` : ''}
+          <div class="lib-detail-entity-name">${_escHtml(albumName)}</div>
+          <div class="lib-detail-entity-sub">${subLine}${missingChips ? `&ensp;${missingChips}` : ''}</div>
+        </div>
+        <button class="lib-detail-entity-more" title="Opciones">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
+        </button>
       </div>
-      <div class="ds-folder-detail">
-        <div class="ds-table-actions">
-          <button class="ds-save-btn">Guardar</button>
-          <button class="ds-apply-all-btn">Aplicar fila 1 a todas</button>
+      <div class="album-edit-panel ds-album-edit-panel">
+        <div class="album-edit-actions">
+          <button class="ds-ignore-btn album-edit-reset-id3-btn">${ignored ? '↩ Designorar' : '✕ Ignorar'}</button>
+          <button class="ds-panel-save-btn album-edit-save-btn">${UI.t('save_btn') || 'Guardar'}</button>
         </div>
-        ${_dsBuildTable(folder)}
+        <div class="album-edit-row">
+          <label class="album-edit-label">${UI.t('lbl_artist') || 'Artista'}</label>
+          <input class="album-edit-input" data-field="artist" value="${_escHtml(artistName)}" placeholder="${UI.t('lbl_artist') || 'Artista'}">
+        </div>
+        <div class="album-edit-row">
+          <label class="album-edit-label">${UI.t('lbl_album') || 'Álbum'}</label>
+          <input class="album-edit-input" data-field="album" value="${_escHtml(albumName)}" placeholder="${UI.t('lbl_album') || 'Álbum'}">
+        </div>
+        <div class="album-edit-row">
+          <label class="album-edit-label">${UI.t('lbl_year') || 'Año'}</label>
+          <input class="album-edit-input" data-field="year" value="${_escHtml(yearVal)}" placeholder="2024" style="max-width:80px">
+        </div>
+        <div class="album-edit-row">
+          <label class="album-edit-label">${UI.t('lbl_cover_url') || 'Cover URL'}</label>
+          <input class="album-edit-input" data-field="coverUrl" value="${_escHtml(coverSrc)}" placeholder="https://…">
+        </div>
       </div>`;
 
-    row.querySelector('.ds-row-menu-btn').addEventListener('click', (e) => {
+    // Clicking the entity row (but not the ⋮ button) toggles the edit panel
+    const entity = row.querySelector('.ds-folder-entity');
+    entity.addEventListener('click', (e) => {
+      if (e.target.closest('.lib-detail-entity-more')) return;
+      const panel  = row.querySelector('.album-edit-panel');
+      const isOpen = panel.classList.toggle('open');
+      entity.classList.toggle('album-editing', isOpen);
+      if (isOpen) _dsSyncPanelFromFolder(panel, folder);
+    });
+
+    // ⋮ opens context menu
+    entity.querySelector('.lib-detail-entity-more').addEventListener('click', (e) => {
       e.stopPropagation();
       UI.showContextMenu(e, 'ds_folder', { id: folder.id, folderId: folder.id, name: leaf, isFolder: true });
     });
 
-    row.querySelector('.ds-folder-header').addEventListener('click', async (e) => {
-      if (e.target.closest('.ds-ignore-btn') || e.target.closest('.ds-row-menu-btn')) return;
-      const opening = !row.classList.contains('ds-open');
-      row.classList.toggle('ds-open');
-      row.classList.toggle('ds-editing', opening); // highlight while editing, clear on close
-      // On first expand, refresh song values from DB so columns reflect current state
-      if (opening && folder.songs?.length) {
-        const tbody = row.querySelector('.ds-table tbody');
-        if (tbody) {
-          for (const tr of tbody.querySelectorAll('tr')) {
-            const sid  = tr.dataset.songId;
-            if (!sid) continue;
-            const meta = await DB.getMeta(sid).catch(() => null);
-            if (!meta) continue;
-            const aIn = tr.querySelector('[data-field="artist"]');
-            const lIn = tr.querySelector('[data-field="album"]');
-            const yIn = tr.querySelector('[data-field="year"]');
-            const tIn = tr.querySelector('[data-field="track"]');
-            const coverVal = meta.thumbnailLink || meta.coverUrl || '';
-            const cIn = tr.querySelector('[data-field="coverUrl"]');
-            if (aIn) { aIn.value = meta.artist || ''; aIn.classList.toggle('missing', !meta.artist); }
-            if (lIn) { lIn.value = meta.album  || ''; lIn.classList.toggle('missing', !meta.album);  }
-            if (cIn) {
-              cIn.value = coverVal;
-              cIn.classList.toggle('missing', !coverVal);
-              // Update thumbnail preview
-              const thumb = tr.querySelector('.ds-cover-thumb');
-              if (thumb) {
-                if (coverVal) {
-                  thumb.outerHTML = `<img src="${_escHtml(coverVal)}" class="ds-cover-thumb" onerror="this.style.display='none'">`;
-                } else {
-                  if (thumb.tagName === 'IMG') thumb.outerHTML = `<span class="ds-cover-thumb ds-cover-empty"></span>`;
-                }
-              }
-            }
-            if (yIn) { yIn.value = meta.year   || ''; }
-            if (tIn) { tIn.value = meta.track  || ''; }
-          }
-        }
-      }
-    });
+    // Ignore button
     row.querySelector('.ds-ignore-btn').addEventListener('click', (e) => {
       e.stopPropagation();
       _dsToggleIgnore(folder.id, row);
     });
-    row.querySelector('.ds-apply-all-btn').addEventListener('click', () => _dsApplyRow1(row, folder.id));
-    row.querySelector('.ds-save-btn').addEventListener('click', () => _dsSaveFolderEdits(row, folder.id));
+
+    // Save button
+    row.querySelector('.ds-panel-save-btn').addEventListener('click', () => _dsSaveFromPanel(row, folder.id));
+
+    // Async: fill cover art from DB if not already in session data
+    _dsLoadCoverForRow(row, folder).catch(() => {});
 
     return row;
+  }
+
+  /* ── Deep scan panel helpers ─────────────────────────────── */
+
+  /** Sync panel inputs from the current in-memory folder data */
+  function _dsSyncPanelFromFolder(panel, folder) {
+    const songs    = folder.songs || [];
+    const artist   = songs.find(s => s.artist)?.artist || '';
+    const album    = songs.find(s => s.album)?.album   || folder.name;
+    const year     = songs.find(s => s.year)?.year     || '';
+    const coverSrc = (songs.find(s => s.thumbnailLink || s.coverUrl)?.thumbnailLink
+                   || songs.find(s => s.thumbnailLink || s.coverUrl)?.coverUrl
+                   || '').replace(/^blob:.*/, '');
+    const artistIn = panel.querySelector('[data-field="artist"]');
+    const albumIn  = panel.querySelector('[data-field="album"]');
+    const yearIn   = panel.querySelector('[data-field="year"]');
+    const coverIn  = panel.querySelector('[data-field="coverUrl"]');
+    if (artistIn) artistIn.value = artist;
+    if (albumIn)  albumIn.value  = album;
+    if (yearIn)   yearIn.value   = year;
+    if (coverIn && !coverIn.value) coverIn.value = coverSrc;
+  }
+
+  /** Save album-edit-panel inputs to every song in the folder */
+  async function _dsSaveFromPanel(rowEl, folderId) {
+    const folder  = _dsSession.folders[folderId];
+    if (!folder) return;
+    const saveBtn = rowEl.querySelector('.ds-panel-save-btn');
+    if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = UI.t('saving') || 'Guardando…'; }
+    const panel    = rowEl.querySelector('.album-edit-panel');
+    const artist   = panel.querySelector('[data-field="artist"]')?.value?.trim()   || '';
+    const album    = panel.querySelector('[data-field="album"]')?.value?.trim()    || '';
+    const year     = panel.querySelector('[data-field="year"]')?.value?.trim()     || '';
+    const coverUrl = panel.querySelector('[data-field="coverUrl"]')?.value?.trim() || '';
+    try {
+      let saved = 0;
+      for (const song of folder.songs) {
+        const patch = { folderId, manualAt: Date.now() };
+        if (artist)                                    patch.artist       = artist;
+        if (album)                                     patch.album        = album;
+        if (year)                                      patch.year         = year;
+        if (coverUrl && !coverUrl.startsWith('blob:')) patch.thumbnailUrl = coverUrl;
+        await DB.setMeta(song.id, patch);
+        saved++;
+        // Update in-memory session song
+        if (artist)   { song.artist  = artist;   song.missingArtist = false; }
+        if (album)    { song.album   = album;    song.missingAlbum  = false; }
+        if (year)     { song.year    = year;     song.missingYear   = false; }
+        if (coverUrl && !coverUrl.startsWith('blob:')) {
+          song.thumbnailLink = coverUrl;
+          song.missingCover  = false;
+        }
+        if (coverUrl && !coverUrl.startsWith('blob:')) {
+          _cacheExternalCover(song.id, coverUrl, true).catch(() => {});
+        }
+        const livePatch = {};
+        if (artist)                                    livePatch.artist       = artist;
+        if (album)                                     livePatch.album        = album;
+        if (year)                                      livePatch.year         = year;
+        if (coverUrl && !coverUrl.startsWith('blob:')) livePatch.thumbnailUrl = coverUrl;
+        if (Object.keys(livePatch).length) _liveMetaUpdate([song.id], livePatch);
+      }
+      // Refresh the entity header to reflect saved values
+      _dsRefreshRowHeader(rowEl, folder, { artist, album, year, coverUrl });
+      folder.attended = true;
+      folder.status   = 'needs_attention';
+      rowEl.classList.remove('ds-ignored');
+      rowEl.classList.add('ds-attended');
+      _dsUpdateCounters();
+      await _dsSaveSession();
+      if (typeof Sync !== 'undefined') Sync.push('metadata');
+      if (_browseFolderId) _updateBrowseLegend(_browseFolderId);
+      if (saveBtn) {
+        saveBtn.textContent = UI.t('saved_ok') || '✓ Guardado';
+        setTimeout(() => { if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = UI.t('save_btn') || 'Guardar'; } }, 1800);
+      }
+      UI.showToast(`${saved} ${UI.t('lbl_songs_updated') || 'canciones actualizadas'}`);
+    } catch (err) {
+      console.error('[DeepScan] Save error:', err);
+      if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = UI.t('save_btn') || 'Guardar'; }
+      UI.showToast(UI.t('toast_save_error') || 'Error guardando', 'error');
+    }
+  }
+
+  /** Update the lib-detail-entity header cells after a save */
+  function _dsRefreshRowHeader(rowEl, folder, { artist, album, year, coverUrl }) {
+    const songs     = folder.songs || [];
+    const songCount = songs.length;
+    const mime      = songs[0]?.mimeType || '';
+    const format    = mime.includes('flac') ? 'FLAC' : mime.includes('ogg') ? 'OGG'
+                    : mime.includes('aac')  ? 'AAC'  : mime.includes('wav') ? 'WAV'
+                    : (mime.includes('mpeg') || mime.includes('mp3')) ? 'MP3' : '';
+    const ftLabel   = isFolderCollection(folder.id) ? 'Collection'
+                    : songCount === 1 ? 'Single' : songCount <= 4 ? 'EP' : 'LP';
+
+    const nameEl = rowEl.querySelector('.lib-detail-entity-name');
+    if (nameEl && album) nameEl.textContent = album;
+
+    const subEl = rowEl.querySelector('.lib-detail-entity-sub');
+    if (subEl) {
+      const chips = _dsMissingChips(folder);
+      subEl.innerHTML = [artist ? _escHtml(artist) : '', `${songCount} canc.`].filter(Boolean).join(' · ')
+                      + (chips ? `&ensp;${chips}` : '');
+    }
+
+    const yearEl = rowEl.querySelector('.lib-detail-entity-year');
+    if (yearEl) {
+      yearEl.innerHTML = [
+        ftLabel ? `<span class="album-format-badge">${_escHtml(ftLabel)}</span>` : '',
+        year    ? `(${_escHtml(year)})`                                          : '',
+        format  ? `<span class="album-format-badge">${_escHtml(format)}</span>`  : '',
+      ].filter(Boolean).join(' ');
+    } else if (year || ftLabel || format) {
+      // Create the year line if it didn't exist before
+      const infoEl = rowEl.querySelector('.lib-detail-entity-info');
+      if (infoEl) {
+        const newYearEl = document.createElement('div');
+        newYearEl.className = 'lib-detail-entity-year';
+        newYearEl.innerHTML = [
+          ftLabel ? `<span class="album-format-badge">${_escHtml(ftLabel)}</span>` : '',
+          year    ? `(${_escHtml(year)})`                                          : '',
+          format  ? `<span class="album-format-badge">${_escHtml(format)}</span>`  : '',
+        ].filter(Boolean).join(' ');
+        infoEl.insertBefore(newYearEl, infoEl.firstChild);
+      }
+    }
+
+    const artEl = rowEl.querySelector('.lib-detail-entity-art');
+    if (artEl && coverUrl && !coverUrl.startsWith('blob:')) {
+      const musicSvg = `<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>`;
+      artEl.innerHTML = `<img src="${_escHtml(coverUrl)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)" onerror="this.style.display='none';this.nextElementSibling.style.display=''"><div style="display:none">${musicSvg}</div>`;
+    }
+  }
+
+  /** Asynchronously load a stable cover URL from DB and inject it into the row's art cell */
+  async function _dsLoadCoverForRow(rowEl, folder) {
+    const artEl = rowEl.querySelector('.lib-detail-entity-art');
+    if (!artEl || artEl.querySelector('img')) return; // already has cover
+    for (const song of (folder.songs || [])) {
+      const meta = await DB.getMeta(song.id).catch(() => null);
+      if (!meta) continue;
+      const cover = meta.thumbnailUrl || meta.coverUrl || '';
+      if (!cover || cover.startsWith('blob:') || /googleusercontent\.com|lh\d+\./i.test(cover)) continue;
+      const musicSvg = `<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>`;
+      artEl.innerHTML = `<img src="${_escHtml(cover)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)" onerror="this.style.display='none';this.nextElementSibling.style.display=''"><div style="display:none">${musicSvg}</div>`;
+      // Populate cover input and update session data
+      const coverIn = rowEl.querySelector('[data-field="coverUrl"]');
+      if (coverIn && !coverIn.value) coverIn.value = cover;
+      song.thumbnailLink = cover;
+      break;
+    }
   }
 
   function _dsBuildTable(folder) {
@@ -6925,7 +7117,7 @@ const App = (() => {
     const dot    = rowEl.querySelector('.ds-status-dot');
     if (dot) dot.className = 'ds-status-dot ' + _dsDotClass(folder);
     const ignBtn = rowEl.querySelector('.ds-ignore-btn');
-    if (ignBtn) { ignBtn.textContent = ignored ? '↩' : '✕'; ignBtn.title = ignored ? 'Designorar' : 'Ignorar'; }
+    if (ignBtn) { ignBtn.textContent = ignored ? '↩ Designorar' : '✕ Ignorar'; ignBtn.title = ignored ? 'Designorar' : 'Ignorar'; }
     _dsUpdateCounters();
     await _dsSaveSession();
   }

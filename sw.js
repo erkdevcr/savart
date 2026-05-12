@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.20';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.20 — year "Apply to All" added: album-edit-panel, collection-edit-panel (+ year field added to collection), song-edit-modal; collection Save also writes year per-song; _songEditCurrentItem tracks full item ref for folderId lookup
+const APP_VERSION  = '3.5.21';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.21 — deep scan folder rows restyled as lib-detail-entity (cover art, folder-type chip, year, format badge, album name, artist, song count); tapping row toggles inline album-edit-panel; save writes all fields to every song in folder; async cover loading from DB via _dsLoadCoverForRow
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
