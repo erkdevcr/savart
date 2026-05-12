@@ -417,6 +417,10 @@ const App = (() => {
       Sync.startLiveSync(_onSyncDataChanged);
     }).catch(() => {}).finally(() => {
       _hideBootToast();
+      // Boot ID3 refresh — 5 s after sync completes (or fails).
+      // Revokes stale blob: URLs and creates fresh session URLs for every home item
+      // whose cover is embedded in the ID3 tags, so they never show blank on startup.
+      setTimeout(() => _bootId3Refresh().catch(() => {}), 5000);
       // Background collection scan — runs once per session, low priority.
       // Lives in .finally() so it fires whether Sync succeeds or fails.
       // Delay 12 s to let boot, render and any in-flight enrichment settle first.
@@ -3072,6 +3076,92 @@ const App = (() => {
     // Re-push recents so other devices get the enriched metadata immediately,
     // without waiting for Device A to open the home screen.
     if (typeof Sync !== 'undefined') Sync.push('recents');
+  }
+
+  /**
+   * Boot-time ID3 refresh for all home items that carry embedded covers.
+   * Runs once per session, ~5 s after auth, so the DB/sync cycle has settled
+   * and every surface (pinned, recents, topPlayed, history, queue) receives a
+   * fresh blob: URL for embedded art.
+   *
+   * Two paths:
+   *  • coverBlob already in DB   → instant (no network): revoke stale session URL,
+   *    call Meta.injectCover, paint every visible surface.
+   *  • thumbnailUrl === 'id3' but no blob in DB → re-scan (downloads 1 MB head,
+   *    parses ID3, writes coverBlob, paints DOM).
+   */
+  async function _bootId3Refresh() {
+    if (typeof Meta === 'undefined') return;
+
+    // ── Collect all home items ──────────────────────────────────────────
+    const [pinnedItems, recents, topPlayedRaw, historyItems] = await Promise.all([
+      DB.getPinnedFolders().catch(() => []),
+      DB.getRecents(50).catch(() => []),
+      DB.getTopPlayed(50).catch(() => []),
+      DB.getHistory(CONFIG.HISTORY_MAX).catch(() => []),
+    ]);
+    const queueItems = (typeof Player !== 'undefined')
+      ? (Player.getQueue?.()?.queue || []) : [];
+
+    const all = [
+      ...pinnedItems.filter(p => !p.isFolder && p.type !== 'folder'),
+      ...recents.filter(r => r.type === 'song'),
+      ...topPlayedRaw,
+      ...historyItems,
+      ...queueItems,
+    ];
+
+    // ── Deduplicate ─────────────────────────────────────────────────────
+    const seen   = new Set();
+    const unique = all.filter(item => {
+      if (!item?.id || seen.has(item.id)) return false;
+      seen.add(item.id);
+      return true;
+    });
+    if (!unique.length) return;
+
+    // ── Bulk-fetch DB meta ──────────────────────────────────────────────
+    const metaResults = await Promise.allSettled(
+      unique.map(item => DB.getMeta(item.id).catch(() => null))
+    );
+
+    const withBlob  = []; // coverBlob in DB  → instant refresh, no network
+    const needsScan = []; // thumbnailUrl='id3' but no blob → needs head-download
+
+    unique.forEach((item, i) => {
+      const m = metaResults[i].status === 'fulfilled' ? metaResults[i].value : null;
+      if (m?.coverBlob)                 withBlob.push({ item, dbMeta: m });
+      else if (m?.thumbnailUrl === 'id3') needsScan.push(item);
+    });
+
+    if (!withBlob.length && !needsScan.length) return;
+    console.log(`[BootId3] ${withBlob.length} instant blob refresh + ${needsScan.length} to re-scan`);
+
+    // ── Fast path: blob in DB → revoke stale URL + fresh inject + paint ─
+    // Batches of 8 (CPU-only: URL.createObjectURL — no I/O)
+    const FAST_BATCH = 8;
+    for (let i = 0; i < withBlob.length; i += FAST_BATCH) {
+      await Promise.all(withBlob.slice(i, i + FAST_BATCH).map(async ({ item, dbMeta }) => {
+        try {
+          Meta.revoke(item.id);                                    // clear stale blob: URL
+          const url = Meta.injectCover(item.id, dbMeta.coverBlob);
+          if (!url) return;
+          _updateHomeCardThumbnail(item.id, url, true);
+          _updateTopListThumb(item.id, url, true);
+          _updatePinnedItemCover(item.id, url, true);
+          _updateRowThumbnail(item.id, url, true);
+          Player.patchQueueItem?.(item.id, { thumbnailUrl: url });
+        } catch (_) {}
+      }));
+      await new Promise(r => setTimeout(r, 0)); // yield to keep UI responsive
+    }
+
+    // ── Slow path: id3 sentinel but no blob → soft-scan (head download) ─
+    if (needsScan.length && typeof Drive !== 'undefined' && Auth.isAuthenticated()) {
+      // Clear session guard so _softScanItems re-downloads and re-parses these
+      needsScan.forEach(item => _sessionScannedIds.delete(item.id));
+      await _softScanItems(needsScan);
+    }
   }
 
   /**
