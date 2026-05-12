@@ -469,6 +469,12 @@ const App = (() => {
 
     if (view === 'history' && types.includes('history')) _loadHistory();
 
+    // When history arrives from another device, scan items that came without a cover.
+    // Runs regardless of which screen is active — same pattern as _scanIncomingRecents.
+    if (types.includes('history')) {
+      setTimeout(() => _scanIncomingHistory().catch(() => {}), 1000);
+    }
+
     if (types.includes('settings')) _restoreSettings();
 
     // When favorites sync in, refresh the heart button for the currently playing track
@@ -3134,6 +3140,57 @@ const App = (() => {
 
     if (toScan.length && typeof Drive !== 'undefined') {
       console.log(`[SyncScan] ${toScan.length} incoming recent(s) need cover scan`);
+      toScan.forEach(s => _sessionScannedIds.delete(s.id)); // ensure _softScanItems processes them
+      await _softScanItems(toScan);
+    }
+  }
+
+  /**
+   * Scan history items that arrived from another device without a cover.
+   * Called 1 s after a live-sync 'history' event so DB writes have settled.
+   *
+   * Two paths per item:
+   *  • coverBlob already in DB  → instant: revoke + injectCover + paint (no network)
+   *  • no cover at all          → soft-scan via _softScanItems (1 MB head download)
+   *
+   * Items already handled this session (_sessionScannedIds) are skipped.
+   */
+  async function _scanIncomingHistory() {
+    if (typeof Meta === 'undefined' || !Auth.isAuthenticated()) return;
+
+    const raw    = await DB.getHistory(50).catch(() => []);
+    const songs  = raw.filter(r => r.type === 'song' || !r.type); // history entries are always songs
+    if (!songs.length) return;
+
+    const metaResults = await Promise.allSettled(
+      songs.map(s => DB.getMeta(s.id).catch(() => null))
+    );
+
+    const toScan = [];
+
+    songs.forEach((s, i) => {
+      const m       = metaResults[i].status === 'fulfilled' ? metaResults[i].value : null;
+      const hasBlob = !!m?.coverBlob;
+      const hasUrl  = !!(m?.thumbnailUrl && m.thumbnailUrl !== 'id3'
+                          && !m.thumbnailUrl.startsWith('blob:'));
+
+      if (hasBlob) {
+        // Blob in DB — refresh session URL for free (no network)
+        Meta.revoke(s.id);
+        const url = Meta.injectCover(s.id, m.coverBlob);
+        if (url) {
+          _updateTopListThumb(s.id, url, true);   // history + top-played share this class
+          _updateHomeCardThumbnail(s.id, url, true);
+          _updateRowThumbnail(s.id, url, true);
+        }
+      } else if (!hasUrl && !_sessionScannedIds.has(s.id)) {
+        // No cover anywhere and not yet scanned this session → queue for ID3 download
+        toScan.push(s);
+      }
+    });
+
+    if (toScan.length && typeof Drive !== 'undefined') {
+      console.log(`[HistScan] ${toScan.length} history item(s) need cover scan`);
       toScan.forEach(s => _sessionScannedIds.delete(s.id)); // ensure _softScanItems processes them
       await _softScanItems(toScan);
     }
