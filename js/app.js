@@ -445,6 +445,14 @@ const App = (() => {
     const needsHome = types.some(t => ['recents', 'pinned', 'playcounts', 'favorites', 'playlists', 'home'].includes(t));
     if (needsHome) _loadHomeData();
 
+    // When recents or a home snapshot arrive from another device, scan any items
+    // that came without a cover (embedded ID3 art can't be synced — only the blob
+    // URL or 'id3' sentinel, both session-only). 1 s delay lets _applyRemote DB
+    // writes and _loadHomeData() finish before we check what needs scanning.
+    if (types.some(t => t === 'recents' || t === 'home')) {
+      setTimeout(() => _scanIncomingRecents().catch(() => {}), 1000);
+    }
+
     if (view === 'library' && types.some(t => ['playlists', 'favorites'].includes(t))) {
       _setLibTab(_currentLibTab || 'albums');
     }
@@ -3076,6 +3084,59 @@ const App = (() => {
     // Re-push recents so other devices get the enriched metadata immediately,
     // without waiting for Device A to open the home screen.
     if (typeof Sync !== 'undefined') Sync.push('recents');
+  }
+
+  /**
+   * Scan recently-synced items that arrived from another device without a cover.
+   * Called 1 s after a live-sync 'recents' or 'home' event so the DB writes
+   * have settled and _loadHomeData() has already re-rendered the list.
+   *
+   * Two paths per item:
+   *  • coverBlob already in DB  → instant: revoke + injectCover + paint (no network)
+   *  • no cover at all          → soft-scan via _softScanItems (1 MB head download)
+   *
+   * Items already handled this session (_sessionScannedIds) are skipped to avoid
+   * redundant downloads.
+   */
+  async function _scanIncomingRecents() {
+    if (typeof Meta === 'undefined' || !Auth.isAuthenticated()) return;
+
+    const recents = await DB.getRecents(20).catch(() => []);
+    const songs   = recents.filter(r => r.type === 'song');
+    if (!songs.length) return;
+
+    const metaResults = await Promise.allSettled(
+      songs.map(s => DB.getMeta(s.id).catch(() => null))
+    );
+
+    const toScan = [];
+
+    songs.forEach((s, i) => {
+      const m       = metaResults[i].status === 'fulfilled' ? metaResults[i].value : null;
+      const hasBlob = !!m?.coverBlob;
+      const hasUrl  = !!(m?.thumbnailUrl && m.thumbnailUrl !== 'id3'
+                          && !m.thumbnailUrl.startsWith('blob:'));
+
+      if (hasBlob) {
+        // Blob in DB — just refresh the session URL (free, no network)
+        Meta.revoke(s.id);
+        const url = Meta.injectCover(s.id, m.coverBlob);
+        if (url) {
+          _updateHomeCardThumbnail(s.id, url, true);
+          _updateTopListThumb(s.id, url, true);
+          _updateRowThumbnail(s.id, url, true);
+        }
+      } else if (!hasUrl && !_sessionScannedIds.has(s.id)) {
+        // No cover anywhere and not yet scanned → queue for ID3 download
+        toScan.push(s);
+      }
+    });
+
+    if (toScan.length && typeof Drive !== 'undefined') {
+      console.log(`[SyncScan] ${toScan.length} incoming recent(s) need cover scan`);
+      toScan.forEach(s => _sessionScannedIds.delete(s.id)); // ensure _softScanItems processes them
+      await _softScanItems(toScan);
+    }
   }
 
   /**

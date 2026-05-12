@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.6';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.6 — _bootId3Refresh: 5 s after boot, revoke+re-inject embedded covers for all home items (pinned/recents/topPlayed/history/queue)
+const APP_VERSION  = '3.5.7';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.7 — _scanIncomingRecents: scan cover for recents arriving from other devices via live sync
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
