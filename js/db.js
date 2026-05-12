@@ -785,6 +785,23 @@ const DB = (() => {
       meta = repaired;
     }
 
+    // ── Ghost-pin cleanup ─────────────────────────────────────────────────────
+    // Remove entries that have no name and no displayName — these are orphaned
+    // references left over from sync bugs or interrupted pin operations. They show
+    // as blank cards with only a music-note icon on the home screen.
+    const ghostIds = Object.keys(meta).filter(id => {
+      const item = meta[id];
+      return !item || (!item.name && !item.displayName);
+    });
+    if (ghostIds.length > 0) {
+      console.warn(`[DB] Removing ${ghostIds.length} ghost pin(s) with no name reference…`);
+      for (const id of ghostIds) delete meta[id];
+      const order = await getState('pinned') || [];
+      const cleanOrder = order.filter(id => meta[id]);
+      await setState('pinnedMeta', meta);
+      await setState('pinned', cleanOrder);
+    }
+
     return Object.values(meta);
   }
 

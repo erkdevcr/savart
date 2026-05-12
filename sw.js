@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.4';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.4 — auto-repair corrupted pinnedMeta (3.5.1 bug): DB + all sync paths now unwrap { meta, order } wrapper
+const APP_VERSION  = '3.5.5';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.5 — getPinnedFolders: auto-remove ghost pins (no name/displayName) on session start
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
