@@ -949,6 +949,16 @@ const UI = (() => {
 
     const content = screen.querySelector('.home-content') || screen;
 
+    // Save scroll positions before tearing down DOM so we can restore them after rebuild.
+    // Vertical: main screen scroll (user may have scrolled past the first section).
+    // Horizontal: each section's card-row scroll (recents, top_played, etc.).
+    const savedVertical = content.scrollTop || screen.scrollTop || 0;
+    const savedHScroll  = {};
+    content.querySelectorAll('.home-section[data-section-type]').forEach(sec => {
+      const row = sec.querySelector('.home-cards-scroll');
+      if (row && row.scrollLeft > 0) savedHScroll[sec.dataset.sectionType] = row.scrollLeft;
+    });
+
     // Clear dynamic sections + old CTA
     content.querySelectorAll('.home-section, .home-cta-btn').forEach(s => s.remove());
 
@@ -982,6 +992,23 @@ const UI = (() => {
     }
     content.appendChild(_buildHomeSection(t('recents_songs'), recentSongs, 'recents'));
     content.appendChild(_buildHomeSection(t('top_played'), topPlayed, 'top_played'));
+
+    // Restore scroll positions after DOM is rebuilt.
+    // requestAnimationFrame defers until the browser has painted the new layout,
+    // otherwise scrollLeft/scrollTop assignments may be ignored on zero-height nodes.
+    requestAnimationFrame(() => {
+      if (savedVertical > 0) {
+        if (content.scrollHeight > content.clientHeight) content.scrollTop = savedVertical;
+        else if (screen.scrollHeight > screen.clientHeight) screen.scrollTop = savedVertical;
+      }
+      content.querySelectorAll('.home-section[data-section-type]').forEach(sec => {
+        const pos = savedHScroll[sec.dataset.sectionType];
+        if (pos > 0) {
+          const row = sec.querySelector('.home-cards-scroll');
+          if (row) row.scrollLeft = pos;
+        }
+      });
+    });
   }
 
   /**
@@ -993,6 +1020,7 @@ const UI = (() => {
   function _buildHomeSection(title, items, type) {
     const section = document.createElement('div');
     section.className = 'home-section';
+    section.dataset.sectionType = type; // used by renderHome to save/restore scroll position
 
     const headerEl = document.createElement('div');
     headerEl.className = 'home-section-header';

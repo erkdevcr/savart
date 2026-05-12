@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.18';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.18 — _liveMetaUpdate now also patches _itemCache; future queue builds from album/search use updated thumbnailUrl instead of stale Drive thumbnailLink
+const APP_VERSION  = '3.5.19';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.19 — home screen flicker + scroll reset fix: _loadHomeData debounced (350ms) on sync/track-start calls; renderHome saves/restores scroll positions (vertical + per-section horizontal) via requestAnimationFrame
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

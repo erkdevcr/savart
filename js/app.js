@@ -38,6 +38,13 @@ const App = (() => {
   // cached (instantly loaded) tracks.
   let _loadingTimer = null;
 
+  /* ── Home-data debounce ──────────────────────────────────── */
+  // _loadHomeData is called from many places (sync events, track start, boot).
+  // Debouncing prevents rapid successive calls from causing multiple full re-renders
+  // of the home screen (which resets scroll position and causes visible flicker).
+  let _loadHomeDebounceTimer = null;
+  const _LOAD_HOME_DEBOUNCE_MS = 350;
+
   /* ── Soft-scan session guard ─────────────────────────────── */
   // IDs already soft-scanned in THIS session (cleared on page reload / new session).
   // Prevents scanning the same item repeatedly when _loadHomeData is called multiple
@@ -443,7 +450,8 @@ const App = (() => {
     const view = UI.getCurrentView();
 
     const needsHome = types.some(t => ['recents', 'pinned', 'playcounts', 'favorites', 'playlists', 'home'].includes(t));
-    if (needsHome) _loadHomeData();
+    // Debounce: live sync fires every 3 s — collapse rapid refreshes into one render
+    if (needsHome) _loadHomeData({ debounce: true });
 
     // When recents or a home snapshot arrive from another device, scan any items
     // that came without a cover (embedded ID3 art can't be synced — only the blob
@@ -464,7 +472,7 @@ const App = (() => {
         if (_currentLibTab === 'artists') _loadArtists();
       }
       // Also refresh home cards (top-played, recents may show stale covers)
-      _loadHomeData();
+      _loadHomeData({ debounce: true });
     }
 
     if (view === 'history' && types.includes('history')) _loadHistory();
@@ -708,7 +716,8 @@ const App = (() => {
       };
       DB.addRecent(recentData).then(() => {
         Sync.push('recents');
-        if (UI.getCurrentView() === 'home') _loadHomeData();
+        // Debounce: track-start fires very close to sync events — collapse into one render
+        if (UI.getCurrentView() === 'home') _loadHomeData({ debounce: true });
       }).catch(() => {});
 
       // Add to playback history
@@ -3773,7 +3782,17 @@ const App = (() => {
 
   /* ── Home ────────────────────────────────────────────────── */
 
-  async function _loadHomeData() {
+  async function _loadHomeData({ debounce = false } = {}) {
+    // Debounce: when called rapidly (sync events, track-start, etc.) collapse into
+    // a single render to avoid flicker and scroll-position resets on the home screen.
+    // Bypass debounce for the very first render (home is still empty — instant paint).
+    const homeHasContent = !!document.querySelector('#screen-home .home-section');
+    if (debounce && homeHasContent) {
+      clearTimeout(_loadHomeDebounceTimer);
+      return new Promise(resolve => {
+        _loadHomeDebounceTimer = setTimeout(() => _loadHomeData().then(resolve).catch(resolve), _LOAD_HOME_DEBOUNCE_MS);
+      });
+    }
     try {
       const [pinned, recents, topPlayedRaw, rawPlaylists] = await Promise.all([
         DB.getPinnedFolders(),
