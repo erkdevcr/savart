@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.10';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.10 — fix: _softScanFolder used stale existingMap causing coverBlobToUse=null race when _onBlobReady ran concurrently; added data-cover-src guard
+const APP_VERSION  = '3.5.11';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.11 — fix: sync thumbnailUrl/coverUrl fill-only logic ignored remote manual edits (manualAt); now overwrites when remoteManualAt > 0
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

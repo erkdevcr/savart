@@ -575,15 +575,16 @@ const Sync = (() => {
       case 'hot': {
         // Shared merge logic for both metadata (full library) and hot (rescan delta).
         // Strategy:
-        //   • name / displayName / folderId / mbReleaseMbid / coverUrl → fill-only
+        //   • name / displayName / folderId / mbReleaseMbid → fill-only
         //   • mbTried / auddTried → adopt if remote is true
         //   • artist / album / year → overwrite if remote was MB/AudD-enriched; else fill-only
-        //   • thumbnailUrl → ALWAYS overwrite (always external URL, never folder-inferred)
+        //   • thumbnailUrl / coverUrl → OVERWRITE if remote was manually edited (remoteManualAt > 0);
+        //                               fill-only otherwise (never silently downgrade a local cover)
         //
         // Performance: single bulk read + bulk write instead of per-song DB round-trips.
         // With 68K+ songs, per-song getMeta calls would take minutes; this takes seconds.
         // For 'hot' (typically 5–50 songs), getAllMeta is still fast since IDB scan is indexed.
-        const FILL_ONLY     = ['name', 'displayName', 'folderId', 'mbReleaseMbid', 'coverUrl'];
+        const FILL_ONLY     = ['name', 'displayName', 'folderId', 'mbReleaseMbid'];
         const ENRICH_FIELDS = ['artist', 'album', 'year'];
 
         const allLocal = await DB.getAllMeta();
@@ -627,17 +628,29 @@ const Sync = (() => {
             if (remoteIsEnriched || !merged[f]) merged[f] = item[f];
           }
 
-          // thumbnailUrl — fill-only: only set if this device has no existing cover at all.
-          // Principle: DB is the source of truth on each device. Sync must never downgrade
-          // a cover (overwrite a good URL or local blob with a stale remote URL).
-          // Exceptions:
-          //   • manualAt guard already handled above — remote manual edit wins.
-          //   • 'id3' sentinel is never synced (filtered in all _push* functions),
-          //     so item.thumbnailUrl here is always a real external URL.
+          // thumbnailUrl / coverUrl — cover sync rules:
+          //   • Remote was manually edited (remoteManualAt > 0) and local didn't win:
+          //     OVERWRITE — the user on the remote device explicitly chose this cover;
+          //     it must propagate even when this device already has an ID3 blob or URL.
+          //   • Remote is auto-enrichment (remoteManualAt === 0):
+          //     FILL-ONLY — only apply when this device has no cover at all, so we never
+          //     silently downgrade a good local cover (ID3 blob, CDN URL) with a stale
+          //     enrichment URL from another device.
+          //   'id3' sentinel is never synced — item.thumbnailUrl is always a real URL.
           if (item.thumbnailUrl && !localManualWins) {
-            const hasLocalCover = (merged.thumbnailUrl && merged.thumbnailUrl !== 'id3')
-                                || merged.coverBlob;   // local blob → always better than external URL
-            if (!hasLocalCover) merged.thumbnailUrl = item.thumbnailUrl;
+            if (remoteManualAt > 0) {
+              merged.thumbnailUrl = item.thumbnailUrl; // manual edit — always propagate
+            } else {
+              const hasLocalCover = (merged.thumbnailUrl && merged.thumbnailUrl !== 'id3')
+                                  || merged.coverBlob;
+              if (!hasLocalCover) merged.thumbnailUrl = item.thumbnailUrl;
+            }
+          }
+          // coverUrl (album folder header cover) — same manual-override / fill-only rules.
+          if (item.coverUrl && !localManualWins) {
+            if (remoteManualAt > 0 || !merged.coverUrl) {
+              merged.coverUrl = item.coverUrl;
+            }
           }
 
           // durationSec: take the larger non-zero value — it's a physical property of
@@ -681,6 +694,7 @@ const Sync = (() => {
               if (rec.album)        patch.album        = rec.album;
               if (rec.year)         patch.year         = rec.year;
               if (rec.thumbnailUrl) patch.thumbnailUrl = rec.thumbnailUrl;
+              if (rec.coverUrl)     patch.coverUrl     = rec.coverUrl;
               if (Object.keys(patch).length) {
                 App.liveMetaUpdate([rec.id], patch);
               }
@@ -1266,7 +1280,7 @@ const Sync = (() => {
       // Structural fields (name/displayName/folderId) and cover URLs: fill-only.
       await _mergeStep('metadata', async () => {
         if (!Array.isArray(remoteMetadata) || remoteMetadata.length === 0) return;
-        const FILL_ONLY     = ['name', 'displayName', 'folderId', 'mbReleaseMbid', 'coverUrl'];
+        const FILL_ONLY     = ['name', 'displayName', 'folderId', 'mbReleaseMbid'];
         const ENRICH_FIELDS = ['artist', 'album', 'year'];
 
         // Single bulk read — avoids per-song getMeta overhead with large libraries
@@ -1305,12 +1319,21 @@ const Sync = (() => {
             if (remoteIsEnriched || !merged[f]) merged[f] = item[f];
           }
 
-          // thumbnailUrl — fill-only: only set if this device has no existing cover.
-          // Same rule as _applyRemote: DB is source of truth, sync never downgrades covers.
+          // thumbnailUrl / coverUrl — same manual-override / fill-only rules as _applyRemote.
           if (item.thumbnailUrl && !localManualWins) {
-            const hasLocalCover = (merged.thumbnailUrl && merged.thumbnailUrl !== 'id3')
-                                || merged.coverBlob;
-            if (!hasLocalCover) merged.thumbnailUrl = item.thumbnailUrl;
+            if (remoteManualAt > 0) {
+              merged.thumbnailUrl = item.thumbnailUrl; // manual edit — always propagate
+            } else {
+              const hasLocalCover = (merged.thumbnailUrl && merged.thumbnailUrl !== 'id3')
+                                  || merged.coverBlob;
+              if (!hasLocalCover) merged.thumbnailUrl = item.thumbnailUrl;
+            }
+          }
+          // coverUrl (album folder header cover) — same rules
+          if (item.coverUrl && !localManualWins) {
+            if (remoteManualAt > 0 || !merged.coverUrl) {
+              merged.coverUrl = item.coverUrl;
+            }
           }
 
           if (merged.mbReleaseMbid && !merged.thumbnailUrl) {
@@ -1349,6 +1372,7 @@ const Sync = (() => {
               if (rec.album)        patch.album        = rec.album;
               if (rec.year)         patch.year         = rec.year;
               if (rec.thumbnailUrl) patch.thumbnailUrl = rec.thumbnailUrl;
+              if (rec.coverUrl)     patch.coverUrl     = rec.coverUrl;
               if (Object.keys(patch).length) {
                 App.liveMetaUpdate([rec.id], patch);
               }
