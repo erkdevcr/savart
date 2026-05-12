@@ -3009,7 +3009,23 @@ const App = (() => {
       while (queue.length > 0) {
         const item = queue.shift();
         try {
-          const existing = metaMap.get(item.id) || null;
+          // Fresh DB read — manualAt / rescannedAt may have been written AFTER
+          // metaMap was built (race condition: user edited while _softScanItems was
+          // already running, or "Apply to All" fired during a concurrent scan).
+          // Using a stale metaMap snapshot for bulkWriteMeta would silently clear
+          // manualAt AND thumbnailUrl from the record (existing has neither, patch
+          // writes thumbnailUrl:null → the manual URL is permanently lost).
+          const freshMeta = await DB.getMeta(item.id).catch(() => null);
+
+          // Secondary guard: item became protected since we built metaMap.
+          // Skip the scan entirely — just paint whatever is already in DB.
+          if ((freshMeta?.manualAt || 0) > 0 || (freshMeta?.rescannedAt || 0) > 0) {
+            _ensureCoverVisible(item.id, freshMeta);
+            continue;
+          }
+
+          // Use fresh DB data as existing baseline (beats stale metaMap snapshot)
+          const existing = freshMeta || metaMap.get(item.id) || null;
 
           // Prefer local cached blob (free, full file — best quality).
           // Fall back to a 1MB head download (enough for most embedded cover art).

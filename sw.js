@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.13';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.13 — fix: AudD in _onBlobReady overwrote manual thumbnailUrl (missing !playManual guard); _softScanFolder loop had no secondary manualAt/rescannedAt guard after fresh DB read (race: edit while folder open)
+const APP_VERSION  = '3.5.14';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.14 — fix: _softScanItems worker used stale metaMap for bulkWriteMeta, silently erasing manualAt+thumbnailUrl written by concurrent "Apply to All"; added fresh DB read + secondary manualAt/rescannedAt guard (same pattern as _softScanFolder 3.5.13)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
