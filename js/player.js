@@ -593,16 +593,23 @@ const Player = (() => {
       // because loadedmetadata always fires before play() can resolve.
       // Combining into one write prevents race conditions with _onDurationReady.
       DB.incrementPlayCount(item.id).catch(() => {});
-      DB.setMeta(item.id, {
-        name:         item.name,
-        displayName:  item.displayName || item.name,
-        thumbnailUrl: item.thumbnailUrl || item.thumbnailLink || null,
-        artist:       item.artist    || '',
-        album:        item.albumName || item.album || '',
-        year:         item.year      || '',
-        folderId:     item.parents?.[0] || null,
-        ...(isFinite(_audio.duration) && _audio.duration > 0
-          ? { durationSec: _audio.duration } : {}),
+      // Guard: never overwrite a manually-set thumbnailUrl with stale queue data.
+      // Queue items are built from Drive API responses and may lack the manual URL.
+      DB.getMeta(item.id).then(existing => {
+        const hasManual = (existing?.manualAt || 0) > 0;
+        return DB.setMeta(item.id, {
+          name:         item.name,
+          displayName:  item.displayName || item.name,
+          // Only write thumbnailUrl if the user has NOT manually set it.
+          // If manualAt is set, preserve whatever is already in DB.
+          ...(!hasManual ? { thumbnailUrl: item.thumbnailUrl || item.thumbnailLink || null } : {}),
+          artist:       item.artist    || '',
+          album:        item.albumName || item.album || '',
+          year:         item.year      || '',
+          folderId:     item.parents?.[0] || null,
+          ...(isFinite(_audio.duration) && _audio.duration > 0
+            ? { durationSec: _audio.duration } : {}),
+        });
       }).catch(() => {});
 
       // Save playback state

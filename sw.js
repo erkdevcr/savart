@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.16';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.16 — i18n: album-edit-panel template and related strings now use t() keys (was hardcoded Spanish); added lbl_embedded_cover key (es/en); onAlbumEdit toast uses UI.t('lbl_songs_updated')
+const APP_VERSION  = '3.5.17';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.17 — player.js: DB.setMeta on play now reads manualAt first; skips thumbnailUrl write if user manually set it, preventing covers from being cleared on playback
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
