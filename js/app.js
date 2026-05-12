@@ -913,6 +913,12 @@ const App = (() => {
       if (hasQueue && Player.patchQueueItem(id, queuePatch)) {
         currentAffected = true;
       }
+      // Also patch _itemCache so future queue builds (from album/search clicks) use
+      // the updated metadata instead of stale Drive API fields (e.g. thumbnailLink).
+      if (hasQueue) {
+        const cached = _itemCache.get(id);
+        if (cached) _itemCache.set(id, { ...cached, ...queuePatch });
+      }
     }
 
     // Patch all visible surfaces (home cards, queue rows, library rows) for every

@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.17';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.17 — player.js: DB.setMeta on play now reads manualAt first; skips thumbnailUrl write if user manually set it, preventing covers from being cleared on playback
+const APP_VERSION  = '3.5.18';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.18 — _liveMetaUpdate now also patches _itemCache; future queue builds from album/search use updated thumbnailUrl instead of stale Drive thumbnailLink
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
