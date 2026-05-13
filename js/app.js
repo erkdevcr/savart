@@ -383,7 +383,7 @@ const App = (() => {
           mb = ((await DB.getCacheSize()) / 1024 / 1024).toFixed(1);
         }
         const sizeEl = document.getElementById('boot-db-size');
-        if (sizeEl) sizeEl.textContent = mb + ' MB';
+        if (sizeEl) sizeEl.textContent = '(' + mb + ' MB)';
       } catch (_) {}
     })();
 
@@ -6686,8 +6686,11 @@ const App = (() => {
     const pathParts    = folder.path.split(' › ');
     const leaf         = pathParts[pathParts.length - 1];
 
-    const ftKey   = isCollection ? 'collection' : songCount === 1 ? 'single' : songCount <= 4 ? 'ep' : 'lp';
-    const ftLabel = { collection: 'Collection', single: 'Single', ep: 'EP', lp: 'LP' }[ftKey] || '';
+    const ftKey   = isCollection ? 'collection' : 'album';
+    const ftLabel = ftKey === 'collection'
+      ? (UI.t('lbl_collection') || 'Colección')
+      : (UI.t('lbl_album_chip') || 'Álbum');
+    const ftChipCls = ftKey === 'collection' ? 'folder-type-chip--collection' : 'folder-type-chip--album';
 
     const musicSvg = `<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>`;
     const hue   = [...(folder.id || '')].reduce((h, c) => h + c.charCodeAt(0), 0) % 360;
@@ -6703,7 +6706,7 @@ const App = (() => {
           ${musicSvg}
         </div>
         <div class="lib-detail-entity-info">
-          <div class="lib-detail-entity-year"><span class="album-format-badge">${_escHtml(ftLabel)}</span></div>
+          <div class="lib-detail-entity-year"><span class="folder-type-chip ${ftChipCls}">${_escHtml(ftLabel)}</span></div>
           <div class="lib-detail-entity-name">${_escHtml(folder.name)}</div>
           <div class="lib-detail-entity-sub">${songCount} canc.</div>
         </div>
@@ -6714,8 +6717,8 @@ const App = (() => {
       <div class="album-edit-panel ds-album-edit-panel">
         <div class="album-edit-actions">
           <div class="ds-type-switch">
-            <button class="ds-type-btn album-edit-apply-btn${!isCollection ? ' ds-type-btn--on' : ''}" data-type="album">LP / EP</button>
-            <button class="ds-type-btn album-edit-apply-btn${isCollection ? ' ds-type-btn--on' : ''}" data-type="collection">Col.</button>
+            <button class="ds-type-btn ds-type-btn--album${!isCollection ? ' ds-type-btn--on' : ''}" data-type="album">${UI.t('lbl_album_chip') || 'Álbum'}</button>
+            <button class="ds-type-btn ds-type-btn--col${isCollection ? ' ds-type-btn--on' : ''}" data-type="collection">${UI.t('lbl_collection') || 'Colección'}</button>
           </div>
           <button class="ds-panel-save-btn album-edit-save-btn">${UI.t('save_btn') || 'Guardar'}</button>
         </div>
@@ -6735,6 +6738,10 @@ const App = (() => {
           <label class="album-edit-label">${UI.t('lbl_cover_url') || 'Cover URL'}</label>
           <input class="album-edit-input" data-field="coverUrl" value="" placeholder="https://…">
         </div>
+        <div class="album-edit-row album-edit-row--track-btn">
+          <button class="album-edit-track-btn ds-track-edit-btn">${UI.t('edit_tracks_btn') || '✎ Editar canciones'}</button>
+        </div>
+        <div class="ds-songs-edit-list" style="display:none"></div>
       </div>`;
 
     // Clicking the entity (not the ⋮) toggles the edit panel; loads meta from DB on first open
@@ -6799,6 +6806,10 @@ const App = (() => {
 
     // Save button
     row.querySelector('.ds-panel-save-btn').addEventListener('click', () => _dsSaveFromPanel(row, folder.id));
+
+    // "Edit songs" — loads from DB since simple rows have no in-memory songs array
+    row.querySelector('.ds-track-edit-btn').addEventListener('click', () =>
+      _dsToggleSongsList(row, null, folder.id));
 
     return row;
   }
@@ -6910,12 +6921,11 @@ const App = (() => {
                  : (mime.includes('mpeg') || mime.includes('mp3')) ? 'MP3'
                  : '';
 
-    // Folder-type chip
-    const ftKey   = isFolderCollection(folder.id) ? 'collection'
-                  : songCount === 1               ? 'single'
-                  : songCount <= 4               ? 'ep'
-                  : 'lp';
-    const ftLabel = { collection: 'Collection', single: 'Single', ep: 'EP', lp: 'LP' }[ftKey] || '';
+    // Folder-type chip — same two types as in Browse
+    const ftKey   = isFolderCollection(folder.id) ? 'collection' : 'album';
+    const ftLabel = ftKey === 'collection'
+      ? (UI.t('lbl_collection') || 'Colección')
+      : (UI.t('lbl_album_chip') || 'Álbum');
 
     // Cover from session data (stable URL only; _dsLoadCoverForRow fills it async from DB)
     const coverSrc = (songs.find(s => s.thumbnailLink || s.coverUrl)?.thumbnailLink
@@ -6927,10 +6937,11 @@ const App = (() => {
       ? `<img src="${_escHtml(coverSrc)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)" onerror="this.style.display='none';this.nextElementSibling.style.display=''"><div style="display:none">${musicSvg}</div>`
       : musicSvg;
 
+    const ftChipCls = ftKey === 'collection' ? 'folder-type-chip--collection' : 'folder-type-chip--album';
     const yearLine = [
-      ftLabel ? `<span class="album-format-badge">${_escHtml(ftLabel)}</span>` : '',
-      yearVal ? `(${_escHtml(yearVal)})`                                        : '',
-      format  ? `<span class="album-format-badge">${_escHtml(format)}</span>`  : '',
+      `<span class="folder-type-chip ${ftChipCls}">${_escHtml(ftLabel)}</span>`,
+      yearVal ? `(${_escHtml(yearVal)})`                                       : '',
+      format  ? `<span class="album-format-badge">${_escHtml(format)}</span>` : '',
     ].filter(Boolean).join(' ');
 
     const subLine = [
@@ -6970,8 +6981,8 @@ const App = (() => {
         <div class="album-edit-row">
           <label class="album-edit-label">Tipo</label>
           <div class="ds-type-switch">
-            <button class="ds-type-btn album-edit-apply-btn${ftKey !== 'collection' ? ' ds-type-btn--on' : ''}" data-type="album">LP / EP</button>
-            <button class="ds-type-btn album-edit-apply-btn${ftKey === 'collection' ? ' ds-type-btn--on' : ''}" data-type="collection">Col.</button>
+            <button class="ds-type-btn ds-type-btn--album${ftKey !== 'collection' ? ' ds-type-btn--on' : ''}" data-type="album">${UI.t('lbl_album_chip') || 'Álbum'}</button>
+            <button class="ds-type-btn ds-type-btn--col${ftKey === 'collection' ? ' ds-type-btn--on' : ''}" data-type="collection">${UI.t('lbl_collection') || 'Colección'}</button>
           </div>
         </div>
         <div class="album-edit-row">
@@ -6990,6 +7001,10 @@ const App = (() => {
           <label class="album-edit-label">${UI.t('lbl_cover_url') || 'Cover URL'}</label>
           <input class="album-edit-input" data-field="coverUrl" value="${_escHtml(coverSrc)}" placeholder="https://…">
         </div>
+        <div class="album-edit-row album-edit-row--track-btn">
+          <button class="album-edit-track-btn ds-track-edit-btn">${UI.t('edit_tracks_btn') || '✎ Editar canciones'}</button>
+        </div>
+        <div class="ds-songs-edit-list" style="display:none"></div>
       </div>`;
 
     // Clicking the entity row (but not the ⋮ button) toggles the edit panel
@@ -7024,6 +7039,10 @@ const App = (() => {
 
     // Save button
     row.querySelector('.ds-panel-save-btn').addEventListener('click', () => _dsSaveFromPanel(row, folder.id));
+
+    // "Edit songs" button — toggles the per-song rename list
+    row.querySelector('.ds-track-edit-btn').addEventListener('click', () =>
+      _dsToggleSongsList(row, folder.songs || [], folder.id));
 
     // Async: fill cover art from DB if not already in session data
     _dsLoadCoverForRow(row, folder).catch(() => {});
@@ -7144,17 +7163,14 @@ const App = (() => {
       // Update the folder-type chip in the header immediately
       const yearEl = rowEl.querySelector('.lib-detail-entity-year');
       if (yearEl) {
-        const firstBadge = yearEl.querySelector('.album-format-badge');
-        if (firstBadge) {
-          // Determine new label: for album types use song count to pick Single/EP/LP
-          if (newType === 'collection') {
-            firstBadge.textContent = 'Collection';
-          } else {
-            const sub   = rowEl.querySelector('.lib-detail-entity-sub');
-            const count = parseInt(sub?.textContent) || 0;
-            firstBadge.textContent = count === 1 ? 'Single' : count <= 4 ? 'EP' : 'LP';
-          }
+        let chip = yearEl.querySelector('.folder-type-chip');
+        if (!chip) {
+          chip = document.createElement('span');
+          yearEl.insertBefore(chip, yearEl.firstChild);
         }
+        const isCol = newType === 'collection';
+        chip.className   = 'folder-type-chip ' + (isCol ? 'folder-type-chip--collection' : 'folder-type-chip--album');
+        chip.textContent = isCol ? (UI.t('lbl_collection') || 'Colección') : (UI.t('lbl_album_chip') || 'Álbum');
       }
     } catch (err) {
       console.error('[DeepScan] Type toggle error:', err);
@@ -7170,8 +7186,9 @@ const App = (() => {
     const format    = mime.includes('flac') ? 'FLAC' : mime.includes('ogg') ? 'OGG'
                     : mime.includes('aac')  ? 'AAC'  : mime.includes('wav') ? 'WAV'
                     : (mime.includes('mpeg') || mime.includes('mp3')) ? 'MP3' : '';
-    const ftLabel   = isFolderCollection(folder.id) ? 'Collection'
-                    : songCount === 1 ? 'Single' : songCount <= 4 ? 'EP' : 'LP';
+    const isCol   = isFolderCollection(folder.id);
+    const ftLabel = isCol ? (UI.t('lbl_collection') || 'Colección') : (UI.t('lbl_album_chip') || 'Álbum');
+    const ftCls   = isCol ? 'folder-type-chip--collection' : 'folder-type-chip--album';
 
     const nameEl = rowEl.querySelector('.lib-detail-entity-name');
     if (nameEl && album) nameEl.textContent = album;
@@ -7183,23 +7200,23 @@ const App = (() => {
                       + (chips ? `&ensp;${chips}` : '');
     }
 
+    const chipHtml = `<span class="folder-type-chip ${ftCls}">${_escHtml(ftLabel)}</span>`;
     const yearEl = rowEl.querySelector('.lib-detail-entity-year');
     if (yearEl) {
       yearEl.innerHTML = [
-        ftLabel ? `<span class="album-format-badge">${_escHtml(ftLabel)}</span>` : '',
-        year    ? `(${_escHtml(year)})`                                          : '',
-        format  ? `<span class="album-format-badge">${_escHtml(format)}</span>`  : '',
+        chipHtml,
+        year   ? `(${_escHtml(year)})`                                           : '',
+        format ? `<span class="album-format-badge">${_escHtml(format)}</span>`   : '',
       ].filter(Boolean).join(' ');
-    } else if (year || ftLabel || format) {
-      // Create the year line if it didn't exist before
+    } else {
       const infoEl = rowEl.querySelector('.lib-detail-entity-info');
       if (infoEl) {
         const newYearEl = document.createElement('div');
         newYearEl.className = 'lib-detail-entity-year';
         newYearEl.innerHTML = [
-          ftLabel ? `<span class="album-format-badge">${_escHtml(ftLabel)}</span>` : '',
-          year    ? `(${_escHtml(year)})`                                          : '',
-          format  ? `<span class="album-format-badge">${_escHtml(format)}</span>`  : '',
+          chipHtml,
+          year   ? `(${_escHtml(year)})`                                         : '',
+          format ? `<span class="album-format-badge">${_escHtml(format)}</span>` : '',
         ].filter(Boolean).join(' ');
         infoEl.insertBefore(newYearEl, infoEl.firstChild);
       }
@@ -7210,6 +7227,68 @@ const App = (() => {
       const musicSvg = `<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>`;
       artEl.innerHTML = `<img src="${_escHtml(coverUrl)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)" onerror="this.style.display='none';this.nextElementSibling.style.display=''"><div style="display:none">${musicSvg}</div>`;
     }
+  }
+
+  /** Toggle the per-song rename list below the edit panel.
+   *  songArr: already-loaded array (attention rows) or null → loads from DB. */
+  async function _dsToggleSongsList(rowEl, songArr, folderId) {
+    const listEl = rowEl.querySelector('.ds-songs-edit-list');
+    const btn    = rowEl.querySelector('.ds-track-edit-btn');
+    if (!listEl || !btn) return;
+
+    const isOpen = listEl.style.display !== 'none';
+    if (isOpen) {
+      listEl.style.display = 'none';
+      btn.textContent = UI.t('edit_tracks_btn') || '✎ Editar canciones';
+      btn.classList.remove('album-edit-track-btn--active');
+      return;
+    }
+
+    // Load songs if not provided
+    let songs = songArr?.length ? songArr : null;
+    if (!songs) {
+      try {
+        const all = await DB.getAllMetaLight();
+        songs = all.filter(m => m.folderId === folderId);
+      } catch (_) { songs = []; }
+    }
+
+    if (!songs.length) {
+      UI.showToast('No hay canciones para editar', 'info');
+      return;
+    }
+
+    // Build song rename rows
+    listEl.innerHTML = songs.map(s => {
+      const name = s.displayName || (typeof cleanTitle === 'function' ? cleanTitle(s.name || '') : (s.name || ''));
+      return `<div class="ds-song-rename-row" data-song-id="${_escHtml(s.id)}">
+        <input class="track-rename-input" value="${_escHtml(name)}" data-original="${_escHtml(name)}" placeholder="Nombre de la canción">
+      </div>`;
+    }).join('');
+
+    // Wire up save-on-blur / enter for each input
+    listEl.querySelectorAll('.track-rename-input').forEach(inp => {
+      const songId = inp.closest('[data-song-id]')?.dataset.songId;
+      if (!songId) return;
+      const save = async () => {
+        const newName  = inp.value.trim();
+        const original = inp.dataset.original;
+        if (!newName || newName === original) return;
+        try {
+          await App.onTrackRename(songId, newName);
+          inp.dataset.original = newName;
+        } catch (_) { inp.value = original; }
+      };
+      inp.addEventListener('blur', save);
+      inp.addEventListener('keydown', e => {
+        if (e.key === 'Enter')  { e.preventDefault(); save().then(() => inp.blur()); }
+        if (e.key === 'Escape') { inp.value = inp.dataset.original; inp.blur(); }
+      });
+    });
+
+    listEl.style.display = 'block';
+    btn.textContent = UI.t('edit_tracks_done') || '✓ Listo';
+    btn.classList.add('album-edit-track-btn--active');
   }
 
   /** Asynchronously load a stable cover URL from DB and inject it into the row's art cell */

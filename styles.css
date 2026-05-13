@@ -5787,16 +5787,59 @@ body.queue-open #mini-player { z-index: 65; }
 .ds-chip--al { background: rgba(160, 100, 220, 0.18); color: #a064dc; border: 1px solid rgba(160,100,220,0.3); }
 .ds-chip--cv { background: rgba(80, 160, 220, 0.18); color: #50a0dc; border: 1px solid rgba(80,160,220,0.3); }
 
-/* ── Deep scan type switch (Album ↔ Collection) ── */
+/* ── Deep scan type switch (Álbum ↔ Colección) ── */
 .ds-type-switch {
   display: flex;
   gap: 4px;
   flex-shrink: 0;
 }
-.ds-type-btn--on {
-  background: var(--accent) !important;
-  color: #fff !important;
-  border-color: var(--accent) !important;
+.ds-type-btn {
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+/* Album button active — purple (matches folder-type-chip--album) */
+.ds-type-btn--album.ds-type-btn--on {
+  background: rgba(139,92,246,0.18);
+  color: #a78bfa;
+  border-color: rgba(139,92,246,0.4);
+}
+/* Collection button active — accent blue (matches folder-type-chip--collection) */
+.ds-type-btn--col.ds-type-btn--on {
+  background: rgba(var(--accent-rgb,74,136,245),0.18);
+  color: var(--accent,#4a88f5);
+  border-color: rgba(var(--accent-rgb,74,136,245),0.4);
+}
+/* Song rename list in deep scan panel */
+.ds-songs-edit-list {
+  padding: 4px 0 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ds-song-rename-row {
+  display: flex;
+  align-items: center;
+}
+.ds-song-rename-row .track-rename-input {
+  flex: 1;
+  background: var(--input-bg, var(--surface2));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 12px;
+  padding: 4px 8px;
+  outline: none;
+}
+.ds-song-rename-row .track-rename-input:focus {
+  border-color: var(--accent);
 }
 
 .ds-table-actions {
