@@ -5928,27 +5928,34 @@ const App = (() => {
   /* Line 1: pinned folder indicator — always visible, updated per folder.
      Lines 2-3: scrolling activity log (newest at bottom, max 2 entries). */
 
-  function _dsSetPinnedFolder(path) {
+  /**
+   * Updates the pinned (top) log line.
+   * Format: "12/47  ·  Folder Name  (8 archivos)"
+   * @param {string} folderName
+   * @param {number} fileCount
+   */
+  function _dsSetPinnedFolder(folderName, fileCount) {
     const strip = document.getElementById('ds-log');
     if (!strip) return;
-    // Remove placeholder if present
     const ph = strip.querySelector('.ds-log-placeholder');
     if (ph) ph.remove();
-    // Update or create the pinned line
     let pinned = strip.querySelector('.ds-log-pinned');
     if (!pinned) {
       pinned = document.createElement('div');
       pinned.className = 'ds-log-entry ds-log-pinned';
       strip.insertBefore(pinned, strip.firstChild);
     }
-    pinned.textContent = '📁 ' + path;
+    const done  = _dsSession.scannedFolders || 0;
+    const total = _dsSession.totalFolders   || 0;
+    const ratio = total > 0 ? `${done + 1}/${total}` : `${done + 1}`;
+    const files = fileCount > 0 ? `  (${fileCount} arch.)` : '';
+    pinned.textContent = `${ratio}  ·  ${folderName}${files}`;
   }
 
-  /* Keep at most 2 scrolling lines below the pinned folder line. */
+  /* Keep at most 1 scrolling line below the pinned folder line. */
   function _dsLogLine(msg, cls = '') {
     const strip = document.getElementById('ds-log');
     if (strip) {
-      // Remove placeholder
       const ph = strip.querySelector('.ds-log-placeholder');
       if (ph) ph.remove();
 
@@ -5957,9 +5964,9 @@ const App = (() => {
       div.textContent = msg;
       strip.appendChild(div);
 
-      // Keep pinned line + at most 2 scrolling lines
+      // Keep pinned line + at most 1 scrolling line
       const entries = [...strip.querySelectorAll('.ds-log-entry:not(.ds-log-pinned)')];
-      while (entries.length > 2) {
+      while (entries.length > 1) {
         entries.shift().remove();
       }
     }
@@ -6308,6 +6315,40 @@ const App = (() => {
     }
   }
 
+  /* ── Pre-scan folder count ─────────────────────────────── */
+
+  /**
+   * BFS through Drive from startFolderId, counting only folders that
+   * contain audio files (1–40 files). Skips empty and >40 file folders.
+   * Updates _dsSession.totalFolders and the status text while running.
+   */
+  async function _dsPrecountFolders(startFolderId) {
+    const visited = new Set();
+    const queue   = [startFolderId];
+    let   count   = 0;
+    const statusEl = document.getElementById('ds-status-text');
+
+    while (queue.length > 0) {
+      if (_dsStopFlag) break;
+      const id = queue.shift();
+      if (visited.has(id)) continue;
+      visited.add(id);
+      try {
+        const page = await Drive.listFolderScan(id);
+        for (const f of page.folders) {
+          if (!visited.has(f.id)) queue.push(f.id);
+        }
+        if (page.audioFiles.length > 0 && page.audioFiles.length <= 40) {
+          count++;
+          _dsSession.totalFolders = count;
+          if (statusEl) statusEl.textContent = `Contando… (${count})`;
+        }
+      } catch (_) { /* skip errors during pre-count */ }
+    }
+    _dsSession.totalFolders = count;
+    return count;
+  }
+
   /* ── Start / Pause / Stop ──────────────────────────────── */
 
   async function _startDeepScan() {
@@ -6342,6 +6383,12 @@ const App = (() => {
     _dsStopFlag = false;
     _dsUpdateControls();
     await _dsSaveSession();
+
+    // Pre-count folders with audio before starting the pipeline
+    const startId = _dsSession.selectedFolderId || CONFIG.ROOT_FOLDER_ID;
+    _dsPrecountFolders(startId).then(() => {
+      if (_dsRunning) _dsUpdateControls();
+    });
 
     _runDeepScan().catch(err => {
       console.error('[DeepScan] Error:', err);
@@ -6533,10 +6580,10 @@ const App = (() => {
       }));
       _folderCoverCache.delete(id);
 
-      // 3. Pin folder name, log files queued
-      _dsSetPinnedFolder(`${path}  (${page.audioFiles.length} arch.)`);
-      for (const f of page.audioFiles) {
-        _dsLogLine(`  ⟳ ${cleanTitle(f.name)}`);
+      // 3. Pin folder progress line; log first file as current item
+      _dsSetPinnedFolder(name, page.audioFiles.length);
+      if (page.audioFiles.length > 0) {
+        _dsLogLine(`  ⟳ ${cleanTitle(page.audioFiles[0].name)}`);
       }
 
       // 4. Run all recognition passes

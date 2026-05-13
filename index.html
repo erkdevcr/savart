@@ -581,76 +581,48 @@
     <!-- ── ESCANEO TAB ────────────────────────────────── -->
     <div class="ds-tab-content active" id="ds-tab-scan">
 
-      <!-- Folder picker bar -->
+      <!-- Folder bar + action controls (single row) -->
       <div class="ds-folder-bar">
         <button id="btn-ds-change-folder" class="ds-open-folder-btn">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V6h5.17l2 2H20v10z"/></svg>
           <span id="ds-folder-btn-label">Abrir carpeta</span>
         </button>
         <div class="ds-folder-bar-info">
-          <div class="ds-folder-bar-top-row">
-            <div class="ds-folder-status-group">
-              <div class="ds-led" id="ds-led"></div>
-              <span class="ds-scanning-label" id="ds-status-text" data-i18n="scan_status_ready">Listo</span>
-            </div>
-            <span class="ds-folder-bar-name" id="ds-folder-name"></span>
-          </div>
+          <div class="ds-folder-bar-name" id="ds-folder-name"></div>
           <div class="ds-folder-bar-path" id="ds-folder-path"></div>
         </div>
-      </div>
-
-      <!-- Controls bar: action buttons -->
-      <div class="ds-controls-bar">
-        <div class="ds-ctrl-btns">
-          <button id="btn-ds-start" class="btn-primary ds-ctrl-btn">
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-            Iniciar
-          </button>
-          <button id="btn-ds-restart" class="btn-sort-toggle ds-ctrl-btn" style="display:none">
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-8 3.58-8 8s3.58 8 8 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
-            Reiniciar
-          </button>
-          <button id="btn-ds-pause" class="btn-sort-toggle ds-ctrl-btn" disabled>
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
-            Pausar
-          </button>
-          <button id="btn-ds-stop" class="btn-sort-toggle ds-ctrl-btn" disabled>
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h12v12H6z"/></svg>
-            Detener
-          </button>
+        <div class="ds-folder-bar-right">
+          <div class="ds-folder-status-group">
+            <div class="ds-led" id="ds-led"></div>
+            <span class="ds-scanning-label" id="ds-status-text" data-i18n="scan_status_ready">Listo</span>
+          </div>
+          <div class="ds-ctrl-btns">
+            <button id="btn-ds-start" class="btn-primary ds-ctrl-btn">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+              Iniciar
+            </button>
+            <button id="btn-ds-restart" class="btn-sort-toggle ds-ctrl-btn" style="display:none">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-8 3.58-8 8s3.58 8 8 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+              Reiniciar
+            </button>
+            <button id="btn-ds-pause" class="btn-sort-toggle ds-ctrl-btn" disabled>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+              Pausar
+            </button>
+            <button id="btn-ds-stop" class="btn-sort-toggle ds-ctrl-btn" disabled>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h12v12H6z"/></svg>
+              Detener
+            </button>
+          </div>
         </div>
       </div>
 
-      <!-- Counters row -->
-      <div class="ds-counters">
-        <div class="ds-counter">
-          <div class="ds-counter-val" id="ds-cnt-scanned">0</div>
-          <div class="ds-counter-lbl" data-i18n="scan_lbl_scanned">Escaneadas</div>
-        </div>
-        <div class="ds-counter">
-          <div class="ds-counter-val" id="ds-cnt-complete">0</div>
-          <div class="ds-counter-lbl" data-i18n="scan_lbl_complete">Completas</div>
-        </div>
-        <div class="ds-counter ds-counter--attn">
-          <div class="ds-counter-val" id="ds-cnt-attention">0</div>
-          <div class="ds-counter-lbl" data-i18n="scan_lbl_missing">Sin datos</div>
-        </div>
-        <div class="ds-counter">
-          <div class="ds-counter-val" id="ds-cnt-remaining">—</div>
-          <div class="ds-counter-lbl" data-i18n="scan_lbl_remaining">Restantes</div>
-        </div>
-        <div class="ds-counter">
-          <div class="ds-counter-val" id="ds-cnt-eta">—</div>
-          <div class="ds-counter-lbl" data-i18n="scan_lbl_estimated">Estimado</div>
-        </div>
-      </div>
-
-      <!-- Progress bar (2px) -->
+      <!-- Progress bar -->
       <div class="ds-prog-track">
         <div class="ds-prog-fill" id="ds-prog-fill" style="width:0%"></div>
       </div>
 
-      <!-- Log strip: always 3 lines -->
+      <!-- Log strip: 2 lines — pinned folder + current file -->
       <div class="ds-log-strip" id="ds-log">
         <div class="ds-log-entry ds-log-placeholder" data-i18n="scan_log_empty">Inicia un escaneo para ver el registro aquí…</div>
       </div>
