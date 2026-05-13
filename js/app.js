@@ -6672,9 +6672,29 @@ const App = (() => {
       }
 
       const needsAttn = attnSongs.length > 0;
-      _dsLogLine(`${needsAttn ? '⚠' : '✓'} ${path}  (${page.audioFiles.length} arch.${needsAttn ? ', ' + attnSongs.length + ' sin meta' : ''})`);
+      const autoSaved = isAutoCollection && needsAttn;
+      _dsLogLine(`${autoSaved ? '📁' : needsAttn ? '⚠' : '✓'} ${path}  (${page.audioFiles.length} arch.${autoSaved ? ' · colección guardada' : needsAttn ? ', ' + attnSongs.length + ' sin meta' : ''})`);
 
-      if (needsAttn) {
+      // Collections auto-save: skip the attention list entirely.
+      // Name is already in DB (saved above); user adjusts cover/name from the done list.
+      if (isAutoCollection && needsAttn) {
+        // Mark each song as manually resolved so pipeline/soft-scan won't reprocess them
+        const now = Date.now();
+        await Promise.all(songMetas.map(({ f, meta }) => {
+          if (!meta) return;
+          return DB.setMeta(f.id, { folderId: id, manualAt: now }).catch(() => {});
+        }));
+        // Remove from attention list in case a previous iteration added it
+        delete _dsSession.folders[id];
+      }
+
+      if (isAutoCollection || !needsAttn) {
+        _dsSession.completedList[id] = { id, name, path, count: page.audioFiles.length, mime: page.audioFiles[0]?.mimeType || '' };
+        if (_dsListMode === 'done' || _dsListMode === 'all') {
+          _dsAddOrUpdateFolderRow(id);
+          _dsInjectCoverIntoRow(id, page.audioFiles).catch(() => {});
+        }
+      } else {
         const existing = _dsSession.folders[id];
         _dsSession.folders[id] = {
           id, name, path, songs: attnSongs,
@@ -6682,12 +6702,6 @@ const App = (() => {
           attended: existing?.attended || false,
         };
         if (_dsListMode === 'attn' || _dsListMode === 'all') {
-          _dsAddOrUpdateFolderRow(id);
-          _dsInjectCoverIntoRow(id, page.audioFiles).catch(() => {});
-        }
-      } else {
-        _dsSession.completedList[id] = { id, name, path, count: page.audioFiles.length, mime: page.audioFiles[0]?.mimeType || '' };
-        if (_dsListMode === 'done' || _dsListMode === 'all') {
           _dsAddOrUpdateFolderRow(id);
           _dsInjectCoverIntoRow(id, page.audioFiles).catch(() => {});
         }
