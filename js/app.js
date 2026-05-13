@@ -5171,7 +5171,15 @@ const App = (() => {
         // Library detail layout: update or inject .top-list-artist
         const artistEl = el.querySelector('.top-list-artist');
         if (artistEl) {
-          artistEl.textContent = artist;
+          // Collection detail rows render "Artist - Album" in this element.
+          // When only the artist is in the patch (album param is null), preserve
+          // whatever album text already follows the " - " separator so a partial
+          // update from _onBlobReady / background scans doesn't strip the album.
+          const existingText  = artistEl.textContent;
+          const sepIdx        = existingText.indexOf(' - ');
+          const existingAlbum = sepIdx !== -1 ? existingText.slice(sepIdx + 3) : '';
+          const effectiveAlbum = album || existingAlbum;
+          artistEl.textContent = [artist, effectiveAlbum].filter(Boolean).join(' - ');
           return;
         }
         // Home / top-played layout: update or inject .top-list-meta
