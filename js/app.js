@@ -8081,6 +8081,25 @@ const App = (() => {
     }
   }
 
+  /* ── Remove from DS list (context menu) ─────────────────── */
+
+  function onDsRemoveFromList(item) {
+    const folderId = item?.id || item?.folderId;
+    if (!folderId || !_dsSession) return;
+
+    // Remove from whichever list holds this folder
+    if (_dsSession.folders)       delete _dsSession.folders[folderId];
+    if (_dsSession.completedList) delete _dsSession.completedList[folderId];
+    if (_dsSession.skippedList)   delete _dsSession.skippedList[folderId];
+
+    // Remove the DOM row from any visible DS list
+    const row = document.querySelector(`.ds-folder-row[data-folder-id="${CSS.escape(folderId)}"]`);
+    if (row) row.remove();
+
+    _dsSaveSession();
+    _dsUpdateCounters();
+  }
+
   /* ── Artistas tab ───────────────────────────────────────── */
 
   async function _dsLoadArtists() {
@@ -12225,6 +12244,7 @@ const App = (() => {
     _stopDeepScan,
     _dsOpenFolderBrowser,
     _dsLoadArtists,
+    onDsRemoveFromList,
   };
 })();
 

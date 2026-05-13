@@ -239,6 +239,7 @@ const UI = (() => {
       ds_apply_cover_btn:   'Aplicar a canciones',
       ds_applying_cover:    'Aplicando…',
       ds_applied_cover:     '✓ Aplicado',
+      ctx_ds_remove_from_list: 'Quitar de la lista',
       scan_status_ready:    'Listo',
       scan_status_paused:   'En pausa',
       scan_status_done:     'Completado',
@@ -565,6 +566,7 @@ const UI = (() => {
       ds_apply_cover_btn:   'Apply to songs',
       ds_applying_cover:    'Applying…',
       ds_applied_cover:     '✓ Applied',
+      ctx_ds_remove_from_list: 'Remove from list',
       scan_status_ready:    'Ready',
       scan_status_paused:   'Paused',
       scan_status_done:     'Done',
@@ -2142,6 +2144,9 @@ const UI = (() => {
         _isCollection(item) ? t('ctx_go_to_collection') : t('ctx_go_to_album'),
         () => { App.onGoToAlbum?.(item); hideContextMenu(); });
       _addCtxItem(menu, _iconFolder, t('ctx_go_to_folder'), () => { App.onGoToFolder?.(item);        hideContextMenu(); });
+      _addCtxDivider(menu);
+      const _iconRemove = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>`;
+      _addCtxItem(menu, _iconRemove, t('ctx_ds_remove_from_list'), () => { App.onDsRemoveFromList?.(item); hideContextMenu(); });
     }
 
     // Position menu near cursor — measure actual rendered size to avoid overflow
