@@ -443,10 +443,6 @@ const App = (() => {
       // Revokes stale blob: URLs and creates fresh session URLs for every home item
       // whose cover is embedded in the ID3 tags, so they never show blank on startup.
       setTimeout(() => _bootId3Refresh().catch(() => {}), 5000);
-      // Background collection scan — runs once per session, low priority.
-      // Lives in .finally() so it fires whether Sync succeeds or fails.
-      // Delay 12 s to let boot, render and any in-flight enrichment settle first.
-      setTimeout(() => _backgroundCollectionScan().catch(() => {}), 12000);
     });
 
     // Auto-open Deep Scan if launched from "Abrir en pestaña"
@@ -5473,89 +5469,12 @@ const App = (() => {
     }
   }
 
-  /* ── Library background scanner ─────────────────────────── */
-
-  let _libScanDone  = false; // run once per session
-  let _lastLibScanAt = null; // ISO timestamp of the last completed BFS scan
-
-  /**
-   * BFS scan from ROOT_FOLDER_ID.
-   * For each folder that contains ≥2 audio files:
-   *   - album   = folder name
-   *   - artist  = parent folder name (if not root)
-   *   - cover   = cover/folder.jpg in the folder → common thumbnailLink → first DB thumbnailUrl
-   * Only patches fields that are missing in DB (never overwrites enriched values).
-   * Runs entirely in background; refreshes the active library tab when done.
-   */
-  async function _scanLibraryBackground() {
-    if (_libScanDone) return;
-    if (!Auth.getValidToken()) return;
-    _libScanDone = true;
-
-    console.log('[LibScan] Starting background library scan…');
-
-    // BFS queue: { id, name, parentName }
-    const queue   = [{ id: CONFIG.ROOT_FOLDER_ID, name: CONFIG.ROOT_FOLDER_NAME, parentName: '' }];
-    const visited = new Set();
-    let   patched = 0;
-
-    while (queue.length > 0) {
-      const { id, name: folderName, parentName } = queue.shift();
-      if (visited.has(id)) continue;
-      visited.add(id);
-
-      let page;
-      try {
-        page = await Drive.listFolderScan(id);
-      } catch (err) {
-        if (err instanceof Drive.AuthError || err?.name === 'AuthError') break;
-        console.warn('[LibScan] Error scanning folder:', folderName, err);
-        continue;
-      }
-
-      // Push subfolders — current folder becomes the artist level for its children
-      for (const f of page.folders) {
-        queue.push({ id: f.id, name: f.name, parentName: folderName });
-      }
-
-      // Only process folders with ≥2 audio files (single files are loose tracks, not albums)
-      if (page.audioFiles.length >= 2) {
-        const n = await _inferAlbumMeta(folderName, parentName, page.audioFiles, page.imageFiles);
-        patched += n;
-      }
-
-      // Small yield to avoid blocking audio playback / UI
-      await new Promise(r => setTimeout(r, 60));
-    }
-
-    _lastLibScanAt = new Date().toISOString();
-    console.log(`[LibScan] Done. Patched metadata for ${patched} files.`);
-
-    // Single metadata push for the entire scan — avoids one push per folder
-    if (patched > 0 && typeof Sync !== 'undefined') Sync.push('metadata');
-
-    // Refresh the current library tab so newly inferred data shows up.
-    // Skip if the user is inside a drill-down — the list re-renders on back-navigation.
-    if (!_libInDetail) {
-      const tab = _currentLibTab;
-      if (tab === 'artists') _loadArtists();
-      if (tab === 'albums')  _loadAlbums();
-    }
-
-    // ── MusicBrainz background enrichment for the whole library ───────────────
-    // Runs after the structural scan. Processes every song that hasn't been tried
-    // yet (no mbTried flag). Sequential at 1 req/sec — silently enriches in background.
-    // Each session only processes songs not yet tried; subsequent sessions are no-ops
-    // for already-enriched files.
-    _mbEnrichLibrary().catch(() => {});
-  }
-
   /**
    * Full library refresh: BFS scan of all Drive from ROOT_FOLDER_ID, then
    * purges DB records for files that no longer exist in Drive.
    *
-   * Differences from _scanLibraryBackground:
-   *  - Always runs (ignores _libScanDone guard)
+   * Differences from the old background scanner:
+   *  - Always runs (no session guard)
    *  - Collects every live file ID across all folders
    *  - After BFS, deletes DB records not found in Drive (global orphan cleanup)
    *  - Shows live progress to the user via toasts
@@ -5615,10 +5534,6 @@ const App = (() => {
       // ── Purge global orphans ─────────────────────────────────
       const pruned = await DB.purgeAllOrphans([...liveIds]).catch(() => 0);
       if (pruned > 0) console.log(`[LibRefresh] Purged ${pruned} orphan record(s) from DB`);
-
-      // Mark scan timestamp and reset guard
-      _lastLibScanAt = new Date().toISOString();
-      _libScanDone   = false;
 
       // Push updated metadata to sync channel
       if (typeof Sync !== 'undefined') Sync.push('metadata');
@@ -5691,7 +5606,6 @@ const App = (() => {
         await new Promise(r => setTimeout(r, 60));
       }
 
-      _libScanDone = false;
       if (typeof Sync !== 'undefined') Sync.push('metadata');
 
       if (!_libInDetail) {
@@ -7179,9 +7093,9 @@ const App = (() => {
     // Save button
     row.querySelector('.ds-panel-save-btn').addEventListener('click', () => _dsSaveFromPanel(row, folder.id));
 
-    // "Edit songs" button — toggles the per-song rename list
+    // "Edit songs" button — always query DB so ALL folder songs appear, not just attn ones
     row.querySelector('.ds-track-edit-btn').addEventListener('click', () =>
-      _dsToggleSongsList(row, folder.songs || [], folder.id));
+      _dsToggleSongsList(row, null, folder.id));
 
     // Async: fill cover art from DB if not already in session data
     _dsLoadCoverForRow(row, folder).catch(() => {});
@@ -7932,86 +7846,8 @@ const App = (() => {
   }
 
   /**
-   * Iterates all songs in the DB and runs MusicBrainz lookup for those missing
-   * text metadata (artist, album, year, track). Runs sequentially at 1 req/sec.
-   * Designed to run once per session in the background after _scanLibraryBackground.
-   */
-  async function _mbEnrichLibrary() {
-    if (typeof MusicBrainz === 'undefined') return;
-
-    const all = await DB.getAllMeta().catch(() => []);
-    const candidates = all.filter(m => {
-      if (!m.id) return false;
-      if (m.mbTried) return false;
-      const title = m.displayName || m.name || '';
-      if (!title) return false;
-      return !m.artist || !m.album || !m.year || !m.track;
-    });
-
-    if (candidates.length === 0) return;
-    console.log(`[MusicBrainz] Library enrichment: ${candidates.length} songs to process…`);
-
-    let enriched = 0;
-    for (const m of candidates) {
-      // Abort if user navigated away from library or lost auth
-      if (!Auth.getValidToken()) break;
-
-      try {
-        const title  = m.displayName || m.name || '';
-        const artist = m.artist || '';
-        const album  = m.album  || '';
-
-        const result = await MusicBrainz.lookup(m.id, title, artist, album);
-        DB.setMeta(m.id, { mbTried: true }).catch(() => {});
-        if (!result) continue;
-
-        const patch = {};
-        // _mbEnrichLibrary runs standalone (no ID3 pass after it), so keep guards
-        // to avoid overwriting ID3-sourced values already in DB.
-        // Also respect manualAt: never overwrite fields the user manually edited.
-        const mbManual = (m.manualAt || 0) > 0;
-        if (result.track       && !m.track)              patch.track         = result.track;
-        if (result.artist      && !m.artist && !mbManual) patch.artist       = result.artist;
-        if (result.album       && !m.album  && !mbManual) patch.album        = result.album;
-        if (result.year        && !m.year   && !mbManual) patch.year         = result.year;
-        if (result.releaseMbid)                           patch.mbReleaseMbid = result.releaseMbid;
-
-        const textFields = Object.keys(patch).filter(k => k !== 'mbReleaseMbid');
-        if (textFields.length === 0 && !patch.mbReleaseMbid) continue;
-
-        await DB.setMeta(m.id, patch);
-        enriched++;
-
-        // Patch visible DOM text if the song is currently displayed
-        if (textFields.some(k => ['artist','album','year'].includes(k))) {
-          _patchMetaText(m.id, {
-            title:  null,
-            artist: patch.artist || m.artist || null,
-            album:  patch.album  || m.album  || null,
-            year:   patch.year   || m.year   || null,
-          });
-        }
-      } catch (_) { /* non-fatal — continue to next song */ }
-    }
-
-    if (enriched > 0) {
-      console.log(`[MusicBrainz] Library enrichment complete: ${enriched} songs enriched.`);
-      // Refresh album/artist grid if not inside a drill-down
-      if (!_libInDetail) {
-        if (_currentLibTab === 'albums')  _loadAlbums();
-        if (_currentLibTab === 'artists') _loadArtists();
-      }
-    }
-
-    // After MB enrichment, fetch Last.fm thumbnails for albums still without a cover URL.
-    // This ensures album cards show images even for albums MB didn't find,
-    // and provides syncable external URLs so other devices can display the covers too.
-    _lfmThumbLibrary().catch(() => {});
-  }
-
-  /**
    * Background Last.fm thumbnail enrichment for the Library.
-   * Runs after _mbEnrichLibrary. For each album folder that has artist+album
+   * For each album folder that has artist+album
    * metadata but no thumbnailUrl, fetches a cover URL from Last.fm and stores
    * it so the album grid can show the image without the user entering each album.
    * Also triggers a metadata sync push so the URLs reach other devices.
@@ -8205,178 +8041,9 @@ const App = (() => {
     // NOTE: Sync.push('metadata') is NOT called here.
     // _inferAlbumMeta is called in a loop (BFS scan, rescan) and pushing per-folder
     // would saturate the debounce queue, causing one full metadata write per folder.
-    // Callers (_scanLibraryBackground, _fullLibraryRefresh) issue a single push after
+    // The caller (_fullLibraryRefresh) issues a single push after
     // the entire loop completes.
     return count;
-  }
-
-  /* ── Background collection scan ─────────────────────────────
-   * Runs once per session, after Sync.init() completes.
-   * Goal: discover Drive folders that qualify as collections (>3 distinct artists)
-   * without the user having to manually browse them.
-   *
-   * Strategy:
-   *  1. Fetch all audio files across Drive (paginated, 1 000/page — usually 1–3 API calls).
-   *  2. Group by parent folder ID.
-   *  3. Skip folders already in DB (known) or already processed in a prior session.
-   *  4. For each unseen folder, extract artist from "Artist - Title.ext" filename pattern.
-   *  5. If >3 distinct artists → save minimal DB records → folder appears in Collections.
-   *  6. Persist ALL examined folder IDs (collection or not) to avoid re-processing them.
-   *  7. Refresh collection cache; update Collections tab if currently visible.
-   * ─────────────────────────────────────────────────────────── */
-
-  let _bgScanDone = false; // session guard — run at most once per page load
-
-  async function _backgroundCollectionScan() {
-    if (_bgScanDone) return;
-    if (typeof Drive === 'undefined' || typeof DB === 'undefined') return;
-    if (!Auth.getValidToken()) {
-      // Token not ready yet — retry once after 15 more seconds
-      setTimeout(() => _backgroundCollectionScan().catch(() => {}), 15000);
-      return;
-    }
-    _bgScanDone = true; // locked after confirming we can actually run
-
-    console.log('[BgScan] Starting background collection scan…');
-
-    try {
-      // ── 1. Load persistent "already checked" folder IDs ───────────────────
-      const checkedArr = await DB.getBgScannedFolders().catch(() => []);
-      const checked    = new Set(checkedArr);
-
-      // ── 2. Load folder IDs already in DB (songs we've seen before) ─────────
-      // _allKnownFolderIdsCache is populated by _refreshCollectionCache (called
-      // early in _onTokenReady), so it's ready by the time we get here.
-      const knownFolders = _allKnownFolderIdsCache ?? new Set();
-
-      // ── 3. Fetch all audio files from Drive (paginated) ────────────────────
-      const folderMap = new Map(); // folderId → [{ id, name, mimeType }]
-      let pageToken   = null;
-      let pageCount   = 0;
-
-      do {
-        if (!Auth.getValidToken()) { console.log('[BgScan] Token lost, aborting.'); return; }
-        const page = await Drive.listAllAudioFiles(pageToken);
-        for (const f of page.files) {
-          const fid = f.parents[0];
-          if (!fid) continue;
-          if (!folderMap.has(fid)) folderMap.set(fid, []);
-          folderMap.get(fid).push(f);
-        }
-        pageToken = page.nextPageToken;
-        pageCount++;
-        if (pageCount > 1) await new Promise(r => setTimeout(r, 200)); // gentle pacing
-      } while (pageToken);
-
-      console.log(`[BgScan] Drive returned ${[...folderMap.values()].reduce((s, a) => s + a.length, 0)} audio files across ${folderMap.size} folders`);
-
-      // ── 4. Process unseen folders ──────────────────────────────────────────
-      const newlyChecked = [];
-      let   newCollections = 0;
-
-      for (const [folderId, files] of folderMap) {
-        // Skip if already known from DB or from a previous scan session
-        if (knownFolders.has(folderId) || checked.has(folderId)) continue;
-
-        newlyChecked.push(folderId);
-
-        // ── Pass A: extract artist from "Artist - Title.ext" filename pattern ──
-        const artists = new Set();
-        for (const f of files) {
-          const base    = f.name.replace(/\.[^.]+$/, '').trim();
-          const dashIdx = base.indexOf(' - ');
-          if (dashIdx > 1) {
-            const candidate = base.slice(0, dashIdx)
-              .replace(/^\d+\.?\s*/, '')
-              .replace(/^track\s+\d+\s*/i, '')
-              .trim().toLowerCase();
-            if (candidate.length >= 2) artists.add(candidate);
-          }
-        }
-
-        // ── Pass B: filename gave no artists → sample ID3 of up to 5 files ──
-        // This handles collections whose files don't follow "Artist - Title.mp3".
-        if (artists.size === 0 && typeof Meta !== 'undefined') {
-          const sample = files.slice(0, 5);
-          for (const f of sample) {
-            try {
-              const blob   = await Drive.downloadFileHead(f.id, 64 * 1024).catch(() => null);
-              if (!blob) continue;
-              const parsed = await Meta.parse(f.id, blob).catch(() => null);
-              if (parsed?.artist) artists.add(parsed.artist.toLowerCase().trim());
-            } catch (_) {}
-            await new Promise(r => setTimeout(r, 100)); // 100 ms between ID3 reads
-          }
-        }
-
-        // Not enough artists to qualify as a collection → mark checked, continue
-        if (artists.size <= 3) continue;
-
-        // ── Save minimal DB records so _buildFolderMap can classify this folder ─
-        const now = Date.now();
-        for (const f of files) {
-          // Only write if not already in DB (race-safe)
-          const existing = await DB.getMeta(f.id).catch(() => null);
-          if (existing) continue;
-
-          const base        = f.name.replace(/\.[^.]+$/, '').trim();
-          const dashIdx     = base.indexOf(' - ');
-          let   artist = '';
-          if (dashIdx > 1) {
-            artist = base.slice(0, dashIdx)
-              .replace(/^\d+\.?\s*/, '')
-              .replace(/^track\s+\d+\s*/i, '')
-              .trim();
-          }
-          await DB.setMeta(f.id, {
-            id:          f.id,
-            folderId,
-            name:        f.name,
-            displayName: cleanTitle(f.name),
-            mimeType:    f.mimeType,
-            artist:      artist || '',
-            bgScanned:   now,   // marker — enrichment will fill the rest on first play
-          }).catch(() => {});
-        }
-
-        newCollections++;
-        console.log(`[BgScan] New collection found: ${folderId} (${artists.size} artists, ${files.length} songs)`);
-
-        // Yield to avoid blocking the event loop
-        await new Promise(r => setTimeout(r, 50));
-      }
-
-      // ── 5. Persist newly-checked folder IDs ───────────────────────────────
-      if (newlyChecked.length > 0) {
-        await DB.addBgScannedFolders(newlyChecked).catch(() => {});
-      }
-
-      if (newCollections === 0) {
-        console.log('[BgScan] No new collections found.');
-        return;
-      }
-
-      console.log(`[BgScan] Done — ${newCollections} new collection(s) added.`);
-
-      // ── 6. Refresh collection cache + UI ──────────────────────────────────
-      await _refreshCollectionCache().catch(() => {});
-
-      const view = UI.getCurrentView();
-      if (view === 'library' && _currentLibTab === 'collections' && !_libInDetail) {
-        _loadCollections();
-      }
-
-      // Friendly toast only when something new was actually found
-      UI.showToast(
-        newCollections === 1
-          ? '1 nueva colección encontrada'
-          : `${newCollections} nuevas colecciones encontradas`,
-        'info'
-      );
-
-    } catch (err) {
-      console.warn('[BgScan] Error:', err);
-    }
   }
 
   /* ── Soft scan ───────────────────────────────────────────────
@@ -11311,34 +10978,6 @@ const App = (() => {
 
   /* ── Event binding ───────────────────────────────────────── */
 
-  /**
-   * Called every time the app becomes visible again (tab focus, phone unlock, etc).
-   * Fires a single Drive API call to check the ROOT folder's modifiedTime.
-   * If Drive reports a change more recent than our last scan, we reset _libScanDone
-   * so the background scan triggers automatically next time Biblioteca opens.
-   * The user sees new/removed content within seconds of opening the library tab —
-   * no manual refresh needed, and no expensive full scan runs eagerly on wake.
-   */
-  async function _onAppForeground() {
-    if (document.hidden) return;            // fired on hide — ignore
-    if (!Auth.getValidToken()) return;      // not signed in
-
-    try {
-      const modTime = await Drive.getFolderModifiedTime(CONFIG.ROOT_FOLDER_ID);
-      if (!modTime) return;
-
-      const driveMs  = new Date(modTime).getTime();
-      const scanMs   = _lastLibScanAt ? new Date(_lastLibScanAt).getTime() : 0;
-
-      if (driveMs > scanMs) {
-        console.log('[App] Drive root changed since last scan — will rescan on next library open');
-        _libScanDone = false; // background scan will run when user opens Biblioteca
-      }
-    } catch {
-      // Network error or auth issue — silently ignore, don't disrupt user
-    }
-  }
-
   function _bindEvents() {
     // Login button
     document.getElementById('btn-login')?.addEventListener('click', () => {
@@ -12043,12 +11682,6 @@ const App = (() => {
       el.addEventListener('click', _refreshCacheBar);
     });
 
-    // ── Detect Drive changes when app returns to foreground ───
-    // On visibilitychange (tab/app comes back from background), do a single
-    // lightweight Drive call to check if ROOT_FOLDER modifiedTime has advanced
-    // past our last scan. If yes, reset _libScanDone so the next time the user
-    // opens Biblioteca the BFS scan runs automatically and picks up new folders.
-    document.addEventListener('visibilitychange', _onAppForeground);
   }
 
   /* ── Expose ─────────────────────────────────────────────── */
@@ -12118,7 +11751,6 @@ const App = (() => {
     _setLibTab,
     _libGoBack,
     _onNewPlaylist,
-    _scanLibraryBackground,
     onArtistClick,
     onAlbumClick,
     onCollectionClick,
