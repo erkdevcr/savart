@@ -6679,26 +6679,127 @@ const App = (() => {
   }
 
   /** Build a simple (non-expandable) folder row for completed/skipped entries. */
+  /** Build a simple row (completed / skipped) as a lib-detail-entity with inline edit panel. */
   function _dsBuildSimpleRow(folder, dotClass) {
+    const isCollection = isFolderCollection(folder.id);
+    const songCount    = folder.count || 0;
+    const pathParts    = folder.path.split(' › ');
+    const leaf         = pathParts[pathParts.length - 1];
+
+    const ftKey   = isCollection ? 'collection' : songCount === 1 ? 'single' : songCount <= 4 ? 'ep' : 'lp';
+    const ftLabel = { collection: 'Collection', single: 'Single', ep: 'EP', lp: 'LP' }[ftKey] || '';
+
+    const musicSvg = `<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>`;
+    const hue   = [...(folder.id || '')].reduce((h, c) => h + c.charCodeAt(0), 0) % 360;
+    const albBg = `hsl(${hue},30%,28%)`;
+
     const row = document.createElement('div');
     row.className = 'ds-folder-row';
     row.dataset.folderId = folder.id;
-    const pathParts = folder.path.split(' › ');
-    const leaf      = pathParts.pop();
-    const parentStr = pathParts.length ? pathParts.join(' › ') + ' › ' : '';
+
     row.innerHTML = `
-      <div class="ds-folder-header" style="cursor:default">
-        <button class="ds-row-menu-btn" title="Más opciones"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg></button>
-        <div class="ds-status-dot ${dotClass}"></div>
-        <div class="ds-folder-path">
-          <span class="ds-folder-parent">${_escHtml(parentStr)}</span><span class="ds-folder-leaf">${_escHtml(leaf)}</span>
+      <div class="ds-folder-entity lib-detail-entity">
+        <div class="lib-detail-entity-art" style="background:${albBg};color:var(--text-secondary)">
+          ${musicSvg}
         </div>
-        <span style="font-size:10px;color:var(--text-disabled);flex-shrink:0">${folder.count} arch.</span>
+        <div class="lib-detail-entity-info">
+          <div class="lib-detail-entity-year"><span class="album-format-badge">${_escHtml(ftLabel)}</span></div>
+          <div class="lib-detail-entity-name">${_escHtml(folder.name)}</div>
+          <div class="lib-detail-entity-sub">${songCount} canc.</div>
+        </div>
+        <button class="lib-detail-entity-more" title="Opciones">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
+        </button>
+      </div>
+      <div class="album-edit-panel ds-album-edit-panel">
+        <div class="album-edit-actions">
+          <div class="ds-type-switch">
+            <button class="ds-type-btn album-edit-apply-btn${!isCollection ? ' ds-type-btn--on' : ''}" data-type="album">LP / EP</button>
+            <button class="ds-type-btn album-edit-apply-btn${isCollection ? ' ds-type-btn--on' : ''}" data-type="collection">Col.</button>
+          </div>
+          <button class="ds-panel-save-btn album-edit-save-btn">${UI.t('save_btn') || 'Guardar'}</button>
+        </div>
+        <div class="album-edit-row">
+          <label class="album-edit-label">${UI.t('lbl_artist') || 'Artista'}</label>
+          <input class="album-edit-input" data-field="artist" value="" placeholder="${UI.t('lbl_artist') || 'Artista'}">
+        </div>
+        <div class="album-edit-row">
+          <label class="album-edit-label">${UI.t('lbl_album') || 'Álbum'}</label>
+          <input class="album-edit-input" data-field="album" value="${_escHtml(folder.name)}" placeholder="${UI.t('lbl_album') || 'Álbum'}">
+        </div>
+        <div class="album-edit-row">
+          <label class="album-edit-label">${UI.t('lbl_year') || 'Año'}</label>
+          <input class="album-edit-input" data-field="year" value="" placeholder="2024" style="max-width:80px">
+        </div>
+        <div class="album-edit-row">
+          <label class="album-edit-label">${UI.t('lbl_cover_url') || 'Cover URL'}</label>
+          <input class="album-edit-input" data-field="coverUrl" value="" placeholder="https://…">
+        </div>
       </div>`;
-    row.querySelector('.ds-row-menu-btn').addEventListener('click', (e) => {
+
+    // Clicking the entity (not the ⋮) toggles the edit panel; loads meta from DB on first open
+    let _panelLoaded = false;
+    const entity = row.querySelector('.ds-folder-entity');
+    entity.addEventListener('click', async (e) => {
+      if (e.target.closest('.lib-detail-entity-more')) return;
+      const panel  = row.querySelector('.album-edit-panel');
+      const isOpen = panel.classList.toggle('open');
+      entity.classList.toggle('album-editing', isOpen);
+      if (isOpen && !_panelLoaded) {
+        _panelLoaded = true;
+        // Load metadata from DB (songs for this folder)
+        try {
+          const all   = await DB.getAllMetaLight();
+          const songs = all.filter(m => m.folderId === folder.id);
+          if (songs.length) {
+            const artist   = songs.find(s => s.artist)?.artist || '';
+            const album    = songs.find(s => s.album)?.album   || '';
+            const year     = songs.find(s => s.year)?.year     || '';
+            const coverSrc = (songs.find(s => s.thumbnailUrl || s.coverUrl)?.thumbnailUrl
+                           || songs.find(s => s.thumbnailUrl || s.coverUrl)?.coverUrl || '')
+                           .replace(/^blob:.*|(?:googleusercontent|lh\d+\.).*/, '');
+            const artistIn = panel.querySelector('[data-field="artist"]');
+            const albumIn  = panel.querySelector('[data-field="album"]');
+            const yearIn   = panel.querySelector('[data-field="year"]');
+            const coverIn  = panel.querySelector('[data-field="coverUrl"]');
+            if (artistIn) artistIn.value = artist;
+            if (albumIn && !albumIn.value) albumIn.value = album || folder.name;
+            if (yearIn)   yearIn.value   = year;
+            if (coverIn && !coverIn.value && coverSrc) coverIn.value = coverSrc;
+            // Also inject album name into header
+            const nameEl = row.querySelector('.lib-detail-entity-name');
+            if (nameEl && album) nameEl.textContent = album;
+            const subEl = row.querySelector('.lib-detail-entity-sub');
+            if (subEl && artist) subEl.textContent = artist + ' · ' + songCount + ' canc.';
+            // Inject cover into art cell if found
+            if (coverSrc) {
+              const artEl = row.querySelector('.lib-detail-entity-art');
+              if (artEl && !artEl.querySelector('img')) {
+                artEl.innerHTML = `<img src="${_escHtml(coverSrc)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)" onerror="this.style.display='none';this.nextElementSibling.style.display=''">${musicSvg}`;
+              }
+            }
+          }
+        } catch (_) {}
+      }
+    });
+
+    // ⋮ context menu
+    entity.querySelector('.lib-detail-entity-more').addEventListener('click', (e) => {
       e.stopPropagation();
       UI.showContextMenu(e, 'ds_folder', { id: folder.id, folderId: folder.id, name: leaf, isFolder: true });
     });
+
+    // Type switch
+    row.querySelectorAll('.ds-type-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        _dsToggleFolderType(folder.id, row, btn.dataset.type);
+      });
+    });
+
+    // Save button
+    row.querySelector('.ds-panel-save-btn').addEventListener('click', () => _dsSaveFromPanel(row, folder.id));
+
     return row;
   }
 
@@ -6867,6 +6968,13 @@ const App = (() => {
           <button class="ds-panel-save-btn album-edit-save-btn">${UI.t('save_btn') || 'Guardar'}</button>
         </div>
         <div class="album-edit-row">
+          <label class="album-edit-label">Tipo</label>
+          <div class="ds-type-switch">
+            <button class="ds-type-btn album-edit-apply-btn${ftKey !== 'collection' ? ' ds-type-btn--on' : ''}" data-type="album">LP / EP</button>
+            <button class="ds-type-btn album-edit-apply-btn${ftKey === 'collection' ? ' ds-type-btn--on' : ''}" data-type="collection">Col.</button>
+          </div>
+        </div>
+        <div class="album-edit-row">
           <label class="album-edit-label">${UI.t('lbl_artist') || 'Artista'}</label>
           <input class="album-edit-input" data-field="artist" value="${_escHtml(artistName)}" placeholder="${UI.t('lbl_artist') || 'Artista'}">
         </div>
@@ -6906,6 +7014,14 @@ const App = (() => {
       _dsToggleIgnore(folder.id, row);
     });
 
+    // Type switch (Album / Collection)
+    row.querySelectorAll('.ds-type-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        _dsToggleFolderType(folder.id, row, btn.dataset.type);
+      });
+    });
+
     // Save button
     row.querySelector('.ds-panel-save-btn').addEventListener('click', () => _dsSaveFromPanel(row, folder.id));
 
@@ -6936,10 +7052,10 @@ const App = (() => {
     if (coverIn && !coverIn.value) coverIn.value = coverSrc;
   }
 
-  /** Save album-edit-panel inputs to every song in the folder */
+  /** Save album-edit-panel inputs to every song in the folder.
+   *  Works for attention rows (songs in session) AND completed/skipped rows (DB lookup). */
   async function _dsSaveFromPanel(rowEl, folderId) {
-    const folder  = _dsSession.folders[folderId];
-    if (!folder) return;
+    const sessionFolder = _dsSession.folders?.[folderId]; // may be undefined for completed/skipped
     const saveBtn = rowEl.querySelector('.ds-panel-save-btn');
     if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = UI.t('saving') || 'Guardando…'; }
     const panel    = rowEl.querySelector('.album-edit-panel');
@@ -6948,8 +7064,21 @@ const App = (() => {
     const year     = panel.querySelector('[data-field="year"]')?.value?.trim()     || '';
     const coverUrl = panel.querySelector('[data-field="coverUrl"]')?.value?.trim() || '';
     try {
+      // Get song list: from session (attention rows) or from DB (completed / skipped rows)
+      let songs;
+      if (sessionFolder?.songs?.length) {
+        songs = sessionFolder.songs;
+      } else {
+        const all = await DB.getAllMetaLight().catch(() => []);
+        songs = all.filter(m => m.folderId === folderId);
+      }
+      if (!songs.length) {
+        UI.showToast('No se encontraron canciones para este álbum', 'error');
+        if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = UI.t('save_btn') || 'Guardar'; }
+        return;
+      }
       let saved = 0;
-      for (const song of folder.songs) {
+      for (const song of songs) {
         const patch = { folderId, manualAt: Date.now() };
         if (artist)                                    patch.artist       = artist;
         if (album)                                     patch.album        = album;
@@ -6957,13 +7086,12 @@ const App = (() => {
         if (coverUrl && !coverUrl.startsWith('blob:')) patch.thumbnailUrl = coverUrl;
         await DB.setMeta(song.id, patch);
         saved++;
-        // Update in-memory session song
-        if (artist)   { song.artist  = artist;   song.missingArtist = false; }
-        if (album)    { song.album   = album;    song.missingAlbum  = false; }
-        if (year)     { song.year    = year;     song.missingYear   = false; }
-        if (coverUrl && !coverUrl.startsWith('blob:')) {
-          song.thumbnailLink = coverUrl;
-          song.missingCover  = false;
+        // Update in-memory session song (attention rows only)
+        if (sessionFolder?.songs) {
+          if (artist)   { song.artist  = artist;   song.missingArtist = false; }
+          if (album)    { song.album   = album;    song.missingAlbum  = false; }
+          if (year)     { song.year    = year;     song.missingYear   = false; }
+          if (coverUrl && !coverUrl.startsWith('blob:')) { song.thumbnailLink = coverUrl; song.missingCover = false; }
         }
         if (coverUrl && !coverUrl.startsWith('blob:')) {
           _cacheExternalCover(song.id, coverUrl, true).catch(() => {});
@@ -6975,14 +7103,17 @@ const App = (() => {
         if (coverUrl && !coverUrl.startsWith('blob:')) livePatch.thumbnailUrl = coverUrl;
         if (Object.keys(livePatch).length) _liveMetaUpdate([song.id], livePatch);
       }
-      // Refresh the entity header to reflect saved values
-      _dsRefreshRowHeader(rowEl, folder, { artist, album, year, coverUrl });
-      folder.attended = true;
-      folder.status   = 'needs_attention';
-      rowEl.classList.remove('ds-ignored');
-      rowEl.classList.add('ds-attended');
-      _dsUpdateCounters();
-      await _dsSaveSession();
+      // Refresh header — build a minimal folder-like object for simple rows
+      const folderRef = sessionFolder || { id: folderId, name: album || folderId, songs, count: songs.length };
+      _dsRefreshRowHeader(rowEl, folderRef, { artist, album, year, coverUrl });
+      if (sessionFolder) {
+        sessionFolder.attended = true;
+        sessionFolder.status   = 'needs_attention';
+        rowEl.classList.remove('ds-ignored');
+        rowEl.classList.add('ds-attended');
+        _dsUpdateCounters();
+        await _dsSaveSession();
+      }
       if (typeof Sync !== 'undefined') Sync.push('metadata');
       if (_browseFolderId) _updateBrowseLegend(_browseFolderId);
       if (saveBtn) {
@@ -6997,10 +7128,44 @@ const App = (() => {
     }
   }
 
+  /** Toggle a folder between album and collection types.
+   *  Updates DB, patches the in-memory cache, refreshes the chip and toggle buttons immediately. */
+  async function _dsToggleFolderType(folderId, rowEl, newType) {
+    try {
+      if (newType === 'collection') {
+        await onMoveToCollections({ folderId });
+      } else {
+        await onMoveToAlbums({ folderId });
+      }
+      // Update toggle button active states
+      rowEl.querySelectorAll('.ds-type-btn').forEach(btn => {
+        btn.classList.toggle('ds-type-btn--on', btn.dataset.type === newType);
+      });
+      // Update the folder-type chip in the header immediately
+      const yearEl = rowEl.querySelector('.lib-detail-entity-year');
+      if (yearEl) {
+        const firstBadge = yearEl.querySelector('.album-format-badge');
+        if (firstBadge) {
+          // Determine new label: for album types use song count to pick Single/EP/LP
+          if (newType === 'collection') {
+            firstBadge.textContent = 'Collection';
+          } else {
+            const sub   = rowEl.querySelector('.lib-detail-entity-sub');
+            const count = parseInt(sub?.textContent) || 0;
+            firstBadge.textContent = count === 1 ? 'Single' : count <= 4 ? 'EP' : 'LP';
+          }
+        }
+      }
+    } catch (err) {
+      console.error('[DeepScan] Type toggle error:', err);
+      UI.showToast('Error cambiando tipo', 'error');
+    }
+  }
+
   /** Update the lib-detail-entity header cells after a save */
   function _dsRefreshRowHeader(rowEl, folder, { artist, album, year, coverUrl }) {
     const songs     = folder.songs || [];
-    const songCount = songs.length;
+    const songCount = songs.length || folder.count || 0;
     const mime      = songs[0]?.mimeType || '';
     const format    = mime.includes('flac') ? 'FLAC' : mime.includes('ogg') ? 'OGG'
                     : mime.includes('aac')  ? 'AAC'  : mime.includes('wav') ? 'WAV'
@@ -7013,7 +7178,7 @@ const App = (() => {
 
     const subEl = rowEl.querySelector('.lib-detail-entity-sub');
     if (subEl) {
-      const chips = _dsMissingChips(folder);
+      const chips = folder.songs?.length ? _dsMissingChips(folder) : '';
       subEl.innerHTML = [artist ? _escHtml(artist) : '', `${songCount} canc.`].filter(Boolean).join(' · ')
                       + (chips ? `&ensp;${chips}` : '');
     }
