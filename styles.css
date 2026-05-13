@@ -5219,18 +5219,12 @@ body.queue-open #mini-player { z-index: 65; }
    Deep Scan screen  (v1.6.24)
    ═══════════════════════════════════════════════════════════ */
 
-/* Deep Scan is a fixed full-viewport overlay — above mini-player (19),
-   player-expanded (~70) and bottom-nav.  z-index 500 clears everything. */
+/* Deep Scan renders as a regular content-area screen inside #main.
+   display/flex-direction/overflow are handled by the shared .screen rules. */
 #screen-deep-scan {
-  display: none;
-  position: fixed;
-  inset: 0;
-  z-index: 500;
-  flex-direction: column;
-  overflow: hidden;
   background: var(--bg-base);
+  overflow: hidden; /* ds-header is sticky; inner lists scroll independently */
 }
-#screen-deep-scan.active { display: flex; }
 
 /* ── Header ─────────────────────────────────────────────────── */
 .ds-header {
@@ -6186,7 +6180,13 @@ body.queue-open #mini-player { z-index: 65; }
   .ds-table th, .ds-table td { padding: 2px 1px; }
   .ds-cell-input { font-size: 10px; padding: 2px 4px; }
   .ds-table-filename { font-size: 10px; }
-  /* #screen-deep-scan is position:fixed so bottom-nav padding is irrelevant */
+  /* #screen-deep-scan is a regular screen; .screen padding-bottom applies */
+}
+
+/* ── Desktop overrides ───────────────────────────────────────── */
+@media (min-width: 768px) {
+  /* Back button is redundant on desktop — sidebar nav replaces it */
+  #btn-ds-back { display: none; }
 }
 
 /* ══════════════════════════════════════════════════════════

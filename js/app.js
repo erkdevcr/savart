@@ -10770,6 +10770,7 @@ const App = (() => {
         _openFolder({ id: _rootFolderId, name: CONFIG.ROOT_FOLDER_NAME }, false);
       }
     }
+    if (viewId === 'deep-scan') _openDeepScan();
   }
 
   /**

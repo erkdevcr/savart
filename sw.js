@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.25';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.25 — deep scan panel switches fields on type toggle (col: Nombre/Año/Cover; album: Artista/Álbum/Año/Cover); saves colName via DB.saveCollection; full i18n; CSS ds-field-col-only/ds-field-album-only — deep scan chips use folder-type-chip (Álbum/Colección); type buttons match chip colors; +Edit songs list; DB size inline in boot text — deep scan all lists (attn/done/skipped) use lib-detail-entity style + inline edit panel + Album↔Collection type switch; _dsSaveFromPanel works for all list types via DB fallback; _dsToggleFolderType patches chip+cache+DB instantly (navigator.storage.estimate) below progress bar; deep scan rows as lib-detail-entity (3.5.21) (cover art, folder-type chip, year, format badge, album name, artist, song count); tapping row toggles inline album-edit-panel; save writes all fields to every song in folder; async cover loading from DB via _dsLoadCoverForRow
+const APP_VERSION  = '3.5.26';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.26 — Deep Scan is now a first-class nav screen (sidebar + bottom-nav); removed fixed overlay positioning; back button hidden on desktop; nav_scan i18n key (Escaneo/Scan) — 3.5.25 — deep scan panel switches fields on type toggle (col: Nombre/Año/Cover; album: Artista/Álbum/Año/Cover); saves colName via DB.saveCollection; full i18n; CSS ds-field-col-only/ds-field-album-only — deep scan chips use folder-type-chip (Álbum/Colección); type buttons match chip colors; +Edit songs list; DB size inline in boot text
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
