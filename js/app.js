@@ -6538,13 +6538,56 @@ const App = (() => {
         page.audioFiles.map(async f => ({ f, meta: await DB.getMeta(f.id).catch(() => null) }))
       );
 
-      // 6. Determine cover threshold: flag folder only if ≥20% of files lack cover
+      // 6. Consensus auto-save — propagate majority-vote metadata to songs missing fields
+      {
+        const _top = map => map.size > 0
+          ? [...map.entries()].sort((a, b) => b[1] - a[1])[0][0]
+          : null;
+
+        const artistMap = new Map();
+        const albumMap  = new Map();
+        const yearMap   = new Map();
+        let   consensusCoverUrl = null;
+
+        for (const { meta } of songMetas) {
+          if (!meta) continue;
+          if (meta.artist) artistMap.set(meta.artist, (artistMap.get(meta.artist) || 0) + 1);
+          if (meta.album)  albumMap.set(meta.album,   (albumMap.get(meta.album)   || 0) + 1);
+          if (meta.year)   yearMap.set(meta.year,     (yearMap.get(meta.year)     || 0) + 1);
+          if (!consensusCoverUrl && (meta.coverUrl || meta.thumbnailUrl)) {
+            consensusCoverUrl = meta.coverUrl || meta.thumbnailUrl || null;
+          }
+        }
+
+        const cArtist = _top(artistMap);
+        const cAlbum  = _top(albumMap);
+        const cYear   = _top(yearMap);
+
+        if (cArtist || cAlbum || cYear || consensusCoverUrl) {
+          await Promise.all(songMetas.map(async ({ f, meta }) => {
+            if (!meta) return;
+            const patch = {};
+            if (cArtist && !meta.artist) patch.artist = cArtist;
+            if (cAlbum  && !meta.album)  patch.album  = cAlbum;
+            if (cYear   && !meta.year)   patch.year   = cYear;
+            if (consensusCoverUrl && !(meta.coverBlob || meta.coverUrl || meta.thumbnailUrl))
+              patch.coverUrl = consensusCoverUrl;
+            if (Object.keys(patch).length > 0) {
+              await DB.setMeta(f.id, patch).catch(() => {});
+              // Update in-memory so attnSongs logic below sees fresh data
+              Object.assign(meta, patch);
+            }
+          }));
+        }
+      }
+
+      // 7. Determine cover threshold: flag folder only if ≥20% of files lack cover
       const missingCoverCount = songMetas.filter(({ meta }) =>
-        !(meta?.coverBlob || meta?.coverUrl || meta?.thumbnailLink)
+        !(meta?.coverBlob || meta?.coverUrl || meta?.thumbnailUrl || meta?.thumbnailLink)
       ).length;
       const folderMissingCover = missingCoverCount >= Math.ceil(page.audioFiles.length * 0.20);
 
-      // 7. Build attention list
+      // 8. Build attention list
       const attnSongs = [];
       for (const { f, meta } of songMetas) {
         const missingArtist = !meta?.artist;
