@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.21';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.21 — deep scan folder rows restyled as lib-detail-entity (cover art, folder-type chip, year, format badge, album name, artist, song count); tapping row toggles inline album-edit-panel; save writes all fields to every song in folder; async cover loading from DB via _dsLoadCoverForRow
+const APP_VERSION  = '3.5.22';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.22 — boot toast shows DB size (navigator.storage.estimate) below progress bar; deep scan rows as lib-detail-entity (3.5.21) (cover art, folder-type chip, year, format badge, album name, artist, song count); tapping row toggles inline album-edit-panel; save writes all fields to every song in folder; async cover loading from DB via _dsLoadCoverForRow
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

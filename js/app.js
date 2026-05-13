@@ -372,6 +372,21 @@ const App = (() => {
       bootToast.style.display = 'flex';
       requestAnimationFrame(() => { bootToast.style.opacity = '1'; });
     }
+    // Show DB size (total origin storage) as a small reference label in the boot toast
+    (async () => {
+      try {
+        let mb;
+        if (navigator.storage?.estimate) {
+          const est = await navigator.storage.estimate();
+          mb = ((est.usage || 0) / 1024 / 1024).toFixed(1);
+        } else {
+          mb = ((await DB.getCacheSize()) / 1024 / 1024).toFixed(1);
+        }
+        const sizeEl = document.getElementById('boot-db-size');
+        if (sizeEl) sizeEl.textContent = mb + ' MB';
+      } catch (_) {}
+    })();
+
     const _hideBootToast = () => {
       if (!bootToast) return;
       const elapsed = Date.now() - _bootShowTime;
