@@ -6573,6 +6573,7 @@ const App = (() => {
             if (consensusCoverUrl && !(meta.coverBlob || meta.coverUrl || meta.thumbnailUrl))
               patch.coverUrl = consensusCoverUrl;
             if (Object.keys(patch).length > 0) {
+              patch.manualAt = Date.now(); // mark as manually resolved — soft scan skips it
               await DB.setMeta(f.id, patch).catch(() => {});
               // Update in-memory so attnSongs logic below sees fresh data
               Object.assign(meta, patch);
