@@ -8081,6 +8081,106 @@ const App = (() => {
     }
   }
 
+  /* ── Reset to originals ──────────────────────────────────── */
+
+  async function _dsResetToOriginals() {
+    if (_dsRunning) return; // block while scan is active
+
+    // Collect all folder IDs tracked by the current session
+    const allFolderIds = new Set([
+      ...Object.keys(_dsSession?.folders        || {}),
+      ...Object.keys(_dsSession?.completedList  || {}),
+      ...Object.keys(_dsSession?.skippedList    || {}),
+    ]);
+
+    if (allFolderIds.size === 0) return; // nothing to reset
+
+    // Show confirmation dialog
+    const confirmed = await _showDsResetDialog();
+    if (!confirmed) return;
+
+    // Disable button and show progress
+    const resetBtn = document.getElementById('btn-ds-reset');
+    const origHTML = resetBtn?.innerHTML;
+    if (resetBtn) {
+      resetBtn.disabled = true;
+      resetBtn.textContent = UI.t('ds_resetting') || 'Restableciendo…';
+    }
+
+    try {
+      // Get all metadata records, filter those belonging to tracked folders
+      const allMeta = await DB.getAllMeta().catch(() => []);
+      const toReset = allMeta.filter(m => m.folderId && allFolderIds.has(m.folderId));
+
+      // Reset each song to virgin state (preserves starred, playCount, addedAt)
+      for (const m of toReset) {
+        await DB.resetToVirgin(m.id).catch(() => {});
+      }
+
+      // Delete collection records for every tracked folder
+      for (const folderId of allFolderIds) {
+        await DB.deleteCollection(folderId).catch(() => {});
+        // Remove from in-memory collection cache so UI updates immediately
+        _collectionFolderIdsCache?.delete?.(folderId);
+      }
+
+      // Clear session lists — keep folder selection and settings
+      if (_dsSession) {
+        _dsSession.folders       = {};
+        _dsSession.completedList = {};
+        _dsSession.skippedList   = {};
+        _dsSession.visited       = [];
+        _dsSession.pendingQueue  = [];
+        _dsSession.scannedFolders = 0;
+        _dsSession.totalFolders   = 0;
+        _dsSession.status         = 'idle';
+        _dsSession.log            = [];
+      }
+      await _dsSaveSession();
+
+      // Re-render the DS list area to reflect empty state
+      _dsRenderAll();
+
+    } finally {
+      if (resetBtn) {
+        resetBtn.disabled = false;
+        if (origHTML) resetBtn.innerHTML = origHTML;
+      }
+    }
+  }
+
+  /**
+   * Show the DS reset confirmation dialog.
+   * Resolves true if confirmed, false if cancelled.
+   */
+  function _showDsResetDialog() {
+    return new Promise(resolve => {
+      const modal      = document.getElementById('ds-reset-dialog');
+      const desc       = document.getElementById('ds-reset-desc');
+      const confirmBtn = document.getElementById('btn-ds-reset-confirm');
+      const cancelBtn  = document.getElementById('btn-ds-reset-cancel');
+      const backdrop   = document.getElementById('ds-reset-backdrop');
+      if (!modal) { resolve(false); return; }
+
+      if (desc) desc.textContent = UI.t('ds_reset_confirm_body') || 'Reset all metadata for the scanned folders? This cannot be undone.';
+      modal.style.display = 'flex';
+
+      const finish = (result) => {
+        modal.style.display = 'none';
+        confirmBtn?.removeEventListener('click', onConfirm);
+        cancelBtn?.removeEventListener('click',  onCancel);
+        backdrop?.removeEventListener('click',   onCancel);
+        resolve(result);
+      };
+      const onConfirm = () => finish(true);
+      const onCancel  = () => finish(false);
+
+      confirmBtn?.addEventListener('click', onConfirm, { once: true });
+      cancelBtn?.addEventListener('click',  onCancel,  { once: true });
+      backdrop?.addEventListener('click',   onCancel,  { once: true });
+    });
+  }
+
   /* ── Remove from DS list (context menu) ─────────────────── */
 
   function onDsRemoveFromList(item) {
@@ -11707,6 +11807,7 @@ const App = (() => {
       if (_dsPaused) _startDeepScan(); else _pauseDeepScan();
     });
     document.getElementById('btn-ds-stop')?.addEventListener('click',  _stopDeepScan);
+    document.getElementById('btn-ds-reset')?.addEventListener('click', _dsResetToOriginals);
 
     // Deep Scan: open in new tab
     document.getElementById('btn-ds-new-tab')?.addEventListener('click', () => {
@@ -12245,6 +12346,7 @@ const App = (() => {
     _dsOpenFolderBrowser,
     _dsLoadArtists,
     onDsRemoveFromList,
+    _dsResetToOriginals,
   };
 })();
 

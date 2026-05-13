@@ -5424,6 +5424,31 @@ body.queue-open #mini-player { z-index: 65; }
 }
 #btn-ds-start.btn-primary svg { width: 11px; height: 11px; }
 
+/* Reset button — subtle amber/warning tint */
+#btn-ds-reset {
+  color: var(--text-secondary);
+  border-radius: var(--radius-pill);
+}
+#btn-ds-reset:hover:not(:disabled) {
+  color: #e8a020;
+  border-color: rgba(232,160,32,0.45);
+  background: rgba(232,160,32,0.08);
+}
+#btn-ds-reset:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+/* Reset confirm button — destructive red */
+.ds-reset-confirm-btn {
+  background: #c0392b !important;
+  border-color: #c0392b !important;
+  color: #fff !important;
+}
+.ds-reset-confirm-btn:hover {
+  background: #a93226 !important;
+  border-color: #a93226 !important;
+}
+
 /* Stop button — orange "Stopping…" state, mirrors lib-rescan-btn.scanning */
 #btn-ds-stop.ds-stopping {
   color: #e8a020;

@@ -1140,6 +1140,15 @@ const DB = (() => {
     return _promisify(store.getAll());
   }
 
+  /**
+   * Delete a collection record entirely (used by Reset to originals).
+   * @param {string} folderId
+   */
+  async function deleteCollection(folderId) {
+    const store = _tx('collections', 'readwrite');
+    return _promisify(store.delete(folderId));
+  }
+
   /* ── Expose ─────────────────────────────────────────────── */
   return {
     open,
@@ -1205,6 +1214,7 @@ const DB = (() => {
     getCollection,
     saveCollection,
     getAllCollections,
+    deleteCollection,
     // Background collection scan log
     getBgScannedFolders,
     addBgScannedFolders,
