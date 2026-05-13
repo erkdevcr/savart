@@ -5877,18 +5877,38 @@ const App = (() => {
     }
   }
 
-  /** Resets any inline font-size override on the folder name element. */
-  function _dsFitFolderName() {
-    const el = document.getElementById('ds-folder-name');
-    if (el) el.style.fontSize = '';
+  /** Splits a full path string into { basename, pathPrefix } */
+  function _dsSplitFolderPath(fullPath) {
+    const parts = (fullPath || '').split(' › ');
+    return {
+      basename:   parts[parts.length - 1] || '',
+      pathPrefix: parts.slice(0, -1).join(' › ')
+    };
   }
+
+  /** Updates the folder-bar name, path, and button label from session state. */
+  function _dsUpdateFolderBar() {
+    const full    = _dsSession.selectedFolderName || CONFIG.ROOT_FOLDER_NAME;
+    const { basename, pathPrefix } = _dsSplitFolderPath(full);
+    const nameEl  = document.getElementById('ds-folder-name');
+    const pathEl  = document.getElementById('ds-folder-path');
+    const btnLbl  = document.getElementById('ds-folder-btn-label');
+    if (nameEl) nameEl.textContent = basename;
+    if (pathEl) pathEl.textContent = pathPrefix;
+    if (btnLbl) {
+      const hasCustomFolder = _dsSession.selectedFolderId &&
+                              _dsSession.selectedFolderId !== CONFIG.ROOT_FOLDER_ID;
+      btnLbl.setAttribute('data-i18n', hasCustomFolder ? 'ds_change_folder_btn' : 'ds_open_folder_btn');
+      btnLbl.textContent = hasCustomFolder ? UI.t('ds_change_folder_btn') : UI.t('ds_open_folder_btn');
+    }
+  }
+
+  /** @deprecated kept for compat — use _dsUpdateFolderBar */
+  function _dsFitFolderName() {}
 
   /* Full render from session state. */
   function _dsRenderAll() {
-    // Folder name
-    const nameEl = document.getElementById('ds-folder-name');
-    if (nameEl) nameEl.textContent = _dsSession.selectedFolderName || CONFIG.ROOT_FOLDER_NAME;
-    _dsFitFolderName();
+    _dsUpdateFolderBar();
 
     _dsUpdateControls();
     _dsUpdateProgress();
@@ -6237,9 +6257,7 @@ const App = (() => {
     // Update session
     _dsSession.selectedFolderId   = id;
     _dsSession.selectedFolderName = fullPath;
-    const nameEl = document.getElementById('ds-folder-name');
-    if (nameEl) nameEl.textContent = fullPath;
-    _dsFitFolderName();
+    _dsUpdateFolderBar();
 
     // Folder changed — reset progress so "Iniciar" always starts fresh from new folder
     _dsSession.pendingQueue   = [];
@@ -10701,10 +10719,8 @@ const App = (() => {
     _dsSession.skippedList        = {};
     _dsSession.log                = [];
 
-    // Update the folder-name label in the Deep Scan UI
-    const nameEl = document.getElementById('ds-folder-name');
-    if (nameEl) nameEl.textContent = folder.name;
-    _dsFitFolderName?.();
+    // Update the folder-bar (name, path, button label)
+    _dsUpdateFolderBar?.();
 
     await _dsSaveSession();
     _dsUpdateControls?.();
