@@ -1618,9 +1618,26 @@ const UI = (() => {
     }
     const metaEl = row.querySelector('.song-row-meta');
     if (!metaEl) return;
-    const _artist = (artist || '').split(';')[0].trim();
-    const _album  = (album  || '').trim();
-    metaEl.textContent = [_artist, _album].filter(Boolean).join(' · ');
+    const _artist   = (artist || '').split(';')[0].trim();
+    const _album    = (album  || '').trim();
+    const metaText  = [_artist, _album].filter(Boolean).join(' · ');
+    // Update only the text span — NOT metaEl.textContent which would wipe
+    // the sibling .song-row-meta-dur span and break the flex layout (duration
+    // would appear inline next to the text instead of pushed to the right).
+    const leftEl = metaEl.querySelector('.song-row-meta-left');
+    if (leftEl) {
+      leftEl.textContent = metaText;
+    } else {
+      // Row had no child spans (built with empty meta) — rebuild with proper structure,
+      // preserving any .song-row-meta-dur that updateBrowseSongDuration already added.
+      const existingDur = metaEl.querySelector('.song-row-meta-dur');
+      metaEl.textContent = ''; // clear text node
+      const newLeft = document.createElement('span');
+      newLeft.className = 'song-row-meta-left';
+      newLeft.textContent = metaText;
+      metaEl.appendChild(newLeft);
+      if (existingDur) metaEl.appendChild(existingDur);
+    }
   }
 
   /**
