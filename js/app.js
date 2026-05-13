@@ -6625,7 +6625,7 @@ const App = (() => {
         // Auto-identify as collection if 3+ distinct artists found
         isAutoCollection = artistMap.size > 3;
         if (isAutoCollection && !_collectionFolderIdsCache?.has(id)) {
-          await DB.saveCollection(id, { forceType: 'collection', name }).catch(() => {});
+          await DB.saveCollection(id, { forceType: 'collection', name, path }).catch(() => {});
           _collectionFolderIdsCache?.add(id);
           if (typeof Sync !== 'undefined') Sync.push('collections');
           _dsLogLine(`  ↳ Colección detectada (${artistMap.size} artistas): ${name}`, 'info');
