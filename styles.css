@@ -454,12 +454,12 @@ img { display: block; }
 .home-header {
   position: sticky;
   top: 0;
-  z-index: 5;
+  z-index: 20;
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 14px 16px;
-  background: var(--bg-base);
+  background: var(--bg-surface);
   border-bottom: 1px solid var(--bg-hover);
   flex-shrink: 0;
 }
@@ -741,10 +741,7 @@ img { display: block; }
 
 /* ── History screen ────────────────────────────────────────── */
 #screen-history .screen-header {
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  background: var(--bg-base);
+  z-index: 20;
 }
 #screen-history #history-list {
   padding-bottom: 120px;
@@ -5232,14 +5229,13 @@ body.queue-open #mini-player { z-index: 65; }
   flex-direction: column;
   flex-shrink: 0;
   background: var(--bg-surface);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--bg-hover);
 }
 .ds-header-top {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 16px 0 10px;
-  min-height: 48px;
+  padding: 14px 16px;
   gap: 0;
 }
 .ds-header-left {
@@ -5261,8 +5257,8 @@ body.queue-open #mini-player { z-index: 65; }
 }
 .ds-back-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
 .ds-title {
-  font-size: 15px;
-  font-weight: 600;
+  font-size: 18px;
+  font-weight: 500;
   margin: 0;
   color: var(--text-primary);
   white-space: nowrap;
@@ -6186,8 +6182,8 @@ body.queue-open #mini-player { z-index: 65; }
 
 /* ── Mobile overrides ────────────────────────────────────────── */
 @media (max-width: 767px) {
-  .ds-header-top { padding: 0 10px 0 8px; min-height: 44px; }
-  .ds-title { font-size: 14px; }
+  .ds-header-top { padding: 14px 16px; }
+  .ds-title { font-size: 18px; }
   .ds-counter-val { font-size: 13px; }
   .ds-counter-lbl { font-size: 8px; }
   .ds-counter { padding: 8px 3px; }
@@ -6205,6 +6201,9 @@ body.queue-open #mini-player { z-index: 65; }
 @media (min-width: 768px) {
   /* Back button is redundant on desktop — sidebar nav replaces it */
   #btn-ds-back { display: none; }
+  /* Match desktop screen-header padding */
+  .ds-header-top { padding: 20px 24px; }
+  .ds-title { font-size: 22px; }
 }
 
 /* ══════════════════════════════════════════════════════════
