@@ -7151,17 +7151,21 @@ const App = (() => {
 
       if (!fd) continue;
 
-      // ── Name & sub-line ────────────────────────────────────
-      const album  = _topMap(fd.albumMap);
-      const artist = _topMap(fd.artistMap);
-      const nameEl = row.querySelector('.lib-detail-entity-name');
-      if (nameEl && album && nameEl.textContent !== album) nameEl.textContent = album;
-      const subEl = row.querySelector('.lib-detail-entity-sub');
-      if (subEl && artist) {
-        // Only patch if the artist part is missing (don't erase song count)
-        if (!subEl.textContent.includes(artist)) {
-          const count = fd.ids.length;
-          subEl.textContent = `${artist} · ${count} ${UI.t('lbl_songs')}`;
+      // ── Name & sub-line — albums only ─────────────────────
+      // Collections keep their own name (folder name / DB name); never overwrite
+      // with a song's album tag or a single-artist name.
+      if (!isFolderCollection(folderId)) {
+        const album  = _topMap(fd.albumMap);
+        const artist = _topMap(fd.artistMap);
+        const nameEl = row.querySelector('.lib-detail-entity-name');
+        if (nameEl && album && nameEl.textContent !== album) nameEl.textContent = album;
+        const subEl = row.querySelector('.lib-detail-entity-sub');
+        if (subEl && artist) {
+          // Only patch if the artist part is missing (don't erase song count)
+          if (!subEl.textContent.includes(artist)) {
+            const count = fd.ids.length;
+            subEl.textContent = `${artist} · ${count} ${UI.t('lbl_songs')}`;
+          }
         }
       }
 
