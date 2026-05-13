@@ -6668,6 +6668,7 @@ const App = (() => {
       return;
     }
     for (const folder of folders) list.appendChild(_dsBuildFolderRow(folder));
+    _dsRefreshRowCovers().catch(() => {});
   }
 
   function _dsRenderCompletedList() {
@@ -6680,6 +6681,7 @@ const App = (() => {
       return;
     }
     for (const folder of folders) list.appendChild(_dsBuildSimpleRow(folder, 'green'));
+    _dsRefreshRowCovers().catch(() => {});
   }
 
   /** Build a simple (non-expandable) folder row for completed/skipped entries. */
@@ -6833,6 +6835,7 @@ const App = (() => {
       return;
     }
     for (const folder of folders) list.appendChild(_dsBuildSimpleRow(folder, 'yellow'));
+    _dsRefreshRowCovers().catch(() => {});
   }
 
   /** Render all scanned folders: attention, completed, skipped. */
@@ -6850,6 +6853,7 @@ const App = (() => {
     for (const folder of attnFolders)    list.appendChild(_dsBuildFolderRow(folder));
     for (const folder of doneFolders)    list.appendChild(_dsBuildSimpleRow(folder, 'green'));
     for (const folder of skippedFolders) list.appendChild(_dsBuildSimpleRow(folder, 'yellow'));
+    _dsRefreshRowCovers().catch(() => {});
   }
 
   function _dsAddOrUpdateFolderRow(folderId) {
@@ -6913,22 +6917,77 @@ const App = (() => {
       try {
         const meta = await DB.getMeta(file.id).catch(() => null);
         if (!meta) continue;
-
-        // 1. Prefer blob (embedded ID3 art) → create a stable object URL
         let url = '';
         if (meta.coverBlob) {
           url = URL.createObjectURL(meta.coverBlob);
         } else {
-          // 2. Stable external URL — skip blobs and expiring googleusercontent links
           url = (meta.coverUrl || meta.thumbnailUrl || meta.thumbnailLink || '')
             .replace(/^blob:.*|(?:googleusercontent|lh\d+\.).*/, '');
         }
-
         if (url) {
           artEl.innerHTML = `<img src="${_escHtml(url)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)" onerror="this.style.display='none';this.nextElementSibling.style.display=''">${musicSvg}`;
-          return; // done — no need to check more files
+          return;
         }
       } catch (_) {}
+    }
+  }
+
+  /**
+   * After any full list re-render (tab switch), inject covers into all visible rows.
+   * Pass 1: one getAllMetaLight() call → stable URLs injected immediately.
+   * Pass 2: rows still without a cover → getMeta() for blob fallback.
+   */
+  async function _dsRefreshRowCovers() {
+    const list = document.getElementById('ds-attention-list');
+    if (!list) return;
+    const rows = [...list.querySelectorAll('[data-folder-id]')];
+    if (!rows.length) return;
+
+    const musicSvg = `<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>`;
+    const setImg = (artEl, url) => {
+      artEl.innerHTML = `<img src="${_escHtml(url)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)" onerror="this.style.display='none';this.nextElementSibling.style.display=''">${musicSvg}`;
+    };
+
+    // Pass 1 — one light DB read; build folderId → { stableUrl, songIds[] }
+    const allLight = await DB.getAllMetaLight().catch(() => []);
+    const folderData = new Map();
+    for (const m of allLight) {
+      if (!m.folderId) continue;
+      if (!folderData.has(m.folderId)) folderData.set(m.folderId, { url: '', ids: [] });
+      const fd = folderData.get(m.folderId);
+      fd.ids.push(m.id);
+      if (!fd.url) {
+        // thumbnailUrl === 'id3' is a sentinel, not a real URL — skip it here
+        const candidate = (m.thumbnailUrl !== 'id3' ? (m.thumbnailUrl || '') : '')
+          || m.coverUrl || '';
+        const stable = candidate.replace(/^blob:.*|(?:googleusercontent|lh\d+\.).*/, '');
+        if (stable) fd.url = stable;
+      }
+    }
+
+    const needsBlob = []; // rows that have no stable URL but may have a coverBlob in DB
+    for (const row of rows) {
+      const artEl = row.querySelector('.lib-detail-entity-art');
+      if (!artEl || artEl.querySelector('img')) continue; // already showing cover
+      const fd = folderData.get(row.dataset.folderId);
+      if (fd?.url) {
+        setImg(artEl, fd.url);
+      } else if (fd?.ids.length) {
+        needsBlob.push({ artEl, ids: fd.ids });
+      }
+    }
+
+    // Pass 2 — blob fallback (ID3 embedded art): individual getMeta calls, only for rows still empty
+    for (const { artEl, ids } of needsBlob) {
+      if (artEl.querySelector('img')) continue;
+      for (const id of ids) {
+        try {
+          const meta = await DB.getMeta(id).catch(() => null);
+          if (!meta?.coverBlob) continue;
+          setImg(artEl, URL.createObjectURL(meta.coverBlob));
+          break;
+        } catch (_) {}
+      }
     }
   }
 
