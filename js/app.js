@@ -6540,7 +6540,7 @@ const App = (() => {
         page.audioFiles.map(async f => ({ f, meta: await DB.getMeta(f.id).catch(() => null) }))
       );
 
-      // 6. Consensus auto-save — propagate majority-vote metadata to songs missing fields
+      // 6. Auto-detect collection + consensus auto-save
       {
         const _top = map => map.size > 0
           ? [...map.entries()].sort((a, b) => b[1] - a[1])[0][0]
@@ -6561,23 +6561,32 @@ const App = (() => {
           }
         }
 
-        const cArtist = _top(artistMap);
-        const cAlbum  = _top(albumMap);
-        const cYear   = _top(yearMap);
+        // Auto-identify as collection if 3+ distinct artists found
+        const isAutoCollection = artistMap.size > 3;
+        if (isAutoCollection && !_collectionFolderIdsCache?.has(id)) {
+          await DB.saveCollection(id, { forceType: 'collection', name }).catch(() => {});
+          _collectionFolderIdsCache?.add(id);
+          _dsLogLine(`  ↳ Colección detectada (${artistMap.size} artistas): ${name}`, 'info');
+        }
 
-        if (cArtist || cAlbum || cYear || consensusCoverUrl) {
+        const cArtist = isAutoCollection ? null : _top(artistMap);
+        const cAlbum  = isAutoCollection ? null : _top(albumMap);
+        const cYear   = _top(yearMap);
+        // Collections: each song keeps its own cover — don't propagate a single cover URL
+        const cCover  = isAutoCollection ? null : consensusCoverUrl;
+
+        if (cArtist || cAlbum || cYear || cCover) {
           await Promise.all(songMetas.map(async ({ f, meta }) => {
             if (!meta) return;
             const patch = {};
             if (cArtist && !meta.artist) patch.artist = cArtist;
             if (cAlbum  && !meta.album)  patch.album  = cAlbum;
             if (cYear   && !meta.year)   patch.year   = cYear;
-            if (consensusCoverUrl && !(meta.coverBlob || meta.coverUrl || meta.thumbnailUrl))
-              patch.coverUrl = consensusCoverUrl;
+            if (cCover  && !(meta.coverBlob || meta.coverUrl || meta.thumbnailUrl))
+              patch.coverUrl = cCover;
             if (Object.keys(patch).length > 0) {
-              patch.manualAt = Date.now(); // mark as manually resolved — soft scan skips it
+              patch.manualAt = Date.now();
               await DB.setMeta(f.id, patch).catch(() => {});
-              // Update in-memory so attnSongs logic below sees fresh data
               Object.assign(meta, patch);
             }
           }));
@@ -7325,10 +7334,11 @@ const App = (() => {
       let saved = 0;
       for (const song of songs) {
         const patch = { folderId, manualAt: Date.now() };
-        if (!isColMode && artist)                        patch.artist       = artist;
-        if (!isColMode && album)                         patch.album        = album;
-        if (year)                                        patch.year         = year;
-        if (coverUrl && !coverUrl.startsWith('blob:'))   patch.thumbnailUrl = coverUrl;
+        if (!isColMode && artist)                                       patch.artist       = artist;
+        if (!isColMode && album)                                        patch.album        = album;
+        if (year)                                                       patch.year         = year;
+        // Collections: cover is stored on the collection record, not on individual songs
+        if (!isColMode && coverUrl && !coverUrl.startsWith('blob:'))    patch.thumbnailUrl = coverUrl;
         await DB.setMeta(song.id, patch);
         saved++;
         // Update in-memory session song (attention rows only)
