@@ -36,16 +36,17 @@ const Sync = (() => {
 
   const MANIFEST = 'savart_manifest.json';
   const FILENAMES = {
-    favorites:  'savart_favorites.json',
-    playlists:  'savart_playlists.json',
-    pinned:     'savart_pinned.json',
-    recents:    'savart_recents.json',
-    playcounts: 'savart_playcounts.json',
-    settings:   'savart_settings.json',
-    history:    'savart_history.json',
-    metadata:   'savart_metadata.json',
-    hot:        'savart_hot.json',   // delta: only the most recent rescan batch (~5–50 songs)
-    home:       'savart_home.json',  // home snapshot — read at boot via readHome(), not merged in init()
+    favorites:   'savart_favorites.json',
+    playlists:   'savart_playlists.json',
+    pinned:      'savart_pinned.json',
+    recents:     'savart_recents.json',
+    playcounts:  'savart_playcounts.json',
+    settings:    'savart_settings.json',
+    history:     'savart_history.json',
+    metadata:    'savart_metadata.json',
+    collections: 'savart_collections.json', // collection overrides: name, coverUrl, forceType
+    hot:         'savart_hot.json',   // delta: only the most recent rescan batch (~5–50 songs)
+    home:        'savart_home.json',  // home snapshot — read at boot via readHome(), not merged in init()
   };
 
   // Types that should not be pushed or merged during init().
@@ -703,6 +704,31 @@ const Sync = (() => {
         }
         break;
       }
+
+      case 'collections': {
+        // LWW per collection: remote wins when its manualAt is strictly newer.
+        // forceType is fill-only — once a folder is marked collection, it stays so.
+        const remote   = Array.isArray(data) ? data : [];
+        const localMap = new Map((await DB.getAllCollections()).map(c => [c.id, c]));
+        for (const item of remote) {
+          if (!item?.id) continue;
+          const local = localMap.get(item.id) || {};
+          const remoteManualAt = item.manualAt || 0;
+          const localManualAt  = local.manualAt  || 0;
+          const remoteWins = remoteManualAt >= localManualAt;
+          const patch = {};
+          // forceType: fill-only — set if local doesn't have it yet
+          if (item.forceType && !local.forceType) patch.forceType = item.forceType;
+          // name / coverUrl: remote wins only when its manualAt is newer or equal
+          if (item.name     && (remoteWins || !local.name))     patch.name     = item.name;
+          if (item.coverUrl && (remoteWins || !local.coverUrl)) patch.coverUrl = item.coverUrl;
+          if (remoteManualAt > localManualAt) patch.manualAt = remoteManualAt;
+          if (Object.keys(patch).length) {
+            await DB.saveCollection(item.id, { ...local, ...patch, manualAt: patch.manualAt ?? localManualAt });
+          }
+        }
+        break;
+      }
     }
   }
 
@@ -829,6 +855,24 @@ const Sync = (() => {
       playedAt:     h.playedAt     ?? Date.now(),
     })));
     console.log(`[Sync] Pushed history (${history.length})`);
+  }
+
+  async function _pushCollections() {
+    const all = await DB.getAllCollections();
+    const isExternalUrl = u => u && !u.startsWith('blob:') && !u.includes('googleapis.com');
+    const payload = all
+      .filter(c => c?.id)
+      .map(c => {
+        const rec = { id: c.id };
+        if (c.forceType)             rec.forceType = c.forceType;
+        if (c.name)                  rec.name      = c.name;
+        if (isExternalUrl(c.coverUrl)) rec.coverUrl = c.coverUrl;
+        if (c.manualAt)              rec.manualAt  = c.manualAt;
+        if (c.updatedAt)             rec.updatedAt = c.updatedAt;
+        return rec;
+      });
+    await _writeFile(FILENAMES.collections, payload);
+    console.log(`[Sync] Pushed collections (${payload.length})`);
   }
 
   async function _pushMetadata() {
@@ -983,16 +1027,17 @@ const Sync = (() => {
   }
 
   const _pushFns = {
-    favorites:  _pushFavorites,
-    playlists:  _pushPlaylists,
-    pinned:     _pushPinned,
-    recents:    _pushRecents,
-    playcounts: _pushPlaycounts,
-    settings:   _pushSettings,
-    history:    _pushHistory,
-    metadata:   _pushMetadata,
-    hot:        () => Promise.resolve(), // no-op — hot is pushed only via pushHot(), not init
-    home:       _pushHome,
+    favorites:   _pushFavorites,
+    playlists:   _pushPlaylists,
+    pinned:      _pushPinned,
+    recents:     _pushRecents,
+    playcounts:  _pushPlaycounts,
+    settings:    _pushSettings,
+    history:     _pushHistory,
+    metadata:    _pushMetadata,
+    collections: _pushCollections,
+    hot:         () => Promise.resolve(), // no-op — hot is pushed only via pushHot(), not init
+    home:        _pushHome,
   };
 
   /* ── Live polling ────────────────────────────────────────── */
@@ -1106,7 +1151,7 @@ const Sync = (() => {
         manifest,
         remoteFavs, remotePlaylists, remotePinned,
         remoteRecents, remotePlaycounts, remoteSettings, remoteHistory,
-        remoteMetadata,
+        remoteMetadata, remoteCollections,
       ] = await Promise.all([
         _readManifest(),
         _readFile(FILENAMES.favorites).catch(() => null),
@@ -1117,6 +1162,7 @@ const Sync = (() => {
         _readFile(FILENAMES.settings).catch(() => null),
         _readFile(FILENAMES.history).catch(() => null),
         _readFile(FILENAMES.metadata).catch(() => null),
+        _readFile(FILENAMES.collections).catch(() => null),
       ]);
       _prog(24);
 
@@ -1380,6 +1426,29 @@ const Sync = (() => {
           }
         }
       });
+
+      // ── Collections merge (init) ──────────────────────────────
+      await _mergeStep('collections', async () => {
+        const remote = Array.isArray(remoteCollections) ? remoteCollections : [];
+        if (remote.length === 0) return;
+        const localMap = new Map((await DB.getAllCollections()).map(c => [c.id, c]));
+        for (const item of remote) {
+          if (!item?.id) continue;
+          const local = localMap.get(item.id) || {};
+          const remoteManualAt = item.manualAt || 0;
+          const localManualAt  = local.manualAt  || 0;
+          const remoteWins = remoteManualAt >= localManualAt;
+          const patch = {};
+          if (item.forceType && !local.forceType) patch.forceType = item.forceType;
+          if (item.name     && (remoteWins || !local.name))     patch.name     = item.name;
+          if (item.coverUrl && (remoteWins || !local.coverUrl)) patch.coverUrl = item.coverUrl;
+          if (remoteManualAt > localManualAt) patch.manualAt = remoteManualAt;
+          if (Object.keys(patch).length) {
+            await DB.saveCollection(item.id, { ...local, ...patch, manualAt: patch.manualAt ?? localManualAt });
+          }
+        }
+        console.log(`[Sync] Merged collections (${remote.length} remote records)`);
+      });
       _prog(86);
 
       // Push merged state back + update manifest.
@@ -1422,14 +1491,15 @@ const Sync = (() => {
   // so Device B sees the change within the next poll cycle (~3 s) rather than 5-8 s.
   // Other types keep a longer debounce to batch rapid changes (e.g. metadata edits).
   const PUSH_DELAY = {
-    recents:    300,   // song just started → write fast
-    history:    300,   // same
-    favorites:  1500,
-    pinned:     1500,
-    playlists:  1500,
-    playcounts: 3000,
-    settings:   2000,
-    metadata:   2000,
+    recents:     300,   // song just started → write fast
+    history:     300,   // same
+    favorites:   1500,
+    pinned:      1500,
+    playlists:   1500,
+    playcounts:  3000,
+    settings:    2000,
+    metadata:    2000,
+    collections: 2000,
   };
 
   /**

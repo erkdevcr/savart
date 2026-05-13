@@ -5948,6 +5948,7 @@ const App = (() => {
     const restartBtn = document.getElementById('btn-ds-restart');
     const pauseBtn   = document.getElementById('btn-ds-pause');
     const stopBtn    = document.getElementById('btn-ds-stop');
+    const resetBtn   = document.getElementById('btn-ds-reset');
     const statusEl   = document.getElementById('ds-status-text');
     if (!startBtn || !_dsSession) return;
 
@@ -5992,6 +5993,13 @@ const App = (() => {
 
     // ── Restart button: always hidden (simplified flow) ───────
     if (restartBtn) restartBtn.style.display = 'none';
+
+    // ── Reset button: visible only when not scanning ──────────
+    if (resetBtn) {
+      const iconReset = `<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg>`;
+      resetBtn.style.display = scanning ? 'none' : '';
+      if (!resetBtn.disabled) resetBtn.innerHTML = iconReset + ' ' + UI.t('ds_reset_btn');
+    }
 
     if (statusEl) {
       const n   = _dsSession.scannedFolders;
@@ -6611,6 +6619,7 @@ const App = (() => {
         if (isAutoCollection && !_collectionFolderIdsCache?.has(id)) {
           await DB.saveCollection(id, { forceType: 'collection', name }).catch(() => {});
           _collectionFolderIdsCache?.add(id);
+          if (typeof Sync !== 'undefined') Sync.push('collections');
           _dsLogLine(`  ↳ Colección detectada (${artistMap.size} artistas): ${name}`, 'info');
         }
 
@@ -7464,7 +7473,10 @@ const App = (() => {
         const colPatch = {};
         if (colName)                                    colPatch.name     = colName;
         if (coverUrl && !coverUrl.startsWith('blob:')) colPatch.coverUrl = coverUrl;
-        if (Object.keys(colPatch).length) await DB.saveCollection(folderId, colPatch).catch(() => {});
+        if (Object.keys(colPatch).length) {
+          await DB.saveCollection(folderId, colPatch).catch(() => {});
+          if (typeof Sync !== 'undefined') Sync.push('collections');
+        }
       }
       let saved = 0;
       for (const song of songs) {
@@ -9709,6 +9721,7 @@ const App = (() => {
     const folderId = item.folderId || item.id;
     if (!folderId) return;
     await DB.saveCollection(folderId, { forceType: 'album' });
+    if (typeof Sync !== 'undefined') Sync.push('collections');
     // Patch cache in-place (no full null-invalidation needed for type changes)
     _collectionFolderIdsCache?.delete(folderId);
     // Immediately update the chip in the current browse view
@@ -9727,6 +9740,7 @@ const App = (() => {
     const folderId = item.folderId || item.id;
     if (!folderId) return;
     await DB.saveCollection(folderId, { forceType: 'collection' });
+    if (typeof Sync !== 'undefined') Sync.push('collections');
     // Patch cache in-place
     if (_collectionFolderIdsCache) _collectionFolderIdsCache.add(folderId);
     // Immediately update the chip in the current browse view
@@ -11845,6 +11859,7 @@ const App = (() => {
       const name     = document.getElementById('collection-edit-name')?.value.trim() || '';
       const coverUrl = document.getElementById('collection-edit-cover')?.value.trim() || '';
       await DB.saveCollection(folderId, { name: name || undefined, coverUrl: coverUrl || undefined });
+      if (typeof Sync !== 'undefined') Sync.push('collections');
       _closeCollectionEditModal();
       // Re-render the header inside the detail view with updated data
       if (_libInDetail && _currentLibTab === 'collections') {
