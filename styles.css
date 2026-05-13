@@ -6184,7 +6184,14 @@ body.queue-open #mini-player { z-index: 65; }
   .ds-table th, .ds-table td { padding: 2px 1px; }
   .ds-cell-input { font-size: 10px; padding: 2px 4px; }
   .ds-table-filename { font-size: 10px; }
-  /* #screen-deep-scan is a regular screen; .screen padding-bottom applies */
+  /* Deep scan: overflow:hidden on the screen traps .screen padding-bottom as a
+     dark dead strip above the bottom-nav — same fix as #screen-library. */
+  #screen-deep-scan {
+    padding-bottom: 0;
+  }
+  .ds-attention-list {
+    padding-bottom: calc(var(--mini-player-h) + var(--mini-margin) * 2 + var(--bottom-nav-h) + 16px);
+  }
 }
 
 /* ── Desktop overrides ───────────────────────────────────────── */
