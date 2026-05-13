@@ -581,7 +581,7 @@
     <!-- ── ESCANEO TAB ────────────────────────────────── -->
     <div class="ds-tab-content active" id="ds-tab-scan">
 
-      <!-- Folder bar + action controls (single row) -->
+      <!-- Folder bar -->
       <div class="ds-folder-bar">
         <button id="btn-ds-change-folder" class="ds-open-folder-btn">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V6h5.17l2 2H20v10z"/></svg>
@@ -596,24 +596,28 @@
             <div class="ds-led" id="ds-led"></div>
             <span class="ds-scanning-label" id="ds-status-text" data-i18n="scan_status_ready">Listo</span>
           </div>
-          <div class="ds-ctrl-btns">
-            <button id="btn-ds-start" class="btn-primary ds-ctrl-btn">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-              Iniciar
-            </button>
-            <button id="btn-ds-restart" class="btn-sort-toggle ds-ctrl-btn" style="display:none">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-8 3.58-8 8s3.58 8 8 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
-              Reiniciar
-            </button>
-            <button id="btn-ds-pause" class="btn-sort-toggle ds-ctrl-btn" disabled>
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
-              Pausar
-            </button>
-            <button id="btn-ds-stop" class="btn-sort-toggle ds-ctrl-btn" disabled>
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h12v12H6z"/></svg>
-              Detener
-            </button>
-          </div>
+        </div>
+      </div>
+
+      <!-- Action buttons bar -->
+      <div class="ds-actions-bar">
+        <div class="ds-ctrl-btns">
+          <button id="btn-ds-start" class="btn-primary ds-ctrl-btn">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+            Iniciar
+          </button>
+          <button id="btn-ds-restart" class="btn-sort-toggle ds-ctrl-btn" style="display:none">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-8 3.58-8 8s3.58 8 8 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+            Reiniciar
+          </button>
+          <button id="btn-ds-pause" class="btn-sort-toggle ds-ctrl-btn" disabled>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+            Pausar
+          </button>
+          <button id="btn-ds-stop" class="btn-sort-toggle ds-ctrl-btn" disabled>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h12v12H6z"/></svg>
+            Detener
+          </button>
         </div>
       </div>
 

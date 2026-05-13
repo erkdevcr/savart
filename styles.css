@@ -5383,7 +5383,16 @@ body.queue-open #mini-player { z-index: 65; }
   padding-right: 4px;
 }
 
-/* ── Action buttons (now inside ds-folder-bar-right) ──────────── */
+/* ── Action buttons bar (below folder bar, right-aligned) ──────── */
+.ds-actions-bar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  padding: 6px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elevated);
+  flex-shrink: 0;
+}
 .ds-ctrl-btns {
   display: flex;
   align-items: center;
