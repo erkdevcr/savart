@@ -6793,6 +6793,7 @@ const App = (() => {
           <div class="lib-detail-entity-year"><span class="folder-type-chip ${ftChipCls}">${_escHtml(ftLabel)}</span></div>
           <div class="lib-detail-entity-name">${_escHtml(folder.name)}</div>
           <div class="lib-detail-entity-sub">${songCount} canc.</div>
+          ${pathParts.length > 1 ? `<div class="lib-detail-entity-path">${_escHtml(pathParts.slice(0, -1).join(' › '))}</div>` : ''}
         </div>
         <button class="lib-detail-entity-more" title="Opciones">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
@@ -7056,6 +7057,7 @@ const App = (() => {
           ${yearLine ? `<div class="lib-detail-entity-year">${yearLine}</div>` : ''}
           <div class="lib-detail-entity-name">${_escHtml(albumName)}</div>
           <div class="lib-detail-entity-sub">${subLine}${missingChips ? `&ensp;${missingChips}` : ''}</div>
+          ${pathParts.length > 1 ? `<div class="lib-detail-entity-path">${_escHtml(pathParts.slice(0, -1).join(' › '))}</div>` : ''}
         </div>
         <button class="lib-detail-entity-more" title="Opciones">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>

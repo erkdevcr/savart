@@ -2098,6 +2098,14 @@ img { display: block; }
   color: var(--text-muted);
   margin-top: 2px;
 }
+.lib-detail-entity-path {
+  font-size: 10px;
+  color: var(--text-disabled);
+  margin-top: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 /* ── Library: artist grid (fluid, ~160px min per card) ───── */
 .lib-artist-grid {
