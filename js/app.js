@@ -6714,32 +6714,36 @@ const App = (() => {
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
         </button>
       </div>
-      <div class="album-edit-panel ds-album-edit-panel">
+      <div class="album-edit-panel ds-album-edit-panel${isCollection ? ' ds-mode-collection' : ''}">
         <div class="album-edit-actions">
           <div class="ds-type-switch">
-            <button class="ds-type-btn ds-type-btn--album${!isCollection ? ' ds-type-btn--on' : ''}" data-type="album">${UI.t('lbl_album_chip') || 'Álbum'}</button>
-            <button class="ds-type-btn ds-type-btn--col${isCollection ? ' ds-type-btn--on' : ''}" data-type="collection">${UI.t('lbl_collection') || 'Colección'}</button>
+            <button class="ds-type-btn ds-type-btn--album${!isCollection ? ' ds-type-btn--on' : ''}" data-type="album">${UI.t('lbl_album_chip')}</button>
+            <button class="ds-type-btn ds-type-btn--col${isCollection ? ' ds-type-btn--on' : ''}" data-type="collection">${UI.t('lbl_collection')}</button>
           </div>
-          <button class="ds-panel-save-btn album-edit-save-btn">${UI.t('save_btn') || 'Guardar'}</button>
+          <button class="ds-panel-save-btn album-edit-save-btn">${UI.t('save_btn')}</button>
+        </div>
+        <div class="album-edit-row ds-field-col-only">
+          <label class="album-edit-label">${UI.t('lbl_col_name')}</label>
+          <input class="album-edit-input" data-field="name" value="${_escHtml(folder.name)}" placeholder="${UI.t('lbl_col_name')}">
+        </div>
+        <div class="album-edit-row ds-field-album-only">
+          <label class="album-edit-label">${UI.t('lbl_artist')}</label>
+          <input class="album-edit-input" data-field="artist" value="" placeholder="${UI.t('lbl_artist')}">
+        </div>
+        <div class="album-edit-row ds-field-album-only">
+          <label class="album-edit-label">${UI.t('lbl_album')}</label>
+          <input class="album-edit-input" data-field="album" value="${_escHtml(folder.name)}" placeholder="${UI.t('lbl_album')}">
         </div>
         <div class="album-edit-row">
-          <label class="album-edit-label">${UI.t('lbl_artist') || 'Artista'}</label>
-          <input class="album-edit-input" data-field="artist" value="" placeholder="${UI.t('lbl_artist') || 'Artista'}">
+          <label class="album-edit-label">${UI.t('lbl_year')}</label>
+          <input class="album-edit-input" data-field="year" value="" placeholder="${UI.t('lbl_year_ph')}">
         </div>
         <div class="album-edit-row">
-          <label class="album-edit-label">${UI.t('lbl_album') || 'Álbum'}</label>
-          <input class="album-edit-input" data-field="album" value="${_escHtml(folder.name)}" placeholder="${UI.t('lbl_album') || 'Álbum'}">
-        </div>
-        <div class="album-edit-row">
-          <label class="album-edit-label">${UI.t('lbl_year') || 'Año'}</label>
-          <input class="album-edit-input" data-field="year" value="" placeholder="2024" style="max-width:80px">
-        </div>
-        <div class="album-edit-row">
-          <label class="album-edit-label">${UI.t('lbl_cover_url') || 'Cover URL'}</label>
+          <label class="album-edit-label">${UI.t('lbl_cover_url')}</label>
           <input class="album-edit-input" data-field="coverUrl" value="" placeholder="https://…">
         </div>
         <div class="album-edit-row album-edit-row--track-btn">
-          <button class="album-edit-track-btn ds-track-edit-btn">${UI.t('edit_tracks_btn') || '✎ Editar canciones'}</button>
+          <button class="album-edit-track-btn ds-track-edit-btn">${UI.t('edit_tracks_btn')}</button>
         </div>
         <div class="ds-songs-edit-list" style="display:none"></div>
       </div>`;
@@ -6973,36 +6977,40 @@ const App = (() => {
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
         </button>
       </div>
-      <div class="album-edit-panel ds-album-edit-panel">
+      <div class="album-edit-panel ds-album-edit-panel${ftKey === 'collection' ? ' ds-mode-collection' : ''}">
         <div class="album-edit-actions">
           <button class="ds-ignore-btn album-edit-reset-id3-btn">${ignored ? '↩ Designorar' : '✕ Ignorar'}</button>
-          <button class="ds-panel-save-btn album-edit-save-btn">${UI.t('save_btn') || 'Guardar'}</button>
+          <button class="ds-panel-save-btn album-edit-save-btn">${UI.t('save_btn')}</button>
         </div>
         <div class="album-edit-row">
-          <label class="album-edit-label">Tipo</label>
+          <label class="album-edit-label">${UI.t('lbl_tipo')}</label>
           <div class="ds-type-switch">
-            <button class="ds-type-btn ds-type-btn--album${ftKey !== 'collection' ? ' ds-type-btn--on' : ''}" data-type="album">${UI.t('lbl_album_chip') || 'Álbum'}</button>
-            <button class="ds-type-btn ds-type-btn--col${ftKey === 'collection' ? ' ds-type-btn--on' : ''}" data-type="collection">${UI.t('lbl_collection') || 'Colección'}</button>
+            <button class="ds-type-btn ds-type-btn--album${ftKey !== 'collection' ? ' ds-type-btn--on' : ''}" data-type="album">${UI.t('lbl_album_chip')}</button>
+            <button class="ds-type-btn ds-type-btn--col${ftKey === 'collection' ? ' ds-type-btn--on' : ''}" data-type="collection">${UI.t('lbl_collection')}</button>
           </div>
         </div>
-        <div class="album-edit-row">
-          <label class="album-edit-label">${UI.t('lbl_artist') || 'Artista'}</label>
-          <input class="album-edit-input" data-field="artist" value="${_escHtml(artistName)}" placeholder="${UI.t('lbl_artist') || 'Artista'}">
+        <div class="album-edit-row ds-field-col-only">
+          <label class="album-edit-label">${UI.t('lbl_col_name')}</label>
+          <input class="album-edit-input" data-field="name" value="${_escHtml(albumName)}" placeholder="${UI.t('lbl_col_name')}">
+        </div>
+        <div class="album-edit-row ds-field-album-only">
+          <label class="album-edit-label">${UI.t('lbl_artist')}</label>
+          <input class="album-edit-input" data-field="artist" value="${_escHtml(artistName)}" placeholder="${UI.t('lbl_artist')}">
+        </div>
+        <div class="album-edit-row ds-field-album-only">
+          <label class="album-edit-label">${UI.t('lbl_album')}</label>
+          <input class="album-edit-input" data-field="album" value="${_escHtml(albumName)}" placeholder="${UI.t('lbl_album')}">
         </div>
         <div class="album-edit-row">
-          <label class="album-edit-label">${UI.t('lbl_album') || 'Álbum'}</label>
-          <input class="album-edit-input" data-field="album" value="${_escHtml(albumName)}" placeholder="${UI.t('lbl_album') || 'Álbum'}">
+          <label class="album-edit-label">${UI.t('lbl_year')}</label>
+          <input class="album-edit-input" data-field="year" value="${_escHtml(yearVal)}" placeholder="${UI.t('lbl_year_ph')}">
         </div>
         <div class="album-edit-row">
-          <label class="album-edit-label">${UI.t('lbl_year') || 'Año'}</label>
-          <input class="album-edit-input" data-field="year" value="${_escHtml(yearVal)}" placeholder="2024" style="max-width:80px">
-        </div>
-        <div class="album-edit-row">
-          <label class="album-edit-label">${UI.t('lbl_cover_url') || 'Cover URL'}</label>
+          <label class="album-edit-label">${UI.t('lbl_cover_url')}</label>
           <input class="album-edit-input" data-field="coverUrl" value="${_escHtml(coverSrc)}" placeholder="https://…">
         </div>
         <div class="album-edit-row album-edit-row--track-btn">
-          <button class="album-edit-track-btn ds-track-edit-btn">${UI.t('edit_tracks_btn') || '✎ Editar canciones'}</button>
+          <button class="album-edit-track-btn ds-track-edit-btn">${UI.t('edit_tracks_btn')}</button>
         </div>
         <div class="ds-songs-edit-list" style="display:none"></div>
       </div>`;
@@ -7061,10 +7069,12 @@ const App = (() => {
     const coverSrc = (songs.find(s => s.thumbnailLink || s.coverUrl)?.thumbnailLink
                    || songs.find(s => s.thumbnailLink || s.coverUrl)?.coverUrl
                    || '').replace(/^blob:.*/, '');
+    const nameIn   = panel.querySelector('[data-field="name"]');
     const artistIn = panel.querySelector('[data-field="artist"]');
     const albumIn  = panel.querySelector('[data-field="album"]');
     const yearIn   = panel.querySelector('[data-field="year"]');
     const coverIn  = panel.querySelector('[data-field="coverUrl"]');
+    if (nameIn   && !nameIn.value)   nameIn.value   = album; // collection name = album name
     if (artistIn) artistIn.value = artist;
     if (albumIn)  albumIn.value  = album;
     if (yearIn)   yearIn.value   = year;
@@ -7077,11 +7087,13 @@ const App = (() => {
     const sessionFolder = _dsSession.folders?.[folderId]; // may be undefined for completed/skipped
     const saveBtn = rowEl.querySelector('.ds-panel-save-btn');
     if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = UI.t('saving') || 'Guardando…'; }
-    const panel    = rowEl.querySelector('.album-edit-panel');
-    const artist   = panel.querySelector('[data-field="artist"]')?.value?.trim()   || '';
-    const album    = panel.querySelector('[data-field="album"]')?.value?.trim()    || '';
-    const year     = panel.querySelector('[data-field="year"]')?.value?.trim()     || '';
-    const coverUrl = panel.querySelector('[data-field="coverUrl"]')?.value?.trim() || '';
+    const panel      = rowEl.querySelector('.album-edit-panel');
+    const isColMode  = panel?.classList.contains('ds-mode-collection');
+    const colName    = panel?.querySelector('[data-field="name"]')?.value?.trim()     || '';
+    const artist     = panel?.querySelector('[data-field="artist"]')?.value?.trim()   || '';
+    const album      = panel?.querySelector('[data-field="album"]')?.value?.trim()    || '';
+    const year       = panel?.querySelector('[data-field="year"]')?.value?.trim()     || '';
+    const coverUrl   = panel?.querySelector('[data-field="coverUrl"]')?.value?.trim() || '';
     try {
       // Get song list: from session (attention rows) or from DB (completed / skipped rows)
       let songs;
@@ -7092,39 +7104,45 @@ const App = (() => {
         songs = all.filter(m => m.folderId === folderId);
       }
       if (!songs.length) {
-        UI.showToast('No se encontraron canciones para este álbum', 'error');
+        UI.showToast(UI.t('ds_no_songs') || 'No songs found', 'error');
         if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = UI.t('save_btn') || 'Guardar'; }
         return;
+      }
+      // For collection mode: save collection name + cover to the collections store
+      if (isColMode) {
+        const colPatch = {};
+        if (colName)                                    colPatch.name     = colName;
+        if (coverUrl && !coverUrl.startsWith('blob:')) colPatch.coverUrl = coverUrl;
+        if (Object.keys(colPatch).length) await DB.saveCollection(folderId, colPatch).catch(() => {});
       }
       let saved = 0;
       for (const song of songs) {
         const patch = { folderId, manualAt: Date.now() };
-        if (artist)                                    patch.artist       = artist;
-        if (album)                                     patch.album        = album;
-        if (year)                                      patch.year         = year;
-        if (coverUrl && !coverUrl.startsWith('blob:')) patch.thumbnailUrl = coverUrl;
+        if (!isColMode && artist)                        patch.artist       = artist;
+        if (!isColMode && album)                         patch.album        = album;
+        if (year)                                        patch.year         = year;
+        if (coverUrl && !coverUrl.startsWith('blob:'))   patch.thumbnailUrl = coverUrl;
         await DB.setMeta(song.id, patch);
         saved++;
         // Update in-memory session song (attention rows only)
         if (sessionFolder?.songs) {
-          if (artist)   { song.artist  = artist;   song.missingArtist = false; }
-          if (album)    { song.album   = album;    song.missingAlbum  = false; }
+          if (!isColMode && artist) { song.artist = artist; song.missingArtist = false; }
+          if (!isColMode && album)  { song.album  = album;  song.missingAlbum  = false; }
           if (year)     { song.year    = year;     song.missingYear   = false; }
           if (coverUrl && !coverUrl.startsWith('blob:')) { song.thumbnailLink = coverUrl; song.missingCover = false; }
         }
-        if (coverUrl && !coverUrl.startsWith('blob:')) {
-          _cacheExternalCover(song.id, coverUrl, true).catch(() => {});
-        }
+        if (coverUrl && !coverUrl.startsWith('blob:')) _cacheExternalCover(song.id, coverUrl, true).catch(() => {});
         const livePatch = {};
-        if (artist)                                    livePatch.artist       = artist;
-        if (album)                                     livePatch.album        = album;
-        if (year)                                      livePatch.year         = year;
-        if (coverUrl && !coverUrl.startsWith('blob:')) livePatch.thumbnailUrl = coverUrl;
+        if (!isColMode && artist)                        livePatch.artist       = artist;
+        if (!isColMode && album)                         livePatch.album        = album;
+        if (year)                                        livePatch.year         = year;
+        if (coverUrl && !coverUrl.startsWith('blob:'))   livePatch.thumbnailUrl = coverUrl;
         if (Object.keys(livePatch).length) _liveMetaUpdate([song.id], livePatch);
       }
-      // Refresh header — build a minimal folder-like object for simple rows
-      const folderRef = sessionFolder || { id: folderId, name: album || folderId, songs, count: songs.length };
-      _dsRefreshRowHeader(rowEl, folderRef, { artist, album, year, coverUrl });
+      // Header refresh — use colName as album display in collection mode
+      const displayAlbum = isColMode ? colName : album;
+      const folderRef = sessionFolder || { id: folderId, name: displayAlbum || folderId, songs, count: songs.length };
+      _dsRefreshRowHeader(rowEl, folderRef, { artist: isColMode ? '' : artist, album: displayAlbum, year, coverUrl });
       if (sessionFolder) {
         sessionFolder.attended = true;
         sessionFolder.status   = 'needs_attention';
@@ -7156,10 +7174,20 @@ const App = (() => {
       } else {
         await onMoveToAlbums({ folderId });
       }
-      // Update toggle button active states
+      const isCol = newType === 'collection';
+      // Toggle button active states
       rowEl.querySelectorAll('.ds-type-btn').forEach(btn => {
         btn.classList.toggle('ds-type-btn--on', btn.dataset.type === newType);
       });
+      // Switch panel field visibility
+      const panel = rowEl.querySelector('.album-edit-panel');
+      if (panel) panel.classList.toggle('ds-mode-collection', isCol);
+      // If switching to collection, populate name field from album input (if empty)
+      if (isCol && panel) {
+        const nameIn  = panel.querySelector('[data-field="name"]');
+        const albumIn = panel.querySelector('[data-field="album"]');
+        if (nameIn && albumIn && !nameIn.value) nameIn.value = albumIn.value;
+      }
       // Update the folder-type chip in the header immediately
       const yearEl = rowEl.querySelector('.lib-detail-entity-year');
       if (yearEl) {
@@ -7168,9 +7196,8 @@ const App = (() => {
           chip = document.createElement('span');
           yearEl.insertBefore(chip, yearEl.firstChild);
         }
-        const isCol = newType === 'collection';
         chip.className   = 'folder-type-chip ' + (isCol ? 'folder-type-chip--collection' : 'folder-type-chip--album');
-        chip.textContent = isCol ? (UI.t('lbl_collection') || 'Colección') : (UI.t('lbl_album_chip') || 'Álbum');
+        chip.textContent = isCol ? UI.t('lbl_collection') : UI.t('lbl_album_chip');
       }
     } catch (err) {
       console.error('[DeepScan] Type toggle error:', err);
@@ -7254,7 +7281,7 @@ const App = (() => {
     }
 
     if (!songs.length) {
-      UI.showToast('No hay canciones para editar', 'info');
+      UI.showToast(UI.t('ds_no_songs'), 'info');
       return;
     }
 

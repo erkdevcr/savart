@@ -5817,6 +5817,12 @@ body.queue-open #mini-player { z-index: 65; }
   color: var(--accent,#4a88f5);
   border-color: rgba(var(--accent-rgb,74,136,245),0.4);
 }
+/* Field visibility by panel mode */
+.ds-field-col-only   { display: none; }
+.ds-field-album-only { display: flex; }
+.ds-mode-collection .ds-field-col-only   { display: flex; }
+.ds-mode-collection .ds-field-album-only { display: none; }
+
 /* Song rename list in deep scan panel */
 .ds-songs-edit-list {
   padding: 4px 0 2px;
