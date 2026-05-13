@@ -6904,35 +6904,56 @@ const App = (() => {
       entity.classList.toggle('album-editing', isOpen);
       if (isOpen && !_panelLoaded) {
         _panelLoaded = true;
+        const isCol = isFolderCollection(folder.id);
         // Load metadata from DB (songs for this folder)
         try {
           const all   = await DB.getAllMetaLight();
           const songs = all.filter(m => m.folderId === folder.id);
           if (songs.length) {
-            const artist   = songs.find(s => s.artist)?.artist || '';
-            const album    = songs.find(s => s.album)?.album   || '';
-            const year     = songs.find(s => s.year)?.year     || '';
-            const coverSrc = (songs.find(s => s.thumbnailUrl || s.coverUrl)?.thumbnailUrl
-                           || songs.find(s => s.thumbnailUrl || s.coverUrl)?.coverUrl || '')
-                           .replace(/^blob:.*|(?:googleusercontent|lh\d+\.).*/, '');
-            const artistIn = panel.querySelector('[data-field="artist"]');
-            const albumIn  = panel.querySelector('[data-field="album"]');
+            const year     = songs.find(s => s.year)?.year || '';
             const yearIn   = panel.querySelector('[data-field="year"]');
-            const coverIn  = panel.querySelector('[data-field="coverUrl"]');
-            if (artistIn) artistIn.value = artist;
-            if (albumIn)  albumIn.value  = album || folder.name;
-            if (yearIn)   yearIn.value   = year;
-            if (coverIn && !coverIn.value && coverSrc) coverIn.value = coverSrc;
-            // Sync row header name with the album from DB
-            const nameEl = row.querySelector('.lib-detail-entity-name');
-            if (nameEl && (album || folder.name)) nameEl.textContent = album || folder.name;
-            const subEl = row.querySelector('.lib-detail-entity-sub');
-            if (subEl && artist) subEl.textContent = `${artist} · ${songCount} ${UI.t('lbl_songs')}`;
-            // Inject cover into art cell if found
-            if (coverSrc) {
-              const artEl = row.querySelector('.lib-detail-entity-art');
-              if (artEl && !artEl.querySelector('img')) {
-                artEl.innerHTML = `<img src="${_escHtml(coverSrc)}" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit" onerror="this.style.display='none'">${musicSvg}`;
+            if (yearIn && !yearIn.value) yearIn.value = year;
+
+            if (!isCol) {
+              // Albums: populate artist, album name and update the row header
+              const artist   = songs.find(s => s.artist)?.artist || '';
+              const album    = songs.find(s => s.album)?.album   || '';
+              const coverSrc = (songs.find(s => s.thumbnailUrl || s.coverUrl)?.thumbnailUrl
+                             || songs.find(s => s.thumbnailUrl || s.coverUrl)?.coverUrl || '')
+                             .replace(/^blob:.*|(?:googleusercontent|lh\d+\.).*/, '');
+              const artistIn = panel.querySelector('[data-field="artist"]');
+              const albumIn  = panel.querySelector('[data-field="album"]');
+              const coverIn  = panel.querySelector('[data-field="coverUrl"]');
+              if (artistIn) artistIn.value = artist;
+              if (albumIn)  albumIn.value  = album || folder.name;
+              if (coverIn && !coverIn.value && coverSrc) coverIn.value = coverSrc;
+              // Sync row header name + artist with DB values
+              const nameEl = row.querySelector('.lib-detail-entity-name');
+              if (nameEl && (album || folder.name)) nameEl.textContent = album || folder.name;
+              const subEl = row.querySelector('.lib-detail-entity-sub');
+              if (subEl && artist) subEl.textContent = `${artist} · ${songCount} ${UI.t('lbl_songs')}`;
+              // Inject cover into art cell if found
+              if (coverSrc) {
+                const artEl = row.querySelector('.lib-detail-entity-art');
+                if (artEl && !artEl.querySelector('img')) {
+                  artEl.innerHTML = `<img src="${_escHtml(coverSrc)}" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit" onerror="this.style.display='none'">${musicSvg}`;
+                }
+              }
+            } else {
+              // Collections: load name + cover from collection DB record — never from songs
+              const colRec   = await DB.getCollection(folder.id).catch(() => null);
+              const colName  = colRec?.name  || folder.name;
+              const colCover = (colRec?.coverUrl || '').replace(/^blob:.*|(?:googleusercontent|lh\d+\.).*/, '');
+              const nameIn   = panel.querySelector('[data-field="name"]');
+              const coverIn  = panel.querySelector('[data-field="coverUrl"]');
+              if (nameIn  && !nameIn.value)  nameIn.value  = colName;
+              if (coverIn && !coverIn.value && colCover) coverIn.value = colCover;
+              // Inject collection cover into art cell if available
+              if (colCover) {
+                const artEl = row.querySelector('.lib-detail-entity-art');
+                if (artEl && !artEl.querySelector('img')) {
+                  artEl.innerHTML = `<img src="${_escHtml(colCover)}" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit" onerror="this.style.display='none'">${musicSvg}`;
+                }
               }
             }
           }
