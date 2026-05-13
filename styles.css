@@ -5805,16 +5805,59 @@ body.queue-open #mini-player { z-index: 65; }
 .ds-mode-collection .ds-field-album-only { display: none; }
 
 /* Song rename list in deep scan panel */
+/* ── Song editor list ──────────────────────────────────────── */
 .ds-songs-edit-list {
-  padding: 4px 0 2px;
+  padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 0;
 }
+
+/* Column header row */
+.ds-songs-col-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0 6px;
+  border-bottom: 1px solid var(--border);
+}
+.ds-col-h-thumb {
+  width: 32px;
+  flex-shrink: 0;
+}
+.ds-col-h-num {
+  width: 44px;
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--text-muted);
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.ds-col-h-name {
+  flex: 1.5;
+  min-width: 0;
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.ds-col-h-meta {
+  flex: 1;
+  min-width: 0;
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* Song rows */
 .ds-song-rename-row {
   display: flex;
   align-items: center;
   gap: 6px;
+  padding: 6px 0;
+  border-top: 1px solid var(--border-subtle, color-mix(in srgb, var(--border) 50%, transparent));
 }
 .ds-song-thumb {
   width: 32px;
@@ -5850,8 +5893,11 @@ body.queue-open #mini-player { z-index: 65; }
 .ds-track-num-input::-webkit-inner-spin-button,
 .ds-track-num-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 .ds-track-num-input:focus { border-color: var(--accent); color: var(--text-primary); }
+
+/* Name input — album mode: flex:1; collection mode: flex:1.5 via col-mode override */
 .ds-song-rename-row .track-rename-input {
-  flex: 1;
+  flex: 1.5;
+  min-width: 0;
   background: var(--input-bg, var(--surface2));
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -5860,26 +5906,12 @@ body.queue-open #mini-player { z-index: 65; }
   padding: 4px 8px;
   outline: none;
 }
-.ds-song-rename-row .track-rename-input:focus {
-  border-color: var(--accent);
-}
-/* Collection mode: song rows grow to two lines (name + artist/album) */
+.ds-song-rename-row .track-rename-input:focus { border-color: var(--accent); }
+
+/* Collection mode: all inputs in a single flat row */
 .ds-song-rename-row.ds-col-mode {
-  flex-wrap: wrap;
-  align-items: flex-start;
-  padding: 6px 0;
-}
-.ds-song-rename-row.ds-col-mode .ds-track-num-input {
-  margin-top: 2px;
-}
-.ds-song-rename-row.ds-col-mode .track-rename-input {
-  min-width: 0;
-}
-.ds-song-meta-row {
-  display: flex;
-  gap: 6px;
-  width: 100%;
-  padding-left: 88px; /* align under name input: thumb(32) + gap(6) + track#(44) + gap(6) */
+  flex-wrap: nowrap;
+  align-items: center;
 }
 .ds-song-meta-input {
   flex: 1;
@@ -5888,11 +5920,14 @@ body.queue-open #mini-player { z-index: 65; }
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   color: var(--text-secondary);
-  font-size: 11px;
-  padding: 3px 7px;
+  font-size: 12px;
+  padding: 4px 7px;
   outline: none;
 }
 .ds-song-meta-input:focus { border-color: var(--accent); color: var(--text-primary); }
+
+/* Legacy wrapper — no longer used for layout */
+.ds-song-meta-row { display: contents; }
 
 .ds-table-actions {
   display: flex;

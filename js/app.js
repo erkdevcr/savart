@@ -7468,7 +7468,7 @@ const App = (() => {
     const panel      = rowEl.querySelector('.album-edit-panel');
     const isColMode  = panel?.classList.contains('ds-mode-collection');
 
-    // Build song rows with thumbnail + track# + name inputs (+ artist/album in collection mode)
+    // Build song rows with thumbnail + track# + name (+ artist/album in collection mode)
     const _noteSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="opacity:0.35"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>`;
     const buildRow = (s) => {
       const name   = s.displayName || (typeof cleanTitle === 'function' ? cleanTitle(s.name || '') : (s.name || ''));
@@ -7483,17 +7483,29 @@ const App = (() => {
       el.dataset.songId = s.id;
       el.innerHTML = `
         <div class="ds-song-thumb">${coverUrl ? `<img src="${_escHtml(coverUrl)}" alt="" onerror="this.style.display='none'">` : _noteSvg}</div>
-        <input class="ds-track-num-input" type="number" min="1" value="${_escHtml(String(track))}" data-original="${_escHtml(String(track))}" placeholder="#" title="N° de pista">
-        <input class="track-rename-input" value="${_escHtml(name)}" data-original="${_escHtml(name)}" placeholder="Nombre de la canción">
+        <input class="ds-track-num-input" type="number" min="1" value="${_escHtml(String(track))}" data-original="${_escHtml(String(track))}" placeholder="#">
+        <input class="track-rename-input" value="${_escHtml(name)}" data-original="${_escHtml(name)}" placeholder="${UI.t('lbl_title') || 'Título'}">
         ${isColMode ? `
-        <div class="ds-song-meta-row">
-          <input class="ds-song-meta-input" data-meta="artist" value="${_escHtml(artist)}" data-original="${_escHtml(artist)}" placeholder="${UI.t('lbl_artist') || 'Artista'}">
-          <input class="ds-song-meta-input" data-meta="album"  value="${_escHtml(album)}"  data-original="${_escHtml(album)}"  placeholder="${UI.t('lbl_album')  || 'Álbum'}">
-        </div>` : ''}`;
+        <input class="ds-song-meta-input" data-meta="artist" value="${_escHtml(artist)}" data-original="${_escHtml(artist)}" placeholder="${UI.t('lbl_artist') || 'Artista'}">
+        <input class="ds-song-meta-input" data-meta="album"  value="${_escHtml(album)}"  data-original="${_escHtml(album)}"  placeholder="${UI.t('lbl_album')  || 'Álbum'}">
+        ` : ''}`;
       return el;
     };
 
+    // Column header row
     listEl.innerHTML = '';
+    const headerEl = document.createElement('div');
+    headerEl.className = 'ds-songs-col-header' + (isColMode ? ' ds-col-mode' : '');
+    headerEl.innerHTML = isColMode
+      ? `<span class="ds-col-h-thumb"></span>
+         <span class="ds-col-h-num">#</span>
+         <span class="ds-col-h-name">${UI.t('lbl_title') || 'Título'}</span>
+         <span class="ds-col-h-meta">${UI.t('lbl_artist') || 'Artista'}</span>
+         <span class="ds-col-h-meta">${UI.t('lbl_album')  || 'Álbum'}</span>`
+      : `<span class="ds-col-h-thumb"></span>
+         <span class="ds-col-h-num">#</span>
+         <span class="ds-col-h-name">${UI.t('lbl_title') || 'Título'}</span>`;
+    listEl.appendChild(headerEl);
     sorted.forEach(s => listEl.appendChild(buildRow(s)));
 
     // Async: inject blob covers for songs that only have embedded ID3 art (no stable URL)
