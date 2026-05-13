@@ -6668,10 +6668,16 @@ const App = (() => {
           status:   existing?.status   || 'needs_attention',
           attended: existing?.attended || false,
         };
-        if (_dsListMode === 'attn' || _dsListMode === 'all') _dsAddOrUpdateFolderRow(id);
+        if (_dsListMode === 'attn' || _dsListMode === 'all') {
+          _dsAddOrUpdateFolderRow(id);
+          _dsInjectCoverIntoRow(id, page.audioFiles).catch(() => {});
+        }
       } else {
         _dsSession.completedList[id] = { id, name, path, count: page.audioFiles.length };
-        if (_dsListMode === 'done' || _dsListMode === 'all') _dsAddOrUpdateFolderRow(id);
+        if (_dsListMode === 'done' || _dsListMode === 'all') {
+          _dsAddOrUpdateFolderRow(id);
+          _dsInjectCoverIntoRow(id, page.audioFiles).catch(() => {});
+        }
       }
 
       // Folder fully processed — persist progress after every folder so that
@@ -6971,6 +6977,45 @@ const App = (() => {
     if (folder.status === 'ignored') return 'red';
     if (folder.attended)             return 'green';
     return 'gray';
+  }
+
+  /**
+   * After a folder row is added to the list, automatically inject its cover art
+   * from DB without requiring the user to open the row.
+   * Tries each file in order until a stable cover URL or blob is found.
+   */
+  async function _dsInjectCoverIntoRow(folderId, audioFiles) {
+    if (!audioFiles || audioFiles.length === 0) return;
+    const list = document.getElementById('ds-attention-list');
+    if (!list) return;
+    const row = list.querySelector(`[data-folder-id="${CSS.escape(folderId)}"]`);
+    if (!row) return;
+    const artEl = row.querySelector('.lib-detail-entity-art');
+    if (!artEl || artEl.querySelector('img')) return; // already has a cover
+
+    const musicSvg = `<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>`;
+
+    for (const file of audioFiles) {
+      try {
+        const meta = await DB.getMeta(file.id).catch(() => null);
+        if (!meta) continue;
+
+        // 1. Prefer blob (embedded ID3 art) → create a stable object URL
+        let url = '';
+        if (meta.coverBlob) {
+          url = URL.createObjectURL(meta.coverBlob);
+        } else {
+          // 2. Stable external URL — skip blobs and expiring googleusercontent links
+          url = (meta.coverUrl || meta.thumbnailUrl || meta.thumbnailLink || '')
+            .replace(/^blob:.*|(?:googleusercontent|lh\d+\.).*/, '');
+        }
+
+        if (url) {
+          artEl.innerHTML = `<img src="${_escHtml(url)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)" onerror="this.style.display='none';this.nextElementSibling.style.display=''">${musicSvg}`;
+          return; // done — no need to check more files
+        }
+      } catch (_) {}
+    }
   }
 
   /* ── Missing-data chips for folder header ───────────────── */
