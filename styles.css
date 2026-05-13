@@ -5816,6 +5816,23 @@ body.queue-open #mini-player { z-index: 65; }
   align-items: center;
   gap: 6px;
 }
+.ds-song-thumb {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  background: var(--bg-hover);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ds-song-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+}
 .ds-track-num-input {
   width: 44px;
   flex-shrink: 0;
@@ -5846,6 +5863,36 @@ body.queue-open #mini-player { z-index: 65; }
 .ds-song-rename-row .track-rename-input:focus {
   border-color: var(--accent);
 }
+/* Collection mode: song rows grow to two lines (name + artist/album) */
+.ds-song-rename-row.ds-col-mode {
+  flex-wrap: wrap;
+  align-items: flex-start;
+  padding: 6px 0;
+}
+.ds-song-rename-row.ds-col-mode .ds-track-num-input {
+  margin-top: 2px;
+}
+.ds-song-rename-row.ds-col-mode .track-rename-input {
+  min-width: 0;
+}
+.ds-song-meta-row {
+  display: flex;
+  gap: 6px;
+  width: 100%;
+  padding-left: 88px; /* align under name input: thumb(32) + gap(6) + track#(44) + gap(6) */
+}
+.ds-song-meta-input {
+  flex: 1;
+  min-width: 0;
+  background: var(--input-bg, var(--surface2));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 11px;
+  padding: 3px 7px;
+  outline: none;
+}
+.ds-song-meta-input:focus { border-color: var(--accent); color: var(--text-primary); }
 
 .ds-table-actions {
   display: flex;

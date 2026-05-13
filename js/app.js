@@ -7420,21 +7420,51 @@ const App = (() => {
       return ta - tb;
     });
 
-    // Build song rows with track# + name inputs
+    // Detect collection mode from the panel class
+    const panel      = rowEl.querySelector('.album-edit-panel');
+    const isColMode  = panel?.classList.contains('ds-mode-collection');
+
+    // Build song rows with thumbnail + track# + name inputs (+ artist/album in collection mode)
+    const _noteSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="opacity:0.35"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>`;
     const buildRow = (s) => {
-      const name  = s.displayName || (typeof cleanTitle === 'function' ? cleanTitle(s.name || '') : (s.name || ''));
-      const track = s.track || '';
+      const name   = s.displayName || (typeof cleanTitle === 'function' ? cleanTitle(s.name || '') : (s.name || ''));
+      const track  = s.track  || '';
+      const artist = s.artist || '';
+      const album  = s.album  || '';
+      // Stable cover URL from light meta (blob injection happens async below)
+      const coverUrl = (s.thumbnailUrl !== 'id3' ? (s.thumbnailUrl || '') : '')
+        .replace(/^blob:.*|(?:googleusercontent|lh\d+\.).*/, '') || s.coverUrl || '';
       const el = document.createElement('div');
-      el.className = 'ds-song-rename-row';
+      el.className = 'ds-song-rename-row' + (isColMode ? ' ds-col-mode' : '');
       el.dataset.songId = s.id;
       el.innerHTML = `
+        <div class="ds-song-thumb">${coverUrl ? `<img src="${_escHtml(coverUrl)}" alt="" onerror="this.style.display='none'">` : _noteSvg}</div>
         <input class="ds-track-num-input" type="number" min="1" value="${_escHtml(String(track))}" data-original="${_escHtml(String(track))}" placeholder="#" title="N° de pista">
-        <input class="track-rename-input" value="${_escHtml(name)}" data-original="${_escHtml(name)}" placeholder="Nombre de la canción">`;
+        <input class="track-rename-input" value="${_escHtml(name)}" data-original="${_escHtml(name)}" placeholder="Nombre de la canción">
+        ${isColMode ? `
+        <div class="ds-song-meta-row">
+          <input class="ds-song-meta-input" data-meta="artist" value="${_escHtml(artist)}" data-original="${_escHtml(artist)}" placeholder="${UI.t('lbl_artist') || 'Artista'}">
+          <input class="ds-song-meta-input" data-meta="album"  value="${_escHtml(album)}"  data-original="${_escHtml(album)}"  placeholder="${UI.t('lbl_album')  || 'Álbum'}">
+        </div>` : ''}`;
       return el;
     };
 
     listEl.innerHTML = '';
     sorted.forEach(s => listEl.appendChild(buildRow(s)));
+
+    // Async: inject blob covers for songs that only have embedded ID3 art (no stable URL)
+    sorted.forEach(async s => {
+      const url = (s.thumbnailUrl !== 'id3' ? (s.thumbnailUrl || '') : '')
+        .replace(/^blob:.*|(?:googleusercontent|lh\d+\.).*/, '') || s.coverUrl || '';
+      if (url) return; // already shown
+      try {
+        const meta = await DB.getMeta(s.id).catch(() => null);
+        if (!meta?.coverBlob) return;
+        const blobUrl = URL.createObjectURL(meta.coverBlob);
+        const thumb = listEl.querySelector(`[data-song-id="${CSS.escape(s.id)}"] .ds-song-thumb`);
+        if (thumb) thumb.innerHTML = `<img src="${blobUrl}" alt="">`;
+      } catch (_) {}
+    });
 
     // Helper: re-sort rows visually by current track# values
     const _reorderRows = () => {
@@ -7515,6 +7545,31 @@ const App = (() => {
         if (e.key === 'Escape') { inp.value = inp.dataset.original; inp.blur(); }
       });
     });
+
+    // Wire up artist / album inputs (collection mode only)
+    if (isColMode) {
+      listEl.querySelectorAll('.ds-song-meta-input').forEach(inp => {
+        const songId = inp.closest('[data-song-id]')?.dataset.songId;
+        const field  = inp.dataset.meta; // 'artist' | 'album'
+        if (!songId || !field) return;
+        const save = async () => {
+          const val      = inp.value.trim();
+          const original = inp.dataset.original;
+          if (val === original) return;
+          try {
+            const patch = { [field]: val, manualAt: Date.now() };
+            await DB.setMeta(songId, patch);
+            _liveMetaUpdate([songId], patch);
+            inp.dataset.original = val;
+          } catch (_) { inp.value = original; }
+        };
+        inp.addEventListener('blur', save);
+        inp.addEventListener('keydown', e => {
+          if (e.key === 'Enter')  { e.preventDefault(); save().then(() => inp.blur()); }
+          if (e.key === 'Escape') { inp.value = inp.dataset.original; inp.blur(); }
+        });
+      });
+    }
 
     listEl.style.display = 'block';
     btn.textContent = UI.t('edit_tracks_done') || '✓ Listo';
