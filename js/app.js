@@ -8193,6 +8193,65 @@ const App = (() => {
     });
   }
 
+  /* ── Reset single DS row (context menu) ─────────────────── */
+
+  async function onDsResetRow(item) {
+    const folderId = item?.id || item?.folderId;
+    if (!folderId || !_dsSession) return;
+
+    // Show the same reset confirmation dialog
+    const confirmed = await _showDsResetDialog();
+    if (!confirmed) return;
+
+    try {
+      // Reset all songs in this folder to virgin state
+      const allMeta = await DB.getAllMeta().catch(() => []);
+      const songs   = allMeta.filter(m => m.folderId === folderId);
+      for (const m of songs) {
+        await DB.resetToVirgin(m.id).catch(() => {});
+      }
+
+      // Delete collection record if it exists
+      await DB.deleteCollection(folderId).catch(() => {});
+      _collectionFolderIdsCache?.delete?.(folderId);
+      if (typeof Sync !== 'undefined') Sync.push('collections');
+
+      // Clear coverUrl from whichever session list holds this folder
+      const sessionFolder = _dsSession.folders?.[folderId]
+                         || _dsSession.completedList?.[folderId]
+                         || _dsSession.skippedList?.[folderId];
+
+      if (sessionFolder) {
+        delete sessionFolder.coverUrl;
+        // Clear song-level thumbnailLink/coverUrl from the session songs array
+        if (Array.isArray(sessionFolder.songs)) {
+          for (const s of sessionFolder.songs) {
+            delete s.thumbnailLink;
+            delete s.coverUrl;
+            delete s.artist;
+            delete s.album;
+            delete s.year;
+          }
+        }
+      }
+
+      await _dsSaveSession();
+
+      // Rebuild the row in-place so it reflects cleared state
+      const oldRow = document.querySelector(`.ds-folder-row[data-folder-id="${CSS.escape(folderId)}"]`);
+      if (oldRow && sessionFolder) {
+        const isSimple = !Array.isArray(sessionFolder.songs);
+        const newRow   = isSimple
+          ? _dsBuildSimpleRow(sessionFolder, _dsSession.completedList?.[folderId] ? 'green' : 'yellow')
+          : _dsBuildFolderRow(sessionFolder);
+        oldRow.parentNode.replaceChild(newRow, oldRow);
+      }
+
+    } catch (err) {
+      console.warn('[DS] onDsResetRow failed:', err);
+    }
+  }
+
   /* ── Remove from DS list (context menu) ─────────────────── */
 
   function onDsRemoveFromList(item) {
@@ -12361,6 +12420,7 @@ const App = (() => {
     _dsOpenFolderBrowser,
     _dsLoadArtists,
     onDsRemoveFromList,
+    onDsResetRow,
     _dsResetToOriginals,
   };
 })();
