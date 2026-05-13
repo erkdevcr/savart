@@ -6268,7 +6268,8 @@ const App = (() => {
         for (const f of page.folders) {
           if (!visited.has(f.id)) queue.push(f.id);
         }
-        if (page.audioFiles.length > 0 && page.audioFiles.length <= 40) {
+        // Only count leaf folders (have audio files but no subfolders)
+        if (page.audioFiles.length > 0 && page.audioFiles.length <= 40 && page.folders.length === 0) {
           count++;
           _dsSession.totalFolders = count;
           if (statusEl) statusEl.textContent = `Contando… (${count})`;
@@ -6843,7 +6844,7 @@ const App = (() => {
             if (coverSrc) {
               const artEl = row.querySelector('.lib-detail-entity-art');
               if (artEl && !artEl.querySelector('img')) {
-                artEl.innerHTML = `<img src="${_escHtml(coverSrc)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)" onerror="this.style.display='none';this.nextElementSibling.style.display=''">${musicSvg}`;
+                artEl.innerHTML = `<img src="${_escHtml(coverSrc)}" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit" onerror="this.style.display='none'">${musicSvg}`;
               }
             }
           }
@@ -6977,7 +6978,7 @@ const App = (() => {
             .replace(/^blob:.*|(?:googleusercontent|lh\d+\.).*/, '');
         }
         if (url) {
-          artEl.innerHTML = `<img src="${_escHtml(url)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)" onerror="this.style.display='none';this.nextElementSibling.style.display=''">${musicSvg}`;
+          artEl.innerHTML = `<img src="${_escHtml(url)}" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit" onerror="this.style.display='none'">${musicSvg}`;
           return;
         }
       } catch (_) {}
@@ -6997,39 +6998,78 @@ const App = (() => {
 
     const musicSvg = `<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>`;
     const setImg = (artEl, url) => {
-      artEl.innerHTML = `<img src="${_escHtml(url)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)" onerror="this.style.display='none';this.nextElementSibling.style.display=''">${musicSvg}`;
+      artEl.innerHTML = `<img src="${_escHtml(url)}" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit" onerror="this.style.display='none'">${musicSvg}`;
     };
 
-    // Pass 1 — one light DB read; build folderId → { stableUrl, songIds[] }
+    // Pass 1 — one light DB read; build folderId → { url, ids[], albumMap, artistMap, mime }
     const allLight = await DB.getAllMetaLight().catch(() => []);
     const folderData = new Map();
     for (const m of allLight) {
       if (!m.folderId) continue;
-      if (!folderData.has(m.folderId)) folderData.set(m.folderId, { url: '', ids: [] });
+      if (!folderData.has(m.folderId)) folderData.set(m.folderId, { url: '', ids: [], albumMap: new Map(), artistMap: new Map(), mime: '' });
       const fd = folderData.get(m.folderId);
       fd.ids.push(m.id);
       if (!fd.url) {
-        // thumbnailUrl === 'id3' is a sentinel, not a real URL — skip it here
-        const candidate = (m.thumbnailUrl !== 'id3' ? (m.thumbnailUrl || '') : '')
-          || m.coverUrl || '';
+        const candidate = (m.thumbnailUrl !== 'id3' ? (m.thumbnailUrl || '') : '') || m.coverUrl || '';
         const stable = candidate.replace(/^blob:.*|(?:googleusercontent|lh\d+\.).*/, '');
         if (stable) fd.url = stable;
       }
+      if (m.album)  fd.albumMap.set(m.album,   (fd.albumMap.get(m.album)   || 0) + 1);
+      if (m.artist) fd.artistMap.set(m.artist,  (fd.artistMap.get(m.artist) || 0) + 1);
+      if (!fd.mime && m.mimeType) fd.mime = m.mimeType;
     }
 
-    const needsBlob = []; // rows that have no stable URL but may have a coverBlob in DB
+    const _topMap = map => map.size > 0 ? [...map.entries()].sort((a, b) => b[1] - a[1])[0][0] : '';
+    const _mimeToFmt = mime =>
+      mime.includes('flac') ? 'FLAC' : mime.includes('ogg')  ? 'OGG'
+    : mime.includes('aac')  ? 'AAC'  : mime.includes('wav')  ? 'WAV'
+    : (mime.includes('mpeg') || mime.includes('mp3')) ? 'MP3' : '';
+
+    const needsBlob = [];
     for (const row of rows) {
+      const folderId = row.dataset.folderId;
+      const fd = folderData.get(folderId);
+
+      // ── Cover ──────────────────────────────────────────────
       const artEl = row.querySelector('.lib-detail-entity-art');
-      if (!artEl || artEl.querySelector('img')) continue; // already showing cover
-      const fd = folderData.get(row.dataset.folderId);
-      if (fd?.url) {
-        setImg(artEl, fd.url);
-      } else if (fd?.ids.length) {
-        needsBlob.push({ artEl, ids: fd.ids });
+      if (artEl && !artEl.querySelector('img')) {
+        if (fd?.url) {
+          setImg(artEl, fd.url);
+        } else if (fd?.ids.length) {
+          needsBlob.push({ artEl, ids: fd.ids });
+        }
+      }
+
+      if (!fd) continue;
+
+      // ── Name & sub-line ────────────────────────────────────
+      const album  = _topMap(fd.albumMap);
+      const artist = _topMap(fd.artistMap);
+      const nameEl = row.querySelector('.lib-detail-entity-name');
+      if (nameEl && album && nameEl.textContent !== album) nameEl.textContent = album;
+      const subEl = row.querySelector('.lib-detail-entity-sub');
+      if (subEl && artist) {
+        // Only patch if the artist part is missing (don't erase song count)
+        if (!subEl.textContent.includes(artist)) {
+          const count = fd.ids.length;
+          subEl.textContent = `${artist} · ${count} ${UI.t('lbl_songs')}`;
+        }
+      }
+
+      // ── Format badge ───────────────────────────────────────
+      const fmt = _mimeToFmt(fd.mime);
+      if (fmt) {
+        const yearEl = row.querySelector('.lib-detail-entity-year');
+        if (yearEl && !yearEl.querySelector('.album-format-badge')) {
+          const badge = document.createElement('span');
+          badge.className = 'album-format-badge';
+          badge.textContent = fmt;
+          yearEl.appendChild(badge);
+        }
       }
     }
 
-    // Pass 2 — blob fallback (ID3 embedded art): individual getMeta calls, only for rows still empty
+    // Pass 2 — blob fallback for rows still without a cover
     for (const { artEl, ids } of needsBlob) {
       if (artEl.querySelector('img')) continue;
       for (const id of ids) {
@@ -7103,7 +7143,7 @@ const App = (() => {
 
     const musicSvg = `<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>`;
     const artHtml  = coverSrc
-      ? `<img src="${_escHtml(coverSrc)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)" onerror="this.style.display='none';this.nextElementSibling.style.display=''"><div style="display:none">${musicSvg}</div>`
+      ? `<img src="${_escHtml(coverSrc)}" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit" onerror="this.style.display='none'">${musicSvg}`
       : musicSvg;
 
     const ftChipCls = ftKey === 'collection' ? 'folder-type-chip--collection' : 'folder-type-chip--album';
@@ -7432,7 +7472,7 @@ const App = (() => {
     const artEl = rowEl.querySelector('.lib-detail-entity-art');
     if (artEl && coverUrl && !coverUrl.startsWith('blob:')) {
       const musicSvg = `<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>`;
-      artEl.innerHTML = `<img src="${_escHtml(coverUrl)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)" onerror="this.style.display='none';this.nextElementSibling.style.display=''"><div style="display:none">${musicSvg}</div>`;
+      artEl.innerHTML = `<img src="${_escHtml(coverUrl)}" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit" onerror="this.style.display='none'">${musicSvg}`;
     }
   }
 
@@ -7653,7 +7693,7 @@ const App = (() => {
       const cover = meta.thumbnailUrl || meta.coverUrl || '';
       if (!cover || cover.startsWith('blob:') || /googleusercontent\.com|lh\d+\./i.test(cover)) continue;
       const musicSvg = `<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>`;
-      artEl.innerHTML = `<img src="${_escHtml(cover)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)" onerror="this.style.display='none';this.nextElementSibling.style.display=''"><div style="display:none">${musicSvg}</div>`;
+      artEl.innerHTML = `<img src="${_escHtml(cover)}" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit" onerror="this.style.display='none'">${musicSvg}`;
       // Populate cover input and update session data
       const coverIn = rowEl.querySelector('[data-field="coverUrl"]');
       if (coverIn && !coverIn.value) coverIn.value = cover;
