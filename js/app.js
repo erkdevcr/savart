@@ -5637,7 +5637,8 @@ const App = (() => {
   let _dsRunning          = false;
   let _dsPaused           = false;
   let _dsPausedForToken   = false;  // true when auto-paused due to expired token
-  let _dsStopFlag      = false;
+  let _dsStopFlag         = false;
+  let _dsStopping         = false;  // true between "Stop clicked" and scan actually ending
   let _dsSession       = null;
   let _dsListMode      = 'attn';     // 'attn' | 'done' | 'skipped' | 'all'
   let _dsArtistsLoaded = false;
@@ -5977,8 +5978,17 @@ const App = (() => {
     else        { pauseBtn.innerHTML = iconPause + ' ' + UI.t('scan_btn_pause');  }
 
     // ── Stop button: visible only while scanning ──────────────
+    const iconStop = `<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h12v12H6z"/></svg>`;
     stopBtn.style.display = scanning ? '' : 'none';
-    stopBtn.disabled = false;
+    if (_dsStopping) {
+      stopBtn.innerHTML = iconStop + ' ' + UI.t('scan_btn_stopping');
+      stopBtn.classList.add('ds-stopping');
+      stopBtn.disabled = true;
+    } else {
+      stopBtn.innerHTML = iconStop + ' ' + UI.t('scan_btn_stop');
+      stopBtn.classList.remove('ds-stopping');
+      stopBtn.disabled = false;
+    }
 
     // ── Restart button: always hidden (simplified flow) ───────
     if (restartBtn) restartBtn.style.display = 'none';
@@ -6324,7 +6334,8 @@ const App = (() => {
     _runDeepScan().catch(err => {
       console.error('[DeepScan] Error:', err);
       _dsLogLine('⚠ Error: ' + (err?.message || err), 'warn');
-      _dsRunning = false;
+      _dsRunning  = false;
+      _dsStopping = false;
       _dsUpdateControls();
     });
   }
@@ -6341,6 +6352,7 @@ const App = (() => {
     if (!_dsRunning) return;
     _dsStopFlag = true;
     _dsPaused   = false;
+    _dsStopping = true;
     _dsLogLine('⏹ Deteniendo…', 'info');
     _dsUpdateControls();
   }
@@ -6369,7 +6381,8 @@ const App = (() => {
     _runDeepScan().catch(err => {
       console.error('[DeepScan] Error:', err);
       _dsLogLine('⚠ Error: ' + (err?.message || err), 'warn');
-      _dsRunning = false;
+      _dsRunning  = false;
+      _dsStopping = false;
       _dsUpdateControls();
     });
   }
@@ -6704,6 +6717,8 @@ const App = (() => {
       _dsSession.totalFolders = _dsSession.scannedFolders;
     }
 
+    _dsRunning  = false;
+    _dsStopping = false;
     await _dsSaveSession();
     _dsUpdateControls();
     _dsUpdateProgress();
