@@ -5616,7 +5616,7 @@ const App = (() => {
       UI.showToast(`✓ ${folderLabel} — ${foldersScanned} carpetas escaneadas`);
     } catch (err) {
       console.error('[FolderScan] Error:', err);
-      UI.showToast('Error al escanear la carpeta');
+      UI.showToast(UI.t('ds_err_scan_folder') || 'Error scanning folder');
     } finally {
       if (btn)  btn.disabled = false;
       if (icon) icon.style.animation = '';
@@ -6229,7 +6229,8 @@ const App = (() => {
         // Show rescan dialog
         const descEl = document.getElementById('ds-rescan-desc');
         if (descEl) {
-          descEl.textContent = `"${folderLabel}" fue escaneada anteriormente. ¿Qué deseas hacer?`;
+          descEl.textContent = (UI.t('ds_rescan_folder_prompt') || '"{name}" was previously scanned. What do you want to do?')
+            .replace('{name}', folderLabel);
         }
         // Reset radio to skip
         const radio = document.querySelector('input[name="ds-rescan-mode"][value="skip"]');
@@ -6830,12 +6831,12 @@ const App = (() => {
             const yearIn   = panel.querySelector('[data-field="year"]');
             const coverIn  = panel.querySelector('[data-field="coverUrl"]');
             if (artistIn) artistIn.value = artist;
-            if (albumIn && !albumIn.value) albumIn.value = album || folder.name;
+            if (albumIn)  albumIn.value  = album || folder.name;
             if (yearIn)   yearIn.value   = year;
             if (coverIn && !coverIn.value && coverSrc) coverIn.value = coverSrc;
-            // Also inject album name into header
+            // Sync row header name with the album from DB
             const nameEl = row.querySelector('.lib-detail-entity-name');
-            if (nameEl && album) nameEl.textContent = album;
+            if (nameEl && (album || folder.name)) nameEl.textContent = album || folder.name;
             const subEl = row.querySelector('.lib-detail-entity-sub');
             if (subEl && artist) subEl.textContent = `${artist} · ${songCount} ${UI.t('lbl_songs')}`;
             // Inject cover into art cell if found
@@ -7065,10 +7066,20 @@ const App = (() => {
     const pathParts = folder.path.split(' › ');
     const leaf      = pathParts[pathParts.length - 1];
 
-    // Derive album-level values from song metadata in the session
-    const albumName  = songs.find(s => s.album)?.album   || folder.name;
-    const artistName = songs.find(s => s.artist)?.artist || '';
-    const yearVal    = songs.find(s => s.year)?.year     || '';
+    // Derive album-level values from song metadata in the session.
+    // Use majority-vote (most frequent non-empty value) so one outlier ID3 tag
+    // doesn't pollute the display — same logic as the consensus auto-save step.
+    const _topVal = (key) => {
+      const map = new Map();
+      for (const s of songs) {
+        const v = s[key];
+        if (v) map.set(v, (map.get(v) || 0) + 1);
+      }
+      return map.size > 0 ? [...map.entries()].sort((a, b) => b[1] - a[1])[0][0] : '';
+    };
+    const albumName  = _topVal('album')  || folder.name;
+    const artistName = _topVal('artist') || '';
+    const yearVal    = _topVal('year')   || '';
 
     // Format badge from first song's MIME type
     const mime   = songs[0]?.mimeType || '';
