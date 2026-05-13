@@ -6585,6 +6585,7 @@ const App = (() => {
       );
 
       // 6. Auto-detect collection + consensus auto-save
+      let isAutoCollection = false;
       {
         const _top = map => map.size > 0
           ? [...map.entries()].sort((a, b) => b[1] - a[1])[0][0]
@@ -6606,7 +6607,7 @@ const App = (() => {
         }
 
         // Auto-identify as collection if 3+ distinct artists found
-        const isAutoCollection = artistMap.size > 3;
+        isAutoCollection = artistMap.size > 3;
         if (isAutoCollection && !_collectionFolderIdsCache?.has(id)) {
           await DB.saveCollection(id, { forceType: 'collection', name }).catch(() => {});
           _collectionFolderIdsCache?.add(id);
