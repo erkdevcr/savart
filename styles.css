@@ -5229,7 +5229,6 @@ body.queue-open #mini-player { z-index: 65; }
   flex-direction: column;
   flex-shrink: 0;
   background: var(--bg-surface);
-  border-bottom: 1px solid var(--bg-hover);
 }
 .ds-header-top {
   display: flex;
@@ -5237,6 +5236,7 @@ body.queue-open #mini-player { z-index: 65; }
   justify-content: space-between;
   padding: 14px 16px;
   gap: 0;
+  border-bottom: 1px solid var(--bg-hover);
 }
 .ds-header-left {
   display: flex;
@@ -5263,26 +5263,42 @@ body.queue-open #mini-player { z-index: 65; }
   color: var(--text-primary);
   white-space: nowrap;
 }
-.ds-tabs {
+/* Sub-header tab bar — mirrors .lib-sidebar desktop horizontal style */
+.ds-tab-bar {
   display: flex;
-  gap: 0;
-  padding: 0 10px;
-  border-top: 1px solid var(--border);
+  flex-direction: row;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--bg-hover);
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
+.ds-tab-bar::-webkit-scrollbar { display: none; }
 .ds-tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
   background: none;
   border: none;
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-muted);
-  padding: 7px 14px;
   border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text-secondary);
+  padding: 11px 18px;
   transition: color 0.15s, border-color 0.15s;
   white-space: nowrap;
 }
-.ds-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
-.ds-tab:hover:not(.active) { color: var(--text-secondary); }
+.ds-tab svg { width: 15px; height: 15px; flex-shrink: 0; opacity: 0.65; transition: opacity 0.15s; }
+.ds-tab:hover:not(.active) { color: var(--text-primary); }
+.ds-tab:hover:not(.active) svg { opacity: 1; }
+.ds-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+.ds-tab.active svg { opacity: 1; }
 .ds-autosave {
   font-size: 10px;
   color: var(--text-disabled);
@@ -6182,7 +6198,6 @@ body.queue-open #mini-player { z-index: 65; }
 
 /* ── Mobile overrides ────────────────────────────────────────── */
 @media (max-width: 767px) {
-  .ds-header-top { padding: 14px 16px; }
   .ds-title { font-size: 18px; }
   .ds-counter-val { font-size: 13px; }
   .ds-counter-lbl { font-size: 8px; }

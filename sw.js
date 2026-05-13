@@ -9,7 +9,7 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.27';
+const APP_VERSION  = '3.5.28';
 const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.26 — Deep Scan is now a first-class nav screen (sidebar + bottom-nav); removed fixed overlay positioning; back button hidden on desktop; nav_scan i18n key (Escaneo/Scan) — 3.5.25 — deep scan panel switches fields on type toggle (col: Nombre/Año/Cover; album: Artista/Álbum/Año/Cover); saves colName via DB.saveCollection; full i18n; CSS ds-field-col-only/ds-field-album-only — deep scan chips use folder-type-chip (Álbum/Colección); type buttons match chip colors; +Edit songs list; DB size inline in boot text
 
 /* Base path — auto-detected from sw.js location.
