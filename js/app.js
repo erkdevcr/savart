@@ -6660,8 +6660,9 @@ const App = (() => {
   function _dsRenderAttentionList() {
     const list = document.getElementById('ds-attention-list');
     if (!list) return;
+    // Only show unresolved folders: not yet attended and not ignored
     const folders = Object.values(_dsSession?.folders || {})
-      .filter(f => f.status !== 'ignored' || true);   // show all (including ignored)
+      .filter(f => !f.attended && f.status !== 'ignored');
     list.innerHTML = '';
     if (folders.length === 0) {
       list.innerHTML = `<div class="ds-attention-empty">${UI.t('scan_no_folders')}</div>`;
@@ -6674,13 +6675,17 @@ const App = (() => {
   function _dsRenderCompletedList() {
     const list = document.getElementById('ds-attention-list');
     if (!list) return;
-    const folders = Object.values(_dsSession?.completedList || {});
+    // Scanner-completed (no issues found) + user-attended (fixed by hand)
+    const scanDone    = Object.values(_dsSession?.completedList || {});
+    const userFixed   = Object.values(_dsSession?.folders      || {}).filter(f => f.attended);
+    const folders     = [...scanDone, ...userFixed];
     list.innerHTML = '';
     if (folders.length === 0) {
       list.innerHTML = `<div class="ds-attention-empty">${UI.t('scan_none_complete')}</div>`;
       return;
     }
-    for (const folder of folders) list.appendChild(_dsBuildSimpleRow(folder, 'green'));
+    for (const f of scanDone)  list.appendChild(_dsBuildSimpleRow(f, 'green'));
+    for (const f of userFixed) list.appendChild(_dsBuildFolderRow(f));
     _dsRefreshRowCovers().catch(() => {});
   }
 
@@ -6714,7 +6719,7 @@ const App = (() => {
         <div class="lib-detail-entity-info">
           <div class="lib-detail-entity-year"><span class="folder-type-chip ${ftChipCls}">${_escHtml(ftLabel)}</span></div>
           <div class="lib-detail-entity-name">${_escHtml(folder.name)}</div>
-          <div class="lib-detail-entity-sub">${songCount} canc.</div>
+          <div class="lib-detail-entity-sub">${songCount} ${UI.t('lbl_songs')}</div>
           ${pathParts.length > 1 ? `<div class="lib-detail-entity-path">${_escHtml(pathParts.slice(0, -1).join(' › '))}</div>` : ''}
         </div>
         <button class="lib-detail-entity-more" title="Opciones">
@@ -6788,7 +6793,7 @@ const App = (() => {
             const nameEl = row.querySelector('.lib-detail-entity-name');
             if (nameEl && album) nameEl.textContent = album;
             const subEl = row.querySelector('.lib-detail-entity-sub');
-            if (subEl && artist) subEl.textContent = artist + ' · ' + songCount + ' canc.';
+            if (subEl && artist) subEl.textContent = `${artist} · ${songCount} ${UI.t('lbl_songs')}`;
             // Inject cover into art cell if found
             if (coverSrc) {
               const artEl = row.querySelector('.lib-detail-entity-art');
@@ -6843,16 +6848,18 @@ const App = (() => {
     const list = document.getElementById('ds-attention-list');
     if (!list) return;
     list.innerHTML = '';
-    const attnFolders    = Object.values(_dsSession?.folders       || {}).filter(f => f.status !== 'ignored' || true);
+    const pendingFolders = Object.values(_dsSession?.folders       || {}).filter(f => !f.attended && f.status !== 'ignored');
+    const fixedFolders   = Object.values(_dsSession?.folders       || {}).filter(f =>  f.attended);
     const doneFolders    = Object.values(_dsSession?.completedList || {});
     const skippedFolders = Object.values(_dsSession?.skippedList   || {});
-    if (attnFolders.length === 0 && doneFolders.length === 0 && skippedFolders.length === 0) {
+    if (pendingFolders.length === 0 && fixedFolders.length === 0 && doneFolders.length === 0 && skippedFolders.length === 0) {
       list.innerHTML = `<div class="ds-attention-empty">${UI.t('scan_no_folders')}</div>`;
       return;
     }
-    for (const folder of attnFolders)    list.appendChild(_dsBuildFolderRow(folder));
-    for (const folder of doneFolders)    list.appendChild(_dsBuildSimpleRow(folder, 'green'));
-    for (const folder of skippedFolders) list.appendChild(_dsBuildSimpleRow(folder, 'yellow'));
+    for (const f of pendingFolders) list.appendChild(_dsBuildFolderRow(f));
+    for (const f of doneFolders)    list.appendChild(_dsBuildSimpleRow(f, 'green'));
+    for (const f of fixedFolders)   list.appendChild(_dsBuildFolderRow(f));
+    for (const f of skippedFolders) list.appendChild(_dsBuildSimpleRow(f, 'yellow'));
     _dsRefreshRowCovers().catch(() => {});
   }
 
@@ -7053,7 +7060,7 @@ const App = (() => {
 
     const subLine = [
       artistName ? _escHtml(artistName) : '',
-      `${songCount} canc.`,
+      `${songCount} ${UI.t('lbl_songs')}`,
     ].filter(Boolean).join(' · ');
 
     const missingChips = _dsMissingChips(folder);
@@ -7074,9 +7081,10 @@ const App = (() => {
         <div class="lib-detail-entity-info">
           ${yearLine ? `<div class="lib-detail-entity-year">${yearLine}</div>` : ''}
           <div class="lib-detail-entity-name">${_escHtml(albumName)}</div>
-          <div class="lib-detail-entity-sub">${subLine}${missingChips ? `&ensp;${missingChips}` : ''}</div>
+          <div class="lib-detail-entity-sub">${subLine}</div>
           ${pathParts.length > 1 ? `<div class="lib-detail-entity-path">${_escHtml(pathParts.slice(0, -1).join(' › '))}</div>` : ''}
         </div>
+        ${missingChips ? `<div class="ds-row-chips">${missingChips}</div>` : ''}
         <button class="lib-detail-entity-more" title="Opciones">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
         </button>
@@ -7254,6 +7262,19 @@ const App = (() => {
         rowEl.classList.add('ds-attended');
         _dsUpdateCounters();
         await _dsSaveSession();
+        // In attn-only mode, fade the row out and remove it — it now belongs in the done list
+        if (_dsListMode === 'attn') {
+          rowEl.style.transition = 'opacity 0.35s, transform 0.35s';
+          rowEl.style.opacity    = '0';
+          rowEl.style.transform  = 'translateX(24px)';
+          setTimeout(() => {
+            rowEl.remove();
+            const list = document.getElementById('ds-attention-list');
+            if (list && !list.querySelector('.ds-folder-row')) {
+              list.innerHTML = `<div class="ds-attention-empty">${UI.t('scan_no_folders')}</div>`;
+            }
+          }, 380);
+        }
       }
       if (typeof Sync !== 'undefined') Sync.push('metadata');
       if (_browseFolderId) _updateBrowseLegend(_browseFolderId);
@@ -7327,7 +7348,7 @@ const App = (() => {
     const subEl = rowEl.querySelector('.lib-detail-entity-sub');
     if (subEl) {
       const chips = folder.songs?.length ? _dsMissingChips(folder) : '';
-      subEl.innerHTML = [artist ? _escHtml(artist) : '', `${songCount} canc.`].filter(Boolean).join(' · ')
+      subEl.innerHTML = [artist ? _escHtml(artist) : '', `${songCount} ${UI.t('lbl_songs')}`].filter(Boolean).join(' · ')
                       + (chips ? `&ensp;${chips}` : '');
     }
 

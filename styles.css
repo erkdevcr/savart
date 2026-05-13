@@ -2100,7 +2100,7 @@ img { display: block; }
 }
 .lib-detail-entity-path {
   font-size: 10px;
-  color: var(--text-disabled);
+  color: var(--text-muted);
   margin-top: 3px;
   white-space: nowrap;
   overflow: hidden;
@@ -5758,6 +5758,15 @@ body.queue-open #mini-player { z-index: 65; }
 .ds-chip--ar { background: rgba(224, 85, 85, 0.18); color: #e05555; border: 1px solid rgba(224,85,85,0.3); }
 .ds-chip--al { background: rgba(160, 100, 220, 0.18); color: #a064dc; border: 1px solid rgba(160,100,220,0.3); }
 .ds-chip--cv { background: rgba(80, 160, 220, 0.18); color: #50a0dc; border: 1px solid rgba(80,160,220,0.3); }
+.ds-row-chips {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-end;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 0 6px;
+}
 
 /* ── Deep scan type switch (Álbum ↔ Colección) ── */
 .ds-type-switch {
