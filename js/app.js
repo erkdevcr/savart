@@ -6786,6 +6786,12 @@ const App = (() => {
     const hue   = [...(folder.id || '')].reduce((h, c) => h + c.charCodeAt(0), 0) % 360;
     const albBg = `hsl(${hue},30%,28%)`;
 
+    // Use session-stored cover (set by _dsSaveFromPanel for both albums and collections)
+    const sessionCover = (folder.coverUrl && !folder.coverUrl.startsWith('blob:')) ? folder.coverUrl : '';
+    const artHtml = sessionCover
+      ? `<img src="${_escHtml(sessionCover)}" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit" onerror="this.style.display='none'">${musicSvg}`
+      : musicSvg;
+
     const row = document.createElement('div');
     row.className = 'ds-folder-row';
     row.dataset.folderId = folder.id;
@@ -6793,7 +6799,7 @@ const App = (() => {
     row.innerHTML = `
       <div class="ds-folder-entity lib-detail-entity">
         <div class="lib-detail-entity-art" style="background:${albBg};color:var(--text-secondary)">
-          ${musicSvg}
+          ${artHtml}
         </div>
         <div class="lib-detail-entity-info">
           <div class="lib-detail-entity-year">${yearLine}</div>
@@ -7051,6 +7057,20 @@ const App = (() => {
       if (m.artist) fd.artistMap.set(m.artist,  (fd.artistMap.get(m.artist) || 0) + 1);
       if (!fd.mime && m.mimeType) fd.mime = m.mimeType;
     }
+
+    // Pass 1b — overlay collection-level coverUrls (saved via DB.saveCollection).
+    // Individual songs in a collection don't carry the cover, so we must read it
+    // from the collections store directly and give it priority over song-level data.
+    try {
+      const allCols = await DB.getAllCollections();
+      for (const col of allCols) {
+        if (!col?.coverUrl || col.coverUrl.startsWith('blob:')) continue;
+        const stable = col.coverUrl.replace(/^blob:.*|(?:googleusercontent|lh\d+\.).*/, '');
+        if (!stable) continue;
+        if (!folderData.has(col.id)) folderData.set(col.id, { url: '', ids: [], albumMap: new Map(), artistMap: new Map(), mime: '' });
+        folderData.get(col.id).url = stable; // collection cover takes priority
+      }
+    } catch (_) {}
 
     const _topMap = map => map.size > 0 ? [...map.entries()].sort((a, b) => b[1] - a[1])[0][0] : '';
     const _mimeToFmt = mime =>
@@ -7384,6 +7404,16 @@ const App = (() => {
       const displayAlbum = isColMode ? colName : album;
       const folderRef = sessionFolder || { id: folderId, name: displayAlbum || folderId, songs, count: songs.length };
       _dsRefreshRowHeader(rowEl, folderRef, { artist: isColMode ? '' : artist, album: displayAlbum, year, coverUrl });
+      // Persist cover URL in the session entry so list re-renders show it immediately
+      // (both for attention folders and completed/skipped ones stored in completedList)
+      if (coverUrl && !coverUrl.startsWith('blob:')) {
+        if (sessionFolder) sessionFolder.coverUrl = coverUrl;
+        const completedEntry = _dsSession?.completedList?.[folderId];
+        if (completedEntry) completedEntry.coverUrl = coverUrl;
+        const skippedEntry = _dsSession?.skippedList?.[folderId];
+        if (skippedEntry) skippedEntry.coverUrl = coverUrl;
+      }
+
       if (sessionFolder) {
         sessionFolder.attended = true;
         sessionFolder.status   = 'needs_attention';
@@ -7405,6 +7435,8 @@ const App = (() => {
           }, 380);
         }
       }
+      // Persist session so cover URL survives page reload / tab switch for completed rows
+      if (!sessionFolder) await _dsSaveSession().catch(() => {});
       if (typeof Sync !== 'undefined') Sync.push('metadata');
       if (_browseFolderId) _updateBrowseLegend(_browseFolderId);
       if (saveBtn) {
