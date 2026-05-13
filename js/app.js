@@ -5930,11 +5930,10 @@ const App = (() => {
 
   /**
    * Updates the pinned (top) log line.
-   * Format: "12/47  ·  Folder Name  (8 archivos)"
+   * Format: "12/47  ·  Folder Name"
    * @param {string} folderName
-   * @param {number} fileCount
    */
-  function _dsSetPinnedFolder(folderName, fileCount) {
+  function _dsSetPinnedFolder(folderName) {
     const strip = document.getElementById('ds-log');
     if (!strip) return;
     const ph = strip.querySelector('.ds-log-placeholder');
@@ -5948,8 +5947,24 @@ const App = (() => {
     const done  = _dsSession.scannedFolders || 0;
     const total = _dsSession.totalFolders   || 0;
     const ratio = total > 0 ? `${done + 1}/${total}` : `${done + 1}`;
-    const files = fileCount > 0 ? `  (${fileCount} arch.)` : '';
-    pinned.textContent = `${ratio}  ·  ${folderName}${files}`;
+    pinned.textContent = `${ratio}  ·  ${folderName}`;
+  }
+
+  /**
+   * Updates (in-place) the second log line — the per-file progress line.
+   * Format: "  1/12  ·  Track Name"
+   * @param {string} msg
+   */
+  function _dsUpdateFileLine(msg) {
+    const strip = document.getElementById('ds-log');
+    if (!strip) return;
+    let line = strip.querySelector('.ds-log-entry:not(.ds-log-pinned)');
+    if (!line) {
+      line = document.createElement('div');
+      line.className = 'ds-log-entry';
+      strip.appendChild(line);
+    }
+    line.textContent = msg;
   }
 
   /* Keep at most 1 scrolling line below the pinned folder line. */
@@ -6580,17 +6595,21 @@ const App = (() => {
       }));
       _folderCoverCache.delete(id);
 
-      // 3. Pin folder progress line; log first file as current item
-      _dsSetPinnedFolder(name, page.audioFiles.length);
-      if (page.audioFiles.length > 0) {
-        _dsLogLine(`  ⟳ ${cleanTitle(page.audioFiles[0].name)}`);
-      }
-
-      // 4. Run all recognition passes
-      try {
-        await _prefetchAndApplyFolderCovers(id, page.audioFiles, true);
-      } catch (err) {
-        _dsLogLine(`⚠ Pipeline error en "${name}": ${err?.message || err}`, 'warn');
+      // 3. Pin folder progress line and run recognition pass per-file (sequential)
+      //    so line 2 updates as each track is processed.
+      _dsSetPinnedFolder(name);
+      const totalFiles = page.audioFiles.length;
+      for (let fi = 0; fi < totalFiles; fi++) {
+        if (_dsStopFlag) break;
+        while (_dsPaused && !_dsStopFlag) await new Promise(r => setTimeout(r, 200));
+        if (_dsStopFlag) break;
+        const file = page.audioFiles[fi];
+        _dsUpdateFileLine(`  ${fi + 1}/${totalFiles}  ·  ${cleanTitle(file.name)}`);
+        try {
+          await _prefetchAndApplyFolderCovers(id, [file], true);
+        } catch (err) {
+          _dsLogLine(`⚠ Pipeline error en "${cleanTitle(file.name)}": ${err?.message || err}`, 'warn');
+        }
       }
 
       // Stop check immediately after pipeline — if set, this folder doesn't count

@@ -5476,7 +5476,6 @@ body.queue-open #mini-player { z-index: 65; }
 .ds-log-entry {
   padding: 1px 14px;
   font-size: 11px;
-  font-family: 'DM Mono', 'Fira Code', ui-monospace, monospace;
   color: var(--text-muted);
   line-height: 20px;
   white-space: nowrap;
