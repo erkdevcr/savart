@@ -6486,7 +6486,7 @@ const App = (() => {
       // Skip folders with too many files (compilations / mega-folders)
       if (page.audioFiles.length > 40) {
         _dsLogLine(`↷ Saltada (${page.audioFiles.length} arch. > 40): ${path}`);
-        _dsSession.skippedList[id] = { id, name, path, count: page.audioFiles.length };
+        _dsSession.skippedList[id] = { id, name, path, count: page.audioFiles.length, mime: page.audioFiles[0]?.mimeType || '' };
         if (_dsListMode === 'skipped' || _dsListMode === 'all') _dsAddOrUpdateFolderRow(id);
         _dsSession.scannedFolders++;
         _dsSession.visited = [...visitedSet];
@@ -6642,7 +6642,7 @@ const App = (() => {
           _dsInjectCoverIntoRow(id, page.audioFiles).catch(() => {});
         }
       } else {
-        _dsSession.completedList[id] = { id, name, path, count: page.audioFiles.length };
+        _dsSession.completedList[id] = { id, name, path, count: page.audioFiles.length, mime: page.audioFiles[0]?.mimeType || '' };
         if (_dsListMode === 'done' || _dsListMode === 'all') {
           _dsAddOrUpdateFolderRow(id);
           _dsInjectCoverIntoRow(id, page.audioFiles).catch(() => {});
@@ -6758,6 +6758,15 @@ const App = (() => {
       : (UI.t('lbl_album_chip') || 'Álbum');
     const ftChipCls = ftKey === 'collection' ? 'folder-type-chip--collection' : 'folder-type-chip--album';
 
+    const mime   = folder.mime || '';
+    const format = mime.includes('flac') ? 'FLAC' : mime.includes('ogg')  ? 'OGG'
+                 : mime.includes('aac')  ? 'AAC'  : mime.includes('wav')  ? 'WAV'
+                 : (mime.includes('mpeg') || mime.includes('mp3')) ? 'MP3' : '';
+    const yearLine = [
+      `<span class="folder-type-chip ${ftChipCls}">${_escHtml(ftLabel)}</span>`,
+      format ? `<span class="album-format-badge">${format}</span>` : '',
+    ].filter(Boolean).join(' ');
+
     const musicSvg = `<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>`;
     const hue   = [...(folder.id || '')].reduce((h, c) => h + c.charCodeAt(0), 0) % 360;
     const albBg = `hsl(${hue},30%,28%)`;
@@ -6772,7 +6781,7 @@ const App = (() => {
           ${musicSvg}
         </div>
         <div class="lib-detail-entity-info">
-          <div class="lib-detail-entity-year"><span class="folder-type-chip ${ftChipCls}">${_escHtml(ftLabel)}</span></div>
+          <div class="lib-detail-entity-year">${yearLine}</div>
           <div class="lib-detail-entity-name">${_escHtml(folder.name)}</div>
           <div class="lib-detail-entity-sub">${songCount} ${UI.t('lbl_songs')}</div>
           ${pathParts.length > 1 ? `<div class="lib-detail-entity-path">${_escHtml(pathParts.slice(0, -1).join(' › '))}</div>` : ''}
