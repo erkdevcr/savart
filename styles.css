@@ -5827,7 +5827,25 @@ body.queue-open #mini-player { z-index: 65; }
 .ds-song-rename-row {
   display: flex;
   align-items: center;
+  gap: 6px;
 }
+.ds-track-num-input {
+  width: 44px;
+  flex-shrink: 0;
+  background: var(--input-bg, var(--surface2));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  padding: 4px 6px;
+  outline: none;
+  text-align: center;
+  -moz-appearance: textfield;
+}
+.ds-track-num-input::-webkit-inner-spin-button,
+.ds-track-num-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.ds-track-num-input:focus { border-color: var(--accent); color: var(--text-primary); }
 .ds-song-rename-row .track-rename-input {
   flex: 1;
   background: var(--input-bg, var(--surface2));

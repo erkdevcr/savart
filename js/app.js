@@ -7285,15 +7285,93 @@ const App = (() => {
       return;
     }
 
-    // Build song rename rows
-    listEl.innerHTML = songs.map(s => {
-      const name = s.displayName || (typeof cleanTitle === 'function' ? cleanTitle(s.name || '') : (s.name || ''));
-      return `<div class="ds-song-rename-row" data-song-id="${_escHtml(s.id)}">
-        <input class="track-rename-input" value="${_escHtml(name)}" data-original="${_escHtml(name)}" placeholder="Nombre de la canción">
-      </div>`;
-    }).join('');
+    // Sort by track number ascending (songs without track go to end)
+    const sorted = [...songs].sort((a, b) => {
+      const ta = parseInt(a.track, 10);
+      const tb = parseInt(b.track, 10);
+      if (isNaN(ta) && isNaN(tb)) return 0;
+      if (isNaN(ta)) return 1;
+      if (isNaN(tb)) return -1;
+      return ta - tb;
+    });
 
-    // Wire up save-on-blur / enter for each input
+    // Build song rows with track# + name inputs
+    const buildRow = (s) => {
+      const name  = s.displayName || (typeof cleanTitle === 'function' ? cleanTitle(s.name || '') : (s.name || ''));
+      const track = s.track || '';
+      const el = document.createElement('div');
+      el.className = 'ds-song-rename-row';
+      el.dataset.songId = s.id;
+      el.innerHTML = `
+        <input class="ds-track-num-input" type="number" min="1" value="${_escHtml(String(track))}" data-original="${_escHtml(String(track))}" placeholder="#" title="N° de pista">
+        <input class="track-rename-input" value="${_escHtml(name)}" data-original="${_escHtml(name)}" placeholder="Nombre de la canción">`;
+      return el;
+    };
+
+    listEl.innerHTML = '';
+    sorted.forEach(s => listEl.appendChild(buildRow(s)));
+
+    // Helper: re-sort rows visually by current track# values
+    const _reorderRows = () => {
+      const rows = [...listEl.querySelectorAll('.ds-song-rename-row')];
+      rows.sort((a, b) => {
+        const ta = parseInt(a.querySelector('.ds-track-num-input').value, 10);
+        const tb = parseInt(b.querySelector('.ds-track-num-input').value, 10);
+        if (isNaN(ta) && isNaN(tb)) return 0;
+        if (isNaN(ta)) return 1;
+        if (isNaN(tb)) return -1;
+        return ta - tb;
+      });
+      rows.forEach(r => listEl.appendChild(r)); // re-append in sorted order
+    };
+
+    // Helper: resolve conflicts — if another row has same track#, cascade-bump it
+    const _resolveConflicts = (changedRow) => {
+      const changedNum = parseInt(changedRow.querySelector('.ds-track-num-input').value, 10);
+      if (isNaN(changedNum)) return;
+      const rows = [...listEl.querySelectorAll('.ds-song-rename-row')];
+      // Collect occupied numbers excluding the row that just changed
+      let bump = changedNum;
+      const others = rows.filter(r => r !== changedRow);
+      // Sort others by track# so cascade is clean
+      others.sort((a, b) => parseInt(a.querySelector('.ds-track-num-input').value, 10) - parseInt(b.querySelector('.ds-track-num-input').value, 10));
+      others.forEach(r => {
+        const inp = r.querySelector('.ds-track-num-input');
+        const n   = parseInt(inp.value, 10);
+        if (n === bump) {
+          bump++;
+          inp.value = String(bump);
+        }
+      });
+    };
+
+    // Wire up track number input
+    listEl.querySelectorAll('.ds-track-num-input').forEach(inp => {
+      const songId = inp.closest('[data-song-id]')?.dataset.songId;
+      if (!songId) return;
+      const saveTrack = async () => {
+        const val = inp.value.trim();
+        const original = inp.dataset.original;
+        if (val === original) return;
+        const n = parseInt(val, 10);
+        if (val !== '' && (isNaN(n) || n < 1)) { inp.value = original; return; }
+        _resolveConflicts(inp.closest('.ds-song-rename-row'));
+        _reorderRows();
+        const patch = val === '' ? { track: '' } : { track: String(n) };
+        try {
+          await DB.setMeta(songId, patch);
+          _liveMetaUpdate([songId], patch);
+          inp.dataset.original = val;
+        } catch (_) { inp.value = original; }
+      };
+      inp.addEventListener('blur', saveTrack);
+      inp.addEventListener('keydown', e => {
+        if (e.key === 'Enter')  { e.preventDefault(); saveTrack().then(() => inp.blur()); }
+        if (e.key === 'Escape') { inp.value = inp.dataset.original; inp.blur(); }
+      });
+    });
+
+    // Wire up name input
     listEl.querySelectorAll('.track-rename-input').forEach(inp => {
       const songId = inp.closest('[data-song-id]')?.dataset.songId;
       if (!songId) return;
