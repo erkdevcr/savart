@@ -6142,8 +6142,9 @@ const App = (() => {
         item.dataset.folderName = folder.name;
         item.innerHTML = `
           <svg class="ds-modal-folder-icon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>
-          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_escHtml(folder.name)}</span>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="color:var(--text-disabled);flex-shrink:0"><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6z"/></svg>`;
+          <span class="ds-modal-folder-name">${_escHtml(folder.name)}</span>
+          <span class="ds-modal-item-count">…</span>
+          <svg class="ds-modal-folder-arrow" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6z"/></svg>`;
 
         // Single click = select this folder
         item.addEventListener('click', () => {
@@ -6162,7 +6163,7 @@ const App = (() => {
         });
 
         // Arrow button = navigate into
-        item.querySelector('svg:last-child').addEventListener('click', async (e) => {
+        item.querySelector('.ds-modal-folder-arrow').addEventListener('click', async (e) => {
           e.stopPropagation();
           _dsModalPath.push({ id: folder.id, name: folder.name });
           _dsModalSel = { id: folder.id, name: folder.name };
@@ -6171,6 +6172,36 @@ const App = (() => {
         });
 
         listEl.appendChild(item);
+      }
+
+      // Async: fetch item counts for each subfolder in batches of 4
+      const _currentFolderId = folderId; // capture to bail out if user navigates away
+      const folderItems = [...listEl.querySelectorAll('.ds-modal-folder-item')];
+      const BATCH = 4;
+      for (let i = 0; i < folderItems.length; i += BATCH) {
+        if (_dsModalPath[_dsModalPath.length - 1]?.id !== _currentFolderId) break; // navigated away
+        const batch = folderItems.slice(i, i + BATCH);
+        await Promise.allSettled(batch.map(async (item) => {
+          const id = item.dataset.folderId;
+          const countEl = item.querySelector('.ds-modal-item-count');
+          try {
+            const sub = await Drive.listFolderScan(id);
+            const nAudio   = sub.audioFiles.length;
+            const nFolders = sub.folders.length;
+            if (!countEl) return;
+            if (nAudio > 0 && nFolders > 0) {
+              countEl.textContent = `${nAudio} ${UI.t('lbl_songs')} · ${nFolders} sub`;
+            } else if (nAudio > 0) {
+              countEl.textContent = `${nAudio} ${UI.t('lbl_songs')}`;
+            } else if (nFolders > 0) {
+              countEl.textContent = `${nFolders} sub`;
+            } else {
+              countEl.textContent = '—';
+            }
+          } catch (_) {
+            if (countEl) countEl.textContent = '';
+          }
+        }));
       }
     } catch (err) {
       listEl.innerHTML = `<div class="ds-attention-empty">Error: ${_escHtml(err?.message || err)}</div>`;

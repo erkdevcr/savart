@@ -6243,6 +6243,15 @@ body.queue-open #mini-player { z-index: 65; }
 }
 .ds-modal-folder-icon { color: var(--text-muted); flex-shrink: 0; }
 .ds-modal-folder-item.ds-modal-folder-selected .ds-modal-folder-icon { color: var(--accent); }
+.ds-modal-folder-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ds-modal-item-count {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-disabled);
+  white-space: nowrap;
+}
+.ds-modal-folder-item.ds-modal-folder-selected .ds-modal-item-count { color: var(--accent); opacity: 0.7; }
+.ds-modal-folder-arrow { color: var(--text-disabled); flex-shrink: 0; }
 .ds-modal-folder-enter {
   display: flex;
   align-items: center;
