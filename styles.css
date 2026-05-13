@@ -5822,6 +5822,33 @@ body.queue-open #mini-player { z-index: 65; }
 .ds-mode-collection .ds-field-col-only   { display: flex; }
 .ds-mode-collection .ds-field-album-only { display: none; }
 
+/* Cover URL input row: input + apply button side by side */
+.ds-cover-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+.ds-cover-input-wrap .album-edit-input { flex: 1; min-width: 0; }
+.ds-apply-cover-btn {
+  flex-shrink: 0;
+  white-space: nowrap;
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.ds-apply-cover-btn:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: rgba(var(--accent-rgb, 99,102,241), 0.5);
+  background: rgba(var(--accent-rgb, 99,102,241), 0.06);
+}
+.ds-apply-cover-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
 /* Song rename list in deep scan panel */
 /* ── Song editor list ──────────────────────────────────────── */
 .ds-songs-edit-list {

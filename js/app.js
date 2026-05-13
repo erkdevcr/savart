@@ -6837,7 +6837,10 @@ const App = (() => {
         </div>
         <div class="album-edit-row">
           <label class="album-edit-label">${UI.t('lbl_cover_url')}</label>
-          <input class="album-edit-input" data-field="coverUrl" value="" placeholder="https://…">
+          <div class="ds-cover-input-wrap">
+            <input class="album-edit-input" data-field="coverUrl" value="" placeholder="https://…" style="flex:1;min-width:0">
+            <button class="ds-apply-cover-btn ds-field-col-only" title="${UI.t('ds_apply_cover_btn')}">${UI.t('ds_apply_cover_btn')}</button>
+          </div>
         </div>
         <div class="album-edit-row album-edit-row--track-btn">
           <button class="album-edit-track-btn ds-track-edit-btn">${UI.t('edit_tracks_btn')}</button>
@@ -6907,6 +6910,13 @@ const App = (() => {
 
     // Save button
     row.querySelector('.ds-panel-save-btn').addEventListener('click', () => _dsSaveFromPanel(row, folder.id));
+
+    // "Apply to songs" — inject collection cover into individual song records
+    row.querySelector('.ds-apply-cover-btn')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const url = row.querySelector('[data-field="coverUrl"]')?.value?.trim() || '';
+      _dsApplyCoverToSongs(folder.id, url, e.currentTarget);
+    });
 
     // "Edit songs" — loads from DB since simple rows have no in-memory songs array
     row.querySelector('.ds-track-edit-btn').addEventListener('click', () =>
@@ -7267,7 +7277,10 @@ const App = (() => {
         </div>
         <div class="album-edit-row">
           <label class="album-edit-label">${UI.t('lbl_cover_url')}</label>
-          <input class="album-edit-input" data-field="coverUrl" value="${_escHtml(coverSrc)}" placeholder="https://…">
+          <div class="ds-cover-input-wrap">
+            <input class="album-edit-input" data-field="coverUrl" value="${_escHtml(coverSrc)}" placeholder="https://…" style="flex:1;min-width:0">
+            <button class="ds-apply-cover-btn ds-field-col-only" title="${UI.t('ds_apply_cover_btn')}">${UI.t('ds_apply_cover_btn')}</button>
+          </div>
         </div>
         <div class="album-edit-row album-edit-row--track-btn">
           <button class="album-edit-track-btn ds-track-edit-btn">${UI.t('edit_tracks_btn')}</button>
@@ -7307,6 +7320,13 @@ const App = (() => {
 
     // Save button
     row.querySelector('.ds-panel-save-btn').addEventListener('click', () => _dsSaveFromPanel(row, folder.id));
+
+    // "Apply to songs" — inject collection cover into individual song records
+    row.querySelector('.ds-apply-cover-btn')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const url = row.querySelector('[data-field="coverUrl"]')?.value?.trim() || '';
+      _dsApplyCoverToSongs(folder.id, url, e.currentTarget);
+    });
 
     // "Edit songs" button — always query DB so ALL folder songs appear, not just attn ones
     row.querySelector('.ds-track-edit-btn').addEventListener('click', () =>
@@ -7390,14 +7410,15 @@ const App = (() => {
           if (!isColMode && artist) { song.artist = artist; song.missingArtist = false; }
           if (!isColMode && album)  { song.album  = album;  song.missingAlbum  = false; }
           if (year)     { song.year    = year;     song.missingYear   = false; }
-          if (coverUrl && !coverUrl.startsWith('blob:')) { song.thumbnailLink = coverUrl; song.missingCover = false; }
+          // Collections: cover lives on the collection record only — never on individual songs
+          if (!isColMode && coverUrl && !coverUrl.startsWith('blob:')) { song.thumbnailLink = coverUrl; song.missingCover = false; }
         }
-        if (coverUrl && !coverUrl.startsWith('blob:')) _cacheExternalCover(song.id, coverUrl, true).catch(() => {});
+        if (!isColMode && coverUrl && !coverUrl.startsWith('blob:')) _cacheExternalCover(song.id, coverUrl, true).catch(() => {});
         const livePatch = {};
-        if (!isColMode && artist)                        livePatch.artist       = artist;
-        if (!isColMode && album)                         livePatch.album        = album;
-        if (year)                                        livePatch.year         = year;
-        if (coverUrl && !coverUrl.startsWith('blob:'))   livePatch.thumbnailUrl = coverUrl;
+        if (!isColMode && artist)                                        livePatch.artist       = artist;
+        if (!isColMode && album)                                         livePatch.album        = album;
+        if (year)                                                        livePatch.year         = year;
+        if (!isColMode && coverUrl && !coverUrl.startsWith('blob:'))     livePatch.thumbnailUrl = coverUrl;
         if (Object.keys(livePatch).length) _liveMetaUpdate([song.id], livePatch);
       }
       // Header refresh — use colName as album display in collection mode
@@ -7450,6 +7471,43 @@ const App = (() => {
       UI.showToast(UI.t('toast_save_error') || 'Error guardando', 'error');
     }
   }
+
+  /**
+   * Inject a cover URL into every individual song of a collection.
+   * Called from the "Apply to songs" button in the Deep Scan collection editor.
+   * Mirrors the Library's "btn-collection-apply-all" logic.
+   */
+  async function _dsApplyCoverToSongs(folderId, coverUrl, btn) {
+    if (!folderId || !coverUrl || coverUrl.startsWith('blob:')) return;
+    const origText = btn?.textContent;
+    if (btn) { btn.disabled = true; btn.textContent = UI.t('ds_applying_cover') || 'Aplicando…'; }
+    try {
+      const all   = await DB.getAllMeta();
+      const songs = all.filter(m => m.folderId === folderId);
+      if (!songs.length) {
+        UI.showToast(UI.t('ds_no_songs') || 'No hay canciones', 'warn');
+        return;
+      }
+      const now = Date.now();
+      for (const m of songs) {
+        await DB.setMeta(m.id, { thumbnailUrl: coverUrl, manualAt: now });
+        if (typeof Meta !== 'undefined') Meta.revoke?.(m.id);
+        _updateRowThumbnail(m.id, coverUrl);
+      }
+      UI.showToast(`${songs.length} ${UI.t('lbl_songs_updated') || 'canciones actualizadas'}`);
+      if (btn) {
+        btn.textContent = UI.t('ds_applied_cover') || '✓ Aplicado';
+        setTimeout(() => {
+          if (btn) { btn.disabled = false; btn.textContent = origText; }
+        }, 2000);
+      }
+    } catch (err) {
+      console.error('[DeepScan] Apply cover error:', err);
+      UI.showToast(UI.t('toast_save_error') || 'Error', 'error');
+      if (btn) { btn.disabled = false; btn.textContent = origText; }
+    }
+  }
+
 
   /** Toggle a folder between album and collection types.
    *  Updates DB, patches the in-memory cache, refreshes the chip and toggle buttons immediately. */
