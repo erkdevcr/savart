@@ -8174,6 +8174,22 @@ const App = (() => {
       }
       await _dsSaveSession();
 
+      // Also remove these folders from the scan history so they are not
+      // skipped on the next scan (rescanMode='skip' checks the history)
+      try {
+        const hist = await _dsLoadHistory();
+        let histChanged = false;
+        for (const folderId of allFolderIds) {
+          if (hist.folders?.[folderId]) {
+            delete hist.folders[folderId];
+            histChanged = true;
+          }
+        }
+        if (histChanged) await _dsSaveHistory();
+      } catch (e) {
+        console.warn('[DS] Could not clear scan history on reset:', e);
+      }
+
       // Re-render the DS list area to reflect empty state
       _dsRenderAll();
 
