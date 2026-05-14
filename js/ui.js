@@ -1142,19 +1142,19 @@ const UI = (() => {
     // Determine type label and banner color
     let bannerLabel, bannerBg, bannerColor;
     if (!isFolder) {
-      bannerLabel = 'Song';
+      bannerLabel = t('item_type_song');
       bannerBg    = 'rgba(62,207,122,0.22)';
       bannerColor = '#3ECF7A';
     } else if (folderType === 'collection') {
-      bannerLabel = 'Collection';
+      bannerLabel = t('lbl_collection');
       bannerBg    = 'rgba(74,136,245,0.22)';
       bannerColor = '#4a88f5';
     } else if (folderType === 'album') {
-      bannerLabel = 'Album';
+      bannerLabel = t('lbl_album_chip');
       bannerBg    = 'rgba(139,92,246,0.22)';
       bannerColor = '#a78bfa';
     } else {
-      bannerLabel = 'Folder';
+      bannerLabel = t('item_type_folder');
       bannerBg    = 'rgba(232,160,32,0.22)';
       bannerColor = '#e8a020';
     }

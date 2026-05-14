@@ -5327,6 +5327,12 @@ body.queue-open #mini-player { z-index: 65; }
   -ms-overflow-style: none;
 }
 .ds-tab-bar::-webkit-scrollbar { display: none; }
+.ds-tab-bar .ds-led {
+  margin-left: auto;
+  align-self: center;
+  margin-right: 14px;
+  flex-shrink: 0;
+}
 .ds-tab {
   display: flex;
   align-items: center;
