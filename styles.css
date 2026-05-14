@@ -5180,7 +5180,7 @@ body.queue-open #mini-player { z-index: 65; }
         calc(100cqh - 76px) — panel height minus vertical padding (40px) + badges row (~36px)
       Result: art is always a square that fits in the available space.
     */
-    width: min(100%, 300px, calc(100cqh - 76px));
+    width: min(100%, 330px, calc(100cqh - 76px));
     max-width: unset; /* replaced by the min() above */
     aspect-ratio: 1;  /* height = width → always square */
   }
