@@ -8171,6 +8171,9 @@ const App = (() => {
         _dsSession.totalFolders   = 0;
         _dsSession.status         = 'idle';
         _dsSession.log            = [];
+        // Force rescan mode so the next Start re-scans everything,
+        // regardless of whether the Drive history was cleared successfully
+        _dsSession.rescanMode    = 'rescan';
       }
       await _dsSaveSession();
 
