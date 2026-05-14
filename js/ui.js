@@ -167,7 +167,7 @@ const UI = (() => {
       // ── Player actions ─────────────────────────────────────
       player_queue:       'Cola',
       player_speed:       'Velocidad',
-      player_timer:       'Temporizador',
+      player_timer:       'Tiempo',
       player_lyrics:      'LETRA',
       player_show_album:  'MOSTRAR ÁLBUM',
       lyrics_loading:     'Buscando letra…',

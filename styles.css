@@ -3259,13 +3259,26 @@ body.queue-open #mini-player { z-index: 65; }
   .queue-remove-btn { opacity: 1; }
 }
 
-/* ── Ctrl sheets (Tempo / Pitch / Timer — mobile bottom sheets) ── */
+/* ── Ctrl sheets (Tempo / Pitch / Timer — bottom sheets on mobile, centred card on desktop) ── */
 .ctrl-sheet {
   position: fixed;
   inset: 0;
   z-index: 80;            /* above expanded player (z-60), below EQ (z-100) */
   display: none;
   align-items: flex-end;
+}
+
+@media (min-width: 768px) {
+  .ctrl-sheet {
+    align-items: center;
+    justify-content: center;
+  }
+  .ctrl-sheet-card {
+    width: 400px;
+    border-radius: var(--radius-lg);
+    padding-bottom: 24px;
+    animation: none;
+  }
 }
 
 .ctrl-sheet.visible { display: flex; }

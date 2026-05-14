@@ -11769,22 +11769,14 @@ const App = (() => {
       onNavClick('settings');
     });
 
-    // Expanded player: Speed (Tempo) → overlay on mobile, settings on desktop
+    // Expanded player: Speed (Tempo) → ctrl-sheet overlay on all screen sizes
     document.getElementById('btn-pexp-speed')?.addEventListener('click', () => {
-      if (window.matchMedia('(min-width: 768px)').matches) {
-        _closeExpandedPlayer(); onNavClick('settings');
-      } else {
-        _openCtrlSheet('overlay-speed');
-      }
+      _openCtrlSheet('overlay-speed');
     });
 
-    // Expanded player: Timer → overlay on mobile, settings on desktop
+    // Expanded player: Timer → ctrl-sheet overlay on all screen sizes
     document.getElementById('btn-pexp-timer')?.addEventListener('click', () => {
-      if (window.matchMedia('(min-width: 768px)').matches) {
-        _closeExpandedPlayer(); onNavClick('settings');
-      } else {
-        _openCtrlSheet('overlay-timer');
-      }
+      _openCtrlSheet('overlay-timer');
     });
 
     // Ctrl sheet close buttons + backdrop
