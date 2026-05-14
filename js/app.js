@@ -10270,53 +10270,48 @@ const App = (() => {
 
     const dbMeta = await DB.getMeta(songId).catch(() => null);
 
-    // Build DB patch — reset enrichment state, then rewrite from ID3 only.
-    // Explicitly null every enrichment field so stale Last.fm / AudD values
-    // don't survive the reset. auddTried/mbTried cleared so enrichment reruns
-    // on next play with fresh identity data. softScannedAt cleared so soft scan
-    // can re-read this song in the next folder open.
-    const dbPatch = {
-      manualAt:     0,
-      auddTried:    false,
-      mbTried:      false,
-      softScannedAt: null,
-      // Reset all text — overwritten below if ID3 has them
-      displayName:  id3?.title  || null,
-      artist:       id3?.artist || null,
-      album:        id3?.album  || null,
-      year:         id3?.year   || null,
-    };
-
+    // Build DB patch — true wipe + rebuild from ID3 only.
+    // We use DB.bulkWriteMeta (direct IndexedDB put, no null-stripping) so null values
+    // actually overwrite stale Last.fm / AudD / manually-edited fields in the DB record.
+    // Mirrors exactly what the DS scan does on a full reset.
     const freshBlob    = id3?.coverBlob;
     const existingBlob = dbMeta?.coverBlob;
-    if (freshBlob) {
-      dbPatch.coverBlob    = freshBlob;
-      dbPatch.thumbnailUrl = 'id3';
-    } else if (existingBlob) {
-      dbPatch.thumbnailUrl = 'id3'; // blob already in DB — ensure sentinel is set
-    } else {
-      dbPatch.thumbnailUrl = null; // no embedded art — clear stale external URL
-    }
+    const coverBlobToUse = freshBlob ?? existingBlob ?? null;
 
-    await DB.setMeta(songId, dbPatch);
+    const dbPatch = {
+      manualAt:       0,
+      auddTried:      false,
+      mbTried:        false,
+      softScannedAt:  null,
+      displayName:    id3?.title  || null,
+      artist:         id3?.artist || null,
+      artistInferred: !id3?.artist,
+      album:          id3?.album  || null,
+      year:           id3?.year   || null,
+      coverBlob:      coverBlobToUse,
+      thumbnailUrl:   coverBlobToUse ? 'id3' : null,
+      coverUrl:       null,   // wipe stale Last.fm / AudD external cover URLs
+    };
 
-    // Live-update text fields only — thumbnailUrl:'id3' must NOT go through _liveMetaUpdate
-    // (it would corrupt the Meta cache coverUrl with the literal string 'id3').
-    const livePatch = {};
-    if (dbPatch.displayName) livePatch.displayName = dbPatch.displayName;
-    if (dbPatch.artist)      livePatch.artist      = dbPatch.artist;
-    if (dbPatch.album)       livePatch.album       = dbPatch.album;
-    if (dbPatch.year)        livePatch.year        = dbPatch.year;
-    if (Object.keys(livePatch).length) _liveMetaUpdate([songId], livePatch);
+    // Direct put so null values literally overwrite stale data in IndexedDB.
+    await DB.bulkWriteMeta([{ ...(dbMeta || {}), ...dbPatch, id: songId }]);
+
+    // Live-update text fields — always apply (even null) so stale values clear in live UI.
+    // thumbnailUrl:'id3' must NOT go through _liveMetaUpdate (would corrupt Meta cache).
+    _liveMetaUpdate([songId], {
+      displayName: dbPatch.displayName,
+      artist:      dbPatch.artist,
+      album:       dbPatch.album,
+      year:        dbPatch.year,
+    });
 
     // Update cover in all visible surfaces
-    const blobToUse = freshBlob || existingBlob;
     let coverUrl = null; // hoisted so the player-update block below can read it
-    if (blobToUse && typeof Meta !== 'undefined') {
+    if (coverBlobToUse && typeof Meta !== 'undefined') {
       // Meta.parse already injected coverUrl into cache if blob was freshly parsed;
       // otherwise injectCover creates the Object URL now.
       coverUrl = id3?.coverUrl;
-      if (!coverUrl) coverUrl = Meta.injectCover(songId, blobToUse);
+      if (!coverUrl) coverUrl = Meta.injectCover(songId, coverBlobToUse);
       if (coverUrl) {
         _updateRowThumbnail(songId, coverUrl, true);
         _updateHomeCardThumbnail(songId, coverUrl, true);
@@ -10333,10 +10328,10 @@ const App = (() => {
       if (_ct?.id === songId) {
         const _ep = {
           ..._ct,
-          ...(dbPatch.displayName ? { displayName: dbPatch.displayName } : {}),
-          ...(dbPatch.artist      ? { artist:      dbPatch.artist }      : {}),
-          ...(dbPatch.album       ? { albumName:   dbPatch.album }       : {}),
-          ...(dbPatch.year        ? { year:        dbPatch.year }        : {}),
+          displayName:  dbPatch.displayName,
+          artist:       dbPatch.artist,
+          albumName:    dbPatch.album,
+          year:         dbPatch.year,
           thumbnailUrl: coverUrl,
         };
         UI.updateMiniPlayer?.(_ep, Player.isPlaying());
@@ -10401,45 +10396,44 @@ const App = (() => {
           id3 = await Meta.parse(m.id, blob).catch(() => null);
         }
 
-        // 4. Build DB patch — same shape as onSongResetId3
+        // 4. Build DB patch — true wipe + rebuild from ID3 only.
+        // Use DB.bulkWriteMeta (direct put, no null-stripping) so null values actually
+        // overwrite stale Last.fm / AudD / manually-edited fields. Mirrors DS scan behavior.
+        const freshBlob      = id3?.coverBlob;
+        const existingBlob   = m.coverBlob;
+        const coverBlobToUse = freshBlob ?? existingBlob ?? null;
+
         const dbPatch = {
-          manualAt:      0,
-          auddTried:     false,
-          mbTried:       false,
-          softScannedAt: null,
-          displayName:   id3?.title  || null,
-          artist:        id3?.artist || null,
-          album:         id3?.album  || null,
-          year:          id3?.year   || null,
+          manualAt:       0,
+          auddTried:      false,
+          mbTried:        false,
+          softScannedAt:  null,
+          displayName:    id3?.title  || null,
+          artist:         id3?.artist || null,
+          artistInferred: !id3?.artist,
+          album:          id3?.album  || null,
+          year:           id3?.year   || null,
+          coverBlob:      coverBlobToUse,
+          thumbnailUrl:   coverBlobToUse ? 'id3' : null,
+          coverUrl:       null,   // wipe stale Last.fm / AudD external cover URLs
         };
 
-        const freshBlob    = id3?.coverBlob;
-        const existingBlob = m.coverBlob;
-        if (freshBlob) {
-          dbPatch.coverBlob    = freshBlob;
-          dbPatch.thumbnailUrl = 'id3';
-        } else if (existingBlob) {
-          dbPatch.thumbnailUrl = 'id3'; // blob already in DB — ensure sentinel is set
-        } else {
-          dbPatch.thumbnailUrl = null; // no embedded art — clear stale external URL
-        }
+        // Direct put so null values literally overwrite stale data in IndexedDB.
+        await DB.bulkWriteMeta([{ ...m, ...dbPatch, id: m.id }]).catch(() => {});
 
-        await DB.setMeta(m.id, dbPatch).catch(() => {});
-
-        // 5. Live-update text fields (thumbnailUrl:'id3' must NOT go through _liveMetaUpdate)
-        const livePatch = {};
-        if (dbPatch.displayName) livePatch.displayName = dbPatch.displayName;
-        if (dbPatch.artist)      livePatch.artist      = dbPatch.artist;
-        if (dbPatch.album)       livePatch.album       = dbPatch.album;
-        if (dbPatch.year)        livePatch.year        = dbPatch.year;
-        if (Object.keys(livePatch).length) _liveMetaUpdate([m.id], livePatch);
+        // 5. Live-update text fields — always apply so stale values clear in live UI.
+        _liveMetaUpdate([m.id], {
+          displayName: dbPatch.displayName,
+          artist:      dbPatch.artist,
+          album:       dbPatch.album,
+          year:        dbPatch.year,
+        });
 
         // 6. Update cover in all visible surfaces
-        const blobToUse = freshBlob || existingBlob;
         let coverUrl = null;
-        if (blobToUse && typeof Meta !== 'undefined') {
+        if (coverBlobToUse && typeof Meta !== 'undefined') {
           coverUrl = id3?.coverUrl;
-          if (!coverUrl) coverUrl = Meta.injectCover(m.id, blobToUse);
+          if (!coverUrl) coverUrl = Meta.injectCover(m.id, coverBlobToUse);
           if (coverUrl) {
             _updateRowThumbnail(m.id, coverUrl, true);
             _updateHomeCardThumbnail(m.id, coverUrl, true);
@@ -10452,10 +10446,10 @@ const App = (() => {
         if (_ct?.id === m.id) {
           const _ep = {
             ..._ct,
-            ...(dbPatch.displayName ? { displayName: dbPatch.displayName } : {}),
-            ...(dbPatch.artist      ? { artist:      dbPatch.artist }      : {}),
-            ...(dbPatch.album       ? { albumName:   dbPatch.album }       : {}),
-            ...(dbPatch.year        ? { year:        dbPatch.year }        : {}),
+            displayName:  dbPatch.displayName,
+            artist:       dbPatch.artist,
+            albumName:    dbPatch.album,
+            year:         dbPatch.year,
             thumbnailUrl: coverUrl,
           };
           UI.updateMiniPlayer?.(_ep, Player.isPlaying());
