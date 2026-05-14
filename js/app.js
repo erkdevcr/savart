@@ -6332,7 +6332,7 @@ const App = (() => {
           if (!visited.has(f.id)) queue.push(f.id);
         }
         // Only count leaf folders (have audio files but no subfolders)
-        if (page.audioFiles.length > 0 && page.audioFiles.length <= 40 && page.folders.length === 0) {
+        if (page.audioFiles.length > 0 && page.folders.length === 0) {
           count++;
           _dsSession.totalFolders = count;
           if (statusEl) statusEl.textContent = `Contando… (${count})`;
@@ -6549,17 +6549,7 @@ const App = (() => {
         continue;
       }
 
-      // Skip folders with too many files (compilations / mega-folders)
-      if (page.audioFiles.length > 40) {
-        _dsLogLine(`↷ Saltada (${page.audioFiles.length} arch. > 40): ${path}`);
-        _dsSession.skippedList[id] = { id, name, path, count: page.audioFiles.length, mime: page.audioFiles[0]?.mimeType || '' };
-        if (_dsListMode === 'skipped' || _dsListMode === 'all') _dsAddOrUpdateFolderRow(id);
-        _dsSession.scannedFolders++;
-        _dsSession.visited = [...visitedSet];
-        _dsUpdateCounters(queue.length, startMs);
-        await new Promise(r => setTimeout(r, 10));
-        continue;
-      }
+      // No file-count limit — all folders are processed regardless of size
 
       // ── Run full recognition pipeline — identical to manual Album Rescan ──
       // NOTE: scannedFolders / visited are only persisted AFTER the pipeline
