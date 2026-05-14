@@ -8125,6 +8125,10 @@ const App = (() => {
       ...Object.keys(_dsSession?.skippedList    || {}),
     ]);
 
+    // Also include the selected folder even if no scan has run yet
+    // (so Reset works immediately after "Send to scan", before pressing Start)
+    if (_dsSession?.selectedFolderId) allFolderIds.add(_dsSession.selectedFolderId);
+
     if (allFolderIds.size === 0) return; // nothing to reset
 
     // Show confirmation dialog
