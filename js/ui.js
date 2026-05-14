@@ -1141,16 +1141,20 @@ const UI = (() => {
     let bannerLabel, bannerBg, bannerColor;
     if (!isFolder) {
       bannerLabel = 'Song';
-      bannerBg    = '#085041'; // teal-800
-      bannerColor = '#9FE1CB'; // teal-100
-    } else if (folderType === 'album' || folderType === 'collection') {
+      bannerBg    = '#1AAE78';
+      bannerColor = '#C8F5E3';
+    } else if (folderType === 'collection') {
+      bannerLabel = 'Collection';
+      bannerBg    = '#e8a020';
+      bannerColor = '#ffffff';
+    } else if (folderType === 'album') {
       bannerLabel = 'Album';
-      bannerBg    = '#3C3489'; // purple-800
-      bannerColor = '#CECBF6'; // purple-100
+      bannerBg    = '#6B5AE0';
+      bannerColor = '#E8E5FF';
     } else {
       bannerLabel = 'Folder';
-      bannerBg    = '#0C447C'; // blue-800
-      bannerColor = '#B5D4F4'; // blue-100
+      bannerBg    = '#2280E0';
+      bannerColor = '#C5E0FF';
     }
 
     // Flat background for the art square

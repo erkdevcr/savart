@@ -614,9 +614,9 @@ img { display: block; }
 }
 
 .pinned-card-type-banner span {
-  font-size: 8px;
+  font-size: 7px;
   font-weight: 500;
-  letter-spacing: 0.13em;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
   writing-mode: vertical-rl;
   transform: rotate(180deg);
