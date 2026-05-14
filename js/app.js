@@ -3864,7 +3864,13 @@ const App = (() => {
       };
 
       const enrichedPinned = pinned.map(p => {
-        if (p.type === 'folder' || p.isFolder) return p;
+        if (p.type === 'folder' || p.isFolder) {
+          // Folders: stamp correct folderType and preserve stored artist (set at pin time for albums)
+          return {
+            ...p,
+            folderType: p.folderType || (isFolderCollection(p.id) ? 'collection' : null),
+          };
+        }
         const dbMeta = pinnedMetaMap.get(p.id);
         const inMem  = (typeof Meta !== 'undefined') ? Meta.getCached(p.id) : null;
         return {

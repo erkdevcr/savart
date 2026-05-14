@@ -715,6 +715,7 @@ const DB = (() => {
         displayName:  item.displayName  || item.name,
         type:         item.type         || (item.isFolder ? 'folder' : 'song'),
         thumbnailUrl: item.thumbnailUrl || item.thumbnailLink || null,
+        artist:       item.artist       || null,
         folderId:     item.folderId     || item.parents?.[0]  || null,
         folderType:   item.folderType   || null,
         pinnedAt:     Date.now(),

@@ -1134,27 +1134,46 @@ const UI = (() => {
     const card = document.createElement('div');
     card.className = 'pinned-card';
 
-    const isFolder = item.isFolder || item.type === 'folder';
+    const isFolder   = item.isFolder || item.type === 'folder';
+    const folderType = item.folderType || null; // 'album' | 'collection' | null
 
-    // Flat background: one color for all folders, one for songs without cover
+    // Determine type label and banner color
+    let bannerLabel, bannerBg, bannerColor;
+    if (!isFolder) {
+      bannerLabel = 'Song';
+      bannerBg    = '#085041'; // teal-800
+      bannerColor = '#9FE1CB'; // teal-100
+    } else if (folderType === 'album' || folderType === 'collection') {
+      bannerLabel = 'Album';
+      bannerBg    = '#3C3489'; // purple-800
+      bannerColor = '#CECBF6'; // purple-100
+    } else {
+      bannerLabel = 'Folder';
+      bannerBg    = '#0C447C'; // blue-800
+      bannerColor = '#B5D4F4'; // blue-100
+    }
+
+    // Flat background for the art square
     const bg = isFolder ? '#1E3A5F' : '#1E4040';
 
-    // For songs: show stored thumbnailUrl immediately; async cover injected later by _prefetchPinnedCovers.
-    // For folders: always show folder icon over colored square (no cover art).
-    const storedUrl = !isFolder ? (item.thumbnailUrl || item.thumbnailLink || null) : null;
+    // Cover art: show for songs AND album/collection folders (cover URL stored at pin time)
+    const storedUrl = (item.thumbnailUrl || item.thumbnailLink || null);
     const imgHtml   = storedUrl ? `<img class="pinned-art-img" src="${escHtml(storedUrl)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display=''">` : '';
     const iconHtml  = isFolder
-      ? `<div class="pinned-art-icon">${iconFolder(26)}</div>`
+      ? `<div class="pinned-art-icon"${storedUrl ? ' style="display:none"' : ''}>${iconFolder(26)}</div>`
       : storedUrl
         ? `<div class="pinned-art-icon" style="display:none">${iconMusicNote(24)}</div>`
         : `<div class="pinned-art-icon">${iconMusicNote(24)}</div>`;
 
-    const artist = !isFolder ? (item.artist || '') : '';
+    const artist = item.artist || '';
 
     card.innerHTML = `
       <div class="pinned-card-art" data-id="${escHtml(item.id)}" style="background:${bg}">
         ${imgHtml}${iconHtml}
         <div class="pinned-art-play">${iconPlay(13)}</div>
+      </div>
+      <div class="pinned-card-type-banner" style="background:${bannerBg}">
+        <span style="color:${bannerColor}">${bannerLabel}</span>
       </div>
       <div class="pinned-card-info">
         <span class="pinned-card-name">${escHtml(item.displayName || item.name)}</span>
@@ -2069,7 +2088,7 @@ const UI = (() => {
       _addCtxItem(menu, iconPlus(14),  t('add_to_pl'),       (e) => { hideContextMenu(); App.onAlbumShowPlaylistPicker?.(e, item); });
       _addCtxItem(menu, iconPin(14),   t('ctx_pin_to_home'), () => {
         App.onTogglePin({ id: item.folderId, name: item.name, type: 'folder', isFolder: true,
-          thumbnailUrl: item.coverUrl || null, folderType: 'album' });
+          thumbnailUrl: item.coverUrl || null, folderType: 'album', artist: item.artist || null });
         hideContextMenu();
       });
       _addCtxDivider(menu);

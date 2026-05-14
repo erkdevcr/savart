@@ -556,8 +556,8 @@ img { display: block; }
 /* ── Art square: cover image for songs, colored square for folders ── */
 .pinned-card-art {
   position: relative;
-  width: 56px;
-  height: 56px;
+  width: 64px;
+  height: 64px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -601,6 +601,26 @@ img { display: block; }
 
 .pinned-card-art:hover .pinned-art-play {
   background: rgba(0,0,0,0.40);
+}
+
+/* ── Type banner: vertical strip between art and text ── */
+.pinned-card-type-banner {
+  flex-shrink: 0;
+  width: 16px;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pinned-card-type-banner span {
+  font-size: 8px;
+  font-weight: 500;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  white-space: nowrap;
 }
 
 /* ── Text & controls ── */
