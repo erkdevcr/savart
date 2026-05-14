@@ -2554,7 +2554,7 @@ const App = (() => {
       try {
         const page = await Drive.listFolderScan(folderId);
         const songs = page.audioFiles || [];
-        if (songs.length === 0 || songs.length > 40) { done++; continue; }
+        if (songs.length === 0) { done++; continue; }
 
         const liveIds = songs.map(s => s.id);
         await DB.purgeOrphans(folderId, liveIds).catch(() => {});
