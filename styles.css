@@ -606,7 +606,7 @@ img { display: block; }
 /* ── Type banner: vertical strip between art and text ── */
 .pinned-card-type-banner {
   flex-shrink: 0;
-  width: 16px;
+  width: 13px;
   align-self: stretch;
   display: flex;
   align-items: center;
@@ -614,7 +614,7 @@ img { display: block; }
 }
 
 .pinned-card-type-banner span {
-  font-size: 7px;
+  font-size: 6px;
   font-weight: 600;
   letter-spacing: 0.07em;
   text-transform: uppercase;
