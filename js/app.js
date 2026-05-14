@@ -4324,25 +4324,14 @@ const App = (() => {
       const searchTerm = document.getElementById('search-input')?.value.trim();
 
       if (searchTerm) {
-        // Search is active: build queue from the search results so the clicked song
-        // actually plays and Prev/Next cycles through the other results.
-        // Do NOT use .item-list here — those are the folder items behind the results,
-        // and the clicked song may not exist in that folder at all.
-        const resultsEl = document.getElementById('search-results');
-        const rows      = Array.from(resultsEl?.querySelectorAll('.song-row:not(.wma)') || []);
-        const allSongs  = rows.map(r => _resolveItemById(r.dataset.id)).filter(Boolean);
-
+        // Search is active: play the clicked song and let radio fill the queue
+        // with songs from the same artist. Do NOT use the search results list as
+        // the queue — those are mixed-artist results from different folders.
         _resetRadio();
-        if (allSongs.length > 0) {
-          const startIdx = allSongs.findIndex(s => s.id === clickedSong.id);
-          Player.setQueue(allSongs, startIdx >= 0 ? startIdx : 0);
-        } else {
-          // Fallback: radio mode from the single clicked song
-          _radioModeActive = true;
-          _radioQueuedIds  = new Set([clickedSong.id]);
-          _radioArtist     = _guessArtistFromItem(clickedSong) || null;
-          Player.setQueue([clickedSong], 0);
-        }
+        _radioModeActive = true;
+        _radioQueuedIds  = new Set([clickedSong.id]);
+        _radioArtist     = _guessArtistFromItem(clickedSong) || null;
+        Player.setQueue([clickedSong], 0);
 
       } else {
         // No search active: build queue from the full folder list so Prev/Next follows
