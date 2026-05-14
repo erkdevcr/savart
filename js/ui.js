@@ -1141,20 +1141,20 @@ const UI = (() => {
     let bannerLabel, bannerBg, bannerColor;
     if (!isFolder) {
       bannerLabel = 'Song';
-      bannerBg    = '#1AAE78';
-      bannerColor = '#C8F5E3';
+      bannerBg    = 'rgba(62,207,122,0.22)';
+      bannerColor = '#3ECF7A';
     } else if (folderType === 'collection') {
       bannerLabel = 'Collection';
-      bannerBg    = '#e8a020';
-      bannerColor = '#ffffff';
+      bannerBg    = 'rgba(74,136,245,0.22)';
+      bannerColor = '#4a88f5';
     } else if (folderType === 'album') {
       bannerLabel = 'Album';
-      bannerBg    = '#6B5AE0';
-      bannerColor = '#E8E5FF';
+      bannerBg    = 'rgba(139,92,246,0.22)';
+      bannerColor = '#a78bfa';
     } else {
       bannerLabel = 'Folder';
-      bannerBg    = '#2280E0';
-      bannerColor = '#C5E0FF';
+      bannerBg    = 'rgba(232,160,32,0.22)';
+      bannerColor = '#e8a020';
     }
 
     // Flat background for the art square
