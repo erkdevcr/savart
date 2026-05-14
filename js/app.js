@@ -836,9 +836,10 @@ const App = (() => {
   }
 
   function _onQueueChange(queue, index) {
-    // Re-render queue panel if it's currently open
+    // Re-render queue panel if it's currently open, preserving scroll position
+    // so that removing/adding items doesn't jump the list back to the top.
     if (UI.isQueuePanelVisible()) {
-      UI.renderQueuePanel(queue, index);
+      UI.renderQueuePanel(queue, index, { preserveScroll: true });
       _prefetchQueueCovers(queue).catch(() => {});
     }
 
@@ -10195,19 +10196,16 @@ const App = (() => {
       if (patch.artist)  update.artist = patch.artist;
       if (patch.album)   update.album  = patch.album;
       if (patch.year)    update.year   = patch.year;
-      // Apply thumbnailUrl to individual songs ONLY when explicitly requested.
-      // Without "Apply to All": songs keep their current thumbnailUrl / embedded covers.
-      if (newCoverUrl && options.applyCoverToAll) update.thumbnailUrl = newCoverUrl;
+      // Always write thumbnailUrl to every song — same behaviour as Deep Scan.
+      if (newCoverUrl) update.thumbnailUrl = newCoverUrl;
       await DB.setMeta(m.id, update);
     }
 
     // ── Cover caching ─────────────────────────────────────────────────────────
     if (newCoverUrl) {
-      if (options.applyCoverToAll) {
-        // Cache for every song (offline availability for all covers)
-        for (const m of songs) {
-          _cacheExternalCover(m.id, newCoverUrl, true).catch(() => {});
-        }
+      // Cache for every song (offline availability) and the folder record
+      for (const m of songs) {
+        _cacheExternalCover(m.id, newCoverUrl, true).catch(() => {});
       }
       // Always cache on the folder record itself (used for album header / grid card)
       _cacheExternalCover(folderId, newCoverUrl, true).catch(() => {});
@@ -10235,7 +10233,7 @@ const App = (() => {
     if (patch.artist)                         liveDbPatch.artist       = patch.artist;
     if (patch.album)                          liveDbPatch.album        = patch.album;
     if (patch.year)                           liveDbPatch.year         = patch.year;
-    if (newCoverUrl && options.applyCoverToAll) liveDbPatch.thumbnailUrl = newCoverUrl;
+    if (newCoverUrl) liveDbPatch.thumbnailUrl = newCoverUrl;
     _liveMetaUpdate(songs.map(m => m.id), liveDbPatch);
 
     if (typeof Sync !== 'undefined') Sync.push('metadata');

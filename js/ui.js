@@ -2805,10 +2805,12 @@ const UI = (() => {
    * @param {DriveItem[]} queue
    * @param {number}      currentIndex
    */
-  function renderQueuePanel(queue, currentIndex) {
+  function renderQueuePanel(queue, currentIndex, { preserveScroll = false } = {}) {
     const list      = document.getElementById('queue-list');
     const countEl   = document.getElementById('queue-count');
     if (!list) return;
+
+    const savedScroll = preserveScroll ? list.scrollTop : null;
 
     list.innerHTML = '';
 
@@ -2857,9 +2859,14 @@ const UI = (() => {
       });
     }
 
-    // Scroll the now-playing item into view so it's always visible
-    const activeEl = list.querySelector('.queue-item.active');
-    if (activeEl) activeEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    if (savedScroll !== null) {
+      // Preserve scroll position (e.g. after removing an item)
+      list.scrollTop = savedScroll;
+    } else {
+      // Scroll the now-playing item into view (on panel open or track change)
+      const activeEl = list.querySelector('.queue-item.active');
+      if (activeEl) activeEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
   }
 
   function _buildQueueItem(item, queueIndex, isActive) {
