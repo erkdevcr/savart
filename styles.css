@@ -3381,6 +3381,18 @@ body.queue-open #mini-player { z-index: 65; }
 
 #context-menu.visible { display: block; }
 
+/* ── Library detail entity dropdown (album / collection header ⋮) ── */
+.lib-detail-dropdown {
+  position: fixed;
+  background: var(--bg-elevated);
+  border: 1px solid var(--bg-hover);
+  border-radius: var(--radius-md);
+  min-width: 190px;
+  padding: 4px 0;
+  z-index: 600;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+}
+
 .ctx-item {
   display: flex;
   align-items: center;

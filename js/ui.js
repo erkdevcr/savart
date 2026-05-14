@@ -339,6 +339,7 @@ const UI = (() => {
       ctx_move_to_albums:      'Mover a Álbumes',
       ctx_move_to_collections: 'Mover a Colecciones',
       ctx_edit_song:           'Editar canción',
+      ctx_edit_album:          'Editar álbum',
       ctx_edit_collection:     'Editar colección',
       btn_reset_id3:           'Resetear ID3',
       toast_reset_id3_done:    'canciones reseteadas a ID3',
@@ -672,6 +673,7 @@ const UI = (() => {
       ctx_move_to_albums:      'Move to Albums',
       ctx_move_to_collections: 'Move to Collections',
       ctx_edit_song:           'Edit song',
+      ctx_edit_album:          'Edit album',
       ctx_edit_collection:     'Edit collection',
       btn_reset_id3:           'Reset ID3',
       toast_reset_id3_done:    'songs reset to ID3',
@@ -2567,6 +2569,49 @@ const UI = (() => {
     menu.appendChild(div);
   }
 
+  /**
+   * Show a small dropdown near a trigger button (for lib detail entity ⋮ menus).
+   * @param {HTMLElement} triggerBtn
+   * @param {Array<{icon:string, label:string, action:fn}|{divider:true}>} items
+   */
+  function _showDetailDropdown(triggerBtn, items) {
+    document.querySelector('.lib-detail-dropdown')?.remove();
+
+    const menu = document.createElement('div');
+    menu.className = 'lib-detail-dropdown';
+
+    for (const it of items) {
+      if (it.divider) { _addCtxDivider(menu); continue; }
+      _addCtxItem(menu, it.icon || '', it.label, e => {
+        menu.remove();
+        it.action(e);
+      });
+    }
+
+    document.body.appendChild(menu);
+
+    // Position: right-aligned below trigger, clamped to viewport
+    const rect = triggerBtn.getBoundingClientRect();
+    const vw   = window.innerWidth;
+    const vh   = window.innerHeight;
+    // Measure after paint
+    requestAnimationFrame(() => {
+      const mw = menu.offsetWidth  || 190;
+      const mh = menu.offsetHeight || 200;
+      let x = rect.right - mw;
+      let y = rect.bottom + 4;
+      x = Math.max(8, Math.min(x, vw - mw - 8));
+      y = Math.min(y, vh - mh - 8);
+      menu.style.left = `${x}px`;
+      menu.style.top  = `${y}px`;
+    });
+
+    // Dismiss on outside click
+    setTimeout(() => {
+      document.addEventListener('click', () => menu.remove(), { once: true, capture: true });
+    }, 0);
+  }
+
   /* ── Language ────────────────────────────────────────────── */
 
   function setLanguage(lang) {
@@ -3416,36 +3461,30 @@ const UI = (() => {
         <button class="album-edit-track-btn">${t('edit_tracks_btn')}</button>
       </div>`;
 
-    // Toggle edit panel on ⋮ click — mark entity while open, unmark on close
-    entity.querySelector('.lib-detail-entity-more').addEventListener('click', e => {
-      e.stopPropagation();
+    // Opens/closes the edit panel — called from the dropdown "Edit" option
+    const _toggleAlbumEditPanel = () => {
       const isOpen = editPanel.classList.toggle('open');
       entity.classList.toggle('album-editing', isOpen);
       if (isOpen) {
-        // Sync inputs from the current entity header — so enrichment-updated values
+        // Sync inputs from the current entity header so enrichment-updated values
         // (artist, album name, year, cover) are always reflected when the panel opens.
 
-        // Album name
         const nameEl = entity.querySelector('.lib-detail-entity-name');
         if (nameEl) editPanel.querySelector('[data-field="album"]').value = nameEl.textContent.trim();
 
-        // Artist — sub line is "Artist · N canciones"; strip the last segment
         const subEl = entity.querySelector('.lib-detail-entity-sub');
         if (subEl) {
           const parts = subEl.textContent.split(' · ');
-          // Last segment is always the song count — everything before it is artist
           const artistText = parts.length > 1 ? parts.slice(0, -1).join(' · ') : parts[0] || '';
           editPanel.querySelector('[data-field="artist"]').value = artistText.trim();
         }
 
-        // Year — year element may contain "(2020) <format badge>"
         const yearEl = entity.querySelector('.lib-detail-entity-year');
         if (yearEl) {
           const yearMatch = yearEl.textContent.match(/\((\d{4})\)/);
           editPanel.querySelector('[data-field="year"]').value = yearMatch ? yearMatch[1] : '';
         }
 
-        // Cover URL — read from the displayed img; skip blob:/id3 (ID3 embeds have no shareable URL)
         const artImg = entity.querySelector('.lib-detail-entity-art img');
         const artSrc = artImg ? (artImg.getAttribute('src') || '') : '';
         const isEmbedded = artSrc.startsWith('blob:') || artSrc === 'id3';
@@ -3454,7 +3493,6 @@ const UI = (() => {
         coverInput.value       = externalUrl;
         coverInput.placeholder = (artSrc && !externalUrl) ? t('lbl_embedded_cover') : 'https://…';
 
-        // Reset "Apply to All" cover state on each open
         _pendingApplyCoverToAll = false;
         const coverApplyBtn = editPanel.querySelector('[data-apply="cover"]');
         if (coverApplyBtn) {
@@ -3465,6 +3503,27 @@ const UI = (() => {
 
         editPanel.querySelector('[data-field="artist"]').focus();
       }
+    };
+
+    // ⋮ button → action dropdown
+    entity.querySelector('.lib-detail-entity-more').addEventListener('click', e => {
+      e.stopPropagation();
+      const _iPlay   = iconPlay(14);
+      const _iScan   = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M9.5 6.5v3h-3v-3h3M11 5H5v6h6V5zm-1.5 9.5v3h-3v-3h3M11 13H5v6h6v-6zm6.5-6.5v3h-3v-3h3M19 5h-6v6h6V5zm-6 8h1.5v1.5H13V13zm1.5 1.5H16V16h-1.5v-1.5zM16 13h1.5v1.5H16V13zm-3 3h1.5v1.5H13V16zm1.5 1.5H16V19h-1.5v-1.5zM16 16h1.5v1.5H16V16zm1.5-1.5H19V16h-1.5v-1.5zm0 3H19V19h-1.5v-1.5zM22 7h-2V4h-3V2h5v5zm0 15v-5h-2v3h-3v2h5zM2 22h5v-2H4v-3H2v5zM2 2v5h2V4h3V2H2z"/></svg>`;
+      const _iPin    = iconPin(14);
+      const _iFolder = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>`;
+      const _iPlus   = iconPlus(14);
+      const _iEdit   = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zm18.71-10.8a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>`;
+      const fid = album.folderId;
+      _showDetailDropdown(e.currentTarget, [
+        { icon: _iPlay,   label: t('ctx_play'),         action: () => App.onAlbumPlay?.(album) },
+        { icon: _iScan,   label: t('ctx_send_to_scan'), action: () => App.onSendToScan?.({id: fid, name: album.name}) },
+        { icon: _iPin,    label: t('ctx_pin_to_home'),  action: () => App.onTogglePin?.({id: fid, name: album.name, type: 'folder', isFolder: true, thumbnailUrl: album.coverUrl || null, folderType: 'album', artist: album.artist || null}) },
+        { icon: _iFolder, label: t('ctx_go_to_folder'), action: () => App.onAlbumGoToFolder?.({folderId: fid, name: album.name}) },
+        { icon: _iPlus,   label: t('add_to_pl'),        action: ev => App.onAlbumShowPlaylistPicker?.(ev, album) },
+        { divider: true },
+        { icon: _iEdit,   label: t('ctx_edit_album'),   action: _toggleAlbumEditPanel },
+      ]);
     });
 
     // Track whether the user clicked "Aplicar a todas" for the cover URL field.
@@ -4062,12 +4121,31 @@ const UI = (() => {
         <button class="album-edit-apply-btn" data-apply="coverUrl" title="${t('lbl_apply_to_all')}">${t('lbl_apply_to_all')}</button>
       </div>`;
 
-    // Toggle panel on ⋮ click
-    entity.querySelector('.lib-detail-entity-more').addEventListener('click', e => {
-      e.stopPropagation();
+    // Opens/closes the edit panel — called from the dropdown "Edit" option
+    const _toggleCollectionEditPanel = () => {
       const isOpen = editPanel.classList.toggle('open');
       entity.classList.toggle('album-editing', isOpen);
       if (isOpen) editPanel.querySelector('[data-field="name"]').focus();
+    };
+
+    // ⋮ button → action dropdown
+    entity.querySelector('.lib-detail-entity-more').addEventListener('click', e => {
+      e.stopPropagation();
+      const _iPlay   = iconPlay(14);
+      const _iScan   = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M9.5 6.5v3h-3v-3h3M11 5H5v6h6V5zm-1.5 9.5v3h-3v-3h3M11 13H5v6h6v-6zm6.5-6.5v3h-3v-3h3M19 5h-6v6h6V5zm-6 8h1.5v1.5H13V13zm1.5 1.5H16V16h-1.5v-1.5zM16 13h1.5v1.5H16V13zm-3 3h1.5v1.5H13V16zm1.5 1.5H16V19h-1.5v-1.5zM16 16h1.5v1.5H16V16zm1.5-1.5H19V16h-1.5v-1.5zm0 3H19V19h-1.5v-1.5zM22 7h-2V4h-3V2h5v5zm0 15v-5h-2v3h-3v2h5zM2 22h5v-2H4v-3H2v5zM2 2v5h2V4h3V2H2z"/></svg>`;
+      const _iPin    = iconPin(14);
+      const _iFolder = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>`;
+      const _iPlus   = iconPlus(14);
+      const _iEdit   = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zm18.71-10.8a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>`;
+      _showDetailDropdown(e.currentTarget, [
+        { icon: _iPlay,   label: t('ctx_play'),         action: () => App.onCollectionPlay?.(collection) },
+        { icon: _iScan,   label: t('ctx_send_to_scan'), action: () => App.onSendToScan?.({id: folderId, name: collection.name}) },
+        { icon: _iPin,    label: t('ctx_pin_to_home'),  action: () => App.onTogglePin?.({id: folderId, name: collection.name, type: 'folder', isFolder: true, thumbnailUrl: collection.manualCoverUrl || null, folderType: 'collection'}) },
+        { icon: _iFolder, label: t('ctx_go_to_folder'), action: () => App.onAlbumGoToFolder?.({folderId, name: collection.name}) },
+        { icon: _iPlus,   label: t('add_to_pl'),        action: ev => App.onAlbumShowPlaylistPicker?.(ev, {folderId, name: collection.name, _isAlbum: true}) },
+        { divider: true },
+        { icon: _iEdit,   label: t('ctx_edit_collection'), action: _toggleCollectionEditPanel },
+      ]);
     });
 
     // Helper: resolve the full list of songs in this collection, seeding DB records
