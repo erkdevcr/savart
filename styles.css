@@ -928,6 +928,16 @@ img { display: block; }
   opacity: 0.6;
 }
 
+.home-card-path {
+  font-size: 9px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 3px;
+  opacity: 0.5;
+}
+
 /* 3-dots button overlaid in top-right corner of home cards.
    Sits as a direct child of .home-card (not inside .home-card-art)
    so overflow:hidden on the art div never clips it.

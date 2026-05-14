@@ -1959,6 +1959,7 @@ const UI = (() => {
       _addCtxDivider(menu);
       _addCtxItem(menu, iconStar(14),  t('add_fav'),     () => { App.onToggleStar(item);         hideContextMenu(); });
       _addCtxItem(menu, iconPlus(14),  t('add_to_pl'),  (e) => { hideContextMenu(); App.onShowPlaylistPicker(e, item); });
+      _addCtxItem(menu, iconPin(14),   t('ctx_pin_to_home'), () => { App.onTogglePin(item);       hideContextMenu(); });
       _addCtxDivider(menu);
       _addCtxItem(menu, _iconEdit,     t('ctx_edit_song'), () => { hideContextMenu(); openSongEditModal(item); });
       if (item._playlistId) {
@@ -2066,6 +2067,11 @@ const UI = (() => {
       _addCtxItem(menu, _iconScan,     t('ctx_send_to_scan'), () => { App.onSendToScan?.({ id: item.folderId, name: item.name }); hideContextMenu(); });
       _addCtxDivider(menu);
       _addCtxItem(menu, iconPlus(14),  t('add_to_pl'),       (e) => { hideContextMenu(); App.onAlbumShowPlaylistPicker?.(e, item); });
+      _addCtxItem(menu, iconPin(14),   t('ctx_pin_to_home'), () => {
+        App.onTogglePin({ id: item.folderId, name: item.name, type: 'folder', isFolder: true,
+          thumbnailUrl: item.coverUrl || null, folderType: 'album' });
+        hideContextMenu();
+      });
       _addCtxDivider(menu);
       _addCtxItem(menu, _iconCollection, t('ctx_move_to_collections'), () => { App.onMoveToCollections?.(item); hideContextMenu(); });
     }
@@ -2080,6 +2086,11 @@ const UI = (() => {
       _addCtxItem(menu, _iconScan,     t('ctx_send_to_scan'), () => { App.onSendToScan?.({ id: item.folderId, name: item.name }); hideContextMenu(); });
       _addCtxDivider(menu);
       _addCtxItem(menu, _iconEdit,     t('ctx_edit_collection'),    () => { App._openCollectionEditModal?.(item);  hideContextMenu(); });
+      _addCtxItem(menu, iconPin(14),   t('ctx_pin_to_home'), () => {
+        App.onTogglePin({ id: item.folderId, name: item.name, type: 'folder', isFolder: true,
+          thumbnailUrl: item.manualCoverUrl || null, folderType: 'collection' });
+        hideContextMenu();
+      });
       _addCtxDivider(menu);
       _addCtxItem(menu, _iconAlbum,    t('ctx_move_to_albums'),     () => { App.onMoveToAlbums?.(item);            hideContextMenu(); });
     }
@@ -2164,6 +2175,10 @@ const UI = (() => {
         _addCtxDivider(menu);
         _addCtxItem(menu, _iconRadio, t('ctx_artist_radio'), () => { App.onArtistRadio?.(item); hideContextMenu(); });
       }
+      _addCtxDivider(menu);
+      _addCtxItem(menu, iconStar(14), t('add_fav'),          () => { App.onToggleStar(item);  hideContextMenu(); });
+      _addCtxItem(menu, iconPlus(14), t('add_to_pl'),       (e) => { hideContextMenu(); App.onShowPlaylistPicker(e, item); });
+      _addCtxItem(menu, iconPin(14),  t('ctx_pin_to_home'),  () => { App.onTogglePin(item);   hideContextMenu(); });
     }
 
     // ── Deep Scan folder rows ────────────────────────────────────
@@ -3856,12 +3871,23 @@ const UI = (() => {
     const songLabel = col.songCount === 1 ? '1 canción' : `${col.songCount} canciones`;
     const artistLabel = col.artistCount ? `${col.artistCount} artistas` : '';
 
+    // Breadcrumb: show parent segments (all except the last, which is the folder name)
+    let pathHtml = '';
+    if (col.path) {
+      const parts = col.path.split(' › ');
+      const parentPath = parts.length > 1 ? parts.slice(0, -1).join(' › ') : '';
+      if (parentPath) {
+        pathHtml = `<div class="home-card-path">${escHtml(parentPath)}</div>`;
+      }
+    }
+
     card.innerHTML = `
       <div class="${artClass}"${artStyle ? ` style="${artStyle}"` : ''}${col.manualCoverUrl ? ' data-manual-cover="1"' : ''}>${artHtml}</div>
       <button class="home-card-more collection-card-more" aria-label="Más opciones">${iconDots(14)}</button>
       ${metaHtml}
       <div class="home-card-name">${escHtml(col.name)}</div>
       <div class="home-card-count">${[artistLabel, songLabel].filter(Boolean).join(' · ')}</div>
+      ${pathHtml}
     `;
 
     card.querySelector('.home-card-art').addEventListener('click', e => {

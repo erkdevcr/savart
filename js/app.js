@@ -7481,6 +7481,12 @@ const App = (() => {
         const colPatch = {};
         if (colName)                                    colPatch.name     = colName;
         if (coverUrl && !coverUrl.startsWith('blob:')) colPatch.coverUrl = coverUrl;
+        // Persist the Drive path breadcrumb so Library collection cards can show it
+        const folderPath = sessionFolder?.path
+          || _dsSession.completedList?.[folderId]?.path
+          || _dsSession.skippedList?.[folderId]?.path
+          || null;
+        if (folderPath) colPatch.path = folderPath;
         if (Object.keys(colPatch).length) {
           await DB.saveCollection(folderId, colPatch).catch(() => {});
           if (typeof Sync !== 'undefined') Sync.push('collections');
@@ -9617,7 +9623,7 @@ const App = (() => {
         const blobId = (!manualCoverUrl && mosaicUrls.length === 0) ? (f.blobId || null) : null;
         collections.push({ folderId, name, manualCoverUrl, mosaicUrls, blobUrl: null, blobId,
           songCount, format, rescannedAt, hasManual,
-          artistCount: f.artistCounts.size });
+          artistCount: f.artistCounts.size, path: saved.path || null });
       });
 
       // Also include forceType:'collection' folders saved in DB that didn't appear
@@ -9632,7 +9638,7 @@ const App = (() => {
         const hasManual    = !!(saved.manualAt);
         const manualCoverUrl = saved.coverUrl || null;
         collections.push({ folderId, name, manualCoverUrl, mosaicUrls: [], blobUrl: null,
-          songCount, format: null, rescannedAt, hasManual, artistCount: 0 });
+          songCount, format: null, rescannedAt, hasManual, artistCount: 0, path: saved.path || null });
       });
 
       // Update global cache
