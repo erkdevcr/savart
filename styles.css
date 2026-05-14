@@ -3255,6 +3255,9 @@ body.queue-open #mini-player { z-index: 65; }
 }
 .queue-item:hover .queue-remove-btn { opacity: 1; }
 .queue-remove-btn:hover { color: var(--error); }
+@media (max-width: 767px) {
+  .queue-remove-btn { opacity: 1; }
+}
 
 /* ── Ctrl sheets (Tempo / Pitch / Timer — mobile bottom sheets) ── */
 .ctrl-sheet {
