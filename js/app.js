@@ -11360,8 +11360,10 @@ const App = (() => {
   }
 
   /* ── Sleep timer ─────────────────────────────────────────── */
-  let _sleepTimerId  = null;
-  let _lastSleepMins = null;   // remember last chosen duration for toggle-on restore
+  let _sleepTimerId        = null;
+  let _sleepCountdownId    = null;   // setInterval for live countdown UI
+  let _sleepTimerEnd       = null;   // Date.now() + remaining ms
+  let _lastSleepMins       = null;
 
   function _setTimerStatus(text) {
     ['sleep-timer-status', 'overlay-timer-status'].forEach(id => {
@@ -11375,13 +11377,43 @@ const App = (() => {
     if (toggle) toggle.classList.toggle('on', on);
   }
 
-  function _setSleepTimer(mins) {
-    if (_sleepTimerId) { clearTimeout(_sleepTimerId); _sleepTimerId = null; }
+  // Update the overlay slider + big-number display from remaining ms
+  function _tickSleepCountdown() {
+    if (!_sleepTimerEnd) return;
+    const remaining = Math.max(0, _sleepTimerEnd - Date.now());
+    const remMins   = Math.ceil(remaining / 60000);
+    const slider    = document.getElementById('overlay-timer-slider');
+    const numEl     = document.getElementById('overlay-timer-num');
+    if (slider) slider.value = remMins;
+    if (numEl)  numEl.textContent = remMins > 0 ? remMins : 'Off';
+    // Sync active chip
+    document.querySelectorAll('.timer-chip').forEach(p => {
+      p.classList.toggle('active', parseInt(p.dataset.mins, 10) === remMins);
+    });
+    // Mark Off chip active when done
+    if (remMins === 0) {
+      document.querySelectorAll('.timer-chip[data-mins="off"]').forEach(p => p.classList.add('active'));
+    }
+  }
 
-    if (mins === 'off' || !mins) {
+  function _clearSleepCountdown() {
+    if (_sleepCountdownId) { clearInterval(_sleepCountdownId); _sleepCountdownId = null; }
+    _sleepTimerEnd = null;
+  }
+
+  function _setSleepTimer(mins) {
+    if (_sleepTimerId)  { clearTimeout(_sleepTimerId);   _sleepTimerId  = null; }
+    _clearSleepCountdown();
+
+    if (mins === 'off' || mins === 0 || mins === '0' || !mins) {
       _setTimerStatus('');
       _setSleepTimerToggle(false);
       document.querySelectorAll('.sleep-pill').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.timer-chip[data-mins="off"]').forEach(p => p.classList.add('active'));
+      const slider = document.getElementById('overlay-timer-slider');
+      const numEl  = document.getElementById('overlay-timer-num');
+      if (slider) slider.value = 0;
+      if (numEl)  numEl.textContent = 'Off';
       return;
     }
     if (mins === 'custom') {
@@ -11389,17 +11421,36 @@ const App = (() => {
       if (!isNaN(val) && val > 0) _setSleepTimer(val);
       return;
     }
-    const ms = parseInt(mins, 10) * 60 * 1000;
-    _lastSleepMins = mins;
+
+    const minsInt = parseInt(mins, 10);
+    const ms      = minsInt * 60 * 1000;
+    _lastSleepMins  = minsInt;
+    _sleepTimerEnd  = Date.now() + ms;
     _setSleepTimerToggle(true);
+
+    // Countdown tick every 10 seconds — updates slider + number display
+    _tickSleepCountdown(); // immediate first tick
+    _sleepCountdownId = setInterval(() => {
+      _tickSleepCountdown();
+      if (Date.now() >= _sleepTimerEnd) _clearSleepCountdown();
+    }, 10000);
+
+    // The actual pause action
     _sleepTimerId = setTimeout(() => {
       Player.pause();
       UI.showToast(UI.t('toast_sleep_stopped'), 'default');
       _setTimerStatus('');
       _setSleepTimerToggle(false);
+      _clearSleepCountdown();
       document.querySelectorAll('.sleep-pill').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.timer-chip[data-mins="off"]').forEach(p => p.classList.add('active'));
+      const slider = document.getElementById('overlay-timer-slider');
+      const numEl  = document.getElementById('overlay-timer-num');
+      if (slider) slider.value = 0;
+      if (numEl)  numEl.textContent = 'Off';
     }, ms);
-    _setTimerStatus(`${mins} min activo`);
+
+    _setTimerStatus(`${minsInt} min`);
   }
 
   /* ── EQ screen ───────────────────────────────────────────── */
@@ -12145,36 +12196,26 @@ const App = (() => {
         document.querySelectorAll('.sleep-pill').forEach(p => p.classList.remove('active'));
         pill.classList.add('active');
         _setSleepTimer(pill.dataset.mins);
-        // Sync overlay slider + display
-        const slider = document.getElementById('overlay-timer-slider');
-        const numEl  = document.getElementById('overlay-timer-num');
-        const mins   = parseInt(pill.dataset.mins, 10);
-        if (slider && !isNaN(mins)) {
-          slider.value = Math.min(Math.max(mins, 5), 120);
-          if (numEl) numEl.textContent = mins;
-        }
       });
     });
 
-    // Overlay timer slider — live update display + set timer on release
+    // Overlay timer slider: min=0 (Off) → max=120
     const _timerSlider = document.getElementById('overlay-timer-slider');
     const _timerNumEl  = document.getElementById('overlay-timer-num');
     if (_timerSlider) {
+      // Live preview while dragging — just update display, don't start timer yet
       _timerSlider.addEventListener('input', () => {
         const v = parseInt(_timerSlider.value, 10);
-        if (_timerNumEl) _timerNumEl.textContent = v;
-        // Highlight matching chip, deselect others
-        document.querySelectorAll('.sleep-pill').forEach(p => {
-          p.classList.toggle('active', parseInt(p.dataset.mins, 10) === v);
+        if (_timerNumEl) _timerNumEl.textContent = v === 0 ? 'Off' : v;
+        document.querySelectorAll('.timer-chip').forEach(p => {
+          const pv = p.dataset.mins === 'off' ? 0 : parseInt(p.dataset.mins, 10);
+          p.classList.toggle('active', pv === v);
         });
       });
+      // On release: reset timer from new position
       _timerSlider.addEventListener('change', () => {
-        const v = _timerSlider.value;
-        document.querySelectorAll('.sleep-pill').forEach(p => p.classList.remove('active'));
-        document.querySelectorAll('.sleep-pill').forEach(p => {
-          if (parseInt(p.dataset.mins, 10) === parseInt(v, 10)) p.classList.add('active');
-        });
-        _setSleepTimer(v);
+        const v = parseInt(_timerSlider.value, 10);
+        _setSleepTimer(v === 0 ? 'off' : v);
       });
     }
 
