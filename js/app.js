@@ -174,7 +174,11 @@ const App = (() => {
 
     // 2. Restore user preferences
     const savedLang = localStorage.getItem('savart_lang') || 'es';
-    UI.setLanguage(savedLang);
+    onLanguageChange(savedLang); // sets language AND syncs lang-btn active state
+
+    // Restore UI zoom (text size)
+    const savedZoom = localStorage.getItem('savart_uizoom') || 'm';
+    _applyUiZoom(savedZoom);
 
     // 3. Root folder is fixed to MSK — never changes
     _rootFolderId = CONFIG.ROOT_FOLDER_ID;
@@ -696,6 +700,18 @@ const App = (() => {
     } catch (err) {
       console.warn('[App] Could not restore player state:', err);
     }
+  }
+
+  /* ── UI zoom (text size) ────────────────────────────────── */
+  const _UI_ZOOMS = { s: 0.88, m: 1.0, l: 1.1, xl: 1.2 };
+
+  function _applyUiZoom(size) {
+    const zoom = _UI_ZOOMS[size] || 1.0;
+    document.documentElement.style.zoom = zoom;
+    document.querySelectorAll('.text-size-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.size === size);
+    });
+    localStorage.setItem('savart_uizoom', size);
   }
 
   function _onTokenExpiring() {
@@ -12505,15 +12521,48 @@ const App = (() => {
       section?.classList.toggle('drawer-open', !isOpen);
     });
 
-    // Settings: text size picker
+    // Settings: UI zoom picker (4 steps — scales whole interface like browser zoom)
     document.querySelectorAll('.text-size-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('.text-size-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        const sizes = { small: '12px', normal: '13px', large: '15px' };
-        document.body.style.fontSize = sizes[btn.dataset.size] || '13px';
-        localStorage.setItem('savart_textsize', btn.dataset.size);
-      });
+      btn.addEventListener('click', () => _applyUiZoom(btn.dataset.size));
+    });
+
+    // Settings: Clear home — checkboxes enable/disable the clear button
+    const _clearHomeBtn = document.getElementById('btn-clear-home');
+    const _syncClearBtn = () => {
+      const anyChecked = [...document.querySelectorAll('.clear-home-cb')].some(c => c.checked);
+      if (_clearHomeBtn) _clearHomeBtn.disabled = !anyChecked;
+    };
+    document.querySelectorAll('.clear-home-cb').forEach(cb => {
+      cb.addEventListener('change', _syncClearBtn);
+    });
+
+    _clearHomeBtn?.addEventListener('click', async () => {
+      const checked = [...document.querySelectorAll('.clear-home-cb:checked')].map(c => c.dataset.store);
+      if (!checked.length) return;
+      _clearHomeBtn.disabled = true;
+      try {
+        const ops = {
+          recents:    () => DB.clearRecents(),
+          playcounts: () => DB.clearPlaycounts(),
+          pinned:     () => DB.clearPinned(),
+          history:    () => DB.clearHistory(),
+          playlists:  () => DB.clearPlaylists(),
+          starred:    () => DB.clearStarred(),
+        };
+        await Promise.all(checked.map(store => ops[store]?.()));
+        // Push affected sync stores back to Drive
+        const syncKeys = { recents: 'recents', pinned: 'pinned', history: 'history', playlists: 'playlists' };
+        checked.forEach(store => { if (syncKeys[store]) Sync.push(syncKeys[store]).catch(() => {}); });
+        // Uncheck all, refresh home
+        document.querySelectorAll('.clear-home-cb').forEach(c => { c.checked = false; });
+        _syncClearBtn();
+        _loadHomeData();
+        UI.showToast(UI.t('toast_cleared') || 'Limpiado ✓');
+      } catch (err) {
+        console.error('[App] clearHome error:', err);
+        UI.showToast('Error al limpiar', 'error');
+        _syncClearBtn();
+      }
     });
 
     // Browse: back button — never navigates above MSK (CONFIG.ROOT_FOLDER_ID)

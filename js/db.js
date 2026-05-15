@@ -886,6 +886,34 @@ const DB = (() => {
     return _promisify(store.clear());
   }
 
+  /** Clear all pinned items (ids list + metadata object in state store). */
+  async function clearPinned() {
+    await setState('pinned',     []);
+    await setState('pinnedMeta', {});
+  }
+
+  /** Reset playCount to 0 on every metadata record (also removes hiddenFromTopPlayed). */
+  async function clearPlaycounts() {
+    const store   = _tx('metadata', 'readwrite');
+    const records = await _promisify(store.getAll());
+    await Promise.all(records.map(r => {
+      r.playCount            = 0;
+      delete r.hiddenFromTopPlayed;
+      return _promisify(_tx('metadata', 'readwrite').put(r));
+    }));
+  }
+
+  /** Set starred = false on every metadata record (also removes starredAt). */
+  async function clearStarred() {
+    const store   = _tx('metadata', 'readwrite');
+    const records = await _promisify(store.getAll());
+    await Promise.all(records.map(r => {
+      r.starred = false;
+      delete r.starredAt;
+      return _promisify(_tx('metadata', 'readwrite').put(r));
+    }));
+  }
+
   /** Trim history: remove oldest entries beyond HISTORY_MAX and older than HISTORY_MAX_DAYS. */
   async function _trimHistory() {
     const store   = _tx('history', 'readwrite');
@@ -1201,6 +1229,9 @@ const DB = (() => {
     bulkPutHistory,
     removeFromHistory,
     clearHistory,
+    clearPinned,
+    clearPlaycounts,
+    clearStarred,
     // Pins
     getPinned,
     togglePin,

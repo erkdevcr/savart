@@ -294,29 +294,10 @@
         <h1 data-i18n="settings">Ajustes</h1>
       </div>
 
-      <!-- Settings: sections shown as cards on desktop (Option A),
-           as a flat list with category subtitles on mobile (Option B) -->
       <div class="settings-grid">
 
-        <!-- ── Column 1: Reproducción · Biblioteca · Cuenta ── -->
+        <!-- ── Columna 1: Biblioteca · Cuenta ── -->
         <div class="settings-col">
-
-          <!-- REPRODUCCIÓN -->
-          <div class="settings-section">
-            <div class="settings-section-title" data-i18n="settings_playback">Reproducción</div>
-
-            <div class="settings-row" id="settings-eq-row">
-              <div>
-                <div class="settings-row-label" data-i18n="settings_eq">Ecualizador</div>
-                <div class="settings-row-cat" data-i18n="settings_playback">Reproducción</div>
-              </div>
-              <button id="btn-open-eq" class="btn-outline-accent" data-i18n-label="settings_open_eq">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/></svg>
-                Abrir EQ
-              </button>
-            </div>
-
-          </div><!-- /Reproducción -->
 
           <!-- BIBLIOTECA -->
           <div class="settings-section">
@@ -325,7 +306,7 @@
             <div class="settings-row" id="settings-root-folder-row">
               <div>
                 <div class="settings-row-label" data-i18n="settings_root_folder">Carpeta raíz</div>
-                <div class="settings-row-cat" data-i18n="settings_library">Biblioteca</div>
+                <div class="settings-row-cat" data-i18n="settings_update_lib_desc">Detecta archivos nuevos o eliminados en Drive</div>
               </div>
               <div style="display:flex;align-items:center;gap:4px">
                 <span class="settings-value-label" id="root-folder-name">MSK</span>
@@ -339,9 +320,7 @@
                 <div class="settings-row-cat" data-i18n="settings_update_lib_desc">Detecta archivos nuevos o eliminados en Drive</div>
               </div>
               <button id="btn-library-refresh" class="btn-sort-toggle" title="Escanear Drive completo">
-                <svg id="library-refresh-icon" width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
-                </svg>
+                <svg id="library-refresh-icon" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
                 <span data-i18n="btn_update">Actualizar</span>
               </button>
             </div>
@@ -352,23 +331,8 @@
                 <div class="settings-row-cat" data-i18n="settings_scan_folder_desc">Elige una carpeta específica de Drive para escanear</div>
               </div>
               <button id="btn-settings-folder-scan" class="btn-sort-toggle" title="Escanear carpeta específica">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
-                </svg>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>
                 <span data-i18n="btn_pick">Elegir</span>
-              </button>
-            </div>
-
-            <div class="settings-row">
-              <div>
-                <div class="settings-row-label" data-i18n="settings_deep_scan">Escaneo y edición</div>
-                <div class="settings-row-cat" data-i18n="settings_deep_scan_desc">Detecta canciones sin metadatos y permite editarlos</div>
-              </div>
-              <button id="btn-open-deep-scan" class="btn-sort-toggle" title="Abrir herramienta de escaneo profundo">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
-                </svg>
-                <span data-i18n="btn_open">Abrir</span>
               </button>
             </div>
           </div><!-- /Biblioteca -->
@@ -399,8 +363,35 @@
 
         </div><!-- /.settings-col (col 1) -->
 
-        <!-- ── Column 2: Almacenamiento · Apariencia ── -->
+        <!-- ── Columna 2: Apariencia · Almacenamiento · Limpiar home ── -->
         <div class="settings-col">
+
+          <!-- APARIENCIA -->
+          <div class="settings-section">
+            <div class="settings-section-title" data-i18n="settings_appearance">Apariencia</div>
+
+            <div class="settings-row">
+              <div>
+                <div class="settings-row-label" data-i18n="settings_language">Idioma</div>
+              </div>
+              <div class="lang-toggle">
+                <button class="lang-btn" data-lang="es">ES</button>
+                <button class="lang-btn" data-lang="en">EN</button>
+              </div>
+            </div>
+
+            <div class="settings-row">
+              <div>
+                <div class="settings-row-label" data-i18n="settings_text_size">Zoom de interfaz</div>
+              </div>
+              <div class="text-size-picker" id="text-size-picker">
+                <button class="text-size-btn" data-size="s"  style="font-size:10px">A</button>
+                <button class="text-size-btn active" data-size="m"  style="font-size:13px">A</button>
+                <button class="text-size-btn" data-size="l"  style="font-size:16px">A</button>
+                <button class="text-size-btn" data-size="xl" style="font-size:19px">A</button>
+              </div>
+            </div>
+          </div><!-- /Apariencia -->
 
           <!-- ALMACENAMIENTO -->
           <div class="settings-section">
@@ -409,8 +400,7 @@
             <div class="settings-row settings-row-complex">
               <div class="settings-row-top">
                 <div>
-                  <div class="settings-row-label" data-i18n="settings_cache">Caché</div>
-                  <div class="settings-row-cat" data-i18n="settings_storage">Almacenamiento</div>
+                  <div class="settings-row-label" data-i18n="settings_cache">Caché de audio</div>
                 </div>
                 <span id="cache-size-label" class="settings-value-label">—</span>
               </div>
@@ -422,7 +412,6 @@
             <div class="settings-row">
               <div>
                 <div class="settings-row-label" data-i18n="settings_cache_limit">Límite de caché</div>
-                <div class="settings-row-cat" data-i18n="settings_storage">Almacenamiento</div>
               </div>
               <select id="select-cache-limit" class="settings-select">
                 <option value="524288000">500 MB</option>
@@ -436,69 +425,79 @@
 
             <div class="settings-row">
               <div>
-                <button id="btn-clear-cache" data-i18n="settings_clear_cache" style="color:var(--error);font-size:14px;background:none;border:none;cursor:pointer;padding:0">Borrar caché</button>
-              </div>
-            </div>
-
-            <div class="settings-row">
-              <div>
                 <div class="settings-row-label" data-i18n="settings_db_status">Estado de la DB</div>
                 <div class="settings-row-cat" data-i18n="settings_db_status_desc">Archivos sincronizados en Drive</div>
               </div>
-              <button id="btn-view-db-stats" class="btn-outline-accent" data-i18n="settings_db_view">Ver</button>
+              <button id="btn-view-db-stats" class="btn-sort-toggle" data-i18n="settings_db_view">Ver</button>
+            </div>
+
+            <div class="settings-row">
+              <button id="btn-clear-cache" data-i18n="settings_clear_cache" style="color:var(--error);font-size:14px;background:none;border:none;cursor:pointer;padding:0">Borrar caché</button>
             </div>
           </div><!-- /Almacenamiento -->
 
-          <!-- DB Stats popup -->
-          <div id="overlay-db-stats" class="db-stats-overlay" style="display:none">
-            <div class="db-stats-backdrop"></div>
-            <div class="db-stats-card">
-              <div class="db-stats-header">
-                <span class="db-stats-title" data-i18n="settings_db_status">Estado de la DB</span>
-                <button id="btn-db-stats-close" class="ctrl-sheet-close-btn" aria-label="Cerrar">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
-                </button>
-              </div>
-              <div class="db-stats-body" id="db-stats-body">
-                <div class="db-stats-loading" data-i18n="searching">Buscando…</div>
-              </div>
-            </div>
-          </div>
-
-          <!-- APARIENCIA -->
+          <!-- LIMPIAR HOME -->
           <div class="settings-section">
-            <div class="settings-section-title" data-i18n="settings_appearance">Apariencia</div>
+            <div class="settings-section-title" data-i18n="settings_clear_home">Limpiar home</div>
+            <p class="settings-section-desc" data-i18n="settings_clear_home_desc">Borra datos de uso del home. No afecta tus archivos en Drive.</p>
 
-            <div class="settings-row">
-              <div>
-                <div class="settings-row-label" data-i18n="settings_language">Idioma</div>
-                <div class="settings-row-cat" data-i18n="settings_appearance">Apariencia</div>
-              </div>
-              <div class="lang-toggle">
-                <button class="lang-btn active" data-lang="es">ES</button>
-                <button class="lang-btn" data-lang="en">EN</button>
-              </div>
+            <div class="clear-home-checks">
+              <label class="clear-home-item">
+                <input type="checkbox" class="clear-home-cb" data-store="recents">
+                <span data-i18n="home_recents">Recientes</span>
+              </label>
+              <label class="clear-home-item">
+                <input type="checkbox" class="clear-home-cb" data-store="playcounts">
+                <span data-i18n="home_top_played">Más reproducidas</span>
+              </label>
+              <label class="clear-home-item">
+                <input type="checkbox" class="clear-home-cb" data-store="pinned">
+                <span data-i18n="home_pinned">Fijadas</span>
+              </label>
+              <label class="clear-home-item">
+                <input type="checkbox" class="clear-home-cb" data-store="history">
+                <span data-i18n="nav_history">Historial</span>
+              </label>
+              <label class="clear-home-item">
+                <input type="checkbox" class="clear-home-cb" data-store="playlists">
+                <span data-i18n="nav_playlists">Playlists</span>
+              </label>
+              <label class="clear-home-item">
+                <input type="checkbox" class="clear-home-cb" data-store="starred">
+                <span data-i18n="home_favorites">Favoritos</span>
+              </label>
             </div>
 
-            <div class="settings-row">
-              <div>
-                <div class="settings-row-label" data-i18n="settings_text_size">Tamaño de texto</div>
-                <div class="settings-row-cat" data-i18n="settings_appearance">Apariencia</div>
-              </div>
-              <div class="text-size-picker" id="text-size-picker">
-                <button class="text-size-btn" data-size="small" style="font-size:11px">A</button>
-                <button class="text-size-btn active" data-size="normal" style="font-size:14px">A</button>
-                <button class="text-size-btn" data-size="large" style="font-size:18px">A</button>
-              </div>
+            <div class="settings-row" style="padding-top:4px">
+              <button id="btn-clear-home" class="btn-sort-toggle btn-danger" disabled>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+                <span data-i18n="settings_clear_selected">Limpiar seleccionados</span>
+              </button>
             </div>
-          </div><!-- /Apariencia -->
+          </div><!-- /Limpiar home -->
 
         </div><!-- /.settings-col (col 2) -->
 
       </div><!-- /.settings-grid -->
 
+      <!-- DB Stats popup — fuera del grid para no afectar el layout -->
+      <div id="overlay-db-stats" class="db-stats-overlay" style="display:none">
+        <div class="db-stats-backdrop"></div>
+        <div class="db-stats-card">
+          <div class="db-stats-header">
+            <span class="db-stats-title" data-i18n="settings_db_status">Estado de la DB</span>
+            <button id="btn-db-stats-close" class="ctrl-sheet-close-btn" aria-label="Cerrar">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+            </button>
+          </div>
+          <div class="db-stats-body" id="db-stats-body">
+            <div class="db-stats-loading" data-i18n="searching">Buscando…</div>
+          </div>
+        </div>
+      </div>
+
       <div style="padding:20px 0 32px;text-align:center">
-        <span id="app-version-label" style="font-size:11px;color:var(--text-disabled)">Savart — versión 1.4.8</span>
+        <span id="app-version-label" style="font-size:11px;color:var(--text-disabled)">Savart</span>
       </div>
     </div>
 
