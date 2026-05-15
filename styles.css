@@ -4380,6 +4380,14 @@ body.queue-open #mini-player { z-index: 65; }
   padding-bottom: 12px;
 }
 
+.step-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
 .step-btn {
   flex-shrink: 0;
   width: 28px;

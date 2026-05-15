@@ -1206,13 +1206,15 @@
         <span class="ctrl-sheet-big-val" id="overlay-tempo-val" style="font-size:18px">1.00×</span>
       </div>
       <div class="slider-with-steps">
-        <button class="step-btn" data-target="overlay-tempo-slider" data-dir="-1" aria-label="Bajar tempo">−</button>
-        <div class="settings-slider-wrap" style="flex:1;padding:0">
+        <div class="step-col">
+          <button class="step-btn" data-target="overlay-tempo-slider" data-dir="-1" aria-label="Bajar tempo">−</button>
           <span class="slider-bound">0.5×</span>
-          <input id="overlay-tempo-slider" type="range" min="50" max="200" value="100" step="1" class="settings-slider">
+        </div>
+        <input id="overlay-tempo-slider" type="range" min="50" max="200" value="100" step="1" class="settings-slider">
+        <div class="step-col">
+          <button class="step-btn" data-target="overlay-tempo-slider" data-dir="1" aria-label="Subir tempo">+</button>
           <span class="slider-bound">2.0×</span>
         </div>
-        <button class="step-btn" data-target="overlay-tempo-slider" data-dir="1" aria-label="Subir tempo">+</button>
       </div>
     </div>
   </div>
