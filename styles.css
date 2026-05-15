@@ -3549,10 +3549,19 @@ body.queue-open #mini-player { z-index: 65; }
   animation: sheetUp 0.28s cubic-bezier(0.32, 0.72, 0, 1);
 }
 
-/* Custom section — flex-shrink: 0; drawer handles scroll */
+/* Custom section:
+   - Closed drawer → doesn't grow (compact, just save-row + toggle)
+   - Open drawer   → grows to fill remaining card space (.drawer-open toggled by JS)
+     so the drawer fills min(available-space, 225px) and scrolls when tight */
 #overlay-eq .eq-custom-section {
-  flex-shrink: 0;
-  overflow: visible;
+  flex: 0 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+#overlay-eq .eq-custom-section.drawer-open {
+  flex: 1 1 0;
 }
 
 /* Mobile: 3-column grid so all cards fit without horizontal overflow */
@@ -5161,6 +5170,7 @@ body.queue-open #mini-player { z-index: 65; }
 
 /* Save button row — always visible above the toggle bar */
 .eq-save-row {
+  flex-shrink: 0;
   padding: 10px 16px 6px;
 }
 
@@ -5183,6 +5193,7 @@ body.queue-open #mini-player { z-index: 65; }
 
 /* Full-width toggle bar with centered V chevron */
 .eq-presets-toggle {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   width: 100%;
@@ -5213,13 +5224,18 @@ body.queue-open #mini-player { z-index: 65; }
 }
 
 /* Collapsible drawer — collapsed by default, expands with .open.
-   max-height = 2.5 card rows: (82px × 2) + (10px gap × 2) + 41px half-row = 225px */
+   When open it participates in flex layout: flex: 1 1 0 fills remaining section
+   space, capped at 225px (≈ 2.5 card rows). When the card is short the drawer
+   simply gets less than 225px and scrolls to reach hidden presets. */
 .eq-presets-drawer {
+  flex-shrink: 0;
   overflow: hidden;
   max-height: 0;
   transition: max-height 0.28s cubic-bezier(0.32, 0.72, 0, 1);
 }
 .eq-presets-drawer.open {
+  flex: 1 1 0;
+  min-height: 0;
   max-height: 225px;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;

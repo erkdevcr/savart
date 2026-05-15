@@ -12493,12 +12493,16 @@ const App = (() => {
 
     // My Presets drawer toggle
     document.getElementById('eq-presets-toggle')?.addEventListener('click', () => {
-      const btn    = document.getElementById('eq-presets-toggle');
-      const drawer = document.getElementById('eq-presets-drawer');
+      const btn     = document.getElementById('eq-presets-toggle');
+      const drawer  = document.getElementById('eq-presets-drawer');
+      const section = drawer?.closest('.eq-custom-section');
       if (!btn || !drawer) return;
       const isOpen = btn.getAttribute('aria-expanded') === 'true';
       btn.setAttribute('aria-expanded', String(!isOpen));
       drawer.classList.toggle('open', !isOpen);
+      // .drawer-open switches the section from flex: 0 1 auto → flex: 1 1 0
+      // so the drawer fills available card space (up to 225px) on short viewports
+      section?.classList.toggle('drawer-open', !isOpen);
     });
 
     // Settings: text size picker
