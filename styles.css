@@ -3491,10 +3491,11 @@ body.queue-open #mini-player { z-index: 65; }
   #overlay-eq .eq-custom-list {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    overflow-x: visible;
+    overflow: hidden;            /* prevents grid from blowing out the section */
   }
   #overlay-eq .eq-custom-card {
-    width: auto;
+    width: auto !important;      /* override the base 140px fixed width */
+    min-width: 0;                /* allow grid cell to shrink below content width */
   }
 }
 
@@ -5015,7 +5016,52 @@ body.queue-open #mini-player { z-index: 65; }
   margin-bottom: 6px;
 }
 
+/* Name row: text + inline load icon button */
+.eq-custom-name-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.eq-custom-load-btn {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-circle);
+  color: var(--accent);
+  background: var(--accent-soft);
+  margin-right: 2px;
+  transition: background 0.15s;
+}
+.eq-custom-load-btn:hover { background: var(--accent); color: #fff; }
+
+/* Date row: date text + inline delete icon button */
+.eq-custom-date-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.eq-custom-del-btn {
+  flex-shrink: 0;
+  margin-left: auto;
+  color: var(--error, #e05);
+  opacity: 0.65;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.15s;
+}
+.eq-custom-del-btn:hover { opacity: 1; }
+
 .eq-custom-name {
+  flex: 1;
+  min-width: 0;
   font-size: 12px;
   font-weight: 500;
   color: var(--text-primary);
