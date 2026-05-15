@@ -372,16 +372,11 @@ const App = (() => {
       bootToast.style.display = 'flex';
       requestAnimationFrame(() => { bootToast.style.opacity = '1'; });
     }
-    // Show DB size (total origin storage) as a small reference label in the boot toast
+    // Show Drive DB size in the boot toast — same method as Settings "Estado de la DB"
     (async () => {
       try {
-        let mb;
-        if (navigator.storage?.estimate) {
-          const est = await navigator.storage.estimate();
-          mb = ((est.usage || 0) / 1024 / 1024).toFixed(1);
-        } else {
-          mb = ((await DB.getCacheSize()) / 1024 / 1024).toFixed(1);
-        }
+        const stats = await Sync.getDbStats();
+        const mb = (stats.totalBytes / 1024 / 1024).toFixed(1);
         const sizeEl = document.getElementById('boot-db-size');
         if (sizeEl) sizeEl.textContent = '(' + mb + ' MB)';
       } catch (_) {}
@@ -11730,6 +11725,7 @@ const App = (() => {
     _customPresets.forEach(preset => {
       const card = document.createElement('div');
       card.className = 'eq-custom-card';
+      card.title = preset.name;
       card.innerHTML = `
         <div class="eq-custom-top-row">
           <div class="eq-custom-name">${UI.escHtml(preset.name)}</div>
@@ -11741,15 +11737,13 @@ const App = (() => {
           <path d="${_gainsToSparkline(preset.gains)}"
             fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
-        <div class="eq-custom-bottom-row">
-          <div class="eq-custom-date">${preset.savedAt}</div>
-          <button class="eq-custom-load-btn" data-action="load" data-id="${preset.id}" title="Cargar">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-          </button>
-        </div>
+        <div class="eq-custom-date">${preset.savedAt}</div>
       `;
-      card.querySelector('[data-action="load"]').addEventListener('click', () => {
+      // Click anywhere on card (except delete) applies the preset
+      card.addEventListener('click', (e) => {
+        if (e.target.closest('[data-action="del"]')) return;
         Player.setEQGains(preset.gains);
+        _eqBypassedGains = null; // applying a preset clears any bypass state
         preset.gains.forEach((g, i) => {
           const s = document.getElementById(`eq-slider-${i}`);
           const v = document.getElementById(`eq-val-${i}`);
@@ -11757,7 +11751,11 @@ const App = (() => {
           if (v) v.textContent = g > 0 ? `+${g}` : `${g}`;
         });
         document.querySelectorAll('.eq-preset-chip').forEach(c => c.classList.remove('active'));
+        document.querySelectorAll('.eq-custom-card').forEach(c => c.classList.remove('active'));
+        card.classList.add('active');
+        _currentPreset = preset.id;
         _drawEQCurve();
+        _saveSettings();
         UI.showToast(`"${preset.name}" ${UI.t('toast_preset_loaded')}`);
       });
       card.querySelector('[data-action="del"]').addEventListener('click', (e) => {
@@ -12491,6 +12489,16 @@ const App = (() => {
     document.getElementById('btn-eq-save')?.addEventListener('click', () => {
       const name = prompt(UI.t('prompt_eq_preset_name'), UI.t('prompt_eq_preset_default'));
       if (name) _saveCustomPreset(name.trim() || UI.t('prompt_eq_preset_default'));
+    });
+
+    // My Presets drawer toggle
+    document.getElementById('eq-presets-toggle')?.addEventListener('click', () => {
+      const btn    = document.getElementById('eq-presets-toggle');
+      const drawer = document.getElementById('eq-presets-drawer');
+      if (!btn || !drawer) return;
+      const isOpen = btn.getAttribute('aria-expanded') === 'true';
+      btn.setAttribute('aria-expanded', String(!isOpen));
+      drawer.classList.toggle('open', !isOpen);
     });
 
     // Settings: text size picker

@@ -3549,17 +3549,10 @@ body.queue-open #mini-player { z-index: 65; }
   animation: sheetUp 0.28s cubic-bezier(0.32, 0.72, 0, 1);
 }
 
-/* Custom presets section grows and scrolls when content overflows.
-   min-height: 0 is required so flex can compress the item below its content
-   size, creating the bounded height that lets overflow-y: auto actually scroll. */
+/* Custom section — flex-shrink: 0; drawer handles scroll */
 #overlay-eq .eq-custom-section {
-  flex: 1 1 0;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  display: flex;
-  flex-direction: column;
-  -webkit-overflow-scrolling: touch; /* iOS Safari scroll inside fixed overlay */
+  flex-shrink: 0;
+  overflow: visible;
 }
 
 /* Mobile: 3-column grid so all cards fit without horizontal overflow */
@@ -3567,21 +3560,16 @@ body.queue-open #mini-player { z-index: 65; }
   #overlay-eq .eq-custom-list {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    overflow-x: hidden;          /* clip horizontal bleed only; let rows flow for parent scroll */
+    overflow-x: hidden;
     overflow-y: visible;
   }
   #overlay-eq .eq-custom-card {
-    width: auto !important;      /* override the base 140px fixed width */
-    min-width: 0;                /* allow grid cell to shrink below content width */
+    width: auto !important;
+    min-width: 0;
   }
-  /* Hide the EQ curve in the overlay on mobile — it costs 72px and the section
-     needs that budget to show 1.5 rows of saved presets (~220px). */
+  /* Hide the EQ curve in the overlay on mobile */
   #overlay-eq .eq-curve-wrap {
     display: none !important;
-  }
-  /* Ensure the custom-presets section always shows ~1.5 card rows (~98px/row + gaps + header) */
-  #overlay-eq .eq-custom-section {
-    min-height: 220px;
   }
 }
 
@@ -5165,18 +5153,80 @@ body.queue-open #mini-player { z-index: 65; }
   display: block;
 }
 
-/* Custom presets section */
+/* Custom presets section wrapper */
 .eq-custom-section {
   border-top: 1px solid var(--bg-hover);
-  padding: 14px 16px;
   flex-shrink: 0;
 }
 
-.eq-custom-header {
+/* Save button row — always visible above the toggle bar */
+.eq-save-row {
+  padding: 10px 16px 6px;
+}
+
+/* Understated save button — like rescan/sort-toggle */
+.eq-save-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  background: transparent;
+  border: 1px solid var(--bg-hover);
+  border-radius: var(--radius-pill);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.eq-save-btn:hover { background: var(--bg-hover); color: var(--text-primary); border-color: transparent; }
+
+/* Full-width toggle bar with centered V chevron */
+.eq-presets-toggle {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
+  width: 100%;
+  gap: 10px;
+  padding: 9px 16px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: color 0.15s;
+}
+.eq-presets-toggle:hover { color: var(--text-secondary); }
+.eq-presets-toggle:hover .eq-toggle-line { background: var(--text-muted); }
+
+.eq-toggle-line {
+  flex: 1;
+  height: 1px;
+  background: var(--bg-hover);
+  transition: background 0.15s;
+}
+
+.eq-toggle-chevron {
+  flex-shrink: 0;
+  transition: transform 0.22s ease;
+}
+.eq-presets-toggle[aria-expanded="true"] .eq-toggle-chevron {
+  transform: rotate(180deg);
+}
+
+/* Collapsible drawer — collapsed by default, expands with .open */
+.eq-presets-drawer {
+  overflow: hidden;
+  max-height: 0;
+  transition: max-height 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.eq-presets-drawer.open {
+  max-height: 400px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Inner list padding inside the drawer */
+.eq-presets-drawer .eq-custom-list {
+  margin: 0 16px 12px;
 }
 
 .eq-custom-list {
@@ -5220,15 +5270,9 @@ body.queue-open #mini-player { z-index: 65; }
   margin-bottom: 4px;
 }
 
-/* Bottom row: date (left) + load icon (bottom-right, larger) */
-.eq-custom-bottom-row {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin-top: 4px;
-}
+/* (eq-custom-bottom-row and eq-custom-load-btn removed — card is now directly clickable) */
 
-.eq-custom-load-btn {
+.eq-custom-load-btn {  /* kept for graceful degradation if cached HTML */
   flex-shrink: 0;
   width: 24px;
   height: 24px;
@@ -5396,9 +5440,9 @@ body.queue-open #mini-player { z-index: 65; }
     width: auto;
   }
 
-  /* Ensure the section always shows ~1.5 card rows on desktop too */
-  #overlay-eq .eq-custom-section {
-    min-height: 220px;
+  /* Desktop: wider drawer, auto-fill grid */
+  #overlay-eq .eq-presets-drawer.open {
+    max-height: 280px;
   }
 }
 

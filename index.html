@@ -1226,14 +1226,25 @@
       <svg id="eq-curve-svg" viewBox="0 0 900 80" preserveAspectRatio="none"></svg>
     </div>
     <div class="eq-custom-section">
-      <div class="eq-custom-header">
-        <span class="t-label" style="color:var(--text-muted)" data-i18n="eq_my_presets">Mis presets</span>
-        <button id="btn-eq-save" class="btn-primary" style="padding:6px 14px;font-size:12px">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+      <!-- Save button row — always visible, understated style -->
+      <div class="eq-save-row">
+        <button id="btn-eq-save" class="eq-save-btn">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
           <span data-i18n="eq_save_current">Guardar actual</span>
         </button>
       </div>
-      <div class="eq-custom-list" id="eq-custom-list"></div>
+      <!-- Full-width toggle bar: line ── V ── line -->
+      <button class="eq-presets-toggle" id="eq-presets-toggle" aria-expanded="false" aria-label="Mis presets">
+        <div class="eq-toggle-line"></div>
+        <svg class="eq-toggle-chevron" width="14" height="9" viewBox="0 0 14 9" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <polyline points="1,1.5 7,7.5 13,1.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <div class="eq-toggle-line"></div>
+      </button>
+      <!-- Collapsible presets drawer — collapsed by default -->
+      <div class="eq-presets-drawer" id="eq-presets-drawer">
+        <div class="eq-custom-list" id="eq-custom-list"></div>
+      </div>
     </div>
   </div>
 </div>
