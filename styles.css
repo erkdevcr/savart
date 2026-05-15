@@ -3439,10 +3439,50 @@ body.queue-open #mini-player { z-index: 65; }
   color: var(--accent);
 }
 
-/* ── EQ Screen — always inline (no overlay on any screen size) */
-#screen-eq {
+/* ── EQ Overlay (floating panel) ─────────────────────────── */
+#overlay-eq {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: none;
+  align-items: flex-end;    /* mobile: card rises from bottom */
+}
+#overlay-eq.visible { display: flex; }
+
+.eq-overlay-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  cursor: pointer;
+}
+
+/* EQ card (the screen-eq element inside the overlay) */
+#overlay-eq #screen-eq {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  background: var(--bg-surface);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  max-height: 85vh;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
+  animation: sheetUp 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@media (min-width: 768px) {
+  /* Desktop: overlay covers only the main content column */
+  #overlay-eq {
+    left: var(--sidebar-w);
+    right: var(--now-playing-w);
+    align-items: stretch;
+  }
+  #overlay-eq #screen-eq {
+    max-height: 100%;
+    height: 100%;
+    border-radius: 0;
+    animation: sheetUpDesk 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+  }
 }
 
 /* ── Context menu ────────────────────────────────────────── */
@@ -4314,7 +4354,6 @@ body.queue-open #mini-player { z-index: 65; }
      the viewport, preventing any overflow → no scroll.
      flex-shrink:0 forces children to keep their natural height so the
      container overflows and becomes scrollable. */
-  #screen-settings > #screen-eq,
   #screen-settings > .settings-grid,
   #screen-settings > div:last-child {
     flex-shrink: 0;
@@ -4710,11 +4749,8 @@ body.queue-open #mini-player { z-index: 65; }
   flex-shrink: 0;
 }
 
-/* ── EQ Screen — always inline (no overlay) */
-#screen-eq {
-  display: flex;
-  flex-direction: column;
-}
+/* ── EQ Screen (inside overlay) ─────────────────────────── */
+/* Base display:flex is set by #overlay-eq #screen-eq above  */
 
 .eq-header {
   display: flex;

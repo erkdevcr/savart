@@ -11808,10 +11808,9 @@ const App = (() => {
       await onToggleStar(track); // onToggleStar calls UI.setHeartActive internally
     });
 
-    // Expanded player: EQ button → navigate to settings (EQ always inline there)
+    // Expanded player: EQ button → open EQ overlay
     document.getElementById('btn-pexp-eq-open')?.addEventListener('click', () => {
-      UI.setExpandedPlayerVisible(false);
-      onNavClick('settings');
+      document.getElementById('overlay-eq')?.classList.add('visible');
     });
 
     // Expanded player: Speed (Tempo) → ctrl-sheet overlay on all screen sizes
@@ -12241,9 +12240,19 @@ const App = (() => {
       }
     });
 
-    // EQ close button (kept for any legacy reference — no-op now that EQ is always inline)
+    // EQ close button → close EQ overlay
     document.getElementById('btn-eq-close')?.addEventListener('click', () => {
-      onNavClick('settings'); // just stay in settings
+      document.getElementById('overlay-eq')?.classList.remove('visible');
+    });
+
+    // Settings row "Abrir EQ" button → open EQ overlay
+    document.getElementById('btn-open-eq')?.addEventListener('click', () => {
+      document.getElementById('overlay-eq')?.classList.add('visible');
+    });
+
+    // EQ overlay backdrop → close on outside click
+    document.querySelector('#overlay-eq .eq-overlay-backdrop')?.addEventListener('click', () => {
+      document.getElementById('overlay-eq')?.classList.remove('visible');
     });
 
     // EQ toggle on/off — bypasses EQ nodes and disables controls
