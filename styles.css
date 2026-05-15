@@ -3298,6 +3298,11 @@ body.queue-open #mini-player { z-index: 65; }
   animation: sheetUp 0.22s cubic-bezier(0.32, 0.72, 0, 1);
 }
 
+@keyframes sheetUpDesk {
+  from { opacity: 0; transform: translateY(40px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 @media (min-width: 768px) {
   .ctrl-sheet-card {
     width: calc(var(--now-playing-w) - 32px);  /* fits inside the right panel */
@@ -3306,6 +3311,7 @@ body.queue-open #mini-player { z-index: 65; }
     border-radius: var(--radius-lg);
     padding: 20px 20px 24px;
     box-sizing: border-box;
+    animation: sheetUpDesk 0.28s cubic-bezier(0.22, 1, 0.36, 1);
   }
   .ctrl-sheet-card .slider-with-steps,
   .ctrl-sheet-card .timer-quick-row,
