@@ -590,7 +590,7 @@ const App = (() => {
   function _saveSettings() {
     const gains      = Player.getEQGains();
     const eqOn       = document.getElementById('eq-toggle')?.classList.contains('on') ?? true;
-    const tempoRaw   = parseFloat(document.getElementById('tempo-slider')?.value ?? 100);
+    const tempoRaw   = parseFloat(document.getElementById('overlay-tempo-slider')?.value ?? 100);
     const tempo      = tempoRaw / 100;
     DB.setState('settings', {
       eqGains:        gains,
@@ -11675,11 +11675,12 @@ const App = (() => {
    */
   function _openCtrlSheet(id) {
     if (id === 'overlay-speed') {
-      const tVal    = document.getElementById('tempo-slider')?.value ?? 100;
+      // #tempo-slider was removed from Settings; read directly from the overlay slider
+      // which is always in the DOM and kept up-to-date by _restoreSettings + input handler.
       const tSlider = document.getElementById('overlay-tempo-slider');
       const tValEl  = document.getElementById('overlay-tempo-val');
-      if (tSlider) tSlider.value = tVal;
-      if (tValEl)  tValEl.textContent = (parseFloat(tVal) / 100).toFixed(2) + '×';
+      const tVal    = parseFloat(tSlider?.value ?? 100);
+      if (tValEl)  tValEl.textContent = (tVal / 100).toFixed(2) + '×';
     }
 
     // Timer: pills already synced via shared .sleep-pill querySelectorAll

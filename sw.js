@@ -9,7 +9,7 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.127';
+const APP_VERSION  = '3.5.128';
 const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.32 — Log: per-file sequential processing (line 2 updates x/x·name as each track runs); removed file count from line 1; removed monospace font from log entries — 3.5.31
 
 /* Base path — auto-detected from sw.js location.
