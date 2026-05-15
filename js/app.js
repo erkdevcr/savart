@@ -11608,20 +11608,20 @@ const App = (() => {
       const card = document.createElement('div');
       card.className = 'eq-custom-card';
       card.innerHTML = `
+        <div class="eq-custom-top-row">
+          <div class="eq-custom-name">${UI.escHtml(preset.name)}</div>
+          <button class="eq-custom-del-btn" data-action="del" data-id="${preset.id}" title="Eliminar">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+          </button>
+        </div>
         <svg class="eq-custom-sparkline" viewBox="0 0 120 24">
           <path d="${_gainsToSparkline(preset.gains)}"
             fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
-        <div class="eq-custom-name-row">
-          <div class="eq-custom-name">${UI.escHtml(preset.name)}</div>
-          <button class="eq-custom-load-btn" data-action="load" data-id="${preset.id}" title="Cargar">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-          </button>
-        </div>
-        <div class="eq-custom-date-row">
+        <div class="eq-custom-bottom-row">
           <div class="eq-custom-date">${preset.savedAt}</div>
-          <button class="eq-custom-del-btn" data-action="del" data-id="${preset.id}" title="Eliminar">
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+          <button class="eq-custom-load-btn" data-action="load" data-id="${preset.id}" title="Cargar">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
           </button>
         </div>
       `;

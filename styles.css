@@ -5016,41 +5016,41 @@ body.queue-open #mini-player { z-index: 65; }
   margin-bottom: 6px;
 }
 
-/* Name row: text + inline load icon button */
-.eq-custom-name-row {
+/* Top row: name (left) + delete icon (top-right) */
+.eq-custom-top-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+/* Bottom row: date (left) + load icon (bottom-right, larger) */
+.eq-custom-bottom-row {
   display: flex;
   align-items: center;
   gap: 4px;
+  margin-top: 4px;
 }
 
 .eq-custom-load-btn {
   flex-shrink: 0;
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: var(--radius-circle);
   color: var(--accent);
   background: var(--accent-soft);
-  margin-right: 2px;
   transition: background 0.15s;
 }
 .eq-custom-load-btn:hover { background: var(--accent); color: #fff; }
-
-/* Date row: date text + inline delete icon button */
-.eq-custom-date-row {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin-top: 2px;
-}
 
 .eq-custom-del-btn {
   flex-shrink: 0;
   margin-left: auto;
   color: var(--error, #e05);
-  opacity: 0.65;
+  opacity: 0.55;
   padding: 2px;
   display: flex;
   align-items: center;
