@@ -201,9 +201,11 @@ const App = (() => {
     // 6. Bind static UI events
     _bindEvents();
 
-    // 6b. Pre-build EQ sliders — EQ is now a floating overlay, always available
+    // 6b. Pre-build EQ sliders — EQ is now a floating overlay, always available.
+    // Do NOT call _applyEQPreset here: it would invoke _saveSettings() before
+    // _restoreSettings() has run, overwriting eqEnabled:false into DB and disabling
+    // the toggle for the session. _restoreSettings() handles all EQ state restoration.
     _buildEQSliders();
-    _applyEQPreset(_currentPreset || 'flat');
     _loadCustomPresets();
 
     // 7. Back gesture prevention
