@@ -11687,7 +11687,22 @@ const App = (() => {
   }
 
   function _closeCtrlSheet(id) {
-    document.getElementById(id)?.classList.remove('visible');
+    _closeWithAnimation(id, '.ctrl-sheet-card');
+  }
+
+  /** Animated close: adds .closing, waits for animationend on cardSel, then removes .visible */
+  function _closeWithAnimation(overlayId, cardSel) {
+    const overlay = document.getElementById(overlayId);
+    if (!overlay || !overlay.classList.contains('visible')) return;
+    overlay.classList.add('closing');
+    const card = cardSel ? overlay.querySelector(cardSel) : overlay;
+    const finish = () => {
+      overlay.classList.remove('visible', 'closing');
+    };
+    if (card) {
+      card.addEventListener('animationend', finish, { once: true });
+    }
+    setTimeout(finish, 350); // fallback in case animationend never fires
   }
 
   /* ── Event binding ───────────────────────────────────────── */
@@ -11845,12 +11860,9 @@ const App = (() => {
 
     // Ctrl sheet close buttons + backdrop
     document.querySelectorAll('.ctrl-sheet').forEach(sheet => {
-      sheet.querySelector('.ctrl-sheet-backdrop')?.addEventListener('click', () => {
-        sheet.classList.remove('visible');
-      });
-      sheet.querySelector('.ctrl-sheet-close-btn')?.addEventListener('click', () => {
-        sheet.classList.remove('visible');
-      });
+      const closeSheet = () => _closeWithAnimation(sheet.id, '.ctrl-sheet-card');
+      sheet.querySelector('.ctrl-sheet-backdrop')?.addEventListener('click', closeSheet);
+      sheet.querySelector('.ctrl-sheet-close-btn')?.addEventListener('click', closeSheet);
     });
 
     // Overlay tempo slider (inside overlay-speed)
@@ -12260,20 +12272,17 @@ const App = (() => {
       }
     });
 
-    // EQ close button → close EQ overlay
-    document.getElementById('btn-eq-close')?.addEventListener('click', () => {
-      document.getElementById('overlay-eq')?.classList.remove('visible');
-    });
+    // EQ close button → close EQ overlay (animated)
+    const _closeEq = () => _closeWithAnimation('overlay-eq', '#screen-eq');
+    document.getElementById('btn-eq-close')?.addEventListener('click', _closeEq);
 
     // Settings row "Abrir EQ" button → open EQ overlay
     document.getElementById('btn-open-eq')?.addEventListener('click', () => {
       document.getElementById('overlay-eq')?.classList.add('visible');
     });
 
-    // EQ overlay backdrop → close on outside click
-    document.querySelector('#overlay-eq .eq-overlay-backdrop')?.addEventListener('click', () => {
-      document.getElementById('overlay-eq')?.classList.remove('visible');
-    });
+    // EQ overlay backdrop → close on outside click (animated)
+    document.querySelector('#overlay-eq .eq-overlay-backdrop')?.addEventListener('click', _closeEq);
 
     // EQ toggle on/off — bypasses EQ nodes and disables controls
     let _eqBypassedGains = null;

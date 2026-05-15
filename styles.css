@@ -3000,7 +3000,11 @@ img { display: block; }
 }
 
 #player-expanded.showing-queue .pexp-now-playing-view { display: none; }
-#player-expanded.showing-queue .pexp-queue-view       { display: flex; }
+#player-expanded.showing-queue .pexp-queue-view       { display: flex; animation: slideInRight 0.25s cubic-bezier(0.22, 1, 0.36, 1); }
+
+/* Queue exit: .hiding-queue keeps queue visible while it animates out */
+#player-expanded.hiding-queue .pexp-queue-view       { display: flex; animation: slideOutRight 0.2s cubic-bezier(0.32, 0.72, 0, 1) forwards; }
+#player-expanded.hiding-queue .pexp-now-playing-view { display: none; }
 
 /* ── Desktop micro player (shown at bottom when queue is open) ─── */
 #desk-micro-player {
@@ -3278,6 +3282,16 @@ body.queue-open #mini-player { z-index: 65; }
 
 .ctrl-sheet.visible { display: flex; }
 
+/* Exit animation: .closing is added by JS before removing .visible */
+.ctrl-sheet.closing .ctrl-sheet-card {
+  animation: sheetDown 0.2s cubic-bezier(0.32, 0.72, 0, 1) forwards;
+}
+@media (min-width: 768px) {
+  .ctrl-sheet.closing .ctrl-sheet-card {
+    animation: sheetDownDesk 0.2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
+}
+
 .ctrl-sheet-backdrop {
   position: absolute;
   inset: 0;
@@ -3301,6 +3315,22 @@ body.queue-open #mini-player { z-index: 65; }
 @keyframes sheetUpDesk {
   from { opacity: 0; transform: translateY(40px); }
   to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes sheetDown {
+  from { transform: translateY(0); }
+  to   { transform: translateY(100%); }
+}
+@keyframes sheetDownDesk {
+  from { opacity: 1; transform: translateY(0); }
+  to   { opacity: 0; transform: translateY(40px); }
+}
+@keyframes slideInRight {
+  from { transform: translateX(30%); opacity: 0; }
+  to   { transform: translateX(0);   opacity: 1; }
+}
+@keyframes slideOutRight {
+  from { transform: translateX(0);   opacity: 1; }
+  to   { transform: translateX(30%); opacity: 0; }
 }
 
 @media (min-width: 768px) {
@@ -4804,6 +4834,19 @@ body.queue-open #mini-player { z-index: 65; }
   margin: 0 4px;
   flex-shrink: 0;
 }
+
+/* EQ overlay exit animation */
+#overlay-eq.closing #screen-eq {
+  animation: sheetDown 0.2s cubic-bezier(0.32, 0.72, 0, 1) forwards;
+}
+@media (min-width: 768px) {
+  #overlay-eq.closing #screen-eq {
+    animation: sheetDownDesk 0.2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
+}
+
+/* EQ button icon: rotate 90° CCW so bars appear vertical */
+#btn-pexp-eq-open svg { transform: rotate(-90deg); }
 
 /* ── EQ Screen (inside overlay) ─────────────────────────── */
 /* Base display:flex is set by #overlay-eq #screen-eq above  */

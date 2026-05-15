@@ -2792,10 +2792,25 @@ const UI = (() => {
   function showQueuePanel(open) {
     const el = document.getElementById('player-expanded');
     if (!el) return;
-    el.classList.toggle('showing-queue', open);
-    if (open) el.classList.remove('showing-lyrics');  // mutual exclusion
-    // Mobile: lift mini-player above the queue overlay
-    if (!_isDesktop()) document.body.classList.toggle('queue-open', open);
+
+    if (open) {
+      el.classList.remove('hiding-queue');
+      el.classList.add('showing-queue');
+      el.classList.remove('showing-lyrics');           // mutual exclusion
+      if (!_isDesktop()) document.body.classList.add('queue-open');
+    } else {
+      // Animated exit: keep queue visible while slideOutRight plays, then remove class
+      el.classList.add('hiding-queue');
+      const queueView = el.querySelector('.pexp-queue-view');
+      const finish = () => {
+        el.classList.remove('showing-queue', 'hiding-queue');
+        if (!_isDesktop()) document.body.classList.remove('queue-open');
+      };
+      if (queueView) {
+        queueView.addEventListener('animationend', finish, { once: true });
+      }
+      setTimeout(finish, 350); // fallback if animationend doesn't fire
+    }
   }
 
   function isQueuePanelVisible() {
