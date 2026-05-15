@@ -3301,10 +3301,18 @@ body.queue-open #mini-player { z-index: 65; }
 @media (min-width: 768px) {
   .ctrl-sheet-card {
     width: calc(var(--now-playing-w) - 32px);  /* fits inside the right panel */
+    max-width: calc(var(--now-playing-w) - 32px);
     margin-right: 16px;                         /* gap from viewport right edge */
     border-radius: var(--radius-lg);
     padding: 20px 24px 24px;
     animation: none;
+    overflow: hidden;                           /* clip anything that escapes */
+    box-sizing: border-box;
+  }
+  .ctrl-sheet-card .slider-with-steps {
+    width: 100%;
+    box-sizing: border-box;
+    overflow: hidden;
   }
 }
 
@@ -4403,8 +4411,9 @@ body.queue-open #mini-player { z-index: 65; }
 
 
 .settings-slider {
-  flex: 1;
+  flex: 1 1 0;
   min-width: 0;
+  width: 0;        /* let flex grow from 0 so browser min-width doesn't block shrink */
   accent-color: var(--accent);
   height: 3px;
 }
