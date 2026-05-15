@@ -413,6 +413,8 @@ const App = (() => {
     _restoreUserInfo();
     // Restore EQ + tempo from DB before first render
     _restoreSettings();
+    // Restore last queue so the user can resume where they left off (no auto-play)
+    _restorePlayerState();
 
     // Populate collection cache early so context menus on home/player/browse
     // correctly show "Ir a la colección" without requiring a library visit first.
@@ -564,8 +566,9 @@ const App = (() => {
 
       // ── Restore EQ gains ───────────────────────────────────
       if (Array.isArray(eqGains) && eqGains.length === CONFIG.EQ_BANDS.length) {
-        Player.setEQGains(eqGains);
         _currentPreset = eqPreset || null;
+
+        // Always update slider DOM with the real (saved) gain values
         eqGains.forEach((g, i) => {
           const slider = document.getElementById(`eq-slider-${i}`);
           const valEl  = document.getElementById(`eq-val-${i}`);
@@ -575,6 +578,17 @@ const App = (() => {
         document.querySelectorAll('.eq-preset-chip').forEach(c => {
           c.classList.toggle('active', c.dataset.preset === _currentPreset);
         });
+
+        if (eqEnabled !== false) {
+          // EQ is on — apply gains to audio nodes immediately
+          Player.setEQGains(eqGains);
+        } else {
+          // EQ is off — store real gains so toggle-on works correctly,
+          // apply zeros to audio nodes (bypass)
+          _eqBypassedGains = eqGains;
+          Player.setEQGains(new Array(CONFIG.EQ_BANDS.length).fill(0));
+        }
+
         _drawEQCurve();
       }
 
@@ -601,10 +615,23 @@ const App = (() => {
    *   → saved to 'settings' in IndexedDB and pushed to Drive via Sync.
    */
   function _saveSettings() {
-    const gains    = Player.getEQGains();
     const eqOn     = document.getElementById('eq-toggle')?.classList.contains('on') ?? true;
     const tempoRaw = parseFloat(document.getElementById('overlay-tempo-slider')?.value ?? 100);
     const tempo    = tempoRaw / 100;
+
+    // When EQ is OFF, Player.getEQGains() returns zeros (bypass state).
+    // Read the real gains directly from slider DOM so they survive a reload.
+    // When EQ is ON, Player.getEQGains() is authoritative (reflects live audio nodes).
+    let gains;
+    if (eqOn) {
+      gains = Player.getEQGains();
+    } else {
+      // Slider DOM always holds the real (non-bypassed) values
+      gains = CONFIG.EQ_BANDS.map((_, i) => {
+        const s = document.getElementById(`eq-slider-${i}`);
+        return s ? parseFloat(s.value) : 0;
+      });
+    }
 
     // Device-local EQ state — never synced
     DB.setState('settings_local', {
@@ -620,6 +647,60 @@ const App = (() => {
       savedAt:         Date.now(),
     }).catch(() => {});
     Sync.push('settings');
+  }
+
+  /* ── Player state persistence ───────────────────────────── */
+
+  /**
+   * Save the current queue + position to IndexedDB (device-local).
+   * Called on every track change and queue structural change so the
+   * user can resume from the same spot after closing and re-opening.
+   */
+  function _savePlayerState() {
+    const { queue, index } = Player.getQueue();
+    if (!queue.length) return;
+    DB.setState('player_state', { queue, queueIndex: index }).catch(() => {});
+  }
+
+  /**
+   * Restore the last saved queue on boot without auto-playing.
+   * Shows the track in the mini-player so the user can tap play to resume.
+   */
+  async function _restorePlayerState() {
+    try {
+      const state = await DB.getState('player_state');
+      if (!state?.queue?.length) return;
+
+      const { queue, queueIndex = 0 } = state;
+      Player.loadState(queue, queueIndex);
+
+      // Show the track in the mini-player (no auto-play)
+      const track = queue[queueIndex];
+      if (track) {
+        const enriched = _enrichTrack(track);
+        UI.updateMiniPlayer(enriched, false);
+        UI.updateExpandedPlayer(enriched, false);
+        UI.setActiveSongRow(track.id);
+        document.title = `${enriched.displayName} — Savart`;
+
+        // Patch with DB meta for correct display name / artist
+        DB.getMeta(track.id).catch(() => null).then(dbMeta => {
+          if (!dbMeta) return;
+          const stillSame = Player.getCurrentTrack()?.id === track.id;
+          if (!stillSame) return; // user already started playing something else
+          if (dbMeta.title)  track.displayName = dbMeta.title;
+          if (dbMeta.artist) track.artist      = dbMeta.artist;
+          if (dbMeta.album)  track.album       = dbMeta.album;
+          const reEnriched = _enrichTrack(track);
+          UI.updateMiniPlayer(reEnriched, false);
+          UI.updateExpandedPlayer(reEnriched, false);
+        });
+      }
+
+      console.log('[App] Player state restored:', queue.length, 'tracks, index', queueIndex);
+    } catch (err) {
+      console.warn('[App] Could not restore player state:', err);
+    }
   }
 
   function _onTokenExpiring() {
@@ -661,6 +742,9 @@ const App = (() => {
       UI.renderQueuePanel(queue, index);
       _prefetchQueueCovers(queue).catch(() => {});
     }
+
+    // Persist current position (track index) so it can be restored after reload
+    _savePlayerState();
 
     UI.setHeartActive(false); // reset while loading
 
@@ -875,6 +959,9 @@ const App = (() => {
         _triggerRadio(_radioArtist, null).catch(() => {});
       }
     }
+
+    // Persist queue so it can be restored after closing and re-opening the app
+    _savePlayerState();
   }
 
   function _onPlayerError({ type, message, item }) {
@@ -11516,6 +11603,7 @@ const App = (() => {
 
   let _currentPreset    = 'flat';
   let _customPresets    = [];  // loaded from DB
+  let _eqBypassedGains  = null; // real gains stored while EQ is toggled off (module-scope so it survives between event handlers)
 
   function _buildEQSliders() {
     const container = document.getElementById('eq-sliders');
@@ -12365,7 +12453,8 @@ const App = (() => {
     document.querySelector('#overlay-eq .eq-overlay-backdrop')?.addEventListener('click', _closeEq);
 
     // EQ toggle on/off — bypasses EQ nodes and disables controls
-    let _eqBypassedGains = null;
+    // _eqBypassedGains is module-scoped (defined above _buildEQSliders) so it
+    // survives across calls to _bindEvents and persists until restored on reload.
 
     function _applyEQToggleState(isOn) {
       document.getElementById('eq-sliders')?.classList.toggle('eq-off', !isOn);

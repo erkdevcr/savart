@@ -324,6 +324,21 @@ const Player = (() => {
   }
 
   /**
+   * Restore a previously saved queue without starting playback.
+   * Used on boot to reload the last session's queue so the user can
+   * resume manually. Unlike setQueue(), this does NOT call _playCurrentTrack().
+   * @param {DriveItem[]} songs
+   * @param {number}      [index=0] - Index to restore as "current" track
+   */
+  function loadState(songs, index = 0) {
+    if (!Array.isArray(songs) || songs.length === 0) return;
+    _queue      = [...songs];
+    _queueIndex = Math.max(0, Math.min(index, _queue.length - 1));
+    _onQueueChange([..._queue], _queueIndex);
+    // Do NOT call _playCurrentTrack() — the user decides when to play
+  }
+
+  /**
    * Remove a track from the queue by index.
    * Cannot remove the currently playing track.
    * @param {number} index
@@ -764,6 +779,7 @@ const Player = (() => {
     updateMediaSessionArtwork,
     // Queue
     setQueue,
+    loadState,
     insertNext,
     appendToQueue,
     removeFromQueue,
