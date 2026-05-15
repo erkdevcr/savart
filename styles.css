@@ -3480,7 +3480,7 @@ body.queue-open #mini-player { z-index: 65; }
 /* Custom presets section grows and scrolls when content overflows */
 #overlay-eq .eq-custom-section {
   flex: 1 1 0;
-  min-height: 72px;             /* always show at least the header row */
+  min-height: 130px;            /* always show header + at least one preset card */
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -5044,9 +5044,15 @@ body.queue-open #mini-player { z-index: 65; }
     display: none;
   }
 
-  .eq-presets-scroll {
-    padding: 12px 16px;
-    gap: 10px;
+  /* Mobile: smaller chips so all 7 fit without overflow */
+  #overlay-eq .eq-presets-scroll {
+    padding: 8px 12px;
+    gap: 5px;
+    flex-wrap: wrap;             /* allow 2nd row rather than cutting off */
+  }
+  #overlay-eq .eq-preset-chip {
+    padding: 4px 10px;
+    font-size: 11px;
   }
 
   .eq-sliders-wrap {
