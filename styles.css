@@ -5212,14 +5212,15 @@ body.queue-open #mini-player { z-index: 65; }
   transform: rotate(180deg);
 }
 
-/* Collapsible drawer — collapsed by default, expands with .open */
+/* Collapsible drawer — collapsed by default, expands with .open.
+   max-height = 2.5 card rows: (82px × 2) + (10px gap × 2) + 41px half-row = 225px */
 .eq-presets-drawer {
   overflow: hidden;
   max-height: 0;
   transition: max-height 0.28s cubic-bezier(0.32, 0.72, 0, 1);
 }
 .eq-presets-drawer.open {
-  max-height: 400px;
+  max-height: 225px;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
 }
@@ -5227,6 +5228,7 @@ body.queue-open #mini-player { z-index: 65; }
 /* Inner list padding inside the drawer */
 .eq-presets-drawer .eq-custom-list {
   margin: 0 16px 12px;
+  overflow: visible; /* parent drawer scrolls, list must not clip itself */
 }
 
 .eq-custom-list {
@@ -5440,9 +5442,9 @@ body.queue-open #mini-player { z-index: 65; }
     width: auto;
   }
 
-  /* Desktop: wider drawer, auto-fill grid */
+  /* Desktop: same 2.5-row height as mobile */
   #overlay-eq .eq-presets-drawer.open {
-    max-height: 280px;
+    max-height: 225px;
   }
 }
 
