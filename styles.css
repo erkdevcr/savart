@@ -3511,13 +3511,17 @@ body.queue-open #mini-player { z-index: 65; }
   animation: sheetUp 0.28s cubic-bezier(0.32, 0.72, 0, 1);
 }
 
-/* Custom presets section grows and scrolls when content overflows */
+/* Custom presets section grows and scrolls when content overflows.
+   min-height: 0 is required so flex can compress the item below its content
+   size, creating the bounded height that lets overflow-y: auto actually scroll. */
 #overlay-eq .eq-custom-section {
   flex: 1 1 0;
-  min-height: 184px;            /* always show header + at least one preset card (~+15%) */
+  min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
+  -webkit-overflow-scrolling: touch; /* iOS Safari scroll inside fixed overlay */
 }
 
 /* Mobile: 3-column grid so all cards fit without horizontal overflow */
@@ -3525,7 +3529,8 @@ body.queue-open #mini-player { z-index: 65; }
   #overlay-eq .eq-custom-list {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    overflow: hidden;            /* prevents grid from blowing out the section */
+    overflow-x: hidden;          /* clip horizontal bleed only; let rows flow for parent scroll */
+    overflow-y: visible;
   }
   #overlay-eq .eq-custom-card {
     width: auto !important;      /* override the base 140px fixed width */
