@@ -361,6 +361,12 @@ const Player = (() => {
     if (!_audio) return;
     _initAudioGraph();
     if (_audio.paused) {
+      // No blob loaded yet — happens when queue is restored from saved state
+      // without auto-play. Fetch and play the current track normally.
+      if (!_currentBlob) {
+        await _playCurrentTrack();
+        return;
+      }
       _keepAliveStart();
       await _audio.play().catch(_handleAudioError);
     } else {
