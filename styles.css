@@ -3480,10 +3480,22 @@ body.queue-open #mini-player { z-index: 65; }
 /* Custom presets section grows and scrolls when content overflows */
 #overlay-eq .eq-custom-section {
   flex: 1 1 0;
-  min-height: 160px;            /* always show header + at least one preset card */
+  min-height: 184px;            /* always show header + at least one preset card (~+15%) */
   overflow-y: auto;
   display: flex;
   flex-direction: column;
+}
+
+/* Mobile: 3-column grid so all cards fit without horizontal overflow */
+@media (max-width: 767px) {
+  #overlay-eq .eq-custom-list {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    overflow-x: visible;
+  }
+  #overlay-eq .eq-custom-card {
+    width: auto;
+  }
 }
 
 /* ── Mobile narrow-screen shrink ─────────────────────────── */
@@ -5086,13 +5098,14 @@ body.queue-open #mini-player { z-index: 65; }
 
   .eq-sliders-wrap {
     flex: none;
-    height: 200px;
+    height: 210px;    /* same as desktop — gives room for val + slider + label */
     overflow: hidden;
   }
 
+  /* Let slider fill remaining height (same flex:1 as base) so label is never clipped */
   .eq-band-slider {
-    height: 160px;
-    flex: none;
+    flex: 1;
+    height: auto;
   }
 
   .eq-curve-wrap {
