@@ -1140,12 +1140,20 @@ const UI = (() => {
     const folderType = item.folderType || null; // 'album' | 'collection' | null
 
     // Determine type label and banner color
-    // All folders (album, collection, plain) show orange — folderType only matters in library chips
+    // Songs → green | Albums (from library) → purple | Collections (from library) → blue | Folders (from browse) → orange
     let bannerLabel, bannerBg, bannerColor;
     if (!isFolder) {
       bannerLabel = t('item_type_song');
       bannerBg    = 'rgba(62,207,122,0.22)';
       bannerColor = '#3ECF7A';
+    } else if (folderType === 'album') {
+      bannerLabel = t('lbl_album_chip');
+      bannerBg    = 'rgba(139,92,246,0.22)';
+      bannerColor = '#a78bfa';
+    } else if (folderType === 'collection') {
+      bannerLabel = t('lbl_collection');
+      bannerBg    = 'rgba(74,136,245,0.22)';
+      bannerColor = '#4a88f5';
     } else {
       bannerLabel = t('item_type_folder');
       bannerBg    = 'rgba(232,160,32,0.22)';
@@ -2002,7 +2010,7 @@ const UI = (() => {
       _addCtxItem(menu, _iconScan,      t('ctx_send_to_scan'),   () => { App.onSendToScan?.(item);            hideContextMenu(); });
       _addCtxDivider(menu);
       _addCtxItem(menu, iconStar(14),   t('ctx_add_fav_folder'), () => { App.onToggleStar(item);              hideContextMenu(); });
-      _addCtxItem(menu, iconPin(14),    t('ctx_pin_to_home'),    () => { App.onTogglePin({ ...item, type: 'folder', isFolder: true }); hideContextMenu(); });
+      _addCtxItem(menu, iconPin(14),    t('ctx_pin_to_home'),    () => { App.onTogglePin({ ...item, type: 'folder', isFolder: true, folderType: null }); hideContextMenu(); });
       _addCtxItem(menu, iconPlus(14),   t('add_to_pl'),         (e) => { hideContextMenu(); App.onShowPlaylistPicker(e, item); });
       // "Move to …" — only when the folder has a known classification
       if (_isCollection(item)) {
