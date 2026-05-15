@@ -1229,12 +1229,17 @@
         <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
       </button>
     </div>
-    <div class="sleep-pills" id="overlay-timer-pills">
-      <button class="sleep-pill" data-mins="15">15 min</button>
-      <button class="sleep-pill" data-mins="30">30 min</button>
-      <button class="sleep-pill" data-mins="60">60 min</button>
-      <button class="sleep-pill" data-mins="custom" data-i18n="sleep_custom">Personalizado</button>
-      <button class="sleep-pill active" data-mins="off" data-i18n="sleep_off">Desactivar</button>
+    <div class="timer-display">
+      <span class="timer-display-num" id="overlay-timer-num">30</span>
+      <span class="timer-display-unit" data-i18n="sleep_mins_unit">minutos</span>
+    </div>
+    <input type="range" id="overlay-timer-slider" class="settings-slider timer-slider" min="5" max="120" value="30" step="5">
+    <div class="timer-quick-row">
+      <button class="sleep-pill timer-chip" data-mins="15">15</button>
+      <button class="sleep-pill timer-chip" data-mins="30">30</button>
+      <button class="sleep-pill timer-chip" data-mins="60">60</button>
+      <button class="sleep-pill timer-chip" data-mins="90">90</button>
+      <button class="sleep-pill timer-chip active" data-mins="off" data-i18n="sleep_off">Off</button>
     </div>
     <div class="ctrl-sheet-timer-status" id="overlay-timer-status"></div>
   </div>

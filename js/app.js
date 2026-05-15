@@ -12145,8 +12145,38 @@ const App = (() => {
         document.querySelectorAll('.sleep-pill').forEach(p => p.classList.remove('active'));
         pill.classList.add('active');
         _setSleepTimer(pill.dataset.mins);
+        // Sync overlay slider + display
+        const slider = document.getElementById('overlay-timer-slider');
+        const numEl  = document.getElementById('overlay-timer-num');
+        const mins   = parseInt(pill.dataset.mins, 10);
+        if (slider && !isNaN(mins)) {
+          slider.value = Math.min(Math.max(mins, 5), 120);
+          if (numEl) numEl.textContent = mins;
+        }
       });
     });
+
+    // Overlay timer slider — live update display + set timer on release
+    const _timerSlider = document.getElementById('overlay-timer-slider');
+    const _timerNumEl  = document.getElementById('overlay-timer-num');
+    if (_timerSlider) {
+      _timerSlider.addEventListener('input', () => {
+        const v = parseInt(_timerSlider.value, 10);
+        if (_timerNumEl) _timerNumEl.textContent = v;
+        // Highlight matching chip, deselect others
+        document.querySelectorAll('.sleep-pill').forEach(p => {
+          p.classList.toggle('active', parseInt(p.dataset.mins, 10) === v);
+        });
+      });
+      _timerSlider.addEventListener('change', () => {
+        const v = _timerSlider.value;
+        document.querySelectorAll('.sleep-pill').forEach(p => p.classList.remove('active'));
+        document.querySelectorAll('.sleep-pill').forEach(p => {
+          if (parseInt(p.dataset.mins, 10) === parseInt(v, 10)) p.classList.add('active');
+        });
+        _setSleepTimer(v);
+      });
+    }
 
     // Sleep timer toggle (settings desktop)
     document.getElementById('sleep-timer-toggle')?.addEventListener('click', (e) => {

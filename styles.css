@@ -3386,6 +3386,51 @@ body.queue-open #mini-player { z-index: 65; }
   min-height: 18px;
 }
 
+/* ── Timer overlay redesign (Option C) ──────────────────── */
+.timer-display {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 0 8px;
+}
+.timer-display-num {
+  font-size: 48px;
+  font-weight: 700;
+  color: var(--accent);
+  line-height: 1;
+}
+.timer-display-unit {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.timer-slider {
+  width: 100%;
+  margin-bottom: 4px;
+}
+.timer-quick-row {
+  display: flex;
+  gap: 6px;
+}
+.timer-chip {
+  flex: 1;
+  padding: 8px 0;
+  font-size: 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--bg-hover);
+  background: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  text-align: center;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.timer-chip:hover { background: var(--bg-hover); color: var(--text-primary); }
+.timer-chip.active {
+  border-color: var(--accent);
+  background: rgba(74,136,245,0.12);
+  color: var(--accent);
+}
+
 /* ── EQ Screen — always inline (no overlay on any screen size) */
 #screen-eq {
   display: flex;

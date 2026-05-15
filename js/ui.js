@@ -313,7 +313,8 @@ const UI = (() => {
       // ── Sleep timer ────────────────────────────────────────
       sleep_timer_title:    'Sleep Timer',
       sleep_custom:         'Personalizado',
-      sleep_off:            'Desactivar',
+      sleep_off:            'Off',
+      sleep_mins_unit:      'minutos',
       // ── Boot loading ───────────────────────────────────────
       boot_loading:         'Cargando datos de la nube…',
       // ── Rescan modals ──────────────────────────────────────
@@ -648,6 +649,7 @@ const UI = (() => {
       sleep_timer_title:    'Sleep Timer',
       sleep_custom:         'Custom',
       sleep_off:            'Off',
+      sleep_mins_unit:      'minutes',
       // ── Boot loading ───────────────────────────────────────
       boot_loading:         'Loading data from cloud…',
       // ── Rescan modals ──────────────────────────────────────
