@@ -4361,6 +4361,7 @@ body.queue-open #mini-player { z-index: 65; }
   align-items: center;
   gap: 8px;
   padding-bottom: 12px;
+  min-width: 0;
 }
 
 /* ── Slider with step buttons ──────────────────────────── */
@@ -4403,6 +4404,7 @@ body.queue-open #mini-player { z-index: 65; }
 
 .settings-slider {
   flex: 1;
+  min-width: 0;
   accent-color: var(--accent);
   height: 3px;
 }
