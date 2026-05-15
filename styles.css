@@ -3270,12 +3270,9 @@ body.queue-open #mini-player { z-index: 65; }
 
 @media (min-width: 768px) {
   .ctrl-sheet {
-    /* Constrain to the right player panel — don't cover the full viewport */
-    left: auto;
-    right: 0;
-    width: var(--now-playing-w);
+    /* Full-screen backdrop; card is right-aligned over the player panel */
     align-items: center;
-    justify-content: center;
+    justify-content: flex-end;
   }
 }
 
@@ -3303,9 +3300,10 @@ body.queue-open #mini-player { z-index: 65; }
 
 @media (min-width: 768px) {
   .ctrl-sheet-card {
-    width: calc(100% - 32px);
+    width: calc(var(--now-playing-w) - 32px);  /* fits inside the right panel */
+    margin-right: 16px;                         /* gap from viewport right edge */
     border-radius: var(--radius-lg);
-    padding: 20px 28px 24px;
+    padding: 20px 24px 24px;
     animation: none;
   }
 }
