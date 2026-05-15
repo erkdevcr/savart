@@ -3154,6 +3154,7 @@ body.queue-open #mini-player { z-index: 65; }
   padding: 14px 16px;
   border-bottom: 1px solid var(--bg-hover);
   flex-shrink: 0;
+  background: var(--bg-base);
 }
 
 .queue-back-btn {
