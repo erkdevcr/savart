@@ -3277,12 +3277,6 @@ body.queue-open #mini-player { z-index: 65; }
     align-items: center;
     justify-content: center;
   }
-  .ctrl-sheet-card {
-    width: calc(100% - 32px);
-    border-radius: var(--radius-lg);
-    padding: 20px 28px 24px;
-    animation: none;
-  }
 }
 
 .ctrl-sheet.visible { display: flex; }
@@ -3305,6 +3299,15 @@ body.queue-open #mini-player { z-index: 65; }
   gap: 20px;
   box-shadow: 0 -8px 40px rgba(0,0,0,0.5);
   animation: sheetUp 0.22s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@media (min-width: 768px) {
+  .ctrl-sheet-card {
+    width: calc(100% - 32px);
+    border-radius: var(--radius-lg);
+    padding: 20px 28px 24px;
+    animation: none;
+  }
 }
 
 /* ── Marquee / LED-pan for long player titles ────────────────
