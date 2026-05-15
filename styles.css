@@ -3006,6 +3006,23 @@ img { display: block; }
 #player-expanded.hiding-queue .pexp-queue-view       { display: flex; animation: sheetDown 0.22s cubic-bezier(0.32, 0.72, 0, 1) forwards; }
 #player-expanded.hiding-queue .pexp-now-playing-view { display: none; }
 
+/* Mobile: queue covers the full expanded-player height (including the topbar)
+   by sitting in an absolute layer. translateY animations still work correctly
+   because 100% = the element's own height = full player height. */
+@media (max-width: 767px) {
+  #player-expanded.showing-queue .pexp-queue-view,
+  #player-expanded.hiding-queue  .pexp-queue-view {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+  }
+}
+
+/* Queue back-btn: arrow points down on mobile (rotate left-arrow -90°) */
+#pexp-queue-view .queue-back-btn svg {
+  transform: rotate(-90deg);
+}
+
 /* ── Desktop micro player (shown at bottom when queue is open) ─── */
 #desk-micro-player {
   display: none;          /* hidden by default; CSS shows it below */
@@ -3134,11 +3151,9 @@ body.queue-open #mini-player { z-index: 65; }
 
 .queue-header-title {
   flex: 1;
-  font-size: 13px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  color: var(--text-secondary);
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text-primary);
 }
 
 .queue-count {
