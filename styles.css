@@ -3280,7 +3280,7 @@ body.queue-open #mini-player { z-index: 65; }
   .ctrl-sheet-card {
     width: calc(100% - 32px);
     border-radius: var(--radius-lg);
-    padding-bottom: 24px;
+    padding: 20px 28px 24px;
     animation: none;
   }
 }
