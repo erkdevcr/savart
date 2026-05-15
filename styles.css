@@ -3480,10 +3480,39 @@ body.queue-open #mini-player { z-index: 65; }
 /* Custom presets section grows and scrolls when content overflows */
 #overlay-eq .eq-custom-section {
   flex: 1 1 0;
-  min-height: 130px;            /* always show header + at least one preset card */
+  min-height: 160px;            /* always show header + at least one preset card */
   overflow-y: auto;
   display: flex;
   flex-direction: column;
+}
+
+/* ── Mobile narrow-screen shrink ─────────────────────────── */
+/* Below 400 px the card starts scaling down proportionally so
+   the full EQ is always visible, even on very small phones.
+   zoom shrinks the entire card (including its children) without
+   breaking the flex/overflow layout inside it.                */
+@media (max-width: 399px) {
+  #overlay-eq {
+    padding: 32px 12px;          /* less side/vertical room at narrow widths */
+  }
+  #overlay-eq #screen-eq {
+    zoom: 0.92;
+  }
+}
+@media (max-width: 374px) {
+  #overlay-eq #screen-eq {
+    zoom: 0.84;
+  }
+}
+@media (max-width: 349px) {
+  #overlay-eq #screen-eq {
+    zoom: 0.76;
+  }
+}
+@media (max-width: 319px) {
+  #overlay-eq #screen-eq {
+    zoom: 0.68;
+  }
 }
 
 @media (min-width: 768px) {
