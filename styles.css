@@ -3302,18 +3302,21 @@ body.queue-open #mini-player { z-index: 65; }
   .ctrl-sheet-card {
     width: calc(var(--now-playing-w) - 32px);  /* fits inside the right panel */
     max-width: calc(var(--now-playing-w) - 32px);
-    margin-right: 16px;                         /* gap from viewport right edge */
+    margin-right: 16px;
     border-radius: var(--radius-lg);
-    padding: 20px 24px 24px;
+    padding: 20px 20px 24px;
     animation: none;
-    overflow: hidden;                           /* clip anything that escapes */
     box-sizing: border-box;
   }
-  .ctrl-sheet-card .slider-with-steps {
+  .ctrl-sheet-card .slider-with-steps,
+  .ctrl-sheet-card .timer-quick-row,
+  .ctrl-sheet-card .timer-slider {
     width: 100%;
     box-sizing: border-box;
-    overflow: hidden;
   }
+  /* Timer: scale down for the narrower desktop card */
+  .ctrl-sheet-card .timer-display-num { font-size: 36px; }
+  .ctrl-sheet-card .timer-chip { font-size: 11px; padding: 6px 0; }
 }
 
 /* ── Marquee / LED-pan for long player titles ────────────────
