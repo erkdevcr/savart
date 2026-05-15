@@ -1140,19 +1140,12 @@ const UI = (() => {
     const folderType = item.folderType || null; // 'album' | 'collection' | null
 
     // Determine type label and banner color
+    // All folders (album, collection, plain) show orange — folderType only matters in library chips
     let bannerLabel, bannerBg, bannerColor;
     if (!isFolder) {
       bannerLabel = t('item_type_song');
       bannerBg    = 'rgba(62,207,122,0.22)';
       bannerColor = '#3ECF7A';
-    } else if (folderType === 'collection') {
-      bannerLabel = t('lbl_collection');
-      bannerBg    = 'rgba(74,136,245,0.22)';
-      bannerColor = '#4a88f5';
-    } else if (folderType === 'album') {
-      bannerLabel = t('lbl_album_chip');
-      bannerBg    = 'rgba(139,92,246,0.22)';
-      bannerColor = '#a78bfa';
     } else {
       bannerLabel = t('item_type_folder');
       bannerBg    = 'rgba(232,160,32,0.22)';
