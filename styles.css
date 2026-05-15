@@ -5285,6 +5285,11 @@ body.queue-open #mini-player { z-index: 65; }
   .eq-custom-card {
     width: auto;
   }
+
+  /* Ensure the section always shows ~1.5 card rows on desktop too */
+  #overlay-eq .eq-custom-section {
+    min-height: 220px;
+  }
 }
 
 
