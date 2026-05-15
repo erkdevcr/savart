@@ -4691,6 +4691,93 @@ body.queue-open #mini-player { z-index: 65; }
 
 .btn-outline-accent:hover { background: var(--accent-soft); }
 
+/* ── DB Stats popup ──────────────────────────────────────── */
+.db-stats-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  box-sizing: border-box;
+}
+.db-stats-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  cursor: pointer;
+}
+.db-stats-card {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 420px;
+  background: var(--bg-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 16px 48px rgba(0,0,0,0.5);
+  overflow: hidden;
+  animation: sheetUpDesk 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.db-stats-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 16px 14px;
+  border-bottom: 1px solid var(--bg-hover);
+}
+.db-stats-title {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.db-stats-body {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.db-stats-loading {
+  color: var(--text-muted);
+  font-size: 13px;
+  padding: 8px 0;
+}
+.db-stats-error {
+  color: var(--error);
+  font-size: 13px;
+  padding: 8px 0;
+}
+.db-stats-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--bg-elevated);
+  font-size: 13px;
+}
+.db-stats-row:last-child { border-bottom: none; }
+.db-stats-name {
+  color: var(--text-secondary);
+  font-family: monospace;
+  font-size: 12px;
+}
+.db-stats-size {
+  color: var(--text-primary);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.db-stats-total {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0 2px;
+  border-top: 1px solid var(--bg-hover);
+  margin-top: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
 /* Sleep timer pills */
 .sleep-pills {
   display: flex;

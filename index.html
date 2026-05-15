@@ -439,7 +439,31 @@
                 <button id="btn-clear-cache" data-i18n="settings_clear_cache" style="color:var(--error);font-size:14px;background:none;border:none;cursor:pointer;padding:0">Borrar caché</button>
               </div>
             </div>
+
+            <div class="settings-row">
+              <div>
+                <div class="settings-row-label" data-i18n="settings_db_status">Estado de la DB</div>
+                <div class="settings-row-cat" data-i18n="settings_db_status_desc">Archivos sincronizados en Drive</div>
+              </div>
+              <button id="btn-view-db-stats" class="btn-outline-accent" data-i18n="settings_db_view">Ver</button>
+            </div>
           </div><!-- /Almacenamiento -->
+
+          <!-- DB Stats popup -->
+          <div id="overlay-db-stats" class="db-stats-overlay" style="display:none">
+            <div class="db-stats-backdrop"></div>
+            <div class="db-stats-card">
+              <div class="db-stats-header">
+                <span class="db-stats-title" data-i18n="settings_db_status">Estado de la DB</span>
+                <button id="btn-db-stats-close" class="ctrl-sheet-close-btn" aria-label="Cerrar">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+                </button>
+              </div>
+              <div class="db-stats-body" id="db-stats-body">
+                <div class="db-stats-loading" data-i18n="searching">Buscando…</div>
+              </div>
+            </div>
+          </div>
 
           <!-- APARIENCIA -->
           <div class="settings-section">

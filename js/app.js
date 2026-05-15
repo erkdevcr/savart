@@ -11279,6 +11279,11 @@ const App = (() => {
   /* ── Nav tab click ───────────────────────────────────────── */
 
   function onNavClick(viewId) {
+    // Close EQ overlay if open (mobile nav tap should dismiss it)
+    const _eqOv = document.getElementById('overlay-eq');
+    if (_eqOv?.classList.contains('visible')) {
+      _closeWithAnimation('overlay-eq', '#screen-eq');
+    }
     // On mobile, close the expanded player so the mini-player is visible again
     if (!window.matchMedia('(min-width: 768px)').matches) {
       UI.setExpandedPlayerVisible(false);
@@ -12224,6 +12229,43 @@ const App = (() => {
 
     // Settings clear cache
     document.getElementById('btn-clear-cache')?.addEventListener('click', onClearCache);
+
+    // DB Stats popup
+    const _dbOverlay  = document.getElementById('overlay-db-stats');
+    const _dbBody     = document.getElementById('db-stats-body');
+    const _closeDbStats = () => { if (_dbOverlay) _dbOverlay.style.display = 'none'; };
+
+    document.getElementById('btn-view-db-stats')?.addEventListener('click', async () => {
+      if (!_dbOverlay || !_dbBody) return;
+      _dbBody.innerHTML = `<div class="db-stats-loading">${UI.t('searching')}</div>`;
+      _dbOverlay.style.display = 'flex';
+      try {
+        const { files, totalBytes } = await Sync.getDbStats();
+        if (!files.length) {
+          _dbBody.innerHTML = `<div class="db-stats-loading">${UI.t('no_results')}</div>`;
+          return;
+        }
+        const fmt = b => b < 1024 ? `${b} B`
+          : b < 1048576 ? `${(b/1024).toFixed(1)} KB`
+          : `${(b/1048576).toFixed(2)} MB`;
+        const rows = files.map(f =>
+          `<div class="db-stats-row">
+            <span class="db-stats-name">${f.name.replace('savart_','').replace('.json','')}</span>
+            <span class="db-stats-size">${fmt(f.size)}</span>
+          </div>`
+        ).join('');
+        _dbBody.innerHTML = rows +
+          `<div class="db-stats-total">
+            <span>${UI.t('db_total')}</span>
+            <span>${fmt(totalBytes)}</span>
+          </div>`;
+      } catch (err) {
+        _dbBody.innerHTML = `<div class="db-stats-error">${err.message || 'Error'}</div>`;
+      }
+    });
+
+    document.getElementById('btn-db-stats-close')?.addEventListener('click', _closeDbStats);
+    document.querySelector('#overlay-db-stats .db-stats-backdrop')?.addEventListener('click', _closeDbStats);
 
     // Cache limit selector
     document.getElementById('select-cache-limit')?.addEventListener('change', async (e) => {

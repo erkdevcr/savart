@@ -1611,6 +1611,23 @@ const Sync = (() => {
   }
 
   /* ── Expose ─────────────────────────────────────────────── */
-  return { init, push, pushHot, readHome, startLiveSync, stopLiveSync };
+  /**
+   * Fetch all savart_*.json files from appDataFolder and return their sizes.
+   * @returns {Promise<{ files: {name:string, size:number}[], totalBytes:number }>}
+   */
+  async function getDbStats() {
+    const res = await _apiFetch(
+      `${API}/files?spaces=appDataFolder&fields=files(name,size)&pageSize=30`
+    );
+    const { files = [] } = await res.json();
+    const savartFiles = files
+      .filter(f => f.name && f.name.startsWith('savart_'))
+      .map(f => ({ name: f.name, size: parseInt(f.size || 0, 10) }))
+      .sort((a, b) => b.size - a.size);
+    const totalBytes = savartFiles.reduce((s, f) => s + f.size, 0);
+    return { files: savartFiles, totalBytes };
+  }
+
+  return { init, push, pushHot, readHome, startLiveSync, stopLiveSync, getDbStats };
 
 })();
