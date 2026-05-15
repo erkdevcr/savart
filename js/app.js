@@ -201,12 +201,10 @@ const App = (() => {
     // 6. Bind static UI events
     _bindEvents();
 
-    // 6b. Desktop: pre-build EQ sliders (EQ is already in settings HTML)
-    if (window.matchMedia('(min-width: 768px)').matches) {
-      _buildEQSliders();
-      _applyEQPreset(_currentPreset || 'flat');
-      _loadCustomPresets();
-    }
+    // 6b. Pre-build EQ sliders — EQ is now a floating overlay, always available
+    _buildEQSliders();
+    _applyEQPreset(_currentPreset || 'flat');
+    _loadCustomPresets();
 
     // 7. Back gesture prevention
     _initBackGuard();
@@ -11290,8 +11288,8 @@ const App = (() => {
     }
     if (viewId === 'history') _loadHistory();
     if (viewId === 'settings') {
-      _buildEQSliders();
-      _applyEQPreset(_currentPreset || 'flat');
+      // EQ is now a floating overlay — no longer built/reset on settings nav.
+      // _loadCustomPresets keeps the saved-preset list up to date if new ones were added.
       _loadCustomPresets();
     }
     if (viewId === 'browse') {
@@ -11485,6 +11483,9 @@ const App = (() => {
   function _buildEQSliders() {
     const container = document.getElementById('eq-sliders');
     if (!container) return;
+    // Idempotency guard — sliders are wired once at boot; skip rebuild if already present
+    // to avoid wiping live gains when settings nav or other callers trigger this.
+    if (container.children.length === CONFIG.EQ_BANDS.length) return;
     container.innerHTML = '';
 
     CONFIG.EQ_BANDS.forEach((freq, i) => {
