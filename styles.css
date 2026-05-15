@@ -3305,7 +3305,6 @@ body.queue-open #mini-player { z-index: 65; }
     margin-right: 16px;
     border-radius: var(--radius-lg);
     padding: 20px 20px 24px;
-    animation: none;
     box-sizing: border-box;
   }
   .ctrl-sheet-card .slider-with-steps,
