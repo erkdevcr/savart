@@ -11702,7 +11702,7 @@ const App = (() => {
     if (card) {
       card.addEventListener('animationend', finish, { once: true });
     }
-    setTimeout(finish, 350); // fallback in case animationend never fires
+    setTimeout(finish, 260); // fallback — just over the longest exit animation (0.22s)
   }
 
   /* ── Event binding ───────────────────────────────────────── */

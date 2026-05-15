@@ -3000,10 +3000,10 @@ img { display: block; }
 }
 
 #player-expanded.showing-queue .pexp-now-playing-view { display: none; }
-#player-expanded.showing-queue .pexp-queue-view       { display: flex; animation: slideInRight 0.25s cubic-bezier(0.22, 1, 0.36, 1); }
+#player-expanded.showing-queue .pexp-queue-view       { display: flex; animation: sheetUp 0.28s cubic-bezier(0.32, 0.72, 0, 1); }
 
 /* Queue exit: .hiding-queue keeps queue visible while it animates out */
-#player-expanded.hiding-queue .pexp-queue-view       { display: flex; animation: slideOutRight 0.2s cubic-bezier(0.32, 0.72, 0, 1) forwards; }
+#player-expanded.hiding-queue .pexp-queue-view       { display: flex; animation: sheetDown 0.22s cubic-bezier(0.32, 0.72, 0, 1) forwards; }
 #player-expanded.hiding-queue .pexp-now-playing-view { display: none; }
 
 /* ── Desktop micro player (shown at bottom when queue is open) ─── */
@@ -3286,6 +3286,9 @@ body.queue-open #mini-player { z-index: 65; }
 .ctrl-sheet.closing .ctrl-sheet-card {
   animation: sheetDown 0.2s cubic-bezier(0.32, 0.72, 0, 1) forwards;
 }
+.ctrl-sheet.closing .ctrl-sheet-backdrop {
+  animation: backdropOut 0.2s ease forwards;
+}
 @media (min-width: 768px) {
   .ctrl-sheet.closing .ctrl-sheet-card {
     animation: sheetDownDesk 0.2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
@@ -3317,8 +3320,8 @@ body.queue-open #mini-player { z-index: 65; }
   to   { opacity: 1; transform: translateY(0); }
 }
 @keyframes sheetDown {
-  from { transform: translateY(0); }
-  to   { transform: translateY(100%); }
+  from { transform: translateY(0);    opacity: 1; }
+  to   { transform: translateY(100%); opacity: 0; }
 }
 @keyframes sheetDownDesk {
   from { opacity: 1; transform: translateY(0); }
@@ -3445,6 +3448,7 @@ body.queue-open #mini-player { z-index: 65; }
 .timer-slider {
   width: 100%;
   margin-bottom: 4px;
+  touch-action: none; /* prevent scroll hijacking on mobile so drag registers correctly */
 }
 .timer-quick-row {
   display: flex;
@@ -4835,14 +4839,24 @@ body.queue-open #mini-player { z-index: 65; }
   flex-shrink: 0;
 }
 
-/* EQ overlay exit animation */
+/* EQ overlay exit animation — card slides away + backdrop fades simultaneously */
 #overlay-eq.closing #screen-eq {
-  animation: sheetDown 0.2s cubic-bezier(0.32, 0.72, 0, 1) forwards;
+  animation: sheetDown 0.22s cubic-bezier(0.32, 0.72, 0, 1) forwards;
+}
+#overlay-eq.closing .eq-overlay-backdrop {
+  animation: backdropOut 0.22s ease forwards;
 }
 @media (min-width: 768px) {
   #overlay-eq.closing #screen-eq {
-    animation: sheetDownDesk 0.2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    animation: sheetDownDesk 0.22s cubic-bezier(0.22, 1, 0.36, 1) forwards;
   }
+  #overlay-eq.closing .eq-overlay-backdrop {
+    animation: backdropOut 0.22s ease forwards;
+  }
+}
+@keyframes backdropOut {
+  from { opacity: 1; }
+  to   { opacity: 0; }
 }
 
 /* EQ button icon: rotate 90° CCW so bars appear vertical */
