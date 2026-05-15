@@ -677,7 +677,13 @@ const App = (() => {
       // If the track has an embedded cover stored locally, inject it into the Meta
       // cache right now — the player cover shows immediately without waiting for
       // the full blob download and _onBlobReady to fire.
-      if (dbMeta?.coverBlob && typeof Meta !== 'undefined') {
+      // Exception: if the user manually set a cover (manualAt > 0 + real URL in DB),
+      // skip blob injection so the manual cover keeps priority.
+      const _hasManualCover = (dbMeta?.manualAt || 0) > 0
+        && dbMeta?.thumbnailUrl
+        && dbMeta.thumbnailUrl !== 'id3'
+        && !dbMeta.thumbnailUrl.startsWith('blob:');
+      if (dbMeta?.coverBlob && !_hasManualCover && typeof Meta !== 'undefined') {
         const _injected = Meta.injectCover(track.id, dbMeta.coverBlob);
         if (_injected) bestThumb = _injected;
       }
@@ -1169,6 +1175,13 @@ const App = (() => {
       // Read DB meta first — needed to guard against overwriting manual edits
       const dbMeta = await DB.getMeta(item.id).catch(() => null);
       const playManual = (dbMeta?.manualAt || 0) > 0;
+
+      // Manual cover always wins — restore the DB URL immediately so every check
+      // below (AudD, Last.fm, folder, Meta.patchCached, _applyMeta) uses it and
+      // never replaces it with the ID3 blob that Meta.parse just extracted.
+      if (playManual && dbMeta?.thumbnailUrl && dbMeta.thumbnailUrl !== 'id3' && !dbMeta.thumbnailUrl.startsWith('blob:')) {
+        meta.coverUrl = dbMeta.thumbnailUrl;
+      }
 
       // Persist embedded cover blob immediately — playlists/favorites can use it
       // across sessions without re-parsing the file.
