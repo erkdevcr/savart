@@ -126,6 +126,7 @@ const UI = (() => {
       // ── Filters ────────────────────────────────────────────
       filter_all:   'Todo',
       filter_songs: 'Canciones',
+      play_results: 'Reproducir resultados',
       filter_folders: 'Carpetas',
       // ── Settings sections ──────────────────────────────────
       settings_playback:    'Reproducción',
@@ -461,6 +462,7 @@ const UI = (() => {
       // ── Filters ────────────────────────────────────────────
       filter_all:   'All',
       filter_songs: 'Songs',
+      play_results: 'Play results',
       filter_folders: 'Folders',
       // ── Settings sections ──────────────────────────────────
       settings_playback:    'Playback',
@@ -4584,6 +4586,10 @@ const UI = (() => {
     const nFolders = (results.folders || []).length;
     const nFiles   = (results.files   || []).length;
     updateSearchChipCounts({ all: nFolders + nFiles, songs: nFiles, folders: nFolders });
+
+    // Show "Play results" button only when there are song results
+    const playBtn = document.getElementById('btn-play-search-results');
+    if (playBtn) playBtn.style.display = nFiles > 0 ? 'inline-flex' : 'none';
 
     const folders = (filter === 'songs') ? [] : (results.folders || []);
     const files   = (filter === 'folders') ? [] : (results.files || []);

@@ -1502,6 +1502,28 @@ img { display: block; }
   font-weight: 400;
 }
 
+/* "Play results" — same shape/size as .filter-chip, purple accent variant */
+.play-results-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 14px;
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid #7c3aed66;
+  color: #c084fc;
+  background: #7c3aed1a;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  margin-left: auto;
+}
+.play-results-btn:hover {
+  background: #7c3aed33;
+  border-color: #7c3aedaa;
+}
+
 /* Count summary line — shown on mobile below the chips */
 #search-count-bar {
   display: none;

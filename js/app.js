@@ -4730,6 +4730,9 @@ const App = (() => {
     };
   }
 
+  // Last song results from a search — used by the "Play results" button
+  let _lastSearchFiles = [];
+
   async function _doSearch(term) {
     const container = document.getElementById('search-results');
     if (!container) return;
@@ -4739,6 +4742,9 @@ const App = (() => {
 
     container.innerHTML = `<div class="empty-state"><p>${UI.t('searching')}</p></div>`;
     UI.updateSearchChipCounts(null); // clear counts while loading
+    // Hide play-results button while searching
+    const playBtn = document.getElementById('btn-play-search-results');
+    if (playBtn) playBtn.style.display = 'none';
     if (!Auth.isAuthenticated()) { UI.showTokenBanner(); return; }
 
     try {
@@ -4747,6 +4753,8 @@ const App = (() => {
       const result = _fuzzyRank(term, raw);
       // Cache all items for queue resolution
       [...(result.folders || []), ...(result.files || [])].forEach(item => _cacheItem(item));
+      // Store song results for the "Play results" button
+      _lastSearchFiles = result.files || [];
       // Render sorted results
       UI.renderSearchResults(result, filter);
       UI.setActiveSongRow(Player.getCurrentTrack()?.id ?? null);
@@ -11305,6 +11313,9 @@ const App = (() => {
         if (searchResults) { searchResults.style.display = 'none'; searchResults.innerHTML = ''; }
         if (filters)       filters.style.display       = 'none';
         if (clearBtn)      clearBtn.style.display      = 'none';
+        const playBtn2 = document.getElementById('btn-play-search-results');
+        if (playBtn2)      playBtn2.style.display      = 'none';
+        _lastSearchFiles = [];
       }
     }
     if (viewId === 'history') _loadHistory();
@@ -11783,6 +11794,13 @@ const App = (() => {
 
     // Browse rescan button → force re-enrichment of current folder
     document.getElementById('btn-browse-rescan')?.addEventListener('click', onBrowseRescan);
+
+    // "Play results" button → queue all song results from the last search
+    document.getElementById('btn-play-search-results')?.addEventListener('click', () => {
+      if (!_lastSearchFiles.length) return;
+      _resetRadio();
+      Player.setQueue([..._lastSearchFiles], 0);
+    });
 
     // Sort option clicks
     document.getElementById('sort-dropdown')?.addEventListener('click', (e) => {
