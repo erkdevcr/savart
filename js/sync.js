@@ -455,7 +455,16 @@ const Sync = (() => {
       }
 
       case 'settings': {
-        if (data && typeof data === 'object') await DB.setState('settings', data);
+        // Only apply the shared portion (custom presets). Never touch 'settings_local'
+        // which holds device-specific EQ state (gains, enabled, preset, tempo).
+        if (data && typeof data === 'object') {
+          const current = (await DB.getState('settings')) || {};
+          await DB.setState('settings', {
+            ...current,
+            eqCustomPresets: data.eqCustomPresets || current.eqCustomPresets || [],
+            savedAt:         data.savedAt || current.savedAt,
+          });
+        }
         break;
       }
 
@@ -836,11 +845,16 @@ const Sync = (() => {
   }
 
   async function _pushSettings() {
-    // Always write something so other devices can pick up settings on first sync.
-    // Fall back to an empty-but-valid object if the user hasn't changed anything yet.
+    // Only push the shared portion of settings (custom EQ presets).
+    // EQ state (gains, enabled, preset, tempo) lives in 'settings_local' and
+    // is intentionally device-specific — it is never written to Drive.
     const s = (await DB.getState('settings')) || {};
-    await _writeFile(FILENAMES.settings, s);
-    console.log('[Sync] Pushed settings');
+    const payload = {
+      eqCustomPresets: s.eqCustomPresets || [],
+      savedAt:         s.savedAt || Date.now(),
+    };
+    await _writeFile(FILENAMES.settings, payload);
+    console.log('[Sync] Pushed settings (custom presets only)');
   }
 
   async function _pushHistory() {

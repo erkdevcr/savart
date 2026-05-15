@@ -519,48 +519,57 @@ const App = (() => {
   }
 
   /**
-   * Restore EQ and tempo from DB.setState('settings').
-   * Called on boot and again after Sync.init() in case remote had newer settings.
+   * Restore EQ and tempo from DB.
+   *
+   * EQ state (gains, enabled, preset, tempo) comes from 'settings_local' —
+   * it is device-specific and never overwritten by sync.
+   * Custom presets come from 'settings' — shared and synced across devices.
+   * On first run after migration the old 'settings' object may still contain
+   * EQ state fields; those are read as a one-time fallback and then ignored.
+   *
+   * Called on boot and again after Sync.init() in case remote had newer presets.
    */
   async function _restoreSettings() {
     try {
-      const s = await DB.getState('settings');
-      if (!s) return;
+      // Device-local EQ state
+      const loc = (await DB.getState('settings_local')) || {};
+      // Shared synced settings (custom presets only going forward)
+      const shared = (await DB.getState('settings')) || {};
+
+      // Migration: if settings_local is empty, fall back to old 'settings' fields
+      const eqGains   = loc.eqGains   ?? shared.eqGains;
+      const eqEnabled = loc.eqEnabled ?? shared.eqEnabled;
+      const eqPreset  = loc.eqPreset  ?? shared.eqPreset;
+      const tempo     = loc.tempo     ?? shared.tempo;
 
       // ── Restore tempo ──────────────────────────────────────
-      if (typeof s.tempo === 'number') {
-        Player.setTempo(s.tempo);
-        const sliderVal    = Math.round(s.tempo * 100);
-        const display      = s.tempo.toFixed(2) + '×';
-        const tempoSlider  = document.getElementById('tempo-slider');
-        const tempoVal     = document.getElementById('tempo-val');
-        const oSlider      = document.getElementById('overlay-tempo-slider');
-        const oVal         = document.getElementById('overlay-tempo-val');
-        if (tempoSlider) tempoSlider.value    = sliderVal;
-        if (tempoVal)    tempoVal.textContent = display;
-        if (oSlider)     oSlider.value        = sliderVal;
-        if (oVal)        oVal.textContent     = display;
+      if (typeof tempo === 'number') {
+        Player.setTempo(tempo);
+        const sliderVal = Math.round(tempo * 100);
+        const display   = tempo.toFixed(2) + '×';
+        const oSlider   = document.getElementById('overlay-tempo-slider');
+        const oVal      = document.getElementById('overlay-tempo-val');
+        if (oSlider) oSlider.value        = sliderVal;
+        if (oVal)    oVal.textContent     = display;
       }
 
       // ── Restore EQ enabled state ───────────────────────────
       const eqToggle = document.getElementById('eq-toggle');
       if (eqToggle) {
-        const isOn = s.eqEnabled !== false; // default on
+        const isOn = eqEnabled !== false; // default on
         eqToggle.classList.toggle('on', isOn);
-        // Apply visual disabled state to sliders panel and EQ screen
         document.getElementById('eq-sliders')?.classList.toggle('eq-off', !isOn);
         document.getElementById('screen-eq')?.classList.toggle('eq-controls-off', !isOn);
       }
 
       // ── Restore EQ gains ───────────────────────────────────
-      if (Array.isArray(s.eqGains) && s.eqGains.length === CONFIG.EQ_BANDS.length) {
-        Player.setEQGains(s.eqGains);
-        _currentPreset = s.eqPreset || null;
-        // Update sliders if the EQ panel is already in the DOM
-        s.eqGains.forEach((g, i) => {
+      if (Array.isArray(eqGains) && eqGains.length === CONFIG.EQ_BANDS.length) {
+        Player.setEQGains(eqGains);
+        _currentPreset = eqPreset || null;
+        eqGains.forEach((g, i) => {
           const slider = document.getElementById(`eq-slider-${i}`);
           const valEl  = document.getElementById(`eq-val-${i}`);
-          if (slider) slider.value    = g;
+          if (slider) slider.value      = g;
           if (valEl)  valEl.textContent = g > 0 ? `+${g}` : `${g}`;
         });
         document.querySelectorAll('.eq-preset-chip').forEach(c => {
@@ -569,10 +578,10 @@ const App = (() => {
         _drawEQCurve();
       }
 
-      // ── Restore custom presets ─────────────────────────────
-      if (Array.isArray(s.eqCustomPresets) && s.eqCustomPresets.length > 0) {
-        _customPresets = s.eqCustomPresets;
-        // Keep localStorage in sync for any legacy reads
+      // ── Restore custom presets (shared / synced) ───────────
+      const presets = shared.eqCustomPresets ?? loc.eqCustomPresets; // migration fallback
+      if (Array.isArray(presets) && presets.length > 0) {
+        _customPresets = presets;
         try { localStorage.setItem('savart_eq_presets', JSON.stringify(_customPresets)); } catch (_) {}
         _renderCustomPresets();
       }
@@ -585,20 +594,30 @@ const App = (() => {
 
   /**
    * Persist current EQ + tempo to DB and schedule a sync push.
-   * Call after any EQ or tempo change.
+   *
+   * EQ state (gains, enabled, active preset, tempo) is device-local:
+   *   → saved to 'settings_local' in IndexedDB, never pushed to Drive.
+   * Custom presets are shared across devices:
+   *   → saved to 'settings' in IndexedDB and pushed to Drive via Sync.
    */
   function _saveSettings() {
-    const gains      = Player.getEQGains();
-    const eqOn       = document.getElementById('eq-toggle')?.classList.contains('on') ?? true;
-    const tempoRaw   = parseFloat(document.getElementById('overlay-tempo-slider')?.value ?? 100);
-    const tempo      = tempoRaw / 100;
-    DB.setState('settings', {
-      eqGains:        gains,
-      eqEnabled:      eqOn,
-      eqPreset:       _currentPreset || null,
+    const gains    = Player.getEQGains();
+    const eqOn     = document.getElementById('eq-toggle')?.classList.contains('on') ?? true;
+    const tempoRaw = parseFloat(document.getElementById('overlay-tempo-slider')?.value ?? 100);
+    const tempo    = tempoRaw / 100;
+
+    // Device-local EQ state — never synced
+    DB.setState('settings_local', {
+      eqGains:   gains,
+      eqEnabled: eqOn,
+      eqPreset:  _currentPreset || null,
       tempo,
+    }).catch(() => {});
+
+    // Shared custom presets — synced across devices
+    DB.setState('settings', {
       eqCustomPresets: _customPresets,
-      savedAt:        Date.now(),
+      savedAt:         Date.now(),
     }).catch(() => {});
     Sync.push('settings');
   }

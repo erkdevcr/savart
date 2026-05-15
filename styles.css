@@ -3536,6 +3536,15 @@ body.queue-open #mini-player { z-index: 65; }
     width: auto !important;      /* override the base 140px fixed width */
     min-width: 0;                /* allow grid cell to shrink below content width */
   }
+  /* Hide the EQ curve in the overlay on mobile — it costs 72px and the section
+     needs that budget to show 1.5 rows of saved presets (~220px). */
+  #overlay-eq .eq-curve-wrap {
+    display: none !important;
+  }
+  /* Ensure the custom-presets section always shows ~1.5 card rows (~98px/row + gaps + header) */
+  #overlay-eq .eq-custom-section {
+    min-height: 220px;
+  }
 }
 
 /* ── Mobile narrow-screen shrink ─────────────────────────── */
