@@ -124,7 +124,7 @@
           <button class="home-action-btn" id="btn-home-search" aria-label="Buscar">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
           </button>
-          <button class="home-action-btn" aria-label="Info">
+          <button class="home-action-btn" id="btn-home-info" aria-label="Info">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
           </button>
         </div>
@@ -994,6 +994,34 @@
   </div>
 
 </div><!-- /#player-expanded -->
+
+<!-- ── About popup ───────────────────────────────────────── -->
+<div id="overlay-about" style="display:none;position:fixed;inset:0;z-index:400;align-items:center;justify-content:center">
+  <div class="about-backdrop"></div>
+  <div class="about-card">
+    <button id="btn-about-close" class="ctrl-sheet-close-btn about-close-btn" aria-label="Cerrar">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+    </button>
+    <div class="login-mark">
+      <svg width="48" height="32" viewBox="0 0 48 32" fill="none">
+        <path d="M6 22 C10 10, 14 10, 18 16 C22 22, 26 22, 30 16 C34 10, 38 10, 42 22"
+              stroke="#4A88F5" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      </svg>
+    </div>
+    <div class="login-logo">Savart</div>
+    <div class="about-versions">
+      <div class="about-version-row">
+        <span class="about-version-label">App</span>
+        <span class="about-version-val" id="about-app-version">—</span>
+      </div>
+      <div class="about-version-row">
+        <span class="about-version-label">SW</span>
+        <span class="about-version-val" id="about-sw-version">—</span>
+      </div>
+    </div>
+    <div class="about-copyright">Erkdevcr © <span id="about-year"></span></div>
+  </div>
+</div>
 
 </div><!-- /#app -->
 

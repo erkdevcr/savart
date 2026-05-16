@@ -4869,6 +4869,67 @@ body.queue-open #mini-player { z-index: 65; }
   color: var(--text-primary);
 }
 
+/* ── About popup ─────────────────────────────────────── */
+.about-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.about-card {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  padding: 36px 32px 28px;
+  width: 260px;
+  background: rgba(12, 12, 18, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 24px;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+}
+
+.about-close-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+}
+
+.about-versions {
+  width: 100%;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.about-version-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+}
+
+.about-version-label { color: var(--text-muted); }
+
+.about-version-val {
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.about-copyright {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
 /* Sleep timer pills */
 .sleep-pills {
   display: flex;

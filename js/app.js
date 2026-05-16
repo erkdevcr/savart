@@ -12369,6 +12369,43 @@ const App = (() => {
     document.getElementById('btn-db-stats-close')?.addEventListener('click', _closeDbStats);
     document.querySelector('#overlay-db-stats .db-stats-backdrop')?.addEventListener('click', _closeDbStats);
 
+    // ── About popup ───────────────────────────────────────────
+    const _aboutOverlay  = document.getElementById('overlay-about');
+    const _closeAbout    = () => { if (_aboutOverlay) _aboutOverlay.style.display = 'none'; };
+
+    document.getElementById('btn-home-info')?.addEventListener('click', () => {
+      if (!_aboutOverlay) return;
+      // App version from config
+      const appVerEl = document.getElementById('about-app-version');
+      if (appVerEl) appVerEl.textContent = `v${CONFIG.VERSION}`;
+      // SW version via message channel
+      const swVerEl = document.getElementById('about-sw-version');
+      if (swVerEl) {
+        swVerEl.textContent = '…';
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.ready.then(reg => {
+            const sw = reg.active;
+            if (sw) {
+              const mc = new MessageChannel();
+              mc.port1.onmessage = e => {
+                if (e.data?.version) swVerEl.textContent = `v${e.data.version}`;
+              };
+              sw.postMessage({ type: 'GET_VERSION' }, [mc.port2]);
+            }
+          }).catch(() => { swVerEl.textContent = '—'; });
+        } else {
+          swVerEl.textContent = '—';
+        }
+      }
+      // Current year
+      const yearEl = document.getElementById('about-year');
+      if (yearEl) yearEl.textContent = new Date().getFullYear();
+      _aboutOverlay.style.display = 'flex';
+    });
+
+    document.getElementById('btn-about-close')?.addEventListener('click', _closeAbout);
+    document.querySelector('#overlay-about .about-backdrop')?.addEventListener('click', _closeAbout);
+
     // Cache limit selector
     document.getElementById('select-cache-limit')?.addEventListener('change', async (e) => {
       const bytes = parseInt(e.target.value, 10);
