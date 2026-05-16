@@ -2464,7 +2464,8 @@ img { display: block; }
   border-bottom: 1px solid var(--bg-hover);
 }
 
-.settings-section:last-child .settings-row:last-child { border-bottom: none; }
+/* Remove bottom border on last row of every card (mobile per-section cards + desktop) */
+.settings-section .settings-row:last-child { border-bottom: none; }
 
 .settings-row-label {
   font-size: 14px;
@@ -4568,13 +4569,15 @@ body.queue-open #mini-player { z-index: 65; }
     border-bottom: 1px solid var(--bg-hover);
   }
 
-  /* Single card wrapping everything */
+  /* Grid = transparent flex column with gap between section cards */
   .settings-grid {
-    display: block;
-    background: var(--bg-elevated);
-    border-radius: var(--radius-md);
-    overflow: hidden;
-    margin: 0 0 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    background: transparent;
+    border-radius: 0;
+    overflow: visible;
+    margin: 0 0 8px;
   }
 
   /* Column wrappers are invisible on mobile — pure passthrough */
@@ -4582,16 +4585,23 @@ body.queue-open #mini-player { z-index: 65; }
     display: contents;
   }
 
-  /* Sections flow as flat blocks, no individual card borders */
+  /* Each section = its own card */
   .settings-section {
+    background: var(--bg-elevated);
+    border-radius: var(--radius-md);
+    overflow: hidden;
     padding: 0;
-    background: transparent;
   }
 
-  /* Section title hidden — category shown inline per row */
-  .settings-section-title { display: none; }
+  /* Section title visible as card header */
+  .settings-section-title {
+    display: block;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--bg-hover);
+    margin-bottom: 0;
+  }
 
-  /* Category label visible */
+  /* Category label visible for extra context under row labels */
   .settings-row-cat {
     display: block;
     font-size: 11px;
