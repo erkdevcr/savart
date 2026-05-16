@@ -4480,7 +4480,7 @@ body.queue-open #mini-player { z-index: 65; }
 /* ── Settings — desktop: Option A (2-col flex layout) ───── */
 @media (min-width: 768px) {
   #screen-settings {
-    padding: 0 24px 32px;
+    padding: 0 0 32px; /* header spans full width; grid + danger get own margins */
   }
 
   /* Two explicit flex columns — each stacks its own cards independently,
@@ -4490,6 +4490,18 @@ body.queue-open #mini-player { z-index: 65; }
     flex-direction: row;
     align-items: flex-start;
     gap: 14px;
+    margin: 16px 24px 0;
+  }
+
+  /* Danger section (logout + clear cache) — full-width card below the grid */
+  .settings-danger {
+    margin: 14px 24px 0;
+    background: var(--bg-elevated);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+  }
+  .settings-danger .settings-row {
+    padding: 13px 18px;
   }
 
   /* Each column fills half the width and stacks its cards vertically */
@@ -4539,8 +4551,21 @@ body.queue-open #mini-player { z-index: 65; }
      flex-shrink:0 forces children to keep their natural height so the
      container overflows and becomes scrollable. */
   #screen-settings > .settings-grid,
+  #screen-settings > .settings-danger,
   #screen-settings > div:last-child {
     flex-shrink: 0;
+  }
+
+  /* Danger section — own card on mobile, shown after the main grid */
+  .settings-danger {
+    background: var(--bg-elevated);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    margin: 0 0 16px;
+  }
+  .settings-danger .settings-row {
+    padding: 11px 16px;
+    border-bottom: 1px solid var(--bg-hover);
   }
 
   /* Single card wrapping everything */

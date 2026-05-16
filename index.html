@@ -356,9 +356,6 @@
               </div>
             </div>
 
-            <div class="settings-row">
-              <button id="btn-logout" data-i18n="logout" style="color:var(--error);font-size:14px;font-weight:500;background:none;border:none;cursor:pointer;padding:0">Cerrar sesión</button>
-            </div>
           </div><!-- /Cuenta -->
 
         </div><!-- /.settings-col (col 1) -->
@@ -431,9 +428,6 @@
               <button id="btn-view-db-stats" class="btn-sort-toggle" data-i18n="settings_db_view">Ver</button>
             </div>
 
-            <div class="settings-row">
-              <button id="btn-clear-cache" data-i18n="settings_clear_cache" style="color:var(--error);font-size:14px;background:none;border:none;cursor:pointer;padding:0">Borrar caché</button>
-            </div>
           </div><!-- /Almacenamiento -->
 
           <!-- LIMPIAR HOME -->
@@ -444,27 +438,27 @@
             <div class="clear-home-checks">
               <label class="clear-home-item">
                 <input type="checkbox" class="clear-home-cb" data-store="recents">
-                <span data-i18n="home_recents">Recientes</span>
+                <span data-i18n="recents">Recientes</span>
               </label>
               <label class="clear-home-item">
                 <input type="checkbox" class="clear-home-cb" data-store="playcounts">
-                <span data-i18n="home_top_played">Más reproducidas</span>
+                <span data-i18n="top_played">Más reproducidas</span>
               </label>
               <label class="clear-home-item">
                 <input type="checkbox" class="clear-home-cb" data-store="pinned">
-                <span data-i18n="home_pinned">Fijadas</span>
+                <span data-i18n="pinned">Fijadas</span>
               </label>
               <label class="clear-home-item">
                 <input type="checkbox" class="clear-home-cb" data-store="history">
-                <span data-i18n="nav_history">Historial</span>
+                <span data-i18n="history">Historial</span>
               </label>
               <label class="clear-home-item">
                 <input type="checkbox" class="clear-home-cb" data-store="playlists">
-                <span data-i18n="nav_playlists">Playlists</span>
+                <span data-i18n="playlists">Playlists</span>
               </label>
               <label class="clear-home-item">
                 <input type="checkbox" class="clear-home-cb" data-store="starred">
-                <span data-i18n="home_favorites">Favoritos</span>
+                <span data-i18n="lib_favorites">Favoritos</span>
               </label>
             </div>
 
@@ -479,6 +473,24 @@
         </div><!-- /.settings-col (col 2) -->
 
       </div><!-- /.settings-grid -->
+
+      <!-- ── Danger actions: Logout + Clear cache — always last on mobile ── -->
+      <div class="settings-danger">
+        <div class="settings-row">
+          <div>
+            <div class="settings-row-label" data-i18n="logout">Cerrar sesión</div>
+            <div class="settings-row-cat" data-i18n="settings_account">Cuenta</div>
+          </div>
+          <button id="btn-logout" data-i18n="logout" style="color:var(--error);font-size:14px;font-weight:500;background:none;border:none;cursor:pointer;padding:0">Cerrar sesión</button>
+        </div>
+        <div class="settings-row" style="border-bottom:none">
+          <div>
+            <div class="settings-row-label" data-i18n="settings_clear_cache">Borrar caché</div>
+            <div class="settings-row-cat" data-i18n="settings_storage">Almacenamiento</div>
+          </div>
+          <button id="btn-clear-cache" data-i18n="settings_clear_cache" style="color:var(--error);font-size:14px;background:none;border:none;cursor:pointer;padding:0">Borrar caché</button>
+        </div>
+      </div>
 
       <!-- DB Stats popup — fuera del grid para no afectar el layout -->
       <div id="overlay-db-stats" class="db-stats-overlay" style="display:none">
