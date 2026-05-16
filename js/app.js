@@ -12412,6 +12412,21 @@ const App = (() => {
       });
     });
 
+    // Overlay timer slider — same slider-with-steps pattern as tempo
+    const _timerSlider = document.getElementById('overlay-timer-slider');
+    const _timerNumEl  = document.getElementById('overlay-timer-num');
+    if (_timerSlider) {
+      _timerSlider.addEventListener('input', () => {
+        const v = parseInt(_timerSlider.value, 10);
+        if (_timerNumEl) _timerNumEl.textContent = v === 0 ? 'Off' : v;
+        document.querySelectorAll('.timer-chip').forEach(p => {
+          const pv = p.dataset.mins === 'off' ? 0 : parseInt(p.dataset.mins, 10);
+          p.classList.toggle('active', pv === v);
+        });
+        _setSleepTimer(v === 0 ? 'off' : v);
+      });
+    }
+
     // Sleep timer toggle (settings desktop)
     document.getElementById('sleep-timer-toggle')?.addEventListener('click', (e) => {
       const isNowOn = e.currentTarget.classList.toggle('on');

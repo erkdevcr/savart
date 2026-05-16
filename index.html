@@ -1196,6 +1196,19 @@
       <span class="timer-display-num" id="overlay-timer-num">Off</span>
       <span class="timer-display-unit" data-i18n="sleep_mins_unit">minutos</span>
     </div>
+    <div style="margin-top:4px">
+      <div class="slider-with-steps">
+        <div class="step-col">
+          <button class="step-btn" data-target="overlay-timer-slider" data-dir="-1" aria-label="Menos tiempo">−</button>
+          <span class="slider-bound">Off</span>
+        </div>
+        <input id="overlay-timer-slider" type="range" min="0" max="120" value="0" step="5" class="settings-slider">
+        <div class="step-col">
+          <button class="step-btn" data-target="overlay-timer-slider" data-dir="1" aria-label="Más tiempo">+</button>
+          <span class="slider-bound">2h</span>
+        </div>
+      </div>
+    </div>
     <div class="timer-quick-row">
       <button class="sleep-pill timer-chip" data-mins="15">15</button>
       <button class="sleep-pill timer-chip" data-mins="30">30</button>
