@@ -1647,10 +1647,15 @@ const App = (() => {
         try {
           const ap = file.appProperties;
           if (ap?.s_cover) {
-            const apDbMeta  = await DB.getMeta(file.id).catch(() => null);
-            const apManual  = (apDbMeta?.manualAt || 0) > 0;
-            if (!apManual) {
+            const apDbMeta   = await DB.getMeta(file.id).catch(() => null);
+            const apManual   = (apDbMeta?.manualAt || 0) > 0;
+            // Embedded-art guard: if local DB already has a coverBlob or thumbnailUrl:'id3'
+            // (set by a reset or a prior scan), the embedded art takes priority over the
+            // stale appProperties URL — don't let Drive re-introduce it every session open.
+            const hasEmbedded = apDbMeta?.coverBlob || apDbMeta?.thumbnailUrl === 'id3';
+            if (!apManual && !hasEmbedded) {
               // Sync cover from Drive appProperties only when user hasn't set a custom cover
+              // and there is no locally-embedded art to prefer.
               _updateRowThumbnail(file.id, ap.s_cover);
               const save = { thumbnailUrl: ap.s_cover };
               if (ap.s_title)  save.displayName = ap.s_title;
@@ -1658,8 +1663,10 @@ const App = (() => {
               if (ap.s_album)  save.album        = ap.s_album;
               if (ap.s_year)   save.year         = ap.s_year;
               DB.setMeta(file.id, save).catch(() => {});
+              return;
             }
-            return;
+            // Has manual cover or embedded art — don't apply appProperties URL.
+            // Fall through so the coverBlob / manualUrl paths below handle rendering.
           }
           const dbMeta = await DB.getMeta(file.id);
           if (!dbMeta) return;
@@ -10433,6 +10440,13 @@ const App = (() => {
 
     // Direct put so null values literally overwrite stale data in IndexedDB.
     await DB.bulkWriteMeta([{ ...(dbMeta || {}), ...dbPatch, id: songId }]);
+
+    // Clear stale s_cover from Drive appProperties so it can't be re-applied by
+    // _prefetchAndApplyFolderCovers on the next session open. Fails silently if
+    // the property doesn't exist or the Drive.file scope is unavailable.
+    if (typeof Drive !== 'undefined' && Drive.setAppProperties) {
+      Drive.setAppProperties(songId, { s_cover: null }).catch(() => {});
+    }
 
     // Live-update text fields — always apply (even null) so stale values clear in live UI.
     // thumbnailUrl:'id3' must NOT go through _liveMetaUpdate (would corrupt Meta cache).
