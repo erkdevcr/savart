@@ -1164,21 +1164,18 @@
         <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
       </button>
     </div>
-    <div style="margin-top:4px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-        <span class="ctrl-sheet-big-val" id="overlay-tempo-val" style="font-size:18px">1.00×</span>
-      </div>
-      <div class="slider-with-steps">
-        <div class="step-col">
-          <button class="step-btn" data-target="overlay-tempo-slider" data-dir="-1" aria-label="Bajar tempo">−</button>
-          <span class="slider-bound">0.5×</span>
-        </div>
-        <input id="overlay-tempo-slider" type="range" min="50" max="200" value="100" step="1" class="settings-slider">
-        <div class="step-col">
-          <button class="step-btn" data-target="overlay-tempo-slider" data-dir="1" aria-label="Subir tempo">+</button>
-          <span class="slider-bound">2.0×</span>
-        </div>
-      </div>
+    <div class="timer-display">
+      <span class="timer-display-num" id="overlay-tempo-val">1.00×</span>
+      <span class="timer-display-unit" data-i18n="settings_tempo">Tempo</span>
+    </div>
+    <div class="slider-with-steps">
+      <button class="step-btn" data-target="overlay-tempo-slider" data-dir="-1" aria-label="Bajar tempo">−</button>
+      <input id="overlay-tempo-slider" type="range" min="50" max="200" value="100" step="1" class="settings-slider">
+      <button class="step-btn" data-target="overlay-tempo-slider" data-dir="1" aria-label="Subir tempo">+</button>
+    </div>
+    <div class="slider-bounds-row">
+      <span>0.5×</span>
+      <span>2.0×</span>
     </div>
   </div>
 </div>
@@ -1196,18 +1193,14 @@
       <span class="timer-display-num" id="overlay-timer-num">Off</span>
       <span class="timer-display-unit" data-i18n="sleep_mins_unit">minutos</span>
     </div>
-    <div style="margin-top:4px">
-      <div class="slider-with-steps">
-        <div class="step-col">
-          <button class="step-btn" data-target="overlay-timer-slider" data-dir="-1" aria-label="Menos tiempo">−</button>
-          <span class="slider-bound">Off</span>
-        </div>
-        <input id="overlay-timer-slider" type="range" min="0" max="120" value="0" step="5" class="settings-slider">
-        <div class="step-col">
-          <button class="step-btn" data-target="overlay-timer-slider" data-dir="1" aria-label="Más tiempo">+</button>
-          <span class="slider-bound">2h</span>
-        </div>
-      </div>
+    <div class="slider-with-steps">
+      <button class="step-btn" data-target="overlay-timer-slider" data-dir="-1" aria-label="Menos tiempo">−</button>
+      <input id="overlay-timer-slider" type="range" min="0" max="120" value="0" step="5" class="settings-slider">
+      <button class="step-btn" data-target="overlay-timer-slider" data-dir="1" aria-label="Más tiempo">+</button>
+    </div>
+    <div class="slider-bounds-row">
+      <span>Off</span>
+      <span>2h</span>
     </div>
     <div class="timer-quick-row">
       <button class="sleep-pill timer-chip" data-mins="15">15</button>

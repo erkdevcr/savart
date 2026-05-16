@@ -4734,6 +4734,20 @@ body.queue-open #mini-player { z-index: 65; }
   flex-shrink: 0;
 }
 
+/* Range labels row shown below slider-with-steps in ctrl-sheet cards */
+.slider-bounds-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0 2px 10px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* Reduce default bottom padding when bounds row follows */
+.ctrl-sheet-card .slider-with-steps {
+  padding-bottom: 2px;
+}
+
 .settings-value-label {
   font-size: 13px;
   color: var(--text-secondary);
