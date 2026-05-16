@@ -475,11 +475,6 @@ img { display: block; }
   letter-spacing: -0.02em;
 }
 
-.home-header-actions {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
 
 .home-action-btn {
   width: 36px;
