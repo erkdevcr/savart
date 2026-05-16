@@ -12412,26 +12412,6 @@ const App = (() => {
       });
     });
 
-    // Overlay timer slider: min=0 (Off) → max=120
-    const _timerSlider = document.getElementById('overlay-timer-slider');
-    const _timerNumEl  = document.getElementById('overlay-timer-num');
-    if (_timerSlider) {
-      // Live preview while dragging — just update display, don't start timer yet
-      _timerSlider.addEventListener('input', () => {
-        const v = parseInt(_timerSlider.value, 10);
-        if (_timerNumEl) _timerNumEl.textContent = v === 0 ? 'Off' : v;
-        document.querySelectorAll('.timer-chip').forEach(p => {
-          const pv = p.dataset.mins === 'off' ? 0 : parseInt(p.dataset.mins, 10);
-          p.classList.toggle('active', pv === v);
-        });
-      });
-      // On release: reset timer from new position
-      _timerSlider.addEventListener('change', () => {
-        const v = parseInt(_timerSlider.value, 10);
-        _setSleepTimer(v === 0 ? 'off' : v);
-      });
-    }
-
     // Sleep timer toggle (settings desktop)
     document.getElementById('sleep-timer-toggle')?.addEventListener('click', (e) => {
       const isNowOn = e.currentTarget.classList.toggle('on');
