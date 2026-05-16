@@ -261,6 +261,8 @@ img { display: block; }
 }
 
 #mini-player .mini-thumb img {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -710,6 +712,15 @@ img { display: block; }
   align-items: center;
   justify-content: center;
   position: relative; /* needed for eq-bars overlay */
+}
+
+.top-list-thumb img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
 }
 
 .top-list-info {
@@ -1282,6 +1293,8 @@ img { display: block; }
 }
 
 .song-thumb img {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;

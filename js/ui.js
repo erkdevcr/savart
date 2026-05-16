@@ -804,7 +804,9 @@ const UI = (() => {
     if (artistEl) artistEl.textContent = track.artist || '';
 
     if (thumbImg) {
+      thumbImg.onerror = null;
       if (track.thumbnailUrl) {
+        thumbImg.onerror = () => { thumbImg.style.display = 'none'; };
         thumbImg.src = track.thumbnailUrl;
         thumbImg.style.display = '';
       } else {
@@ -834,7 +836,9 @@ const UI = (() => {
     if (artistEl) artistEl.textContent = track?.artist || '';
 
     if (img && icon) {
+      img.onerror = null;
       if (track?.thumbnailUrl) {
+        img.onerror        = () => { img.style.display = 'none'; icon.style.display = ''; };
         img.src            = track.thumbnailUrl;
         img.style.display  = '';
         icon.style.display = 'none';
@@ -948,8 +952,10 @@ const UI = (() => {
     const artImg  = document.getElementById('pexp-art-img');
     const artPh   = document.getElementById('pexp-art-placeholder');
     if (artImg && artPh) {
+      artImg.onerror = null;
       if (track?.thumbnailUrl) {
-        artImg.src = track.thumbnailUrl;
+        artImg.onerror       = () => { artImg.style.display = 'none'; artPh.style.display = ''; };
+        artImg.src           = track.thumbnailUrl;
         artImg.style.display = '';
         artPh.style.display  = 'none';
       } else {
@@ -1249,10 +1255,7 @@ const UI = (() => {
     const year    = meta?.year   || item.year    || '';
     const coverSrc = meta?.coverUrl || item.coverUrl || item.thumbnailUrl || item.thumbnailLink || '';
 
-    const _topFallback = `<div style="display:none;width:100%;height:100%;align-items:center;justify-content:center;color:var(--text-disabled)">${isFolder ? iconFolder(18) : iconMusicNote(18)}</div>`;
-    const thumbHtml = coverSrc
-      ? `<img src="${coverSrc}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">${_topFallback}`
-      : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--text-disabled)">${isFolder ? iconFolder(18) : iconMusicNote(18)}</div>`;
+    const thumbHtml = `<div style="display:flex;align-items:center;justify-content:center;color:var(--text-disabled)">${isFolder ? iconFolder(18) : iconMusicNote(18)}</div>${coverSrc ? `<img src="${coverSrc}" alt="" loading="lazy" onerror="this.style.display='none'">` : ''}`;
 
     // Secondary line: artist | album · year (only non-empty parts)
     const metaParts = [artist, [album, year].filter(Boolean).join(' · ')].filter(Boolean);
@@ -1387,9 +1390,7 @@ const UI = (() => {
     const year     = inMem?.year   || item.year      || '';
     const coverSrc = inMem?.coverUrl || item.thumbnailUrl || '';
 
-    const thumbHtml = coverSrc
-      ? `<img src="${coverSrc}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover">`
-      : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--text-disabled)">${iconMusicNote(18)}</div>`;
+    const thumbHtml = `<div style="display:flex;align-items:center;justify-content:center;color:var(--text-disabled)">${iconMusicNote(18)}</div>${coverSrc ? `<img src="${coverSrc}" alt="" loading="lazy" onerror="this.style.display='none'">` : ''}`;
 
     // Secondary line: "artist — album · year" (same format as top-played)
     const metaParts = [artist, [album, year].filter(Boolean).join(' · ')].filter(Boolean);
@@ -1629,17 +1630,17 @@ const UI = (() => {
     if (!thumb) return;
     let img = thumb.querySelector('img');
     if (img) {
+      img.style.display = '';   // reset any display:none set by a previous onerror
       img.src = coverUrl;
     } else {
-      // Replace placeholder with a real image
-      const placeholder = thumb.querySelector('.thumb-placeholder');
-      if (placeholder) {
-        img = document.createElement('img');
-        img.alt = '';
-        img.loading = 'lazy';
-        img.src = coverUrl;
-        placeholder.replaceWith(img);
-      }
+      // Placeholder is always present — insert img on top of it (position:absolute via CSS)
+      img = document.createElement('img');
+      img.alt = '';
+      img.loading = 'lazy';
+      img.onerror = function() { this.style.display = 'none'; };
+      img.src = coverUrl;
+      const eqBars = thumb.querySelector('.eq-bars');
+      thumb.insertBefore(img, eqBars || null);
     }
   }
 
@@ -1878,10 +1879,8 @@ const UI = (() => {
     row.innerHTML = `
       ${numHtml}
       <div class="song-thumb">
-        ${file.thumbnailUrl
-          ? `<img src="${file.thumbnailUrl}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display=''"><div class="thumb-placeholder" style="display:none">${iconMusicNote(20)}</div>`
-          : `<div class="thumb-placeholder">${iconMusicNote(20)}</div>`
-        }
+        <div class="thumb-placeholder">${iconMusicNote(20)}</div>
+        ${file.thumbnailUrl ? `<img src="${file.thumbnailUrl}" alt="" loading="lazy" onerror="this.style.display='none'">` : ''}
         <div class="eq-bars">
           <div class="eq-bar"></div>
           <div class="eq-bar"></div>
@@ -2989,10 +2988,8 @@ const UI = (() => {
       row.innerHTML = `
         <div class="top-list-rank">${i + 1}</div>
         <div class="top-list-thumb">
-          ${song.thumbnailUrl
-            ? `<img src="${song.thumbnailUrl}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)">`
-            : iconMusicNote(22)
-          }
+          <div style="display:flex;align-items:center;justify-content:center;color:var(--text-disabled)">${iconMusicNote(22)}</div>
+          ${song.thumbnailUrl ? `<img src="${song.thumbnailUrl}" alt="" loading="lazy" onerror="this.style.display='none'">` : ''}
           <div class="eq-bars"><div class="eq-bar"></div><div class="eq-bar"></div><div class="eq-bar"></div><div class="eq-bar"></div></div>
         </div>
         <div class="top-list-info">
@@ -3121,10 +3118,8 @@ const UI = (() => {
 
       row.innerHTML = `
         <div class="song-thumb">
-          ${song.thumbnailUrl
-            ? `<img src="${song.thumbnailUrl}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display=''"><div class="thumb-placeholder" style="display:none">${iconMusicNote(20)}</div>`
-            : `<div class="thumb-placeholder">${iconMusicNote(20)}</div>`
-          }
+          <div class="thumb-placeholder">${iconMusicNote(20)}</div>
+          ${song.thumbnailUrl ? `<img src="${song.thumbnailUrl}" alt="" onerror="this.style.display='none'">` : ''}
           <div class="eq-bars">
             <div class="eq-bar"></div>
             <div class="eq-bar"></div>
@@ -3786,10 +3781,8 @@ const UI = (() => {
       row.innerHTML = `
         <div class="top-list-rank">${i + 1}</div>
         <div class="top-list-thumb">
-          ${song.thumbnailUrl
-            ? `<img src="${song.thumbnailUrl}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)">`
-            : iconMusicNote(22)
-          }
+          <div style="display:flex;align-items:center;justify-content:center;color:var(--text-disabled)">${iconMusicNote(22)}</div>
+          ${song.thumbnailUrl ? `<img src="${song.thumbnailUrl}" alt="" loading="lazy" onerror="this.style.display='none'">` : ''}
           <div class="eq-bars"><div class="eq-bar"></div><div class="eq-bar"></div><div class="eq-bar"></div><div class="eq-bar"></div></div>
         </div>
         <div class="top-list-info">
@@ -4336,10 +4329,8 @@ const UI = (() => {
       row.innerHTML = `
         <div class="top-list-rank">${i + 1}</div>
         <div class="top-list-thumb">
-          ${song.thumbnailUrl
-            ? `<img src="${song.thumbnailUrl}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)">`
-            : iconMusicNote(22)
-          }
+          <div style="display:flex;align-items:center;justify-content:center;color:var(--text-disabled)">${iconMusicNote(22)}</div>
+          ${song.thumbnailUrl ? `<img src="${song.thumbnailUrl}" alt="" loading="lazy" onerror="this.style.display='none'">` : ''}
           <div class="eq-bars"><div class="eq-bar"></div><div class="eq-bar"></div><div class="eq-bar"></div><div class="eq-bar"></div></div>
         </div>
         <div class="top-list-info">
