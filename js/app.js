@@ -12609,38 +12609,48 @@ const App = (() => {
       const anyChecked = [...document.querySelectorAll('.clear-home-cb')].some(c => c.checked);
       if (_clearHomeBtn) _clearHomeBtn.disabled = !anyChecked;
     };
+    // Listen on both 'change' and 'input' for belt-and-suspenders checkbox tracking
     document.querySelectorAll('.clear-home-cb').forEach(cb => {
       cb.addEventListener('change', _syncClearBtn);
+      cb.addEventListener('input',  _syncClearBtn);
     });
+    // Also delegate from the container so any programmatic change is caught
+    document.querySelector('.clear-home-checks')
+      ?.addEventListener('change', _syncClearBtn);
 
-    _clearHomeBtn?.addEventListener('click', async () => {
-      const checked = [...document.querySelectorAll('.clear-home-cb:checked')].map(c => c.dataset.store);
-      if (!checked.length) return;
-      _clearHomeBtn.disabled = true;
-      try {
-        const ops = {
-          recents:    () => DB.clearRecents(),
-          playcounts: () => DB.clearPlaycounts(),
-          pinned:     () => DB.clearPinned(),
-          history:    () => DB.clearHistory(),
-          playlists:  () => DB.clearPlaylists(),
-          starred:    () => DB.clearStarred(),
-        };
-        await Promise.all(checked.map(store => ops[store]?.()));
-        // Push affected sync stores back to Drive
-        const syncKeys = { recents: 'recents', pinned: 'pinned', history: 'history', playlists: 'playlists' };
-        checked.forEach(store => { if (syncKeys[store]) Sync.push(syncKeys[store]).catch(() => {}); });
-        // Uncheck all, refresh home
-        document.querySelectorAll('.clear-home-cb').forEach(c => { c.checked = false; });
-        _syncClearBtn();
-        _loadHomeData();
-        UI.showToast(UI.t('toast_cleared') || 'Limpiado ✓');
-      } catch (err) {
-        console.error('[App] clearHome error:', err);
-        UI.showToast('Error al limpiar', 'error');
-        _syncClearBtn();
-      }
-    });
+    if (_clearHomeBtn) {
+      _clearHomeBtn.addEventListener('click', async () => {
+        const checked = [...document.querySelectorAll('.clear-home-cb:checked')].map(c => c.dataset.store);
+        if (!checked.length) {
+          UI.showToast(UI.t('settings_clear_selected') + ': 0', 'error');
+          return;
+        }
+        _clearHomeBtn.disabled = true;
+        try {
+          const ops = {
+            recents:    () => DB.clearRecents(),
+            playcounts: () => DB.clearPlaycounts(),
+            pinned:     () => DB.clearPinned(),
+            history:    () => DB.clearHistory(),
+            playlists:  () => DB.clearPlaylists(),
+            starred:    () => DB.clearStarred(),
+          };
+          await Promise.all(checked.map(store => ops[store]?.()));
+          // Push affected sync stores back to Drive
+          const syncKeys = { recents: 'recents', pinned: 'pinned', history: 'history', playlists: 'playlists' };
+          checked.forEach(store => { if (syncKeys[store]) Sync.push(syncKeys[store]).catch(() => {}); });
+          // Uncheck all, refresh home
+          document.querySelectorAll('.clear-home-cb').forEach(c => { c.checked = false; });
+          _syncClearBtn();
+          _loadHomeData();
+          UI.showToast(UI.t('toast_cleared'));
+        } catch (err) {
+          console.error('[App] clearHome error:', err);
+          UI.showToast('Error al limpiar', 'error');
+          _syncClearBtn();
+        }
+      });
+    }
 
     // Browse: back button — never navigates above MSK (CONFIG.ROOT_FOLDER_ID)
     document.getElementById('btn-browse-back')?.addEventListener('click', async () => {

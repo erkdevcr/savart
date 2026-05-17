@@ -365,6 +365,7 @@ const UI = (() => {
       lbl_embedded_cover:      '(Cover Embebida)',
       toast_moved_to_albums:      'Movido a Álbumes',
       toast_moved_to_collections: 'Movido a Colecciones',
+      toast_cleared:              'Limpiado ✓',
     },
     en: {
       // ── Navigation ─────────────────────────────────────────
@@ -708,6 +709,7 @@ const UI = (() => {
       lbl_embedded_cover:      '(Embedded Cover)',
       toast_moved_to_albums:      'Moved to Albums',
       toast_moved_to_collections: 'Moved to Collections',
+      toast_cleared:              'Cleared ✓',
     },
   };
 

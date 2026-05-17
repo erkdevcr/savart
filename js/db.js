@@ -894,23 +894,33 @@ const DB = (() => {
 
   /** Reset playCount to 0 on every metadata record (also removes hiddenFromTopPlayed). */
   async function clearPlaycounts() {
-    const store   = _tx('metadata', 'readwrite');
-    const records = await _promisify(store.getAll());
+    // Step 1: read all records (first transaction — auto-commits after getAll)
+    const readStore = _tx('metadata', 'readwrite');
+    const records   = await _promisify(readStore.getAll());
+    if (!records.length) return;
+    // Step 2: write all records in a SINGLE transaction (all puts issued
+    // synchronously so the transaction stays open until they all complete)
+    const writeStore = _tx('metadata', 'readwrite');
     await Promise.all(records.map(r => {
-      r.playCount            = 0;
+      r.playCount = 0;
       delete r.hiddenFromTopPlayed;
-      return _promisify(_tx('metadata', 'readwrite').put(r));
+      return _promisify(writeStore.put(r));
     }));
   }
 
   /** Set starred = false on every metadata record (also removes starredAt). */
   async function clearStarred() {
-    const store   = _tx('metadata', 'readwrite');
-    const records = await _promisify(store.getAll());
+    // Step 1: read all records (first transaction — auto-commits after getAll)
+    const readStore = _tx('metadata', 'readwrite');
+    const records   = await _promisify(readStore.getAll());
+    if (!records.length) return;
+    // Step 2: write all records in a SINGLE transaction (all puts issued
+    // synchronously so the transaction stays open until they all complete)
+    const writeStore = _tx('metadata', 'readwrite');
     await Promise.all(records.map(r => {
       r.starred = false;
       delete r.starredAt;
-      return _promisify(_tx('metadata', 'readwrite').put(r));
+      return _promisify(writeStore.put(r));
     }));
   }
 
