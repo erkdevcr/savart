@@ -29,11 +29,44 @@
 const Meta = (() => {
 
   /* ── In-memory cache ─────────────────────────────────────── */
-  // fileId → parsed result
+  // fileId → parsed result (LRU — Map preserves insertion order;
+  // delete+re-insert on access moves entry to the end = most-recently-used).
   const _cache = new Map();
 
   // Object URLs that need cleanup when cache is evicted
   const _objectUrls = new Set();
+
+  // Maximum number of entries kept in the cache.
+  // Home screen shows ≤ 50 songs simultaneously; 80 gives comfortable headroom
+  // for pinned items, currently playing track, and recently browsed songs.
+  const _MAX_CACHE = 80;
+
+  /* ── LRU helpers ─────────────────────────────────────────── */
+
+  /** Move an existing entry to the end of the Map (mark as recently used). */
+  function _touch(fileId) {
+    if (!_cache.has(fileId)) return;
+    const val = _cache.get(fileId);
+    _cache.delete(fileId);
+    _cache.set(fileId, val);
+  }
+
+  /**
+   * Evict the least-recently-used entries until cache is within _MAX_CACHE.
+   * Revokes any blob: Object URLs in evicted entries so the browser can free
+   * the underlying image memory immediately.
+   */
+  function _evictLRU() {
+    while (_cache.size > _MAX_CACHE) {
+      const oldest = _cache.keys().next().value; // first key = LRU
+      const entry  = _cache.get(oldest);
+      if (entry?.coverUrl?.startsWith('blob:')) {
+        URL.revokeObjectURL(entry.coverUrl);
+        _objectUrls.delete(entry.coverUrl);
+      }
+      _cache.delete(oldest);
+    }
+  }
 
   /* ── Public API ─────────────────────────────────────────── */
 
@@ -46,7 +79,10 @@ const Meta = (() => {
    * @returns {Promise<{ title, artist, album, year, track, coverUrl }>}
    */
   async function parse(fileId, blob, force = false) {
-    if (!force && _cache.has(fileId)) return _cache.get(fileId);
+    if (!force && _cache.has(fileId)) {
+      _touch(fileId); // mark as recently used
+      return _cache.get(fileId);
+    }
 
     // When force-re-parsing, revoke the old object URL so we don't leak it.
     if (force) {
@@ -69,6 +105,7 @@ const Meta = (() => {
     const { coverBlob, ...cacheResult } = result;
     _cache.set(fileId, cacheResult);
     if (cacheResult.coverUrl) _objectUrls.add(cacheResult.coverUrl);
+    _evictLRU();
     return result; // caller gets coverBlob for one-time DB storage
   }
 
@@ -78,7 +115,9 @@ const Meta = (() => {
    * @returns {{ title, artist, album, year, coverUrl }|null}
    */
   function getCached(fileId) {
-    return _cache.get(fileId) || null;
+    if (!_cache.has(fileId)) return null;
+    _touch(fileId); // mark as recently used so it isn't the next eviction target
+    return _cache.get(fileId);
   }
 
   /**
@@ -450,10 +489,16 @@ const Meta = (() => {
   function injectCover(fileId, blob) {
     if (!blob) return null;
     const existing = _cache.get(fileId);
-    if (existing?.coverUrl) return existing.coverUrl; // already resolved this session
+    if (existing?.coverUrl) {
+      _touch(fileId); // already resolved — just mark as recently used
+      return existing.coverUrl;
+    }
     const url = URL.createObjectURL(blob);
     _objectUrls.add(url);
+    // delete + re-set so this entry lands at the end (most-recently-used position)
+    _cache.delete(fileId);
     _cache.set(fileId, { ...(existing || {}), coverUrl: url });
+    _evictLRU();
     return url;
   }
 
@@ -471,7 +516,10 @@ const Meta = (() => {
     );
     if (Object.keys(patch).length === 0) return;
     if (patch.coverUrl) _objectUrls.add(patch.coverUrl);
+    // delete + re-set → moves entry to most-recently-used position
+    _cache.delete(fileId);
     _cache.set(fileId, { ...existing, ...patch });
+    _evictLRU();
   }
 
   /**
@@ -490,9 +538,18 @@ const Meta = (() => {
       if (v !== null && v !== undefined && v !== '') next[k] = v;
     }
     if (next.coverUrl && next.coverUrl !== existing.coverUrl) {
+      // Revoke the old blob: URL before replacing it — prevents Object URL leak.
+      // External URLs (https:) don't need revoking; only blob: URLs hold live memory.
+      if (existing.coverUrl?.startsWith('blob:')) {
+        URL.revokeObjectURL(existing.coverUrl);
+        _objectUrls.delete(existing.coverUrl);
+      }
       _objectUrls.add(next.coverUrl);
     }
+    // delete + re-set → moves entry to most-recently-used position
+    _cache.delete(fileId);
     _cache.set(fileId, next);
+    _evictLRU();
   }
 
   /* ── Expose ─────────────────────────────────────────────── */
