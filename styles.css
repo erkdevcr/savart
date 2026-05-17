@@ -5802,33 +5802,33 @@ body.queue-open #mini-player { z-index: 65; }
     right: 4px;
   }
 
-  /* Top Played list — +15% vs base desktop values */
+  /* Top Played list — mobile (approx. base desktop values) */
   .top-list {
-    padding: 0 14px;
+    padding: 0 12px;
   }
   .top-list-item {
-    gap: 14px;
-    padding: 11px 0;
+    gap: 12px;
+    padding: 9px 0;
   }
   .top-list-rank {
-    font-size: 16px;
-    width: 21px;
+    font-size: 14px;
+    width: 18px;
   }
   .top-list-thumb {
-    width: 55px;
-    height: 55px;
+    width: 47px;
+    height: 47px;
   }
   .top-list-title {
-    font-size: 15px;
+    font-size: 13px;
   }
   .top-list-artist {
-    font-size: 13px;
+    font-size: 11px;
   }
   .top-list-meta {
-    font-size: 13px;
+    font-size: 11px;
   }
   .top-list-count {
-    font-size: 14px;
+    font-size: 12px;
   }
 }
 
