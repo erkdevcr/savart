@@ -4017,8 +4017,18 @@ const App = (() => {
       // Helper: resolve a cover URL for enrichment — injects blob into Meta cache
       // synchronously (URL.createObjectURL is sync) so the FIRST render already
       // has the cover, without waiting for _prefetchHomeCovers Pass 0.
+      //
+      // Priority:
+      //   • Manual cover (manualAt > 0 + real URL) → always wins, even over coverBlob.
+      //     Mirrors the same guard in _onTrackChange so home and player are consistent.
+      //   • coverBlob (embedded ID3 art) → wins over external URLs (Last.fm / AudD).
+      //   • fallbacks → external URLs, Drive thumbnail, etc.
       const _resolveCoverUrl = (id, dbMeta, inMem, ...fallbacks) => {
-        if (dbMeta?.coverBlob) {
+        const hasManual = (dbMeta?.manualAt || 0) > 0
+          && dbMeta?.thumbnailUrl
+          && dbMeta.thumbnailUrl !== 'id3'
+          && !dbMeta.thumbnailUrl.startsWith('blob:');
+        if (dbMeta?.coverBlob && !hasManual) {
           return inMem?.coverUrl
             || (typeof Meta !== 'undefined' ? Meta.injectCover(id, dbMeta.coverBlob) : null)
             || null;
