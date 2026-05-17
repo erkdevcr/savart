@@ -2597,6 +2597,7 @@ const UI = (() => {
 
     const menu = document.createElement('div');
     menu.className = 'lib-detail-dropdown';
+    menu.style.visibility = 'hidden'; // hide until positioned to avoid top-left flash
 
     for (const it of items) {
       if (it.divider) { _addCtxDivider(menu); continue; }
@@ -2608,11 +2609,12 @@ const UI = (() => {
 
     document.body.appendChild(menu);
 
-    // Position: right-aligned below trigger, clamped to viewport
+    // Capture rect before RAF — button is in DOM and already laid out
     const rect = triggerBtn.getBoundingClientRect();
     const vw   = window.innerWidth;
     const vh   = window.innerHeight;
-    // Measure after paint
+
+    // Measure after paint so offsetWidth/Height are accurate, then reveal
     requestAnimationFrame(() => {
       const mw = menu.offsetWidth  || 190;
       const mh = menu.offsetHeight || 200;
@@ -2620,13 +2622,16 @@ const UI = (() => {
       let y = rect.bottom + 4;
       x = Math.max(8, Math.min(x, vw - mw - 8));
       y = Math.min(y, vh - mh - 8);
-      menu.style.left = `${x}px`;
-      menu.style.top  = `${y}px`;
+      menu.style.left       = `${x}px`;
+      menu.style.top        = `${y}px`;
+      menu.style.visibility = ''; // show only after correct position is set
     });
 
-    // Dismiss on outside click
+    // Dismiss on outside click OR any scroll
     setTimeout(() => {
-      document.addEventListener('click', () => menu.remove(), { once: true, capture: true });
+      const _dismiss = () => menu.remove();
+      document.addEventListener('click',  _dismiss, { once: true, capture: true });
+      document.addEventListener('scroll', _dismiss, { once: true, capture: true, passive: true });
     }, 0);
   }
 
@@ -3469,6 +3474,7 @@ const UI = (() => {
     editPanel.innerHTML = `
       <div class="album-edit-actions">
         <button class="album-edit-reset-id3-btn">${t('btn_reset_id3')}</button>
+        <button class="album-edit-cancel-btn" title="${t('cancel') || 'Cancelar'}">✕</button>
         <button class="album-edit-save-btn">${t('save_btn')}</button>
       </div>
       <div class="album-edit-row">
@@ -3537,9 +3543,15 @@ const UI = (() => {
           coverApplyBtn.disabled = false;
         }
 
-        editPanel.querySelector('[data-field="artist"]').focus();
+        // No auto-focus — user chooses which field to edit first
       }
     };
+
+    // Cancel button: close the edit panel without saving
+    editPanel.querySelector('.album-edit-cancel-btn').addEventListener('click', () => {
+      editPanel.classList.remove('open');
+      entity.classList.remove('album-editing');
+    });
 
     // ⋮ button → action dropdown
     entity.querySelector('.lib-detail-entity-more').addEventListener('click', e => {
@@ -4138,6 +4150,7 @@ const UI = (() => {
     editPanel.innerHTML = `
       <div class="album-edit-actions">
         <button class="album-edit-reset-id3-btn">${t('btn_reset_id3')}</button>
+        <button class="album-edit-cancel-btn" title="${t('cancel') || 'Cancelar'}">✕</button>
         <button class="album-edit-save-btn">${t('save_btn')}</button>
       </div>
       <div class="album-edit-row">
@@ -4159,8 +4172,14 @@ const UI = (() => {
     const _toggleCollectionEditPanel = () => {
       const isOpen = editPanel.classList.toggle('open');
       entity.classList.toggle('album-editing', isOpen);
-      if (isOpen) editPanel.querySelector('[data-field="name"]').focus();
+      // No auto-focus — user chooses which field to edit first
     };
+
+    // Cancel button: close the edit panel without saving
+    editPanel.querySelector('.album-edit-cancel-btn').addEventListener('click', () => {
+      editPanel.classList.remove('open');
+      entity.classList.remove('album-editing');
+    });
 
     // ⋮ button → action dropdown
     entity.querySelector('.lib-detail-entity-more').addEventListener('click', e => {
