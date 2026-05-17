@@ -31,8 +31,9 @@ const Player = (() => {
   let _shuffle      = false;
   let _repeatMode   = 'off';     // 'off' | 'all' | 'one'
   let _volume       = 1.0;       // 0.0 – 1.0
-  let _currentBlob  = null;      // current blob URL (to revoke on track change)
-  let _preloadingId = null;      // fileId being pre-downloaded
+  let _currentBlob      = null;  // current blob URL (to revoke on track change)
+  let _preloadingId     = null;  // fileId being pre-downloaded
+  let _preloadAbortCtrl = null;  // AbortController for the in-flight preload fetch
 
   // EQ band gains (dB), indexed same as CONFIG.EQ_BANDS
   let _eqGains = new Array(12).fill(0);
@@ -553,6 +554,14 @@ const Player = (() => {
   async function _playCurrentTrack() {
     if (_queueIndex < 0 || _queueIndex >= _queue.length) return;
 
+    // Cancel any in-flight preload so it doesn't compete for bandwidth with the
+    // track the user actually wants to hear right now.
+    if (_preloadAbortCtrl) {
+      _preloadAbortCtrl.abort();
+      _preloadAbortCtrl = null;
+      _preloadingId     = null;
+    }
+
     const item = _queue[_queueIndex];
     _onTrackChange(item, _queueIndex, _queue.length);
 
@@ -695,16 +704,28 @@ const Player = (() => {
     const alreadyCached = await DB.isCached(nextItem.id);
     if (alreadyCached) return;
 
-    _preloadingId = nextItem.id;
+    // Each preload gets its own AbortController so _playCurrentTrack can
+    // cancel it instantly when the user selects a different track.
+    const ctrl        = new AbortController();
+    _preloadAbortCtrl = ctrl;
+    _preloadingId     = nextItem.id;
     console.log('[Player] Pre-downloading next:', nextItem.name);
 
     try {
-      const blob = await Drive.downloadFile(nextItem.id);
-      await DB.setCachedBlob(nextItem.id, blob, nextItem.mimeType);
-      console.log('[Player] Pre-download complete:', nextItem.name);
+      const blob = await Drive.downloadFile(nextItem.id, null, ctrl.signal);
+      // Only cache if we were not aborted mid-flight
+      if (!ctrl.signal.aborted) {
+        await DB.setCachedBlob(nextItem.id, blob, nextItem.mimeType);
+        console.log('[Player] Pre-download complete:', nextItem.name);
+      }
     } catch (err) {
-      console.warn('[Player] Pre-download failed:', err.message);
+      if (err.name !== 'AbortError') {
+        console.warn('[Player] Pre-download failed:', err.message);
+      }
     } finally {
+      if (_preloadAbortCtrl === ctrl) {
+        _preloadAbortCtrl = null;
+      }
       _preloadingId = null;
     }
   }

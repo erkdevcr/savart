@@ -288,9 +288,9 @@ const Drive = (() => {
    * @param {Function} [onProgress] - called with (loadedBytes, totalBytes)
    * @returns {Promise<Blob>}
    */
-  async function downloadFile(fileId, onProgress = null) {
+  async function downloadFile(fileId, onProgress = null, signal = null) {
     const url = `${CONFIG.API_BASE}/files/${encodeURIComponent(fileId)}?alt=media`;
-    const res = await _fetch(url);
+    const res = await _fetch(url, signal ? { signal } : {});
 
     // Stream with progress reporting if callback provided
     if (onProgress && res.body) {
