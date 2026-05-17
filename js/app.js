@@ -682,14 +682,39 @@ const App = (() => {
         UI.setActiveSongRow(track.id);
         document.title = `${enriched.displayName} — Savart`;
 
-        // Patch with DB meta for correct display name / artist
+        // Patch with DB meta for correct display name / artist / cover art.
+        // Cover resolution mirrors _onTrackChange: inject coverBlob from DB so
+        // the mini-player and expanded player show the correct artwork immediately
+        // on login, without waiting for the track to start playing.
         DB.getMeta(track.id).catch(() => null).then(dbMeta => {
           if (!dbMeta) return;
           const stillSame = Player.getCurrentTrack()?.id === track.id;
           if (!stillSame) return; // user already started playing something else
-          if (dbMeta.title)  track.displayName = dbMeta.title;
-          if (dbMeta.artist) track.artist      = dbMeta.artist;
-          if (dbMeta.album)  track.album       = dbMeta.album;
+
+          // Text fields
+          if (dbMeta.displayName) track.displayName = dbMeta.displayName;
+          if (dbMeta.artist)      track.artist      = dbMeta.artist;
+          if (dbMeta.album)       track.albumName   = dbMeta.album;
+          if (dbMeta.year)        track.year        = dbMeta.year;
+
+          // Cover art — resolve in priority order:
+          //   1. coverBlob in DB (embedded ID3 art) → create fresh Object URL
+          //   2. valid external thumbnailUrl (Last.fm / AudD / manual)
+          let coverUrl = null;
+          if (dbMeta.coverBlob && typeof Meta !== 'undefined') {
+            coverUrl = Meta.injectCover(track.id, dbMeta.coverBlob);
+          }
+          if (!coverUrl) {
+            const stored = dbMeta.thumbnailUrl || dbMeta.coverUrl || null;
+            if (stored && stored !== 'id3' && !stored.startsWith('blob:')) {
+              coverUrl = stored;
+              // Populate Meta cache so _enrichTrack picks it up immediately
+              if (typeof Meta !== 'undefined') {
+                Meta.patchCached(track.id, { coverUrl });
+              }
+            }
+          }
+
           const reEnriched = _enrichTrack(track);
           UI.updateMiniPlayer(reEnriched, false);
           UI.updateExpandedPlayer(reEnriched, false);
