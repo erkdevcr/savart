@@ -466,6 +466,12 @@ img { display: block; }
   flex-shrink: 0;
 }
 
+.home-header-left {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
 .home-header-brand {
   display: flex;
   align-items: center;
