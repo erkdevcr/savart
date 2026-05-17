@@ -3924,9 +3924,9 @@ const App = (() => {
         return c;
       };
       const payload = {
-        pinned:    (pinned    || []).slice(0, 20).map(cleanItem),
-        recents:   (recents   || []).slice(0, 20).map(cleanItem),
-        topPlayed: (topPlayed || []).slice(0, 20).map(cleanItem),
+        pinned:    (pinned    || []).slice(0, 12).map(cleanItem),
+        recents:   (recents   || []).slice(0, 24).map(cleanItem),
+        topPlayed: (topPlayed || []).slice(0, 12).map(cleanItem),
         playlists: (playlists || []).slice(0, 12).map(pl => ({
           ...pl,
           resolvedCovers: (pl.resolvedCovers || []).filter(u => !u.startsWith('blob:')),
@@ -3970,8 +3970,8 @@ const App = (() => {
     try {
       const [pinned, recents, topPlayedRaw, rawPlaylists] = await Promise.all([
         DB.getPinnedFolders(),
-        DB.getRecents(20),
-        DB.getTopPlayed(20),
+        DB.getRecents(24),   // fetch extra so we have ≥12 songs after type-filtering
+        DB.getTopPlayed(12),
         DB.getPlaylists(),
       ]);
 
@@ -4126,18 +4126,22 @@ const App = (() => {
         })
       );
 
-      UI.renderHome({ pinned: enrichedPinned, recents: enrichedRecents, topPlayed, playlists: enrichedPlaylists });
+      // Cap each home section to 12 items before rendering
+      const displayPinned  = enrichedPinned.slice(0, 12);
+      const displayRecents = enrichedRecents.slice(0, 24); // song-only filtering to 12 happens inside renderHome
+
+      UI.renderHome({ pinned: displayPinned, recents: displayRecents, topPlayed, playlists: enrichedPlaylists });
       // Re-mark the active row after renderHome creates fresh DOM nodes
       UI.setActiveSongRow(Player.getCurrentTrack()?.id ?? null);
 
       // Persist home data to localStorage so the next startup can paint instantly
       // before the DB is ready (stale-while-revalidate).
-      _saveHomeCache({ pinned: enrichedPinned, recents: enrichedRecents, topPlayed, playlists: enrichedPlaylists });
+      _saveHomeCache({ pinned: displayPinned, recents: displayRecents, topPlayed, playlists: enrichedPlaylists });
 
       // Async: load cover art for song cards and top-played in the background
-      _prefetchHomeCovers(enrichedRecents).catch(() => {});
+      _prefetchHomeCovers(displayRecents).catch(() => {});
       _prefetchTopPlayedCovers(topPlayed).catch(() => {});
-      _prefetchPinnedCovers(enrichedPinned).catch(() => {});
+      _prefetchPinnedCovers(displayPinned).catch(() => {});
       _prefetchHomePlaylists(enrichedPlaylists).catch(() => {});
 
       // Async: fix any items still with no name by fetching from Drive API

@@ -1050,8 +1050,8 @@ const UI = (() => {
       content.appendChild(ctaBtn);
     }
 
-    // Only songs in recents row (folders row removed; replaced by playlists)
-    const recentSongs = recents.filter(r => r.type === 'song');
+    // Only songs in recents row (folders row removed; replaced by playlists), max 12
+    const recentSongs = recents.filter(r => r.type === 'song').slice(0, 12);
 
     content.appendChild(_buildHomeSection(t('pinned'), pinned, 'pinned'));
     // Playlists row: only rendered if user has playlists

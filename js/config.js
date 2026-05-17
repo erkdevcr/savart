@@ -50,7 +50,7 @@ const CONFIG = {
   RECENTS_MAX: 30,
 
   // How many top-played items to show on Home
-  TOP_PLAYED_MAX: 20,
+  TOP_PLAYED_MAX: 12,
 
   // ── Audio ─────────────────────────────────────────────────
   // MIME types that Chrome can play natively
