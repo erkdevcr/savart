@@ -12216,6 +12216,7 @@ const App = (() => {
           thumbnailUrl: track.thumbnailUrl || null,
           manualAt:     track.thumbnailUrl ? Date.now() : undefined,
         }).catch(() => {});
+        Sync.push('metadata');
 
         // 5. Remove the Soundrop recent entry (sd_ id) and add the Drive one
         //    so Home no longer shows the SD chip for this track.
@@ -12232,6 +12233,7 @@ const App = (() => {
           year:         meta.year,
           folderId:     null,
         }).catch(() => {});
+        Sync.push('recents');
 
         modal.style.display = 'none';
         modal._sdItem = null;

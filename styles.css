@@ -7229,6 +7229,13 @@ body.queue-open #mini-player { z-index: 65; }
   .ds-attention-list {
     padding-bottom: calc(var(--mini-player-h) + var(--mini-margin) * 2 + var(--bottom-nav-h) + 16px);
   }
+
+  /* Hide SD download button in mobile mini player */
+  #btn-mini-sd-download { display: none !important; }
+
+  /* Browse search filters: fit all 5 chips without horizontal scroll */
+  .search-filters { gap: 5px; padding: 8px 10px; flex-wrap: nowrap; overflow-x: visible; }
+  .filter-chip    { flex-shrink: 1; min-width: 0; padding: 5px 8px; font-size: 11px; }
 }
 
 /* ── Desktop overrides ───────────────────────────────────────── */
