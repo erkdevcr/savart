@@ -12195,7 +12195,10 @@ const App = (() => {
         const driveId = await Soundrop.saveToDrive(blob, meta);
         const filename = `${[meta.artist, meta.title].filter(Boolean).join(' - ')}.mp3`;
 
-        // 4. Write Drive metadata to DB
+        // 4. Write Drive metadata to DB.
+        // manualAt prevents _preScanBeforePlay from replacing the clean YouTube
+        // thumbnail (mqdefault, 16:9, no bars) with ID3 art embedded in the MP3
+        // by the worker (hqdefault, 4:3, black bars already baked into the image).
         await DB.setMeta(driveId, {
           name:         filename,
           displayName:  meta.title,
@@ -12203,6 +12206,7 @@ const App = (() => {
           album:        meta.album,
           year:         meta.year,
           thumbnailUrl: track.thumbnailUrl || null,
+          manualAt:     track.thumbnailUrl ? Date.now() : undefined,
         }).catch(() => {});
 
         // 5. Remove the Soundrop recent entry (sd_ id) and add the Drive one
