@@ -822,6 +822,10 @@ const UI = (() => {
     const btnPlayDesk = mp.querySelector('.btn-play-mini-desk');
     if (btnPlayDesk) btnPlayDesk.innerHTML = isPlaying ? iconPause(18) : iconPlay(18);
 
+    // Show/hide SD download button (mobile mini-player)
+    const btnSdMini = document.getElementById('btn-mini-sd-download');
+    if (btnSdMini) btnSdMini.style.display = track?.isSoundrop ? '' : 'none';
+
     // Sync desk micro player
     _updateDeskMicroPlayer(track, isPlaying);
   }
@@ -971,6 +975,10 @@ const UI = (() => {
     if (playBtn) {
       playBtn.innerHTML = isPlaying ? iconPause(30) : iconPlay(30);
     }
+
+    // Show/hide SD download button (expanded player header)
+    const btnSdExp = document.getElementById('btn-pexp-sd-download');
+    if (btnSdExp) btnSdExp.style.display = track?.isSoundrop ? '' : 'none';
   }
 
   /**
@@ -1871,7 +1879,9 @@ const UI = (() => {
                   : file.durationMs  > 0 ? file.durationMs / 1000
                   : 0;
     const _dur    = _durSec > 0 ? formatTime(Math.round(_durSec)) : '';
-    const _left   = file.isWma ? t('format_unsupported') : [_size, _ext].filter(Boolean).join(' · ');
+    const _left   = file.isWma ? t('format_unsupported')
+                  : file.isSoundrop ? 'YouTube · MP3'
+                  : [_size, _ext].filter(Boolean).join(' · ');
     const _artist   = (file.artist || '').split(';')[0].trim(); // strip collaborators
     const _album    = (file.album  || '').trim();
     const _meta     = [_artist, _album].filter(Boolean).join(' · ');
@@ -1900,6 +1910,7 @@ const UI = (() => {
         </div>
       </div>
       ${file.isWma ? `<span class="wma-badge">WMA</span>` : ''}
+      ${file.isSoundrop ? `<span class="sd-badge">SD</span>` : ''}
       <button class="btn-more" aria-label="Más opciones" data-id="${escHtml(file.id)}">${iconDots()}</button>
     `;
 
@@ -4608,6 +4619,24 @@ const UI = (() => {
     const container = document.getElementById('search-results');
     if (!container) return;
     container.innerHTML = '';
+
+    // Soundrop results are separate — they don't mix with Drive results
+    if (filter === 'soundrop') {
+      const sdTracks = results.soundrop || [];
+      updateSearchChipCounts({ all: sdTracks.length, songs: 0, folders: 0, soundrop: sdTracks.length });
+      const playBtn = document.getElementById('btn-play-search-results');
+      if (playBtn) playBtn.style.display = 'none';
+      if (sdTracks.length === 0) {
+        container.innerHTML = `<div class="empty-state"><p>${t('no_results')}</p></div>`;
+        return;
+      }
+      const label = document.createElement('div');
+      label.className = 'section-label';
+      label.textContent = 'Soundrop';
+      container.appendChild(label);
+      sdTracks.forEach(f => container.appendChild(_buildSongRow(f)));
+      return;
+    }
 
     const nFolders = (results.folders || []).length;
     const nFiles   = (results.files   || []).length;

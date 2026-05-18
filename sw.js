@@ -9,7 +9,7 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.159';
+const APP_VERSION  = '3.5.160';
 const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.32 — Log: per-file sequential processing (line 2 updates x/x·name as each track runs); removed file count from line 1; removed monospace font from log entries — 3.5.31
 
 /* Base path — auto-detected from sw.js location.
@@ -35,6 +35,7 @@ const SHELL_FILES = [
   `${BASE}/js/musicbrainz.js`,
   `${BASE}/js/discogs.js`,
   `${BASE}/js/lyrics.js`,
+  `${BASE}/js/soundrop.js`,
   `${BASE}/js/ui.js`,
   `${BASE}/js/app.js`,
   `${BASE}/manifest.json`,

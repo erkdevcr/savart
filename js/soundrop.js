@@ -1,0 +1,164 @@
+/* ============================================================
+   Savart — Soundrop module
+   YouTube search → Cloudflare Worker MP3 link → Savart player.
+   Separate from Drive; tracks are not cached in IndexedDB.
+   ============================================================ */
+
+const Soundrop = (() => {
+
+  // ── Constants ─────────────────────────────────────────────
+  const YT_SEARCH  = 'https://www.googleapis.com/youtube/v3/search';
+  const YT_VIDEOS  = 'https://www.googleapis.com/youtube/v3/videos';
+  const WORKER_URL = 'https://sounddrop-worker.erisd17.workers.dev';
+  const YT_KEY     = 'AIzaSyBgi4D1UclWh6EVAPaXfApI34AF7lh_O4E';
+
+  // ── Search YouTube ────────────────────────────────────────
+
+  /**
+   * Search YouTube for audio tracks matching `term`.
+   * Returns an array of Soundrop track objects ready to hand to the player.
+   *
+   * @param {string} term
+   * @returns {Promise<SoundropTrack[]>}
+   */
+  async function search(term) {
+    // 1. Search request
+    const searchParams = new URLSearchParams({
+      part: 'snippet',
+      q: term,
+      type: 'video',
+      videoCategoryId: '10', // Music
+      maxResults: '20',
+      key: YT_KEY,
+    });
+    const searchRes = await fetch(`${YT_SEARCH}?${searchParams}`);
+    if (!searchRes.ok) throw new Error(`YouTube search failed: ${searchRes.status}`);
+    const searchData = await searchRes.json();
+    const items = searchData.items || [];
+    if (!items.length) return [];
+
+    const videoIds = items.map(i => i.id.videoId).filter(Boolean).join(',');
+
+    // 2. Content details (duration) for each video
+    const detailParams = new URLSearchParams({
+      part: 'snippet,contentDetails',
+      id: videoIds,
+      key: YT_KEY,
+    });
+    const detailRes = await fetch(`${YT_VIDEOS}?${detailParams}`);
+    if (!detailRes.ok) throw new Error(`YouTube videos failed: ${detailRes.status}`);
+    const detailData = await detailRes.json();
+
+    // Build a map videoId → details
+    const detailMap = {};
+    (detailData.items || []).forEach(v => { detailMap[v.id] = v; });
+
+    // 3. Build Soundrop track objects
+    return items.map(item => {
+      const vid     = item.id.videoId;
+      const snippet = item.snippet;
+      const detail  = detailMap[vid];
+
+      // Parse ISO 8601 duration → seconds
+      const durStr  = detail?.contentDetails?.duration || '';
+      const durSec  = _parseDuration(durStr);
+
+      // Heuristic title split: "Artist - Title"
+      const rawTitle = snippet.title || '';
+      let artist = '', title = rawTitle;
+      const dash = rawTitle.indexOf(' - ');
+      if (dash > 0) {
+        artist = rawTitle.slice(0, dash).trim();
+        title  = rawTitle.slice(dash + 3).trim();
+      }
+
+      return {
+        id:           `sd_${vid}`,
+        videoId:      vid,
+        isSoundrop:   true,
+        name:         rawTitle,
+        displayName:  title,
+        artist:       artist,
+        album:        '',
+        year:         (snippet.publishedAt || '').slice(0, 4),
+        thumbnailUrl: snippet.thumbnails?.medium?.url || snippet.thumbnails?.default?.url || '',
+        channelTitle: snippet.channelTitle || '',
+        mimeType:     'audio/mpeg',
+        durationSec:  durSec,
+        size:         0,
+      };
+    });
+  }
+
+  /**
+   * Ask the Cloudflare Worker for a streamable MP3 URL for a given YouTube video.
+   * Returns a string URL on success, or throws.
+   *
+   * @param {string} videoId  — bare YouTube video ID (no "sd_" prefix)
+   * @returns {Promise<string>}
+   */
+  async function getAudioLink(videoId) {
+    const url = `${WORKER_URL}?id=${encodeURIComponent(videoId)}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Worker error ${res.status}`);
+    const data = await res.json();
+    if (!data.url) throw new Error('Worker returned no audio URL');
+    return data.url;
+  }
+
+  /**
+   * Download the audio for a Soundrop track as a Blob.
+   * Used only during the "save to Drive" flow.
+   *
+   * @param {string} audioUrl  — URL returned by getAudioLink()
+   * @returns {Promise<Blob>}
+   */
+  async function fetchBlob(audioUrl) {
+    const res = await fetch(audioUrl);
+    if (!res.ok) throw new Error(`Blob fetch error ${res.status}`);
+    return await res.blob();
+  }
+
+  // ── Upload to Drive ───────────────────────────────────────
+
+  /**
+   * Save a Soundrop track to the user's Drive "Soundrop" folder.
+   * Creates the folder if it doesn't exist.
+   *
+   * @param {Blob}   blob      — audio blob
+   * @param {object} meta      — { title, artist, album, year }
+   * @returns {Promise<string>}  — Drive file ID of the uploaded file
+   */
+  async function saveToDrive(blob, meta) {
+    // Find or create the "Soundrop" folder at Drive root
+    const folderId = await Drive.findOrCreateFolder('Soundrop', 'root');
+
+    // Build filename
+    const safeName = [meta.artist, meta.title].filter(Boolean).join(' - ');
+    const filename = `${safeName || 'Soundrop track'}.mp3`;
+
+    // Upload via multipart
+    const fileId = await Drive.uploadFile(blob, filename, 'audio/mpeg', folderId);
+    return fileId;
+  }
+
+  // ── Helpers ───────────────────────────────────────────────
+
+  /**
+   * Parse ISO 8601 duration string (e.g. "PT3M45S") to seconds.
+   * @param {string} str
+   * @returns {number}
+   */
+  function _parseDuration(str) {
+    if (!str) return 0;
+    const m = str.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+    if (!m) return 0;
+    return (parseInt(m[1] || 0) * 3600)
+         + (parseInt(m[2] || 0) * 60)
+         + parseInt(m[3] || 0);
+  }
+
+  // ── Expose ────────────────────────────────────────────────
+  return { search, getAudioLink, fetchBlob, saveToDrive };
+
+})();

@@ -483,6 +483,100 @@ const Drive = (() => {
     };
   }
 
+  /* ── findOrCreateFolder ──────────────────────────────────── */
+  /**
+   * Find (or create) a Drive folder with the given name inside parentId.
+   * Returns the folder ID.
+   *
+   * @param {string} name      — folder name
+   * @param {string} parentId  — parent folder ID ('root' = My Drive root)
+   * @returns {Promise<string>}
+   */
+  async function findOrCreateFolder(name, parentId = 'root') {
+    // Search for existing folder
+    const q   = `name='${name.replace(/'/g, "\\'")}' and mimeType='application/vnd.google-apps.folder' and '${parentId}' in parents and trashed=false`;
+    const url = `${CONFIG.API_BASE}/files?q=${encodeURIComponent(q)}&fields=files(id,name)&spaces=drive`;
+    const res = await _fetch(url);
+    const data = await res.json();
+    if (data.files && data.files.length > 0) return data.files[0].id;
+
+    // Create it
+    const createRes = await _fetch(`${CONFIG.API_BASE}/files`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name,
+        mimeType: 'application/vnd.google-apps.folder',
+        parents: [parentId],
+      }),
+    });
+    const created = await createRes.json();
+    return created.id;
+  }
+
+  /* ── uploadFile ─────────────────────────────────────────── */
+  /**
+   * Upload a Blob to Drive using multipart upload.
+   * Returns the new file's Drive ID.
+   *
+   * @param {Blob}   blob      — file data
+   * @param {string} filename  — file name in Drive
+   * @param {string} mimeType  — e.g. 'audio/mpeg'
+   * @param {string} parentId  — Drive folder ID
+   * @returns {Promise<string>}
+   */
+  async function uploadFile(blob, filename, mimeType, parentId) {
+    const token = Auth.getValidToken();
+    if (!token) throw new AuthError();
+
+    const metadata = JSON.stringify({ name: filename, parents: [parentId] });
+    const boundary = '-------savart_boundary_314159';
+
+    const metaPart = [
+      `--${boundary}`,
+      'Content-Type: application/json; charset=UTF-8',
+      '',
+      metadata,
+    ].join('\r\n');
+
+    const bodyParts = [
+      metaPart,
+      `--${boundary}`,
+      `Content-Type: ${mimeType}`,
+      '',
+      '',   // blank line; actual blob follows
+    ].join('\r\n');
+
+    // Build multipart body as Uint8Array
+    const encoder  = new TextEncoder();
+    const bodyHead = encoder.encode(bodyParts);
+    const blobArr  = new Uint8Array(await blob.arrayBuffer());
+    const tail     = encoder.encode(`\r\n--${boundary}--`);
+
+    const combined = new Uint8Array(bodyHead.byteLength + blobArr.byteLength + tail.byteLength);
+    combined.set(bodyHead, 0);
+    combined.set(blobArr, bodyHead.byteLength);
+    combined.set(tail, bodyHead.byteLength + blobArr.byteLength);
+
+    const res = await fetch(
+      'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id',
+      {
+        method:  'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': `multipart/related; boundary="${boundary}"`,
+        },
+        body: combined,
+      }
+    );
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '');
+      throw new DriveError(`Upload failed ${res.status}: ${txt.slice(0, 200)}`, res.status);
+    }
+    const data = await res.json();
+    return data.id;
+  }
+
   /* ── Expose ─────────────────────────────────────────────── */
   return {
     listFolder,
@@ -496,6 +590,8 @@ const Drive = (() => {
     getFolderModifiedTime,
     findCoverImage,
     setAppProperties,
+    findOrCreateFolder,
+    uploadFile,
     AuthError,
     DriveError,
   };

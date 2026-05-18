@@ -4891,6 +4891,22 @@ const App = (() => {
     if (playBtn) playBtn.style.display = 'none';
     if (!Auth.isAuthenticated()) { UI.showTokenBanner(); return; }
 
+    // ── Soundrop (YouTube) search branch ─────────────────────
+    if (filter === 'soundrop') {
+      try {
+        const sdTracks = await Soundrop.search(term);
+        sdTracks.forEach(t => _cacheItem(t));
+        _lastSearchFiles = sdTracks;
+        UI.renderSearchResults({ soundrop: sdTracks }, 'soundrop');
+        UI.setActiveSongRow(Player.getCurrentTrack()?.id ?? null);
+      } catch (err) {
+        console.error('[App] Soundrop search error:', err);
+        container.innerHTML = `<div class="empty-state"><p>${UI.t('search_error')}</p></div>`;
+      }
+      return;
+    }
+
+    // ── Drive search branch ───────────────────────────────────
     try {
       const raw = await Drive.searchFiles(term, _rootFolderId);
       // Fuzzy-score + sort — drops unrelated results from word-expansion queries
@@ -12083,6 +12099,76 @@ const App = (() => {
       e.stopPropagation();
       const track = Player.getCurrentTrack();
       if (track) UI.showContextMenu(e, 'player_song', track);
+    });
+
+    // ── Soundrop download buttons (expanded + mini) ───────────
+    function _openSdSaveModal() {
+      const track = Player.getCurrentTrack();
+      if (!track?.isSoundrop) return;
+      document.getElementById('sd-save-title').value  = track.displayName || track.name || '';
+      document.getElementById('sd-save-artist').value = track.artist || '';
+      document.getElementById('sd-save-album').value  = track.album  || '';
+      document.getElementById('sd-save-year').value   = track.year   || '';
+      document.getElementById('sd-modal-save-label').textContent = 'Guardar';
+      document.getElementById('btn-sd-modal-save').disabled = false;
+      document.getElementById('sd-save-modal').style.display = '';
+    }
+
+    document.getElementById('btn-pexp-sd-download')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      _openSdSaveModal();
+    });
+    document.getElementById('btn-mini-sd-download')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      _openSdSaveModal();
+    });
+
+    // SD save modal: close / cancel
+    document.getElementById('btn-sd-modal-close')?.addEventListener('click',  () => { document.getElementById('sd-save-modal').style.display = 'none'; });
+    document.getElementById('btn-sd-modal-cancel')?.addEventListener('click', () => { document.getElementById('sd-save-modal').style.display = 'none'; });
+    document.getElementById('sd-save-modal-backdrop')?.addEventListener('click', () => { document.getElementById('sd-save-modal').style.display = 'none'; });
+
+    // SD save modal: confirm → fetch blob, upload to Drive, write DB meta
+    document.getElementById('btn-sd-modal-save')?.addEventListener('click', async () => {
+      const track = Player.getCurrentTrack();
+      if (!track?.isSoundrop) return;
+
+      const meta = {
+        title:  document.getElementById('sd-save-title').value.trim()  || track.displayName || track.name,
+        artist: document.getElementById('sd-save-artist').value.trim() || '',
+        album:  document.getElementById('sd-save-album').value.trim()  || '',
+        year:   document.getElementById('sd-save-year').value.trim()   || '',
+      };
+
+      const saveBtn = document.getElementById('btn-sd-modal-save');
+      const saveLabel = document.getElementById('sd-modal-save-label');
+      saveBtn.disabled = true;
+      saveLabel.textContent = 'Guardando…';
+
+      try {
+        // 1. Get fresh audio URL from worker
+        const audioUrl = await Soundrop.getAudioLink(track.videoId);
+        // 2. Download blob
+        const blob = await Soundrop.fetchBlob(audioUrl);
+        // 3. Upload to Drive "Soundrop" folder
+        const driveId = await Soundrop.saveToDrive(blob, meta);
+        // 4. Write metadata to DB (using the real Drive ID)
+        await DB.setMeta(driveId, {
+          name:        `${[meta.artist, meta.title].filter(Boolean).join(' - ')}.mp3`,
+          displayName: meta.title,
+          artist:      meta.artist,
+          album:       meta.album,
+          year:        meta.year,
+          thumbnailUrl: track.thumbnailUrl || null,
+        }).catch(() => {});
+        document.getElementById('sd-save-modal').style.display = 'none';
+        UI.showToast('✓ Guardado en Drive · Soundrop');
+      } catch (err) {
+        console.error('[App] SD save error:', err);
+        saveBtn.disabled = false;
+        saveLabel.textContent = 'Guardar';
+        UI.showToast('Error al guardar', 'error');
+      }
     });
 
     // Expanded player: Cola button → open queue panel

@@ -572,6 +572,30 @@ const Player = (() => {
     }
 
     try {
+      // ── Soundrop track: stream directly from worker URL ──────
+      if (item.isSoundrop) {
+        // Revoke any previous blob URL
+        if (_currentBlob) {
+          URL.revokeObjectURL(_currentBlob);
+          _currentBlob = null;
+        }
+
+        const audioUrl = await Soundrop.getAudioLink(item.videoId);
+        _audio.src = audioUrl;
+        _audio.playbackRate = _tempo;
+        _initAudioGraph();
+        if (_audioCtx?.state === 'suspended') {
+          await _audioCtx.resume().catch(() => {});
+        }
+        _keepAliveStart();
+        _msSetMetadata(item);
+        _msSetPlaybackState('playing');
+        await _audio.play();
+        // Soundrop tracks: no DB play count, no recents, no preload
+        return;
+      }
+
+      // ── Drive track: blob path ────────────────────────────────
       const blob = await _getBlob(item);
       if (!blob) {
         console.error('[Player] Could not load blob for:', item.name);

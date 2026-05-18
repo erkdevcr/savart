@@ -447,6 +447,23 @@ img { display: block; }
   height: 18px;
 }
 
+.btn-secondary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: transparent;
+  color: var(--text-muted);
+  border: 1.5px solid var(--border);
+  font-size: 14px;
+  font-weight: 500;
+  padding: 12px 24px;
+  border-radius: var(--radius-pill);
+  transition: background 0.15s, opacity 0.15s;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.btn-secondary:hover { background: var(--bg-hover); }
+
 /* ── Home screen ─────────────────────────────────────────── */
 #screen-home {
   padding-top: 0;
@@ -1536,6 +1553,83 @@ img { display: block; }
 .play-results-btn:hover {
   background: #7c3aed33;
   border-color: #7c3aedaa;
+}
+
+/* Soundrop chip — orange accent */
+.filter-chip--sd {
+  border-color: #f97316aa;
+  color: #f97316;
+}
+.filter-chip--sd.active {
+  border-color: #f97316;
+  color: #fff;
+  background: #f97316;
+}
+
+/* SD badge in search results (file-type column) */
+.sd-badge {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 5px;
+  border-radius: var(--radius-pill);
+  color: #f97316;
+  border: 1px solid #f97316;
+  flex-shrink: 0;
+  letter-spacing: 0.02em;
+}
+
+/* SD download button (circle with V-arrow + "SD" text) */
+.sd-download-btn {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-circle);
+  background: #f97316;
+  border: none;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s, opacity 0.15s;
+  padding: 0;
+}
+.sd-download-btn:hover { background: #ea6c00; }
+.sd-download-btn svg { display: block; }
+.sd-btn-label {
+  font-size: 7px;
+  font-weight: 700;
+  color: white;
+  line-height: 1;
+  letter-spacing: 0.03em;
+}
+
+/* Slightly smaller variant for mini-player mobile row */
+.sd-download-btn--mini {
+  width: 28px;
+  height: 28px;
+}
+
+/* Soundrop save modal body */
+.sd-save-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 0 20px 4px;
+}
+.sd-save-label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+.sd-save-hint {
+  font-size: 11px;
+  color: var(--text-disabled);
+  margin-top: 4px;
 }
 
 /* Count summary line — shown on mobile below the chips */
