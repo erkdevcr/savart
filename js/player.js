@@ -661,17 +661,21 @@ const Player = (() => {
           year:         item.year    || '',
           folderId:     null,
         }).catch(() => {});
-        DB.incrementPlayCount(item.id).catch(() => {});
-        DB.setMeta(item.id, {
-          name:         item.name,
-          displayName:  item.displayName || item.name,
-          thumbnailUrl: item.thumbnailUrl || null,
-          artist:       item.artist  || '',
-          album:        item.album   || '',
-          year:         item.year    || '',
-          isSoundrop:   true,
-          videoId:      item.videoId,
-        }).catch(() => {});
+        // Chain setMeta AFTER incrementPlayCount so the final IDB write always
+        // includes isSoundrop + videoId (avoids a race where incrementPlayCount's
+        // read-modify-write overwrites a concurrent setMeta and strips those fields).
+        DB.incrementPlayCount(item.id)
+          .then(() => DB.setMeta(item.id, {
+            name:         item.name,
+            displayName:  item.displayName || item.name,
+            thumbnailUrl: item.thumbnailUrl || null,
+            artist:       item.artist  || '',
+            album:        item.album   || '',
+            year:         item.year    || '',
+            isSoundrop:   true,
+            videoId:      item.videoId,
+          }))
+          .catch(() => {});
         return;
       }
 

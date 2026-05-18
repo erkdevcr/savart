@@ -4080,6 +4080,10 @@ const App = (() => {
         const inMem  = (typeof Meta !== 'undefined') ? Meta.getCached(item.id) : null;
         return {
           ...item,
+          // Recover isSoundrop/videoId from recents if the metadata record lost them
+          // (can happen due to an incrementPlayCount race on first SD play).
+          isSoundrop:   item.isSoundrop   || r?.isSoundrop   || undefined,
+          videoId:      item.videoId      || r?.videoId      || undefined,
           displayName:  _pick(dbMeta?.displayName,  dbMeta?.name,     inMem?.title,    item.displayName,  r?.displayName, r?.name, item.name),
           name:         _pick(dbMeta?.name,          item.name,        r?.name),
           thumbnailUrl: _resolveCoverUrl(item.id, dbMeta, inMem, _safeUrl(dbMeta?.thumbnailUrl), _safeUrl(dbMeta?.coverUrl), inMem?.coverUrl, _safeUrl(item.thumbnailUrl), _safeUrl(item.coverUrl), _safeUrl(r?.thumbnailUrl), _safeUrl(r?.thumbnailLink)),
