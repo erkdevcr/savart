@@ -1004,7 +1004,9 @@ const App = (() => {
   }
 
   function _onPlayerError({ type, message, item }) {
-    UI.showToast(message, 'error');
+    // message may be a bare i18n key — translate it if so
+    const text = (typeof UI !== 'undefined' && UI.t) ? (UI.t(message) || message) : message;
+    UI.showToast(text, 'error');
     if (type === 'auth') {
       UI.showTokenBanner();
     }
@@ -5793,7 +5795,7 @@ const App = (() => {
 
     } catch (err) {
       console.error('[LibRefresh] Error:', err);
-      UI.showToast('Error al actualizar la biblioteca');
+      UI.showToast(UI.t('toast_lib_error'), 'error');
     } finally {
       if (btn)  btn.disabled = false;
       if (icon) icon.style.animation = '';
@@ -5858,7 +5860,7 @@ const App = (() => {
       UI.showToast(`✓ ${folderLabel} — ${foldersScanned} carpetas escaneadas`);
     } catch (err) {
       console.error('[FolderScan] Error:', err);
-      UI.showToast(UI.t('ds_err_scan_folder') || 'Error scanning folder');
+      UI.showToast(UI.t('ds_err_scan_folder'), 'error');
     } finally {
       if (btn)  btn.disabled = false;
       if (icon) icon.style.animation = '';
@@ -7696,7 +7698,7 @@ const App = (() => {
         songs = all.filter(m => m.folderId === folderId);
       }
       if (!songs.length) {
-        UI.showToast(UI.t('ds_no_songs') || 'No songs found', 'error');
+        UI.showToast(UI.t('ds_no_songs'), 'error');
         if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = UI.t('save_btn') || 'Guardar'; }
         return;
       }
@@ -7866,7 +7868,7 @@ const App = (() => {
       }
     } catch (err) {
       console.error('[DeepScan] Type toggle error:', err);
-      UI.showToast('Error cambiando tipo', 'error');
+      UI.showToast(UI.t('toast_type_error'), 'error');
     }
   }
 
@@ -12249,12 +12251,12 @@ const App = (() => {
         // Re-render home so the card gets fresh data + correct click closure
         _loadHomeData().catch(() => {});
 
-        UI.showToast('✓ Guardado en Drive · Soundrop');
+        UI.showToast(UI.t('toast_sd_saved'));
       } catch (err) {
         console.error('[App] SD save error:', err);
         saveBtn.disabled = false;
         saveLabel.textContent = 'Guardar';
-        UI.showToast('Error al guardar', 'error');
+        UI.showToast(UI.t('toast_sd_save_error'), 'error');
       }
     });
 
@@ -12823,7 +12825,7 @@ const App = (() => {
           UI.showToast(UI.t('toast_cleared'));
         } catch (err) {
           console.error('[App] clearHome error:', err);
-          UI.showToast('Error al limpiar', 'error');
+          UI.showToast(UI.t('toast_clear_error'), 'error');
           _syncClearBtn();
         }
       });

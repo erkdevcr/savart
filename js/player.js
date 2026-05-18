@@ -768,7 +768,7 @@ const Player = (() => {
       if (err.name === 'AuthError') {
         _onError({ type: 'auth', message: 'Sesión expirada. Renueva tu sesión.', item });
       } else {
-        _onError({ type: 'download', message: 'Error al descargar la canción.', item });
+        _onError({ type: 'download', message: 'toast_download_error', item });
         // Auto-skip after a short delay
         setTimeout(() => next(), 1500);
       }
@@ -867,9 +867,12 @@ const Player = (() => {
   }
 
   function _handleAudioError(err) {
+    // Ignore errors from _sdAudio when it is not the active source —
+    // setting src='' after switching to a Drive track fires a spurious error event.
+    if (err?.target === _sdAudio && !_sdActive) return;
     const error = err?.target?.error || err;
     console.error('[Player] Audio error:', error);
-    _onError({ type: 'audio', message: 'Error de reproducción.', error });
+    _onError({ type: 'audio', message: 'toast_audio_error', error });
   }
 
   /* ── Getters ────────────────────────────────────────────── */
