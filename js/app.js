@@ -12219,19 +12219,29 @@ const App = (() => {
           folderId:     null,
         }).catch(() => {});
 
-        // 6. Update home cards that still reference the old sd_ id
-        document.querySelectorAll(`.home-card[data-id="${CSS.escape(track.id)}"]`).forEach(card => {
-          card.querySelector('.sd-thumb-chip')?.remove();
-          card.dataset.id = driveId;
-          // Update displayed title with confirmed modal name
-          const nameEl = card.querySelector('.home-card-name');
-          if (nameEl) nameEl.textContent = meta.title || filename;
-        });
-
         document.getElementById('sd-save-modal').style.display = 'none';
-        // Hide download button — track is now on Drive
+
+        // Hide download buttons — track is now a Drive file
         document.getElementById('btn-pexp-sd-download').style.display = 'none';
         document.getElementById('btn-mini-sd-download').style.display = 'none';
+
+        // Also update the player queue so the current track reflects the Drive file,
+        // preventing a second "Descargar" if the user opens the modal again.
+        Player.patchQueueItem(track.id, {
+          id:          driveId,
+          name:        filename,
+          displayName: meta.title,
+          artist:      meta.artist,
+          album:       meta.album,
+          year:        meta.year,
+          isSoundrop:  false,
+          videoId:     null,
+          mimeType:    'audio/mpeg',
+        });
+
+        // Re-render home so the card gets fresh data + correct click closure
+        _loadHomeData().catch(() => {});
+
         UI.showToast('✓ Guardado en Drive · Soundrop');
       } catch (err) {
         console.error('[App] SD save error:', err);
