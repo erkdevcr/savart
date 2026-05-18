@@ -130,12 +130,25 @@ const Soundrop = (() => {
    * @returns {Promise<string>}  — Drive file ID of the uploaded file
    */
   async function saveToDrive(blob, meta) {
-    // Find or create the "Soundrop" folder at Drive root
-    const folderId = await Drive.findOrCreateFolder('Soundrop', 'root');
+    // Build nested folder path inside MSK:
+    //   Soundrop/                        (always)
+    //   Soundrop/{Artist}/               (if artist set)
+    //   Soundrop/{Artist}/{Album}/       (if artist + album set)
+    let folderId = await Drive.findOrCreateFolder('Soundrop', CONFIG.ROOT_FOLDER_ID);
 
-    // Build filename
-    const safeName = [meta.artist, meta.title].filter(Boolean).join(' - ');
-    const filename = `${safeName || 'Soundrop track'}.mp3`;
+    const artist = (meta.artist || '').trim();
+    const album  = (meta.album  || '').trim();
+
+    if (artist) {
+      folderId = await Drive.findOrCreateFolder(artist, folderId);
+      if (album) {
+        folderId = await Drive.findOrCreateFolder(album, folderId);
+      }
+    }
+
+    // Filename: "Artist - Title.mp3" (or just "Title.mp3" when no artist)
+    const titlePart  = (meta.title || 'Soundrop track').trim();
+    const filename   = artist ? `${artist} - ${titlePart}.mp3` : `${titlePart}.mp3`;
 
     // Upload via multipart
     const fileId = await Drive.uploadFile(blob, filename, 'audio/mpeg', folderId);

@@ -4157,11 +4157,13 @@ const App = (() => {
       _resetRadio();
       _openFolder({ id: item.id, name: item.name });
     } else {
-      // Single song from Home → enable radio mode
+      // Single song from Home → enable radio mode (skip for Soundrop tracks)
       _resetRadio();
-      _radioModeActive = true;
-      _radioQueuedIds  = new Set([item.id]);
-      _radioArtist = _guessArtistFromItem(item) || null;
+      if (!item.isSoundrop) {
+        _radioModeActive = true;
+        _radioQueuedIds  = new Set([item.id]);
+        _radioArtist = _guessArtistFromItem(item) || null;
+      }
       Player.setQueue([item], 0);
     }
   }
@@ -9243,6 +9245,7 @@ const App = (() => {
 
   async function _preScanBeforePlay(item) {
     if (!item?.id) return;
+    if (item.isSoundrop) return;   // Soundrop tracks have no Drive file to scan
     if (typeof Meta === 'undefined' || typeof Drive === 'undefined') return;
 
     try {
@@ -12213,6 +12216,9 @@ const App = (() => {
         document.querySelectorAll(`.home-card[data-id="${CSS.escape(track.id)}"]`).forEach(card => {
           card.querySelector('.sd-thumb-chip')?.remove();
           card.dataset.id = driveId;
+          // Update displayed title with confirmed modal name
+          const nameEl = card.querySelector('.home-card-name');
+          if (nameEl) nameEl.textContent = meta.title || filename;
         });
 
         document.getElementById('sd-save-modal').style.display = 'none';

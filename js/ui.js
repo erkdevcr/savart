@@ -976,6 +976,23 @@ const UI = (() => {
       playBtn.innerHTML = isPlaying ? iconPause(30) : iconPlay(30);
     }
 
+    // SD chip on album art
+    const artWrap = document.getElementById('pexp-art');
+    if (artWrap) {
+      let sdChip = artWrap.querySelector('.sd-thumb-chip--exp');
+      if (track?.isSoundrop) {
+        if (!sdChip) {
+          sdChip = document.createElement('span');
+          sdChip.className = 'sd-thumb-chip sd-thumb-chip--exp';
+          sdChip.textContent = 'SD';
+          artWrap.appendChild(sdChip);
+        }
+        sdChip.style.display = '';
+      } else if (sdChip) {
+        sdChip.style.display = 'none';
+      }
+    }
+
     // Show/hide SD download button (expanded player header)
     const btnSdExp = document.getElementById('btn-pexp-sd-download');
     if (btnSdExp) btnSdExp.style.display = track?.isSoundrop ? '' : 'none';
