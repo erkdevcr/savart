@@ -99,11 +99,11 @@ const Soundrop = (() => {
    */
   async function getAudioLink(videoId) {
     const url = `${WORKER_URL}?id=${encodeURIComponent(videoId)}`;
-    const res = await fetch(url);
+    const res = await fetch(url, { signal: AbortSignal.timeout(30000) });
     if (!res.ok) throw new Error(`Worker error ${res.status}`);
     const data = await res.json();
-    if (!data.url) throw new Error('Worker returned no audio URL');
-    return data.url;
+    if (data.status !== 'ok' || !data.link) throw new Error(data.msg || 'Worker returned no audio link');
+    return data.link;
   }
 
   /**
