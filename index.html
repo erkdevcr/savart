@@ -885,8 +885,8 @@
           <svg width="64" height="64" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z"/></svg>
         </div>
       </div>
-      <!-- File info badges -->
-      <div class="pexp-badges" id="pexp-badges" style="display:none">
+      <!-- File info badges: always in layout (visibility:hidden for SD so art stays at same height) -->
+      <div class="pexp-badges" id="pexp-badges" style="visibility:hidden">
         <span class="pexp-badge" id="pexp-badge-type"></span>
         <span class="pexp-badge" id="pexp-badge-kbps"></span>
         <span class="pexp-badge" id="pexp-badge-size"></span>
@@ -896,7 +896,6 @@
     <!-- Info + controls panel -->
     <div class="pexp-info-panel">
 
-      <!-- Desktop-only header -->
       <!-- SD download bar — visible only for Soundrop tracks, sits above LETRA -->
       <button id="btn-pexp-sd-download" class="sd-download-bar" aria-label="Descargar en Drive" style="display:none">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>

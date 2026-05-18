@@ -965,9 +965,11 @@ const UI = (() => {
       if (badgeType) badgeType.textContent = ext;
       if (badgeKbps) badgeKbps.textContent = kbps ? `${kbps} kbps` : '— kbps';
       if (badgeSize) badgeSize.textContent = sizeStr;
-      badgesEl.style.display = 'flex';
+      // Keep element in layout always so art height stays consistent between Drive and SD tracks
+      badgesEl.style.visibility = 'visible';
     } else if (badgesEl) {
-      badgesEl.style.display = 'none';
+      // Hidden but still occupies space — art panel height stays the same for SD tracks
+      badgesEl.style.visibility = 'hidden';
     }
 
     // Album art
