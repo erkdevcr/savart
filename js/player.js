@@ -572,16 +572,23 @@ const Player = (() => {
     }
 
     try {
-      // ── Soundrop track: stream directly from worker URL ──────
+      // ── Soundrop track ────────────────────────────────────────
+      // Fetch audio as an in-memory blob so we can use a same-origin
+      // blob: URL — required because _audio is wired to the Web Audio
+      // graph via createMediaElementSource, and cross-origin URLs are
+      // silenced by CORS enforcement inside that pipeline.
       if (item.isSoundrop) {
-        // Revoke any previous blob URL
+        const audioUrl = await Soundrop.getAudioLink(item.videoId);
+        const sdRes    = await fetch(audioUrl);
+        if (!sdRes.ok) throw new Error(`Soundrop fetch ${sdRes.status}`);
+        const sdBlob   = await sdRes.blob();
+
         if (_currentBlob) {
           URL.revokeObjectURL(_currentBlob);
           _currentBlob = null;
         }
-
-        const audioUrl = await Soundrop.getAudioLink(item.videoId);
-        _audio.src = audioUrl;
+        _currentBlob = URL.createObjectURL(sdBlob);
+        _audio.src = _currentBlob;
         _audio.playbackRate = _tempo;
         _initAudioGraph();
         if (_audioCtx?.state === 'suspended') {
