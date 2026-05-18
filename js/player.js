@@ -20,11 +20,12 @@
 const Player = (() => {
 
   /* ── State ──────────────────────────────────────────────── */
-  let _audio        = null;      // HTMLAudioElement — wired to Web Audio graph (Drive tracks)
-  let _sdAudio      = null;      // HTMLAudioElement — NOT in graph (Soundrop tracks, avoids CORS silence)
+  let _audio        = null;      // HTMLAudioElement — Drive tracks (Web Audio graph)
+  let _sdAudio      = null;      // HTMLAudioElement — Soundrop tracks (crossOrigin + same graph)
+  let _sdSourceNode = null;      // MediaElementAudioSourceNode for _sdAudio
   let _sdActive     = false;     // true while a Soundrop track is playing
   let _audioCtx     = null;      // AudioContext
-  let _sourceNode   = null;      // MediaElementAudioSourceNode
+  let _sourceNode   = null;      // MediaElementAudioSourceNode for _audio
   let _gainNode     = null;      // GainNode (master volume)
   let _eqNodes      = [];        // Array of 12 BiquadFilterNode
 
@@ -256,9 +257,13 @@ const Player = (() => {
    */
   function _initSdAudio() {
     if (_sdAudio) return;
-    _sdAudio             = new Audio();
-    _sdAudio.preload     = 'auto';
-    _sdAudio.playsInline = true;
+    _sdAudio              = new Audio();
+    _sdAudio.preload      = 'auto';
+    _sdAudio.playsInline  = true;
+    // crossOrigin must be set BEFORE src and BEFORE createMediaElementSource
+    // so the browser sends CORS headers — required for Web Audio processing.
+    // The Soundrop worker URL supports CORS (fetch() works in the download flow).
+    _sdAudio.crossOrigin  = 'anonymous';
 
     _sdAudio.addEventListener('play',  () => { _onPlayPause(true);  _msSetPlaybackState('playing'); });
     _sdAudio.addEventListener('pause', () => { _onPlayPause(false); _msSetPlaybackState('paused');  });
@@ -280,29 +285,38 @@ const Player = (() => {
   function _initAudioGraph() {
     if (_audioCtx) return;
 
-    _audioCtx   = new (window.AudioContext || window.webkitAudioContext)();
-    _sourceNode = _audioCtx.createMediaElementSource(_audio);
-    _gainNode   = _audioCtx.createGain();
+    // _sdAudio must exist before createMediaElementSource is called on it
+    _initSdAudio();
+
+    _audioCtx     = new (window.AudioContext || window.webkitAudioContext)();
+    _sourceNode   = _audioCtx.createMediaElementSource(_audio);
+    _sdSourceNode = _audioCtx.createMediaElementSource(_sdAudio);
+    _gainNode     = _audioCtx.createGain();
     _gainNode.gain.value = _volume;
 
     // 12-band EQ
     _eqNodes = CONFIG.EQ_BANDS.map((freq, i) => {
       const f = _audioCtx.createBiquadFilter();
-      f.type           = (i === 0) ? 'lowshelf' : (i === 11) ? 'highshelf' : 'peaking';
+      f.type            = (i === 0) ? 'lowshelf' : (i === 11) ? 'highshelf' : 'peaking';
       f.frequency.value = freq;
       f.gain.value      = _eqGains[i];
       if (f.type === 'peaking') f.Q.value = 1.41;
       return f;
     });
 
-    // Chain: source → eq[0..11] → gain → destination
-    let prev = _sourceNode;
-    for (const eq of _eqNodes) { prev.connect(eq); prev = eq; }
-    prev.connect(_gainNode);
+    // Both sources feed into the same EQ → gain → destination chain.
+    // _sourceNode: Drive tracks  |  _sdSourceNode: Soundrop tracks (crossOrigin).
+    // When one is paused it produces silence, so only the active one is heard.
+    _sourceNode.connect(_eqNodes[0]);
+    _sdSourceNode.connect(_eqNodes[0]);
+    for (let i = 0; i < _eqNodes.length - 1; i++) {
+      _eqNodes[i].connect(_eqNodes[i + 1]);
+    }
+    _eqNodes[_eqNodes.length - 1].connect(_gainNode);
     _gainNode.connect(_audioCtx.destination);
 
     _audioCtx.resume();
-    console.log('[Player] Web Audio graph built.');
+    console.log('[Player] Web Audio graph built (Drive + Soundrop sources).');
   }
 
   /* ── Queue management ───────────────────────────────────── */
@@ -532,11 +546,8 @@ const Player = (() => {
    */
   function setVolume(value) {
     _volume = Math.max(0, Math.min(1, value));
-    if (_sdActive && _sdAudio) {
-      _sdAudio.volume = _volume;           // Soundrop: direct volume (no graph)
-    }
-    if (_gainNode) _gainNode.gain.value = _volume;  // Drive: always keep graph in sync
-    else if (_audio) _audio.volume = _volume;
+    if (_gainNode) _gainNode.gain.value = _volume; // controls both sources via the shared graph
+    else if (_audio) _audio.volume = _volume;      // fallback before graph is built
   }
 
   function getVolume() { return _volume; }
@@ -614,20 +625,22 @@ const Player = (() => {
 
     try {
       // ── Soundrop track ────────────────────────────────────────
-      // Uses _sdAudio — a separate element NOT connected to the Web
-      // Audio graph, so cross-origin worker URLs play without CORS silence.
+      // _sdAudio has crossOrigin='anonymous', so the Web Audio graph can
+      // process it through the full EQ/gain chain without CORS silence.
       if (item.isSoundrop) {
-        _initSdAudio();
+        _initAudioGraph(); // builds graph + _sdSourceNode if not yet done
         _sdActive = true;
 
-        // Stop Drive audio so only one element plays at a time
+        // Pause Drive element so only one source is heard
         _audio.pause();
 
-        const audioUrl = await Soundrop.getAudioLink(item.videoId);
+        const audioUrl        = await Soundrop.getAudioLink(item.videoId);
         _sdAudio.src          = audioUrl;
-        _sdAudio.volume       = _volume;
         _sdAudio.playbackRate = _tempo;
 
+        if (_audioCtx?.state === 'suspended') {
+          await _audioCtx.resume().catch(() => {});
+        }
         _keepAliveStart();
         _msSetMetadata(item);
         _msSetPlaybackState('playing');
