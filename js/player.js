@@ -23,7 +23,9 @@ const Player = (() => {
   let _audio        = null;      // HTMLAudioElement — Drive tracks (Web Audio graph)
   let _sdAudio      = null;      // HTMLAudioElement — Soundrop tracks (crossOrigin + same graph)
   let _sdSourceNode = null;      // MediaElementAudioSourceNode for _sdAudio
-  let _sdActive     = false;     // true while a Soundrop track is playing
+  let _sdActive      = false;    // true while a Soundrop track is playing
+  let _sdPlaySession = 0;       // incremented on each SD play attempt
+  let _sdSrcSession  = 0;       // session# when _sdAudio.src was last written; stale errors ignored
   let _audioCtx     = null;      // AudioContext
   let _sourceNode   = null;      // MediaElementAudioSourceNode for _audio
   let _gainNode     = null;      // GainNode (master volume)
@@ -631,10 +633,27 @@ const Player = (() => {
         _initAudioGraph(); // builds graph + _sdSourceNode if not yet done
         _sdActive = true;
 
+        // Tag this play attempt so stale errors from the previous attempt are ignored
+        const mySession = ++_sdPlaySession;
+
         // Pause Drive element so only one source is heard
         _audio.pause();
 
-        const audioUrl        = await Soundrop.getAudioLink(item.videoId);
+        // Auto-retry getAudioLink — Cloudflare Worker cold starts can fail
+        // the first request; up to 3 attempts with 1 s / 2 s back-off.
+        let audioUrl, lastErr;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try { audioUrl = await Soundrop.getAudioLink(item.videoId); break; }
+          catch (err) {
+            lastErr = err;
+            if (attempt < 2) await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+          }
+        }
+        // If the user clicked something else while we were retrying, bail out
+        if (mySession !== _sdPlaySession) return;
+        if (!audioUrl) throw lastErr;
+
+        _sdSrcSession         = mySession;   // mark this src as belonging to current session
         _sdAudio.src          = audioUrl;
         _sdAudio.playbackRate = _tempo;
 
@@ -869,9 +888,13 @@ const Player = (() => {
   }
 
   function _handleAudioError(err) {
-    // Ignore errors from _sdAudio when it is not the active source —
-    // setting src='' after switching to a Drive track fires a spurious error event.
-    if (err?.target === _sdAudio && !_sdActive) return;
+    if (err?.target === _sdAudio) {
+      // Ignore errors when SD is not the active source (e.g. src='' after switching to Drive)
+      if (!_sdActive) return;
+      // Ignore errors from a stale src — cold-start retries or the previous song's element
+      // still loading when a new play has already overwritten it.
+      if (_sdSrcSession !== _sdPlaySession) return;
+    }
     const error = err?.target?.error || err;
     console.error('[Player] Audio error:', error);
     _onError({ type: 'audio', message: 'toast_audio_error', error });
