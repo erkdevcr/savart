@@ -2208,21 +2208,32 @@ img { display: block; }
   transition: opacity 0.15s;
 }
 .album-edit-save-btn:disabled { opacity: 0.6; cursor: not-allowed; }
-/* Close (✕) button — sits between Reset ID3 and Save */
-.album-edit-cancel-btn {
+/* Close (✕) button — sits in place of the 3-dots when the edit panel is open */
+.album-entity-close-btn {
+  display: none;           /* hidden by default — 3-dots shows instead */
+  flex-shrink: 0;
   background: transparent;
-  border: 1px solid var(--border, rgba(255,255,255,0.12));
+  border: 1px solid var(--border, rgba(255,255,255,0.15));
   color: var(--text-muted);
   border-radius: var(--radius-sm);
-  padding: 5px 10px;
+  padding: 5px 9px;
   font-size: 13px;
+  line-height: 1;
   cursor: pointer;
-  margin-right: 6px;
   transition: color 0.15s, border-color 0.15s;
 }
-.album-edit-cancel-btn:hover {
+.album-entity-close-btn:hover {
   color: var(--text-primary);
   border-color: var(--text-secondary);
+}
+/* When editing: hide 3-dots, show ✕ in its place */
+.lib-detail-entity.album-editing .lib-detail-entity-more {
+  display: none;
+}
+.lib-detail-entity.album-editing .album-entity-close-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .album-edit-apply-btn {
   flex-shrink: 0;

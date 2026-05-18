@@ -3526,7 +3526,8 @@ const UI = (() => {
       </div>
       <button class="lib-detail-entity-more" title="Editar álbum" aria-label="Editar álbum">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
-      </button>`;
+      </button>
+      <button class="album-entity-close-btn" title="Cerrar" aria-label="Cerrar edición">✕</button>`;
 
     // ── Edit panel (initially hidden) ──
     const editPanel = document.createElement('div');
@@ -3534,7 +3535,6 @@ const UI = (() => {
     editPanel.innerHTML = `
       <div class="album-edit-actions">
         <button class="album-edit-reset-id3-btn">${t('btn_reset_id3')}</button>
-        <button class="album-edit-cancel-btn" title="${t('cancel') || 'Cancelar'}">✕</button>
         <button class="album-edit-save-btn">${t('save_btn')}</button>
       </div>
       <div class="album-edit-row">
@@ -3607,8 +3607,8 @@ const UI = (() => {
       }
     };
 
-    // Cancel button: close the edit panel without saving
-    editPanel.querySelector('.album-edit-cancel-btn').addEventListener('click', () => {
+    // Close button (✕ over the 3-dots): close the edit panel without saving
+    entity.querySelector('.album-entity-close-btn').addEventListener('click', () => {
       editPanel.classList.remove('open');
       entity.classList.remove('album-editing');
     });
@@ -4202,7 +4202,8 @@ const UI = (() => {
       </div>
       <button class="lib-detail-entity-more" title="${t('ctx_edit_collection')}" aria-label="${t('ctx_edit_collection')}">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
-      </button>`;
+      </button>
+      <button class="album-entity-close-btn" title="Cerrar" aria-label="Cerrar edición">✕</button>`;
 
     // ── Inline edit panel (same pattern as album detail) ──
     const editPanel = document.createElement('div');
@@ -4210,7 +4211,6 @@ const UI = (() => {
     editPanel.innerHTML = `
       <div class="album-edit-actions">
         <button class="album-edit-reset-id3-btn">${t('btn_reset_id3')}</button>
-        <button class="album-edit-cancel-btn" title="${t('cancel') || 'Cancelar'}">✕</button>
         <button class="album-edit-save-btn">${t('save_btn')}</button>
       </div>
       <div class="album-edit-row">
@@ -4235,8 +4235,8 @@ const UI = (() => {
       // No auto-focus — user chooses which field to edit first
     };
 
-    // Cancel button: close the edit panel without saving
-    editPanel.querySelector('.album-edit-cancel-btn').addEventListener('click', () => {
+    // Close button (✕ over the 3-dots): close the edit panel without saving
+    entity.querySelector('.album-entity-close-btn').addEventListener('click', () => {
       editPanel.classList.remove('open');
       entity.classList.remove('album-editing');
     });
