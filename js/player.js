@@ -20,7 +20,9 @@
 const Player = (() => {
 
   /* ── State ──────────────────────────────────────────────── */
-  let _audio        = null;      // HTMLAudioElement
+  let _audio        = null;      // HTMLAudioElement — wired to Web Audio graph (Drive tracks)
+  let _sdAudio      = null;      // HTMLAudioElement — NOT in graph (Soundrop tracks, avoids CORS silence)
+  let _sdActive     = false;     // true while a Soundrop track is playing
   let _audioCtx     = null;      // AudioContext
   let _sourceNode   = null;      // MediaElementAudioSourceNode
   let _gainNode     = null;      // GainNode (master volume)
@@ -242,6 +244,39 @@ const Player = (() => {
   /**
    * Build the Web Audio graph. Must be called from a user gesture context.
    */
+  /**
+   * Returns the currently active HTMLAudioElement.
+   * Soundrop tracks play through _sdAudio (no Web Audio graph → no CORS silence).
+   * Drive tracks play through _audio (full EQ/gain pipeline).
+   */
+  function _getAudio() { return _sdActive ? _sdAudio : _audio; }
+
+  /**
+   * Create _sdAudio once and wire its events to the same callbacks as _audio.
+   */
+  function _initSdAudio() {
+    if (_sdAudio) return;
+    _sdAudio             = new Audio();
+    _sdAudio.preload     = 'auto';
+    _sdAudio.playsInline = true;
+
+    _sdAudio.addEventListener('play',  () => { _onPlayPause(true);  _msSetPlaybackState('playing'); });
+    _sdAudio.addEventListener('pause', () => { _onPlayPause(false); _msSetPlaybackState('paused');  });
+    _sdAudio.addEventListener('ended',   _handleEnded);
+    _sdAudio.addEventListener('error',   _handleAudioError);
+    _sdAudio.addEventListener('timeupdate', () => {
+      _onProgress(_sdAudio.currentTime, _sdAudio.duration || 0);
+      _msUpdatePositionState();
+    });
+    _sdAudio.addEventListener('durationchange', _msUpdatePositionState);
+    _sdAudio.addEventListener('loadedmetadata', () => {
+      if (_onDurationReady && isFinite(_sdAudio.duration) && _sdAudio.duration > 0) {
+        const item = _queue[_queueIndex];
+        if (item) _onDurationReady(item, _sdAudio.duration);
+      }
+    });
+  }
+
   function _initAudioGraph() {
     if (_audioCtx) return;
 
@@ -360,19 +395,19 @@ const Player = (() => {
    */
   async function togglePlayPause() {
     if (!_audio) return;
-    _initAudioGraph();
-    if (_audio.paused) {
-      // No blob loaded yet — happens when queue is restored from saved state
-      // without auto-play. Fetch and play the current track normally.
-      if (!_currentBlob) {
+    const el = _getAudio();
+    if (!_sdActive) _initAudioGraph();
+    if (el.paused) {
+      // No content loaded yet — happens when queue is restored from saved state
+      if (!_sdActive && !_currentBlob) {
         await _playCurrentTrack();
         return;
       }
       _keepAliveStart();
-      await _audio.play().catch(_handleAudioError);
+      await el.play().catch(_handleAudioError);
     } else {
-      _keepAliveStop(); // explicit user pause — release keepalive
-      _audio.pause();
+      _keepAliveStop();
+      el.pause();
     }
   }
 
@@ -381,17 +416,17 @@ const Player = (() => {
    */
   async function play() {
     if (!_audio) return;
-    _initAudioGraph();
+    if (!_sdActive) _initAudioGraph();
     _keepAliveStart();
-    await _audio.play().catch(_handleAudioError);
+    await _getAudio().play().catch(_handleAudioError);
   }
 
   /**
    * Pause.
    */
   function pause() {
-    _keepAliveStop(); // explicit user pause — release keepalive
-    _audio?.pause();
+    _keepAliveStop();
+    _getAudio()?.pause();
   }
 
   /**
@@ -400,7 +435,7 @@ const Player = (() => {
   function next() {
     if (_queue.length === 0) return;
     if (_repeatMode === 'one') {
-      _audio.currentTime = 0;
+      _getAudio().currentTime = 0;
       play();
       return;
     }
@@ -422,8 +457,9 @@ const Player = (() => {
    */
   function prev() {
     if (_queue.length === 0) return;
-    if (_audio && _audio.currentTime > 3) {
-      _audio.currentTime = 0;
+    const el = _getAudio();
+    if (el && el.currentTime > 3) {
+      el.currentTime = 0;
       return;
     }
     if (_queueIndex > 0) {
@@ -437,8 +473,9 @@ const Player = (() => {
    * @param {number} time - seconds
    */
   function seekTo(time) {
-    if (_audio && isFinite(time)) {
-      _audio.currentTime = time;
+    const el = _getAudio();
+    if (el && isFinite(time)) {
+      el.currentTime = time;
     }
   }
 
@@ -495,7 +532,10 @@ const Player = (() => {
    */
   function setVolume(value) {
     _volume = Math.max(0, Math.min(1, value));
-    if (_gainNode) _gainNode.gain.value = _volume;
+    if (_sdActive && _sdAudio) {
+      _sdAudio.volume = _volume;           // Soundrop: direct volume (no graph)
+    }
+    if (_gainNode) _gainNode.gain.value = _volume;  // Drive: always keep graph in sync
     else if (_audio) _audio.volume = _volume;
   }
 
@@ -509,7 +549,8 @@ const Player = (() => {
    */
   function setTempo(rate) {
     _tempo = Math.max(0.5, Math.min(2.0, rate));
-    if (_audio) _audio.playbackRate = _tempo;
+    if (_audio)   _audio.playbackRate   = _tempo;
+    if (_sdAudio) _sdAudio.playbackRate = _tempo;
   }
 
   function getTempo() { return _tempo; }
@@ -573,33 +614,31 @@ const Player = (() => {
 
     try {
       // ── Soundrop track ────────────────────────────────────────
-      // Fetch audio as an in-memory blob so we can use a same-origin
-      // blob: URL — required because _audio is wired to the Web Audio
-      // graph via createMediaElementSource, and cross-origin URLs are
-      // silenced by CORS enforcement inside that pipeline.
+      // Uses _sdAudio — a separate element NOT connected to the Web
+      // Audio graph, so cross-origin worker URLs play without CORS silence.
       if (item.isSoundrop) {
-        const audioUrl = await Soundrop.getAudioLink(item.videoId);
-        const sdRes    = await fetch(audioUrl);
-        if (!sdRes.ok) throw new Error(`Soundrop fetch ${sdRes.status}`);
-        const sdBlob   = await sdRes.blob();
+        _initSdAudio();
+        _sdActive = true;
 
-        if (_currentBlob) {
-          URL.revokeObjectURL(_currentBlob);
-          _currentBlob = null;
-        }
-        _currentBlob = URL.createObjectURL(sdBlob);
-        _audio.src = _currentBlob;
-        _audio.playbackRate = _tempo;
-        _initAudioGraph();
-        if (_audioCtx?.state === 'suspended') {
-          await _audioCtx.resume().catch(() => {});
-        }
+        // Stop Drive audio so only one element plays at a time
+        _audio.pause();
+
+        const audioUrl = await Soundrop.getAudioLink(item.videoId);
+        _sdAudio.src          = audioUrl;
+        _sdAudio.volume       = _volume;
+        _sdAudio.playbackRate = _tempo;
+
         _keepAliveStart();
         _msSetMetadata(item);
         _msSetPlaybackState('playing');
-        await _audio.play();
-        // Soundrop tracks: no DB play count, no recents, no preload
+        await _sdAudio.play();
         return;
+      }
+
+      // ── Drive track: deactivate Soundrop element if it was on ─
+      if (_sdActive) {
+        _sdActive = false;
+        if (_sdAudio) { _sdAudio.pause(); _sdAudio.src = ''; }
       }
 
       // ── Drive track: blob path ────────────────────────────────
@@ -791,9 +830,9 @@ const Player = (() => {
 
   /* ── Getters ────────────────────────────────────────────── */
 
-  function isPlaying()      { return _audio ? !_audio.paused : false; }
-  function getCurrentTime() { return _audio ? _audio.currentTime : 0; }
-  function getDuration()    { return _audio ? (_audio.duration || 0) : 0; }
+  function isPlaying()      { const el = _getAudio(); return el ? !el.paused : false; }
+  function getCurrentTime() { const el = _getAudio(); return el ? el.currentTime : 0; }
+  function getDuration()    { const el = _getAudio(); return el ? (el.duration || 0) : 0; }
   function getCurrentTrack() {
     return (_queueIndex >= 0 && _queueIndex < _queue.length)
       ? _queue[_queueIndex]
