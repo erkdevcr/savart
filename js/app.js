@@ -869,6 +869,8 @@ const App = (() => {
         thumbnailUrl: _recentThumb,
         thumbnailLink: track.thumbnailLink || null,
         folderId:     track.parents?.[0]  || track.folderId || null,
+        // Preserve SD fields so the recents store never loses them on re-write
+        ...(track.isSoundrop ? { isSoundrop: true, videoId: track.videoId } : {}),
       };
       DB.addRecent(recentData).then(() => {
         Sync.push('recents');
@@ -889,9 +891,10 @@ const App = (() => {
       // Persist display fields to metadata store so topPlayed can show them.
       // Only write non-empty values to avoid overwriting enriched fields with blanks.
       const _metaUpdate = { name: track.name, folderId: recentData.folderId };
-      if (bestName)   _metaUpdate.displayName  = bestName;
-      if (bestThumb)  _metaUpdate.thumbnailUrl = bestThumb;
-      if (bestArtist) _metaUpdate.artist       = bestArtist;
+      if (bestName)         _metaUpdate.displayName  = bestName;
+      if (bestThumb)        _metaUpdate.thumbnailUrl = bestThumb;
+      if (bestArtist)       _metaUpdate.artist       = bestArtist;
+      if (track.isSoundrop) { _metaUpdate.isSoundrop = true; _metaUpdate.videoId = track.videoId; }
       DB.setMeta(track.id, _metaUpdate).catch(() => {});
 
       // ── Proactive early cover fetch ────────────────────────────────────────────

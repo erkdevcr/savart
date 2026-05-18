@@ -934,7 +934,7 @@ const UI = (() => {
     const badgeType  = document.getElementById('pexp-badge-type');
     const badgeKbps  = document.getElementById('pexp-badge-kbps');
     const badgeSize  = document.getElementById('pexp-badge-size');
-    if (badgesEl && track) {
+    if (badgesEl && track && !track.isSoundrop) {
       const ext     = (track.name || '').split('.').pop().toUpperCase() || '—';
       const sizeNum = parseInt(track.size || '0', 10);
       const durMs   = parseInt(track.durationMs || '0', 10);
