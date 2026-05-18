@@ -5994,17 +5994,21 @@ body.queue-open #mini-player { z-index: 65; }
     /* Establish size-query container so .pexp-art can reference panel height via cqh */
     container-type: size;
     overflow: hidden; /* clip art if somehow still too large (safety net) */
+    /* Anchor art to the bottom so it grows upward toward the "now playing" label */
+    justify-content: flex-end;
+    padding-top: 6px;   /* minimal top gap — art reaches up toward "now playing" */
+    padding-bottom: 14px;
   }
 
   .pexp-art {
     /*
       min() picks the smallest of:
         100%       — panel content width (never overflow sideways)
-        300px      — absolute max size cap
-        calc(100cqh - 76px) — panel height minus vertical padding (40px) + badges row (~36px)
-      Result: art is always a square that fits in the available space.
+        363px      — absolute max size cap (~10% larger than before)
+        calc(100cqh - 36px) — panel height minus reduced vertical padding
+      Result: art is always a square that fits in the available space, grows upward.
     */
-    width: min(100%, 330px, calc(100cqh - 76px));
+    width: min(100%, 363px, calc(100cqh - 36px));
     max-width: unset; /* replaced by the min() above */
     aspect-ratio: 1;  /* height = width → always square */
   }
