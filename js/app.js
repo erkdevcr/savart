@@ -12225,19 +12225,26 @@ const App = (() => {
         document.getElementById('btn-pexp-sd-download').style.display = 'none';
         document.getElementById('btn-mini-sd-download').style.display = 'none';
 
-        // Also update the player queue so the current track reflects the Drive file,
-        // preventing a second "Descargar" if the user opens the modal again.
-        Player.patchQueueItem(track.id, {
+        // Update the player queue so the current track reflects the Drive file.
+        const driveTrack = {
           id:          driveId,
           name:        filename,
           displayName: meta.title,
           artist:      meta.artist,
           album:       meta.album,
           year:        meta.year,
+          thumbnailUrl: track.thumbnailUrl || null,
+          mimeType:    'audio/mpeg',
           isSoundrop:  false,
           videoId:     null,
-          mimeType:    'audio/mpeg',
-        });
+        };
+        Player.patchQueueItem(track.id, driveTrack);
+
+        // Refresh mini-player and expanded player with confirmed data
+        const playing = Player.isPlaying();
+        UI.updateMiniPlayer(driveTrack, playing);
+        UI.updateExpandedPlayer(driveTrack, playing);
+        document.title = `${meta.title} — Savart`;
 
         // Re-render home so the card gets fresh data + correct click closure
         _loadHomeData().catch(() => {});
