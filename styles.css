@@ -1636,15 +1636,19 @@ img { display: block; }
   padding: 0;
 }
 .sd-download-btn:hover { background: #ea6c00; }
-.sd-download-btn svg { display: block; }
+.sd-download-btn svg { display: block; width: 9px; height: 9px; }
 .sd-btn-label {
-  font-size: 7px;
+  font-size: 6px;
   font-weight: 700;
   color: white;
   line-height: 1;
   letter-spacing: 0.03em;
 }
-.sd-download-btn--mini { width: 28px; height: 28px; }
+.sd-download-btn--mini {
+  width: 22px;
+  height: 22px;
+  margin-left: 6px;
+}
 
 /* Soundrop save modal body */
 .sd-save-modal-body {
