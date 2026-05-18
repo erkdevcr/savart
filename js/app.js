@@ -3557,11 +3557,19 @@ const App = (() => {
     const songs = items.filter(r => r.type === 'song');
     if (!songs.length || typeof Meta === 'undefined') return;
 
-    // Pass 0: persisted covers from IndexedDB — blob first, then external URL (Last.fm / AudD.io)
+    // Pass 0: persisted covers from IndexedDB — manual cover always wins, then blob, then external URL
     await Promise.allSettled(songs.map(async song => {
       try {
         const dbMeta = await DB.getMeta(song.id);
         if (!dbMeta) return;
+        // Manual cover wins over embedded ID3 art — user explicitly chose this URL.
+        const hasManualUrl = (dbMeta.manualAt || 0) > 0
+          && dbMeta.thumbnailUrl && dbMeta.thumbnailUrl !== 'id3'
+          && !dbMeta.thumbnailUrl.startsWith('blob:');
+        if (hasManualUrl) {
+          _updateHomeCardThumbnail(song.id, dbMeta.thumbnailUrl, false);
+          return;
+        }
         if (dbMeta.coverBlob) {
           const url = Meta.injectCover(song.id, dbMeta.coverBlob);
           if (url) { _updateHomeCardThumbnail(song.id, url, true); return; }
@@ -3575,11 +3583,19 @@ const App = (() => {
       } catch (_) {}
     }));
 
-    // Pass 1: in-memory Meta cache (current session — instant, no DB call)
-    songs.forEach(song => {
+    // Pass 1: in-memory Meta cache (current session — instant, no DB call).
+    // Skip songs that already show a manual cover (manualAt wins over session cache).
+    await Promise.allSettled(songs.map(async song => {
       const meta = Meta.getCached(song.id);
-      if (meta?.coverUrl) _updateHomeCardThumbnail(song.id, meta.coverUrl, true);
-    });
+      if (!meta?.coverUrl) return;
+      try {
+        const dbMeta = await DB.getMeta(song.id).catch(() => null);
+        const hasManualUrl = (dbMeta?.manualAt || 0) > 0
+          && dbMeta?.thumbnailUrl && dbMeta.thumbnailUrl !== 'id3'
+          && !dbMeta.thumbnailUrl.startsWith('blob:');
+        if (!hasManualUrl) _updateHomeCardThumbnail(song.id, meta.coverUrl, true);
+      } catch (_) {}
+    }));
 
     // Pass 2: soft scan — download ID3 header for every song not yet scanned on this
     // device (regardless of whether it already has a cover from Pass 0/1 — we want
@@ -3600,14 +3616,22 @@ const App = (() => {
   async function _prefetchTopPlayedCovers(items) {
     if (!items || !items.length || typeof Meta === 'undefined') return;
 
-    // Pass 0: persisted covers from IndexedDB — blob first, then external URL (Last.fm / AudD.io)
+    // Pass 0: persisted covers from IndexedDB — manual cover always wins, then blob, then external URL
     await Promise.allSettled(items.map(async item => {
       try {
         const dbMeta = await DB.getMeta(item.id);
         if (!dbMeta) return;
+        // Manual cover wins over embedded ID3 art — user explicitly chose this URL.
+        const hasManualUrl = (dbMeta.manualAt || 0) > 0
+          && dbMeta.thumbnailUrl && dbMeta.thumbnailUrl !== 'id3'
+          && !dbMeta.thumbnailUrl.startsWith('blob:');
+        if (hasManualUrl) {
+          _updateTopListThumb(item.id, dbMeta.thumbnailUrl, false);
+          return;
+        }
         if (dbMeta.coverBlob) {
           const url = Meta.injectCover(item.id, dbMeta.coverBlob);
-          if (url) { _updateTopListThumb(item.id, url, true); return; }  // ID3 embedded
+          if (url) { _updateTopListThumb(item.id, url, true); return; }
         }
         // External URL persisted from Last.fm / AudD.io in a previous session
         const persistedUrl = dbMeta.coverUrl || dbMeta.thumbnailUrl;
@@ -3617,11 +3641,18 @@ const App = (() => {
       } catch (_) {}
     }));
 
-    // Pass 1: in-memory Meta cache (always ID3)
-    items.forEach(item => {
+    // Pass 1: in-memory Meta cache — skip songs with a manual cover (manualAt wins).
+    await Promise.allSettled(items.map(async item => {
       const meta = Meta.getCached(item.id);
-      if (meta?.coverUrl) _updateTopListThumb(item.id, meta.coverUrl, true);
-    });
+      if (!meta?.coverUrl) return;
+      try {
+        const dbMeta = await DB.getMeta(item.id).catch(() => null);
+        const hasManualUrl = (dbMeta?.manualAt || 0) > 0
+          && dbMeta?.thumbnailUrl && dbMeta.thumbnailUrl !== 'id3'
+          && !dbMeta.thumbnailUrl.startsWith('blob:');
+        if (!hasManualUrl) _updateTopListThumb(item.id, meta.coverUrl, true);
+      } catch (_) {}
+    }));
 
     // Pass 2: soft scan — same logic as home: scan all items not yet scanned on this device
     await _softScanItems(items);
@@ -5452,11 +5483,19 @@ const App = (() => {
       return !!(art && art.querySelector('.pinned-art-img'));
     };
 
-    // Pass 0: DB persisted covers — blob first, then external URL — all in parallel
+    // Pass 0: DB persisted covers — manual cover always wins, then blob, then external URL
     await Promise.allSettled(songs.map(async item => {
       try {
         const dbMeta = await DB.getMeta(item.id);
         if (!dbMeta) return;
+        // Manual cover wins over embedded ID3 art — user explicitly chose this URL.
+        const hasManualUrl = (dbMeta.manualAt || 0) > 0
+          && dbMeta.thumbnailUrl && dbMeta.thumbnailUrl !== 'id3'
+          && !dbMeta.thumbnailUrl.startsWith('blob:');
+        if (hasManualUrl) {
+          _updatePinnedItemCover(item.id, dbMeta.thumbnailUrl, false);
+          return;
+        }
         if (dbMeta.coverBlob) {
           const url = Meta.injectCover(item.id, dbMeta.coverBlob);
           if (url) { _updatePinnedItemCover(item.id, url, true); return; }
@@ -5469,11 +5508,18 @@ const App = (() => {
       } catch (_) { /* non-fatal */ }
     }));
 
-    // Pass 1: in-memory Meta cache (covers resolved this session — always fresh)
-    songs.forEach(item => {
+    // Pass 1: in-memory Meta cache — skip songs with a manual cover (manualAt wins).
+    await Promise.allSettled(songs.map(async item => {
       const inMem = Meta.getCached(item.id);
-      if (inMem?.coverUrl) _updatePinnedItemCover(item.id, inMem.coverUrl, true);
-    });
+      if (!inMem?.coverUrl) return;
+      try {
+        const dbMeta = await DB.getMeta(item.id).catch(() => null);
+        const hasManualUrl = (dbMeta?.manualAt || 0) > 0
+          && dbMeta?.thumbnailUrl && dbMeta.thumbnailUrl !== 'id3'
+          && !dbMeta.thumbnailUrl.startsWith('blob:');
+        if (!hasManualUrl) _updatePinnedItemCover(item.id, inMem.coverUrl, true);
+      } catch (_) {}
+    }));
 
     // Pass 2: soft scan — all pinned songs not yet scanned on this device
     await _softScanItems(songs);
@@ -9240,6 +9286,20 @@ const App = (() => {
    */
   function _ensureCoverVisible(fileId, dbMeta) {
     if (!dbMeta) return;
+
+    // Manual cover always wins — user explicitly chose this URL.
+    // Must be checked BEFORE coverBlob, otherwise ID3 art silently overrides it.
+    const hasManualUrl = (dbMeta.manualAt || 0) > 0
+      && dbMeta.thumbnailUrl
+      && dbMeta.thumbnailUrl !== 'id3'
+      && !dbMeta.thumbnailUrl.startsWith('blob:');
+    if (hasManualUrl) {
+      _updateHomeCardThumbnail(fileId, dbMeta.thumbnailUrl, false);
+      _updateRowThumbnail(fileId, dbMeta.thumbnailUrl, false);
+      _updateTopListThumb(fileId, dbMeta.thumbnailUrl, false);
+      return;
+    }
+
     if (dbMeta.coverBlob) {
       const url = Meta.injectCover(fileId, dbMeta.coverBlob);
       if (url) {
