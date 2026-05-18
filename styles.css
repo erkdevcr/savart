@@ -1614,18 +1614,18 @@ img { display: block; }
   align-self: flex-start;   /* never stretch in a flex column parent */
   align-items: center;
   gap: 5px;
-  padding: 5px 12px;
-  background: #f97316;
-  color: #fff;
-  border: none;
-  border-radius: var(--radius-pill);
+  padding: 5px 11px;
+  background: none;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
   margin-bottom: 2px;
-  transition: background 0.15s;
+  transition: background 0.15s, color 0.15s;
 }
-.sd-download-bar:hover { background: #ea6c00; }
+.sd-download-bar:hover { background: var(--bg-hover); color: var(--accent); }
 .sd-download-bar svg   { flex-shrink: 0; width: 11px; height: 11px; }
 
 /* SD download button in mini-player mobile row (circle) */
