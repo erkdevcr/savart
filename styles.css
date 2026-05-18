@@ -1602,6 +1602,7 @@ img { display: block; }
 /* "Descargar" button — compact, above LETRA, left-aligned */
 .sd-download-bar {
   display: inline-flex;
+  align-self: flex-start;   /* never stretch in a flex column parent */
   align-items: center;
   gap: 5px;
   padding: 5px 12px;
