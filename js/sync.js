@@ -809,6 +809,7 @@ const Sync = (() => {
 
     const live = liveRaw.map((r, i) => {
       const m = metaRecords[i];
+      const isSd = r.isSoundrop || m?.isSoundrop || false;
       return {
         id: r.id, name: r.name || null,
         displayName: m?.displayName || r.displayName || r.name || null,
@@ -819,6 +820,8 @@ const Sync = (() => {
         thumbnailUrl: _safeUrl(m?.thumbnailUrl) || _safeUrl(r.thumbnailUrl)
                    || _safeUrl(r.thumbnailLink)  || null,
         accessedAt: r.accessedAt ?? Date.now(),
+        // SD fields — must survive sync so other devices can play Soundrop tracks
+        ...(isSd ? { isSoundrop: true, videoId: r.videoId || m?.videoId || null } : {}),
       };
     });
 
@@ -1005,6 +1008,7 @@ const Sync = (() => {
       pinnedOrder: pinnedOrder || [],
       recents: recentsLive.map((r, i) => {
         const m = recentMetaRecords[i];
+        const isSd = r.isSoundrop || m?.isSoundrop || false;
         return {
           id: r.id, name: r.name || null,
           displayName: m?.displayName || r.displayName || r.name || null,
@@ -1017,6 +1021,8 @@ const Sync = (() => {
           thumbnailUrl: cleanUrl(m?.thumbnailUrl) || cleanUrl(r.thumbnailUrl)
                      || cleanUrl(r.thumbnailLink) || null,
           accessedAt: r.accessedAt ?? Date.now(),
+          // SD fields — must survive sync so other devices can play Soundrop tracks
+          ...(isSd ? { isSoundrop: true, videoId: r.videoId || m?.videoId || null } : {}),
         };
       }),
       // Tombstones let readHome() honour deletions even before init() runs.
