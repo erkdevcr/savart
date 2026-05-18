@@ -4877,6 +4877,31 @@ const App = (() => {
   // Last song results from a search — used by the "Play results" button
   let _lastSearchFiles = [];
 
+  // Cached raw results from the last Drive / Soundrop search.
+  // Re-used when the user switches filter chips so we never re-fetch.
+  let _cachedSearchResults = null;
+  let _cachedSearchTerm    = '';
+
+  /**
+   * Re-render the search results from cache with a different filter.
+   * Called by filter chip clicks — no network request needed.
+   */
+  /**
+   * Re-render cached search results with a new filter.
+   * Returns true if cache was available, false if a fresh fetch is needed.
+   */
+  function _renderCachedSearch(filter) {
+    if (!_cachedSearchResults) return false;
+    // Soundrop chip selected but cached results are from Drive (or vice versa):
+    // the result shapes are incompatible — do a fresh search.
+    const hasSd    = !!_cachedSearchResults.soundrop;
+    const needsSd  = filter === 'soundrop';
+    if (hasSd !== needsSd) return false;
+    UI.renderSearchResults(_cachedSearchResults, filter);
+    UI.setActiveSongRow(Player.getCurrentTrack()?.id ?? null);
+    return true;
+  }
+
   async function _doSearch(term) {
     const container = document.getElementById('search-results');
     if (!container) return;
@@ -4896,8 +4921,10 @@ const App = (() => {
       try {
         const sdTracks = await Soundrop.search(term);
         sdTracks.forEach(t => _cacheItem(t));
-        _lastSearchFiles = sdTracks;
-        UI.renderSearchResults({ soundrop: sdTracks }, 'soundrop');
+        _lastSearchFiles     = sdTracks;
+        _cachedSearchResults = { soundrop: sdTracks };
+        _cachedSearchTerm    = term;
+        UI.renderSearchResults(_cachedSearchResults, 'soundrop');
         UI.setActiveSongRow(Player.getCurrentTrack()?.id ?? null);
       } catch (err) {
         console.error('[App] Soundrop search error:', err);
@@ -4913,8 +4940,10 @@ const App = (() => {
       const result = _fuzzyRank(term, raw);
       // Cache all items for queue resolution
       [...(result.folders || []), ...(result.files || [])].forEach(item => _cacheItem(item));
-      // Store song results for the "Play results" button
-      _lastSearchFiles = result.files || [];
+      // Store song results for the "Play results" button + search cache
+      _lastSearchFiles     = result.files || [];
+      _cachedSearchResults = result;
+      _cachedSearchTerm    = term;
       // Render sorted results
       UI.renderSearchResults(result, filter);
       UI.setActiveSongRow(Player.getCurrentTrack()?.id ?? null);
@@ -11456,7 +11485,8 @@ const App = (() => {
       UI.setExpandedPlayerVisible(false);
     }
     UI.showView(viewId);
-    UI.updateSearchChipCounts(null); // clear search chip counts on every nav
+    // Only clear chip counts when leaving browse entirely (not just switching tabs)
+    if (viewId !== 'browse') UI.updateSearchChipCounts(null);
     if (viewId === 'home')    _loadHomeData();
     if (viewId === 'library') {
       if (_libDetailRestoreFn) {
@@ -11468,28 +11498,10 @@ const App = (() => {
         _setLibTab(_currentLibTab || 'albums');
       }
     }
-    // When navigating away from browse, clear any active search so the
-    // folder list is restored immediately when Browse is opened again.
-    if (viewId !== 'browse') {
-      const inp = document.getElementById('search-input');
-      if (inp && inp.value) {
-        inp.value = '';
-        // Use the same toggle helper defined in index.html inline script
-        const browseScreen  = document.getElementById('screen-browse');
-        const browseList    = document.querySelector('#screen-browse .item-list:not(#search-results)');
-        const searchResults = document.getElementById('search-results');
-        const filters       = document.querySelector('.browse-search-filters');
-        const clearBtn      = document.getElementById('btn-search-clear');
-        if (browseScreen)  browseScreen.classList.remove('search-active');
-        if (browseList)    browseList.style.display    = '';
-        if (searchResults) { searchResults.style.display = 'none'; searchResults.innerHTML = ''; }
-        if (filters)       filters.style.display       = 'none';
-        if (clearBtn)      clearBtn.style.display      = 'none';
-        const playBtn2 = document.getElementById('btn-play-search-results');
-        if (playBtn2)      playBtn2.style.display      = 'none';
-        _lastSearchFiles = [];
-      }
-    }
+    // Search is intentionally PRESERVED when switching tabs (home/library/settings/etc.)
+    // so the user can return to Browse and find their results still there.
+    // Search is only cleared when the user navigates INTO a folder (see _openFolder)
+    // or explicitly clears the input.
     if (viewId === 'history') _loadHistory();
     if (viewId === 'settings') {
       // EQ is now a floating overlay — no longer built/reset on settings nav.
@@ -11497,7 +11509,24 @@ const App = (() => {
       _loadCustomPresets();
     }
     if (viewId === 'browse') {
-      if (_breadcrumb.length === 0) {
+      const searchInp = document.getElementById('search-input');
+      const hasTerm   = !!searchInp?.value.trim();
+      if (hasTerm && _cachedSearchResults) {
+        // Search is still active — restore the results UI without re-fetching
+        const browseScreen  = document.getElementById('screen-browse');
+        const browseList    = document.querySelector('#screen-browse .item-list:not(#search-results)');
+        const searchResults = document.getElementById('search-results');
+        const filters       = document.querySelector('.browse-search-filters');
+        const clearBtn      = document.getElementById('btn-search-clear');
+        if (browseScreen)  browseScreen.classList.add('search-active');
+        if (browseList)    browseList.style.display    = 'none';
+        if (searchResults) searchResults.style.display = '';
+        if (filters)       filters.style.display       = '';
+        if (clearBtn)      clearBtn.style.display      = '';
+        const activeFilter = document.querySelector('[data-filter].active')?.dataset.filter || 'all';
+        UI.updateSearchChipCounts(null);
+        _renderCachedSearch(activeFilter);
+      } else if (_breadcrumb.length === 0) {
         _breadcrumb = [{ id: _rootFolderId, name: CONFIG.ROOT_FOLDER_NAME }];
         _openFolder({ id: _rootFolderId, name: CONFIG.ROOT_FOLDER_NAME }, false);
       }
@@ -12152,16 +12181,44 @@ const App = (() => {
         const blob = await Soundrop.fetchBlob(audioUrl);
         // 3. Upload to Drive "Soundrop" folder
         const driveId = await Soundrop.saveToDrive(blob, meta);
-        // 4. Write metadata to DB (using the real Drive ID)
+        const filename = `${[meta.artist, meta.title].filter(Boolean).join(' - ')}.mp3`;
+
+        // 4. Write Drive metadata to DB
         await DB.setMeta(driveId, {
-          name:        `${[meta.artist, meta.title].filter(Boolean).join(' - ')}.mp3`,
-          displayName: meta.title,
-          artist:      meta.artist,
-          album:       meta.album,
-          year:        meta.year,
+          name:         filename,
+          displayName:  meta.title,
+          artist:       meta.artist,
+          album:        meta.album,
+          year:         meta.year,
           thumbnailUrl: track.thumbnailUrl || null,
         }).catch(() => {});
+
+        // 5. Remove the Soundrop recent entry (sd_ id) and add the Drive one
+        //    so Home no longer shows the SD chip for this track.
+        await DB.removeRecent?.(track.id).catch(() => {});
+        await DB.addRecent({
+          id:           driveId,
+          name:         filename,
+          displayName:  meta.title,
+          type:         'song',
+          mimeType:     'audio/mpeg',
+          thumbnailUrl: track.thumbnailUrl || null,
+          artist:       meta.artist,
+          album:        meta.album,
+          year:         meta.year,
+          folderId:     null,
+        }).catch(() => {});
+
+        // 6. Update home cards that still reference the old sd_ id
+        document.querySelectorAll(`.home-card[data-id="${CSS.escape(track.id)}"]`).forEach(card => {
+          card.querySelector('.sd-thumb-chip')?.remove();
+          card.dataset.id = driveId;
+        });
+
         document.getElementById('sd-save-modal').style.display = 'none';
+        // Hide download button — track is now on Drive
+        document.getElementById('btn-pexp-sd-download').style.display = 'none';
+        document.getElementById('btn-mini-sd-download').style.display = 'none';
         UI.showToast('✓ Guardado en Drive · Soundrop');
       } catch (err) {
         console.error('[App] SD save error:', err);
@@ -12896,6 +12953,7 @@ const App = (() => {
     _cacheItem,
     _resolveItemById,
     _doSearch,
+    _renderCachedSearch,
     _loadStarred,
     _loadPlaylists,
     _loadCollections,

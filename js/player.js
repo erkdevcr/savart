@@ -645,6 +645,33 @@ const Player = (() => {
         _msSetMetadata(item);
         _msSetPlaybackState('playing');
         await _sdAudio.play();
+
+        // Save Soundrop track to recents so it appears on Home
+        DB.addRecent({
+          id:           item.id,
+          videoId:      item.videoId,
+          isSoundrop:   true,
+          name:         item.name,
+          displayName:  item.displayName,
+          type:         'song',
+          mimeType:     item.mimeType,
+          thumbnailUrl: item.thumbnailUrl,
+          artist:       item.artist  || '',
+          album:        item.album   || '',
+          year:         item.year    || '',
+          folderId:     null,
+        }).catch(() => {});
+        DB.incrementPlayCount(item.id).catch(() => {});
+        DB.setMeta(item.id, {
+          name:         item.name,
+          displayName:  item.displayName || item.name,
+          thumbnailUrl: item.thumbnailUrl || null,
+          artist:       item.artist  || '',
+          album:        item.album   || '',
+          year:         item.year    || '',
+          isSoundrop:   true,
+          videoId:      item.videoId,
+        }).catch(() => {});
         return;
       }
 

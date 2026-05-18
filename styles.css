@@ -1578,7 +1578,49 @@ img { display: block; }
   letter-spacing: 0.02em;
 }
 
-/* SD download button (circle with V-arrow + "SD" text) */
+/* SD chip overlaid on thumbnail (bottom-right corner) */
+.song-thumb,
+.home-card-art {
+  position: relative; /* needed for absolute SD chip */
+}
+.sd-thumb-chip {
+  position: absolute;
+  bottom: 3px;
+  right: 3px;
+  font-size: 8px;
+  font-weight: 800;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: #f97316;
+  color: #fff;
+  letter-spacing: 0.04em;
+  pointer-events: none;
+  z-index: 2;
+  line-height: 1.4;
+}
+
+/* "Descargar" bar — sits above LETRA button in expanded player */
+.sd-download-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  width: 100%;
+  padding: 8px 0;
+  background: #f97316;
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm, 6px);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: 10px;
+  transition: background 0.15s;
+}
+.sd-download-bar:hover { background: #ea6c00; }
+.sd-download-bar svg   { flex-shrink: 0; }
+
+/* SD download button in mini-player mobile row (circle) */
 .sd-download-btn {
   display: inline-flex;
   flex-direction: column;
@@ -1592,7 +1634,7 @@ img { display: block; }
   border: none;
   cursor: pointer;
   flex-shrink: 0;
-  transition: background 0.15s, opacity 0.15s;
+  transition: background 0.15s;
   padding: 0;
 }
 .sd-download-btn:hover { background: #ea6c00; }
@@ -1604,12 +1646,7 @@ img { display: block; }
   line-height: 1;
   letter-spacing: 0.03em;
 }
-
-/* Slightly smaller variant for mini-player mobile row */
-.sd-download-btn--mini {
-  width: 28px;
-  height: 28px;
-}
+.sd-download-btn--mini { width: 28px; height: 28px; }
 
 /* Soundrop save modal body */
 .sd-save-modal-body {

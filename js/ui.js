@@ -1315,6 +1315,7 @@ const UI = (() => {
             ? `<div class="folder-icon-placeholder">${iconFolder(32)}</div>`
             : `<div class="folder-icon-placeholder" style="color:var(--text-disabled)">${iconMusicNote(28)}</div>`
         }
+        ${item.isSoundrop ? `<span class="sd-thumb-chip">SD</span>` : ''}
       </div>
       <button class="home-card-more" aria-label="Más opciones">${iconDots(14)}</button>
       <div class="home-card-name">${escHtml(item.displayName || item.name || '—')}</div>
@@ -1899,6 +1900,7 @@ const UI = (() => {
           <div class="eq-bar"></div>
           <div class="eq-bar"></div>
         </div>
+        ${file.isSoundrop ? `<span class="sd-thumb-chip">SD</span>` : ''}
       </div>
       <div class="song-row-info">
         <div class="song-row-title">${escHtml(file.displayName || file.name)}</div>
