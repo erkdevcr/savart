@@ -1599,6 +1599,15 @@ img { display: block; }
   line-height: 1.4;
 }
 
+/* Expanded player art chip — 2.5× the base size */
+.sd-thumb-chip--exp {
+  bottom: 18px;
+  right: 18px;
+  font-size: 20px;
+  padding: 3px 10px;
+  border-radius: 8px;
+}
+
 /* "Descargar" button — compact, above LETRA, left-aligned */
 .sd-download-bar {
   display: inline-flex;
