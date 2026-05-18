@@ -5997,7 +5997,7 @@ body.queue-open #mini-player { z-index: 65; }
     /* Anchor art to the bottom so it grows upward toward the "now playing" label */
     justify-content: flex-end;
     padding-top: 6px;   /* minimal top gap — art reaches up toward "now playing" */
-    padding-bottom: 14px;
+    padding-bottom: 44px; /* +30px vs before → shifts art 30px upward */
   }
 
   .pexp-art {
@@ -6005,10 +6005,11 @@ body.queue-open #mini-player { z-index: 65; }
       min() picks the smallest of:
         100%       — panel content width (never overflow sideways)
         363px      — absolute max size cap (~10% larger than before)
-        calc(100cqh - 36px) — panel height minus reduced vertical padding
+        calc(100cqh - 6px) — adjusted to compensate for extra padding-bottom
+                             so art size stays exactly the same
       Result: art is always a square that fits in the available space, grows upward.
     */
-    width: min(100%, 363px, calc(100cqh - 36px));
+    width: min(100%, 363px, calc(100cqh - 6px));
     max-width: unset; /* replaced by the min() above */
     aspect-ratio: 1;  /* height = width → always square */
   }
