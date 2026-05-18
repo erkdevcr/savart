@@ -12143,17 +12143,22 @@ const App = (() => {
     });
 
     // ── Soundrop download buttons (expanded + mini) ───────────
-    function _openSdSaveModal() {
-      const track = Player.getCurrentTrack();
+    // item is optional — falls back to current track (button press).
+    // Stores the target on the modal so the save handler uses it.
+    function _openSdSaveModal(item) {
+      const track = item || Player.getCurrentTrack();
       if (!track?.isSoundrop) return;
+      document.getElementById('sd-save-modal')._sdItem = track; // save handler reads this
       document.getElementById('sd-save-title').value  = track.displayName || track.name || '';
       document.getElementById('sd-save-artist').value = track.artist || '';
       document.getElementById('sd-save-album').value  = track.album  || '';
       document.getElementById('sd-save-year').value   = track.year   || '';
-      document.getElementById('sd-modal-save-label').textContent = 'Guardar';
+      document.getElementById('sd-modal-save-label').textContent = UI.t('ctx_sd_download') || 'Guardar';
       document.getElementById('btn-sd-modal-save').disabled = false;
       document.getElementById('sd-save-modal').style.display = '';
     }
+    // Expose for context menu
+    App.onSdDownload = (item) => _openSdSaveModal(item);
 
     document.getElementById('btn-pexp-sd-download')?.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -12171,7 +12176,8 @@ const App = (() => {
 
     // SD save modal: confirm → fetch blob, upload to Drive, write DB meta
     document.getElementById('btn-sd-modal-save')?.addEventListener('click', async () => {
-      const track = Player.getCurrentTrack();
+      const modal = document.getElementById('sd-save-modal');
+      const track = modal._sdItem || Player.getCurrentTrack();
       if (!track?.isSoundrop) return;
 
       const meta = {
@@ -12225,13 +12231,10 @@ const App = (() => {
           folderId:     null,
         }).catch(() => {});
 
-        document.getElementById('sd-save-modal').style.display = 'none';
+        modal.style.display = 'none';
+        modal._sdItem = null;
 
-        // Hide download buttons — track is now a Drive file
-        document.getElementById('btn-pexp-sd-download').style.display = 'none';
-        document.getElementById('btn-mini-sd-download').style.display = 'none';
-
-        // Update the player queue so the current track reflects the Drive file.
+        // Update the player queue so the saved track reflects the Drive file.
         const driveTrack = {
           id:          driveId,
           name:        filename,
@@ -12246,11 +12249,16 @@ const App = (() => {
         };
         Player.patchQueueItem(track.id, driveTrack);
 
-        // Refresh mini-player and expanded player with confirmed data
-        const playing = Player.isPlaying();
-        UI.updateMiniPlayer(driveTrack, playing);
-        UI.updateExpandedPlayer(driveTrack, playing);
-        document.title = `${meta.title} — Savart`;
+        // Only update player UI if the saved track is the one currently loaded
+        const nowPlaying = Player.getCurrentTrack();
+        if (nowPlaying?.id === track.id || nowPlaying?.id === driveId) {
+          document.getElementById('btn-pexp-sd-download').style.display = 'none';
+          document.getElementById('btn-mini-sd-download').style.display = 'none';
+          const playing = Player.isPlaying();
+          UI.updateMiniPlayer(driveTrack, playing);
+          UI.updateExpandedPlayer(driveTrack, playing);
+          document.title = `${meta.title} — Savart`;
+        }
 
         // Re-render home so the card gets fresh data + correct click closure
         _loadHomeData().catch(() => {});

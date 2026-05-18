@@ -373,6 +373,7 @@ const UI = (() => {
       toast_moved_to_albums:      'Movido a Álbumes',
       toast_moved_to_collections: 'Movido a Colecciones',
       toast_cleared:              'Limpiado ✓',
+      ctx_sd_download:            'Guardar en Drive',
     },
     en: {
       // ── Navigation ─────────────────────────────────────────
@@ -724,6 +725,7 @@ const UI = (() => {
       toast_moved_to_albums:      'Moved to Albums',
       toast_moved_to_collections: 'Moved to Collections',
       toast_cleared:              'Cleared ✓',
+      ctx_sd_download:            'Save to Drive',
     },
   };
 
@@ -2032,25 +2034,28 @@ const UI = (() => {
     const _iconScan       = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M9.5 6.5v3h-3v-3h3M11 5H5v6h6V5zm-1.5 9.5v3h-3v-3h3M11 13H5v6h6v-6zm6.5-6.5v3h-3v-3h3M19 5h-6v6h6V5zm-6 8h1.5v1.5H13V13zm1.5 1.5H16V16h-1.5v-1.5zM16 13h1.5v1.5H16V13zm-3 3h1.5v1.5H13V16zm1.5 1.5H16V19h-1.5v-1.5zM16 16h1.5v1.5H16V16zm1.5-1.5H19V16h-1.5v-1.5zm0 3H19V19h-1.5v-1.5zM22 7h-2V4h-3V2h5v5zm0 15v-5h-2v3h-3v2h5zM2 22h5v-2H4v-3H2v5zM2 2v5h2V4h3V2H2z"/></svg>`;
     const _iconAlbum      = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 14.5c-2.49 0-4.5-2.01-4.5-4.5S9.51 7.5 12 7.5s4.5 2.01 4.5 4.5-2.01 4.5-4.5 4.5zm0-5.5c-.55 0-1 .45-1 1s.45 1 1 1 1-.45 1-1-.45-1-1-1z"/></svg>`;
     const _iconCollection = `<svg width="16" height="14" viewBox="0 0 361.54 315.2" fill="currentColor"><path d="M136.81,41.58C61.25,41.58,0,102.83,0,178.39s61.25,136.81,136.81,136.81,136.81-61.25,136.81-136.81S212.37,41.58,136.81,41.58ZM136.81,239.6c-33.8,0-61.21-27.4-61.21-61.21s27.4-61.21,61.21-61.21,61.21,27.4,61.21,61.21-27.4,61.21-61.21,61.21ZM136.81,191.78c-7.39,0-13.39-5.99-13.39-13.39s5.99-13.39,13.39-13.39,13.39,5.99,13.39,13.39-5.99,13.39-13.39,13.39ZM361.54,126.94c0,54.17-33.93,100.4-81.69,118.63,9.59-20.39,14.96-43.16,14.96-67.18,0-78.52-57.28-143.65-132.33-155.91C182.95,8.31,207.8,0,234.6,0c70.11,0,126.94,56.83,126.94,126.94Z"/></svg>`;
+    const _iconSdDownload = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>`;
 
     if (type === 'song') {
+      const isSd = !!item.isSoundrop;
       _addCtxItem(menu, iconPlay(14),  t('ctx_play'),    () => { App.onSongClick(item);         hideContextMenu(); });
       _addCtxDivider(menu);
       _addCtxItem(menu, _iconNext,     t('play_next'),   () => { Player.insertNext(item);        hideContextMenu(); });
       _addCtxItem(menu, _iconQueue,    t('play_after'),  () => { Player.appendToQueue(item);     hideContextMenu(); });
-      if (item.artist) _addCtxItem(menu, _iconRadio, t('ctx_artist_radio'), () => { App.onArtistRadio?.(item); hideContextMenu(); });
+      if (!isSd && item.artist) _addCtxItem(menu, _iconRadio, t('ctx_artist_radio'), () => { App.onArtistRadio?.(item); hideContextMenu(); });
       _addCtxDivider(menu);
-      if (item.artist) _addCtxItem(menu, _iconArtist, t('ctx_go_to_artist'), () => { App.onGoToArtist?.(item); hideContextMenu(); });
-      _addCtxItem(menu, _isCollection(item) ? _iconCollection : _iconFolder,
+      if (!isSd && item.artist) _addCtxItem(menu, _iconArtist, t('ctx_go_to_artist'), () => { App.onGoToArtist?.(item); hideContextMenu(); });
+      if (!isSd) _addCtxItem(menu, _isCollection(item) ? _iconCollection : _iconFolder,
         _isCollection(item) ? t('ctx_go_to_collection') : t('ctx_go_to_album'),
         () => { App.onGoToAlbum?.(item); hideContextMenu(); });
-      _addCtxItem(menu, _iconFolder,   t('ctx_go_to_folder'), () => { App.onGoToFolder(item);    hideContextMenu(); });
+      if (!isSd) _addCtxItem(menu, _iconFolder, t('ctx_go_to_folder'), () => { App.onGoToFolder(item); hideContextMenu(); });
       _addCtxDivider(menu);
       _addCtxItem(menu, iconStar(14),  t('add_fav'),     () => { App.onToggleStar(item);         hideContextMenu(); });
       _addCtxItem(menu, iconPlus(14),  t('add_to_pl'),  (e) => { hideContextMenu(); App.onShowPlaylistPicker(e, item); });
       _addCtxItem(menu, iconPin(14),   t('ctx_pin_to_home'), () => { App.onTogglePin(item);       hideContextMenu(); });
       _addCtxDivider(menu);
       _addCtxItem(menu, _iconEdit,     t('ctx_edit_song'), () => { hideContextMenu(); openSongEditModal(item); });
+      if (isSd) _addCtxItem(menu, _iconSdDownload, t('ctx_sd_download'), () => { App.onSdDownload?.(item); hideContextMenu(); });
       if (item._playlistId) {
         _addCtxDivider(menu);
         _addCtxItem(menu, iconTrash(14), t('ctx_remove_from_pl'), () => { App.onRemoveFromPlaylist?.(item.id, item._playlistId); hideContextMenu(); });
@@ -2087,19 +2092,20 @@ const UI = (() => {
 
     if (type === 'pinned') {
       const isFolder = item.isFolder || item.type === 'folder';
+      const isSd = !isFolder && !!item.isSoundrop;
       _addCtxItem(menu, iconPlay(14), t('ctx_play'), () => {
         if (isFolder) { App.onFolderPlay(item); }
         else { if (typeof Player !== 'undefined') Player.setQueue([item], 0); }
         hideContextMenu();
       });
       _addCtxDivider(menu);
-      if (!isFolder && item.artist) _addCtxItem(menu, _iconArtist, t('ctx_go_to_artist'), () => { App.onGoToArtist?.(item); hideContextMenu(); });
-      _addCtxItem(menu,
+      if (!isFolder && !isSd && item.artist) _addCtxItem(menu, _iconArtist, t('ctx_go_to_artist'), () => { App.onGoToArtist?.(item); hideContextMenu(); });
+      if (!isSd) _addCtxItem(menu,
         isFolder ? _iconFolder : (_isCollection(item) ? _iconCollection : _iconFolder),
         isFolder ? t('ctx_go_to_folder') : (_isCollection(item) ? t('ctx_go_to_collection') : t('ctx_go_to_album')),
         () => { isFolder ? App.onGoToFolder(item) : App.onGoToAlbum?.(item); hideContextMenu(); }
       );
-      if (!isFolder) _addCtxItem(menu, _iconFolder, t('ctx_go_to_folder'), () => { App.onGoToFolder(item); hideContextMenu(); });
+      if (!isFolder && !isSd) _addCtxItem(menu, _iconFolder, t('ctx_go_to_folder'), () => { App.onGoToFolder(item); hideContextMenu(); });
       if (isFolder)  _addCtxItem(menu, _iconScan,   t('ctx_send_to_scan'), () => { App.onSendToScan?.(item); hideContextMenu(); });
       _addCtxDivider(menu);
       _addCtxItem(menu, iconPin(14), t('ctx_unpin_from_home'), () => {
@@ -2109,11 +2115,13 @@ const UI = (() => {
       if (!isFolder) {
         _addCtxDivider(menu);
         _addCtxItem(menu, _iconEdit, t('ctx_edit_song'), () => { hideContextMenu(); openSongEditModal(item); });
+        if (isSd) _addCtxItem(menu, _iconSdDownload, t('ctx_sd_download'), () => { App.onSdDownload?.(item); hideContextMenu(); });
       }
     }
 
     if (type === 'top_played') {
       const isFolder = item.isFolder || item.type === 'folder';
+      const isSd = !isFolder && !!item.isSoundrop;
       _addCtxItem(menu, iconPlay(14), t('ctx_play'), () => {
         if (isFolder) { App.onFolderPlay(item); }
         else { if (typeof Player !== 'undefined') Player.setQueue([item], 0); }
@@ -2122,15 +2130,15 @@ const UI = (() => {
       _addCtxDivider(menu);
       _addCtxItem(menu, _iconNext,  t('play_next'),  () => { isFolder ? App.onFolderQueue(item,'next') : Player.insertNext(item);     hideContextMenu(); });
       _addCtxItem(menu, _iconQueue, t('play_after'), () => { isFolder ? App.onFolderQueue(item,'end')  : Player.appendToQueue(item);  hideContextMenu(); });
-      if (!isFolder && item.artist) _addCtxItem(menu, _iconRadio, t('ctx_artist_radio'), () => { App.onArtistRadio?.(item); hideContextMenu(); });
+      if (!isFolder && !isSd && item.artist) _addCtxItem(menu, _iconRadio, t('ctx_artist_radio'), () => { App.onArtistRadio?.(item); hideContextMenu(); });
       _addCtxDivider(menu);
-      if (!isFolder && item.artist) _addCtxItem(menu, _iconArtist, t('ctx_go_to_artist'), () => { App.onGoToArtist?.(item); hideContextMenu(); });
-      _addCtxItem(menu,
+      if (!isFolder && !isSd && item.artist) _addCtxItem(menu, _iconArtist, t('ctx_go_to_artist'), () => { App.onGoToArtist?.(item); hideContextMenu(); });
+      if (!isSd) _addCtxItem(menu,
         isFolder ? _iconFolder : (_isCollection(item) ? _iconCollection : _iconFolder),
         isFolder ? t('ctx_go_to_folder') : (_isCollection(item) ? t('ctx_go_to_collection') : t('ctx_go_to_album')),
         () => { isFolder ? App.onGoToFolder(item) : App.onGoToAlbum?.(item); hideContextMenu(); }
       );
-      if (!isFolder) _addCtxItem(menu, _iconFolder, t('ctx_go_to_folder'), () => { App.onGoToFolder(item); hideContextMenu(); });
+      if (!isFolder && !isSd) _addCtxItem(menu, _iconFolder, t('ctx_go_to_folder'), () => { App.onGoToFolder(item); hideContextMenu(); });
       if (isFolder)  _addCtxItem(menu, _iconScan,   t('ctx_send_to_scan'), () => { App.onSendToScan?.(item); hideContextMenu(); });
       _addCtxDivider(menu);
       _addCtxItem(menu, iconStar(14), isFolder ? t('ctx_add_fav_folder') : t('add_fav'),
@@ -2141,6 +2149,7 @@ const UI = (() => {
       if (!isFolder) {
         _addCtxDivider(menu);
         _addCtxItem(menu, _iconEdit, t('ctx_edit_song'), () => { hideContextMenu(); openSongEditModal(item); });
+        if (isSd) _addCtxItem(menu, _iconSdDownload, t('ctx_sd_download'), () => { App.onSdDownload?.(item); hideContextMenu(); });
       }
       _addCtxDivider(menu);
       _addCtxItem(menu, iconTrash(14), t('ctx_remove_top_played'), () => { App.onRemoveFromTopPlayed?.(item); hideContextMenu(); });
@@ -2197,23 +2206,25 @@ const UI = (() => {
     // ── Recents home cards ───────────────────────────────────────
 
     if (type === 'home_song') {
+      const isSd = !!item.isSoundrop;
       _addCtxItem(menu, iconPlay(14),  t('ctx_play'),           () => { Player.setQueue([item], 0);  hideContextMenu(); });
       _addCtxDivider(menu);
       _addCtxItem(menu, _iconNext,     t('play_next'),          () => { Player.insertNext(item);      hideContextMenu(); });
       _addCtxItem(menu, _iconQueue,    t('play_after'),         () => { Player.appendToQueue(item);   hideContextMenu(); });
-      if (item.artist) _addCtxItem(menu, _iconRadio, t('ctx_artist_radio'), () => { App.onArtistRadio?.(item); hideContextMenu(); });
+      if (!isSd && item.artist) _addCtxItem(menu, _iconRadio, t('ctx_artist_radio'), () => { App.onArtistRadio?.(item); hideContextMenu(); });
       _addCtxDivider(menu);
-      if (item.artist) _addCtxItem(menu, _iconArtist, t('ctx_go_to_artist'), () => { App.onGoToArtist?.(item); hideContextMenu(); });
-      _addCtxItem(menu, _isCollection(item) ? _iconCollection : _iconFolder,
+      if (!isSd && item.artist) _addCtxItem(menu, _iconArtist, t('ctx_go_to_artist'), () => { App.onGoToArtist?.(item); hideContextMenu(); });
+      if (!isSd) _addCtxItem(menu, _isCollection(item) ? _iconCollection : _iconFolder,
         _isCollection(item) ? t('ctx_go_to_collection') : t('ctx_go_to_album'),
         () => { App.onGoToAlbum?.(item); hideContextMenu(); });
-      _addCtxItem(menu, _iconFolder,   t('ctx_go_to_folder'),   () => { App.onGoToFolder(item);       hideContextMenu(); });
+      if (!isSd) _addCtxItem(menu, _iconFolder, t('ctx_go_to_folder'), () => { App.onGoToFolder(item); hideContextMenu(); });
       _addCtxDivider(menu);
       _addCtxItem(menu, iconStar(14),  t('ctx_mark_fav'),       () => { App.onToggleStar(item);       hideContextMenu(); });
       _addCtxItem(menu, iconPlus(14),  t('add_to_pl'),         (e) => { hideContextMenu(); App.onShowPlaylistPicker(e, item); });
       _addCtxItem(menu, iconPin(14),   t('ctx_pin_to_home'),    () => { App.onTogglePin(item);        hideContextMenu(); });
       _addCtxDivider(menu);
       _addCtxItem(menu, _iconEdit,     t('ctx_edit_song'),      () => { hideContextMenu(); openSongEditModal(item); });
+      if (isSd) _addCtxItem(menu, _iconSdDownload, t('ctx_sd_download'), () => { App.onSdDownload?.(item); hideContextMenu(); });
       _addCtxItem(menu, iconTrash(14), t('ctx_remove_history'), () => { App.onRemoveFromHistory(item);hideContextMenu(); });
     }
 
@@ -2233,34 +2244,37 @@ const UI = (() => {
     // ── History screen items ─────────────────────────────────────
 
     if (type === 'history') {
+      const isSd = !!item.isSoundrop;
       _addCtxItem(menu, iconPlay(14),  t('ctx_play'),        () => { Player.setQueue([item], 0);  hideContextMenu(); });
       _addCtxDivider(menu);
       _addCtxItem(menu, _iconNext,     t('play_next'),       () => { Player.insertNext(item);      hideContextMenu(); });
       _addCtxItem(menu, _iconQueue,    t('play_after'),      () => { Player.appendToQueue(item);   hideContextMenu(); });
-      if (item.artist) _addCtxItem(menu, _iconRadio, t('ctx_artist_radio'), () => { App.onArtistRadio?.(item); hideContextMenu(); });
+      if (!isSd && item.artist) _addCtxItem(menu, _iconRadio, t('ctx_artist_radio'), () => { App.onArtistRadio?.(item); hideContextMenu(); });
       _addCtxDivider(menu);
-      if (item.artist) _addCtxItem(menu, _iconArtist, t('ctx_go_to_artist'), () => { App.onGoToArtist?.(item); hideContextMenu(); });
-      _addCtxItem(menu, _isCollection(item) ? _iconCollection : _iconFolder,
+      if (!isSd && item.artist) _addCtxItem(menu, _iconArtist, t('ctx_go_to_artist'), () => { App.onGoToArtist?.(item); hideContextMenu(); });
+      if (!isSd) _addCtxItem(menu, _isCollection(item) ? _iconCollection : _iconFolder,
         _isCollection(item) ? t('ctx_go_to_collection') : t('ctx_go_to_album'),
         () => { App.onGoToAlbum?.(item); hideContextMenu(); });
-      _addCtxItem(menu, _iconFolder,   t('ctx_go_to_folder'),() => { App.onGoToFolder(item);       hideContextMenu(); });
+      if (!isSd) _addCtxItem(menu, _iconFolder, t('ctx_go_to_folder'), () => { App.onGoToFolder(item); hideContextMenu(); });
       _addCtxDivider(menu);
       _addCtxItem(menu, iconStar(14),  t('add_fav'),         () => { App.onToggleStar(item);       hideContextMenu(); });
       _addCtxItem(menu, iconPlus(14),  t('add_to_pl'),      (e) => { hideContextMenu(); App.onShowPlaylistPicker(e, item); });
       _addCtxDivider(menu);
       _addCtxItem(menu, _iconEdit,     t('ctx_edit_song'),  () => { hideContextMenu(); openSongEditModal(item); });
+      if (isSd) _addCtxItem(menu, _iconSdDownload, t('ctx_sd_download'), () => { App.onSdDownload?.(item); hideContextMenu(); });
       _addCtxItem(menu, iconTrash(14), t('ctx_remove_history'), () => { App.onRemoveFromHistoryItem(item); hideContextMenu(); });
     }
 
     // ── Player expanded 3-dot menu ───────────────────────────────
 
     if (type === 'player_song') {
-      if (item.artist) _addCtxItem(menu, _iconArtist, t('ctx_go_to_artist'), () => { App.onGoToArtist?.(item); hideContextMenu(); });
-      _addCtxItem(menu, _isCollection(item) ? _iconCollection : _iconFolder,
+      const isSd = !!item.isSoundrop;
+      if (!isSd && item.artist) _addCtxItem(menu, _iconArtist, t('ctx_go_to_artist'), () => { App.onGoToArtist?.(item); hideContextMenu(); });
+      if (!isSd) _addCtxItem(menu, _isCollection(item) ? _iconCollection : _iconFolder,
         _isCollection(item) ? t('ctx_go_to_collection') : t('ctx_go_to_album'),
         () => { App.onGoToAlbum?.(item); hideContextMenu(); });
-      _addCtxItem(menu, _iconFolder, t('ctx_go_to_folder'), () => { App.onGoToFolder?.(item); hideContextMenu(); });
-      if (item.artist) {
+      if (!isSd) _addCtxItem(menu, _iconFolder, t('ctx_go_to_folder'), () => { App.onGoToFolder?.(item); hideContextMenu(); });
+      if (!isSd && item.artist) {
         _addCtxDivider(menu);
         _addCtxItem(menu, _iconRadio, t('ctx_artist_radio'), () => { App.onArtistRadio?.(item); hideContextMenu(); });
       }
@@ -2268,6 +2282,7 @@ const UI = (() => {
       _addCtxItem(menu, iconStar(14), t('add_fav'),          () => { App.onToggleStar(item);  hideContextMenu(); });
       _addCtxItem(menu, iconPlus(14), t('add_to_pl'),       (e) => { hideContextMenu(); App.onShowPlaylistPicker(e, item); });
       _addCtxItem(menu, iconPin(14),  t('ctx_pin_to_home'),  () => { App.onTogglePin(item);   hideContextMenu(); });
+      if (isSd) _addCtxItem(menu, _iconSdDownload, t('ctx_sd_download'), () => { App.onSdDownload?.(item); hideContextMenu(); });
     }
 
     // ── Deep Scan folder rows ────────────────────────────────────
