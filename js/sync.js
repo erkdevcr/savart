@@ -822,6 +822,7 @@ const Sync = (() => {
         accessedAt: r.accessedAt ?? Date.now(),
         // SD fields — must survive sync so other devices can play Soundrop tracks
         ...(isSd ? { isSoundrop: true, videoId: r.videoId || m?.videoId || null } : {}),
+        ...((m?.durationSec > 0 || r.durationSec > 0) ? { durationSec: m?.durationSec || r.durationSec } : {}),
       };
     });
 

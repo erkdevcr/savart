@@ -660,6 +660,7 @@ const Player = (() => {
           album:        item.album   || '',
           year:         item.year    || '',
           folderId:     null,
+          ...(item.durationSec > 0 ? { durationSec: item.durationSec } : {}),
         }).catch(() => {});
         // Chain setMeta AFTER incrementPlayCount so the final IDB write always
         // includes isSoundrop + videoId (avoids a race where incrementPlayCount's
@@ -674,6 +675,7 @@ const Player = (() => {
             year:         item.year    || '',
             isSoundrop:   true,
             videoId:      item.videoId,
+            ...(item.durationSec > 0 ? { durationSec: item.durationSec } : {}),
           }))
           .catch(() => {});
         return;

@@ -871,6 +871,7 @@ const App = (() => {
         folderId:     track.parents?.[0]  || track.folderId || null,
         // Preserve SD fields so the recents store never loses them on re-write
         ...(track.isSoundrop ? { isSoundrop: true, videoId: track.videoId } : {}),
+        ...(track.durationSec > 0 ? { durationSec: track.durationSec } : {}),
       };
       DB.addRecent(recentData).then(() => {
         Sync.push('recents');
@@ -895,6 +896,7 @@ const App = (() => {
       if (bestThumb)        _metaUpdate.thumbnailUrl = bestThumb;
       if (bestArtist)       _metaUpdate.artist       = bestArtist;
       if (track.isSoundrop) { _metaUpdate.isSoundrop = true; _metaUpdate.videoId = track.videoId; }
+      if (track.durationSec > 0) _metaUpdate.durationSec = track.durationSec;
       DB.setMeta(track.id, _metaUpdate).catch(() => {});
 
       // ── Proactive early cover fetch ────────────────────────────────────────────

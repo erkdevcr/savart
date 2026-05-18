@@ -1945,7 +1945,6 @@ const UI = (() => {
         </div>
       </div>
       ${file.isWma ? `<span class="wma-badge">WMA</span>` : ''}
-      ${file.isSoundrop ? `<span class="sd-badge">SD</span>` : ''}
       <button class="btn-more" aria-label="Más opciones" data-id="${escHtml(file.id)}">${iconDots()}</button>
     `;
 
