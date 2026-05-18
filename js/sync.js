@@ -1153,6 +1153,10 @@ const Sync = (() => {
     // would wipe the source device's data via LWW on its next poll).
     const _failedTypes = new Set();
 
+    // Types whose remote snapshot hasn't changed since our last successful merge —
+    // no need to download or re-merge them this session.
+    const _skippedTypes = new Set();
+
     // Helper: run a merge step, logging errors without aborting other steps
     async function _mergeStep(name, fn) {
       try {
@@ -1167,28 +1171,47 @@ const Sync = (() => {
       await _refreshFileList();
       _prog(8);
 
-      // Pull everything in parallel (including manifest)
+      // ── Phase 0: restore persisted timestamps from last session ──────────────
+      // _localTs is in-memory and resets every page load.
+      // 'sync_localTs' in IDB bridges sessions so we know which remote snapshots
+      // we already merged — avoiding redundant downloads on subsequent logins.
+      const _savedTs = (await DB.getState('sync_localTs').catch(() => null)) || {};
+      for (const [k, v] of Object.entries(_savedTs)) {
+        if ((v || 0) > (_localTs[k] || 0)) _localTs[k] = v;
+      }
+
+      // ── Phase 1: read manifest only (tiny, always needed) ───────────────────
+      const manifest = await _readManifest();
+      _remoteTs = { ...manifest };
+      _prog(14);
+
+      // ── Classify types: stale (need download) vs fresh (can skip) ───────────
+      const PULL_TYPES = ['favorites', 'playlists', 'pinned', 'recents',
+                          'playcounts', 'settings', 'history', 'metadata', 'collections'];
+      for (const type of PULL_TYPES) {
+        const remoteTs = _remoteTs[type] || 0;
+        const localTs  = _localTs[type]  || 0;
+        // Skip only when remote has been written at least once AND we've already merged it.
+        if (remoteTs > 0 && remoteTs <= localTs) _skippedTypes.add(type);
+      }
+      if (_skippedTypes.size) {
+        console.log(`[Sync] Fresh — skipping download+merge for: [${[..._skippedTypes].join(', ')}]`);
+      }
+
+      // ── Phase 2: pull only stale types in parallel ───────────────────────────
+      const _pull = (type) =>
+        _skippedTypes.has(type) ? Promise.resolve(null) : _readFile(FILENAMES[type]).catch(() => null);
+
       const [
-        manifest,
         remoteFavs, remotePlaylists, remotePinned,
         remoteRecents, remotePlaycounts, remoteSettings, remoteHistory,
         remoteMetadata, remoteCollections,
       ] = await Promise.all([
-        _readManifest(),
-        _readFile(FILENAMES.favorites).catch(() => null),
-        _readFile(FILENAMES.playlists).catch(() => null),
-        _readFile(FILENAMES.pinned).catch(() => null),
-        _readFile(FILENAMES.recents).catch(() => null),
-        _readFile(FILENAMES.playcounts).catch(() => null),
-        _readFile(FILENAMES.settings).catch(() => null),
-        _readFile(FILENAMES.history).catch(() => null),
-        _readFile(FILENAMES.metadata).catch(() => null),
-        _readFile(FILENAMES.collections).catch(() => null),
+        _pull('favorites'), _pull('playlists'),  _pull('pinned'),
+        _pull('recents'),   _pull('playcounts'), _pull('settings'), _pull('history'),
+        _pull('metadata'),  _pull('collections'),
       ]);
       _prog(24);
-
-      // Seed remote timestamps from manifest
-      _remoteTs = { ...manifest };
 
       // ── Merge favorites ───────────────────────────────────
       // Full LWW merge using starredAt timestamps:
@@ -1197,6 +1220,9 @@ const Sync = (() => {
       //     (meaning the remote had a chance to include them but didn't → un-starred elsewhere)
       //     If starredAt > remoteManifestTs the song was starred offline → keep & push it back.
       await _mergeStep('favorites', async () => {
+        // remoteFavs is null when type was skipped (fresh) — treat as "nothing to merge"
+        // rather than empty list (which would delete all local favorites).
+        if (remoteFavs === null) return;
         const local      = await DB.getStarred();
         const remoteList = Array.isArray(remoteFavs) ? remoteFavs : [];
         const remoteIds  = new Set(remoteList.map(r => r.id));
@@ -1475,6 +1501,8 @@ const Sync = (() => {
       // Push merged state back + update manifest.
       // Skip any type whose merge step failed (prevents data-poisoning via LWW).
       // Also skip SKIP_ON_INIT types (e.g. 'hot' — transient delta, not pushed at init).
+      // Skipped (fresh) types are still pushed: they may carry offline local changes
+      // that weren't flushed before the last session closed.
       const now = Date.now();
       const safeToPush = Object.keys(FILENAMES).filter(t => !_failedTypes.has(t) && !SKIP_ON_INIT.has(t));
       await Promise.allSettled(safeToPush.map(t => _pushFns[t]()));
@@ -1492,6 +1520,11 @@ const Sync = (() => {
         _remoteTs.home = homeTs;
         await _bumpManifest(['home']);
       } catch (_) {}
+
+      // ── Persist local timestamps so next session can skip fresh types ────────
+      // Saved AFTER all pushes so the stored values reflect what was actually written.
+      await DB.setState('sync_localTs', { ..._localTs }).catch(() => {});
+
       _prog(100);
 
       console.log('[Sync] Init complete ✓');
