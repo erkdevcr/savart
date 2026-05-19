@@ -3347,9 +3347,15 @@ const App = (() => {
     // 2 parallel workers — head downloads are ~1 MB each
     await Promise.allSettled([worker(), worker()]);
 
-    // Re-push recents so other devices get the enriched metadata immediately,
-    // without waiting for Device A to open the home screen.
-    if (typeof Sync !== 'undefined') Sync.push('recents');
+    // Push both stores so other devices get the enriched data immediately:
+    //   recents  — thumbnailUrl field updated with 'id3' sentinel or preserved URL
+    //   metadata — artist, album, displayName, softScannedAt, thumbnailUrl written
+    //              by bulkWriteMeta above (coverBlob is binary and NOT synced —
+    //              each device extracts the embedded art from the audio file itself)
+    if (typeof Sync !== 'undefined') {
+      Sync.push('recents');
+      Sync.push('metadata');
+    }
   }
 
   /**
@@ -3610,7 +3616,12 @@ const App = (() => {
     // softScannedAt stamped and all metadata fields populated).
     await _softScanItems(songs);
 
-    // Pass 3: Drive API thumbnail fallback for songs still without cover after scan
+    // Pass 3: Last.fm cover lookup for songs still without cover after ID3 scan.
+    // Uses artist + album/title from DB (populated by soft scan above).
+    // Also re-applies any persisted URL that wasn't visible in the DOM yet.
+    await _lastfmCoverFallback(songs, _homeCardHasCover, _updateHomeCardThumbnail);
+
+    // Pass 4: Drive API thumbnail fallback for songs still without cover after Last.fm
     await _driveThumbFallback(songs, _homeCardHasCover, _updateHomeCardThumbnail);
   }
 
@@ -3665,7 +3676,10 @@ const App = (() => {
     // Pass 2: soft scan — same logic as home: scan all items not yet scanned on this device
     await _softScanItems(items);
 
-    // Pass 3: Drive API fallback — songs still without cover after scan
+    // Pass 3: Last.fm cover lookup for items still without cover after ID3 scan
+    await _lastfmCoverFallback(items, _topListHasCover, _updateTopListThumb);
+
+    // Pass 4: Drive API fallback — items still without cover after Last.fm
     await _driveThumbFallback(items, _topListHasCover, _updateTopListThumb);
   }
 
@@ -3867,6 +3881,85 @@ const App = (() => {
     }
     // 2 parallel workers — partial downloads are heavier than metadata calls
     await Promise.allSettled([worker(), worker()]);
+  }
+
+  /**
+   * Last.fm cover fallback for home / top-played items that still have no cover
+   * after the ID3 soft scan.  Fetches a cover from Last.fm using the artist +
+   * album or track title available in the DB (or derived from filename).
+   * Persists the URL to DB so future sessions pick it up in Pass 0.
+   * Runs 3 workers in parallel — Last.fm API calls are lightweight.
+   *
+   * @param {Object[]} items      — items to check (must have .id)
+   * @param {function} hasCoverFn — (id) → bool: true if cover already visible in DOM
+   * @param {function} updateFn   — (id, url, isId3) → void: injects cover into DOM
+   */
+  async function _lastfmCoverFallback(items, hasCoverFn, updateFn) {
+    if (!items.length || typeof Lastfm === 'undefined') return;
+
+    const queue = items.filter(item => !hasCoverFn(item.id));
+    if (!queue.length) return;
+
+    const jobs = [...queue];
+    let anyNewUrl = false; // track whether we wrote any new URL to DB
+
+    async function worker() {
+      while (jobs.length > 0) {
+        const item = jobs.shift();
+        try {
+          const m = await DB.getMeta(item.id).catch(() => null);
+
+          // Manual cover — never overwrite
+          if ((m?.manualAt || 0) > 0) continue;
+
+          // A valid URL already in DB but just not rendered yet — apply it directly
+          const persisted = m?.thumbnailUrl || m?.coverUrl || null;
+          if (persisted && persisted !== 'id3' && !persisted.startsWith('blob:')) {
+            updateFn(item.id, persisted);
+            continue;
+          }
+
+          // Resolve artist — DB field first, then filename heuristic
+          let artist = m?.artist || null;
+          if (!artist) {
+            const base = (item.name || m?.name || '').replace(/\.[^.]+$/, '').trim();
+            const dash  = base.indexOf(' - ');
+            if (dash > 0) {
+              artist = base.slice(0, dash)
+                .replace(/^\d+\.?\s*/, '')        // strip leading track number "01. "
+                .replace(/^track\s+\d+\s*/i, '')  // strip "Track 01 "
+                .trim();
+            }
+          }
+          if (!artist) continue;
+
+          const album = m?.album || null;
+          const title = m?.displayName || item.displayName || item.name || m?.name || null;
+
+          let coverUrl = null;
+          if (album) {
+            coverUrl = await Lastfm.fetchCover(artist, album).catch(() => null);
+          }
+          if (!coverUrl && title) {
+            coverUrl = await Lastfm.fetchCoverByTrack(artist, title).catch(() => null);
+          }
+          if (!coverUrl) continue;
+
+          // Persist so Pass 0 picks it up on future sessions without a network call,
+          // and so other devices receive the URL via metadata sync (no re-fetch needed).
+          DB.setMeta(item.id, { thumbnailUrl: coverUrl }).catch(() => {});
+          if (typeof Meta !== 'undefined') Meta.forcePatch(item.id, { coverUrl });
+          updateFn(item.id, coverUrl);
+          anyNewUrl = true;
+        } catch (_) { /* non-fatal */ }
+      }
+    }
+
+    // 3 workers — enough concurrency without hammering Last.fm
+    await Promise.allSettled([worker(), worker(), worker()]);
+
+    // Push metadata so other devices get the discovered URLs without re-fetching Last.fm
+    if (anyNewUrl && typeof Sync !== 'undefined') Sync.push('metadata');
   }
 
   /**
