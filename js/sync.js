@@ -426,7 +426,11 @@ const Sync = (() => {
         // when an older push from another device arrives.
         // savart_recents.json includes tombstones; _mergeRecents handles them correctly.
         const remote = (data || []).filter(r => r && r.id);
-        if (!remote.length) break;
+        if (!remote.length) {
+          // Remote has no live items — Device A cleared recents; propagate the clear.
+          await DB.clearRecents();
+          break;
+        }
         const local = await DB.getRecentsAll(); // include local tombstones
         const { merged, tombstoneRecords } = _mergeRecents(local, remote);
 
@@ -450,7 +454,12 @@ const Sync = (() => {
         // MAX(local, remote) per song — prevents a lower remote count from overwriting
         // a higher local count when two devices have played the same song differently.
         const validCounts = (data || []).filter(r => r && r.id);
-        if (validCounts.length) await DB.bulkApplyPlaycounts(validCounts);
+        if (validCounts.length) {
+          await DB.bulkApplyPlaycounts(validCounts);
+        } else {
+          // Remote cleared playcounts — propagate the clear.
+          await DB.clearPlaycounts();
+        }
         break;
       }
 
@@ -471,7 +480,11 @@ const Sync = (() => {
       case 'history': {
         // LWW per-item by playedAt — keep the most recent play record for each song.
         const remote = (data || []).filter(r => r && r.id);
-        if (!remote.length) break;
+        if (!remote.length) {
+          // Remote cleared history — propagate the clear.
+          await DB.clearHistory();
+          break;
+        }
         const local   = await DB.getHistory();
         const map     = new Map();
         for (const item of local)  map.set(item.id, item);
@@ -547,16 +560,32 @@ const Sync = (() => {
           // Write live items + preserved tombstones in one batch
           const allToWrite = [...mergedR, ...localTombstones, ...newRemoteTombstones];
           if (allToWrite.length) await DB.bulkPutRecents(allToWrite);
+        } else if (Array.isArray(recents)) {
+          // recents: [] — Device A cleared home. Preserve only items played after the snapshot.
+          const snapshotTs = data.ts || 0;
+          const local = await DB.getRecentsAll();
+          const survived = snapshotTs > 0
+            ? local.filter(r => !r.removedAt && (r.accessedAt || 0) > snapshotTs)
+            : [];
+          await DB.clearRecents();
+          if (survived.length) await DB.bulkPutRecents(survived);
         }
 
-        if (Array.isArray(playcounts) && playcounts.length) {
+        if (Array.isArray(playcounts)) {
           // MAX(local, remote) per song (same as case 'playcounts')
           const valid = playcounts.filter(m => m && m.id);
-          if (valid.length) await DB.bulkApplyPlaycounts(valid);
+          if (valid.length) {
+            await DB.bulkApplyPlaycounts(valid);
+          } else {
+            // playcounts: [] — Device A cleared play counts; propagate the clear.
+            await DB.clearPlaycounts();
+          }
         }
 
-        if (Array.isArray(playlists) && playlists.length) {
-          // Per-playlist LWW using updatedAt; deletions follow remote as authoritative
+        if (Array.isArray(playlists)) {
+          // Per-playlist LWW using updatedAt; deletions follow remote as authoritative.
+          // Empty array means all playlists were deleted on Device A — the remoteIds.has()
+          // check below will delete all local playlists, which is the correct behaviour.
           const local    = await DB.getPlaylists();
           const localMap = new Map(local.map(p => [p.id, p]));
           const remoteIds = new Set(playlists.map(p => p.id));
@@ -586,6 +615,9 @@ const Sync = (() => {
             .slice(0, CONFIG.HISTORY_MAX);
           await DB.clearHistory();
           if (mergedH.length) await DB.bulkPutHistory(mergedH);
+        } else if (Array.isArray(history)) {
+          // history: [] — Device A cleared history; propagate the clear.
+          await DB.clearHistory();
         }
         break;
       }

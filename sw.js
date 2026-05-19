@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.209';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.32 — Log: per-file sequential processing (line 2 updates x/x·name as each track runs); removed file count from line 1; removed monospace font from log entries — 3.5.31
+const APP_VERSION  = '3.5.210';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.210 — Fix: _applyRemote case 'home' now propagates clear for recents/playcounts/playlists/history when remote arrays are empty
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
