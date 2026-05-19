@@ -4679,9 +4679,8 @@ body.queue-open #mini-player { z-index: 65; }
     margin: 16px 24px 0;
   }
 
-  /* Danger section (logout + clear cache) — full-width card below the grid */
+  /* Danger section (logout + clear cache) — lives inside col 1, same card style */
   .settings-danger {
-    margin: 14px 24px 0;
     background: var(--bg-elevated);
     border-radius: var(--radius-md);
     overflow: hidden;
@@ -4737,7 +4736,6 @@ body.queue-open #mini-player { z-index: 65; }
      flex-shrink:0 forces children to keep their natural height so the
      container overflows and becomes scrollable. */
   #screen-settings > .settings-grid,
-  #screen-settings > .settings-danger,
   #screen-settings > div:last-child {
     flex-shrink: 0;
   }

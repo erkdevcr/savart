@@ -339,6 +339,32 @@
           </div><!-- /Biblioteca -->
 
 
+          <!-- CUENTA / LOGOUT / CLEAR CACHE -->
+          <div class="settings-danger">
+            <div class="settings-row">
+              <div style="display:flex;align-items:center;gap:12px">
+                <div class="account-avatar" id="account-avatar">
+                  <svg width="28" height="19" viewBox="0 0 48 32" fill="none" aria-hidden="true">
+                    <path d="M6 22 C10 10, 14 10, 18 16 C22 22, 26 22, 30 16 C34 10, 38 10, 42 22"
+                          stroke="#4A88F5" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+                  </svg>
+                </div>
+                <div>
+                  <div class="settings-row-label" id="account-email">—</div>
+                  <div class="settings-row-cat" data-i18n="settings_drive_linked">Google Drive vinculado</div>
+                </div>
+              </div>
+              <button id="btn-logout" data-i18n="logout" style="color:var(--error);font-size:14px;font-weight:500;background:none;border:none;cursor:pointer;padding:0">Cerrar sesión</button>
+            </div>
+            <div class="settings-row" style="border-bottom:none">
+              <div>
+                <div class="settings-row-label" data-i18n="settings_clear_cache">Borrar caché</div>
+                <div class="settings-row-cat" data-i18n="settings_storage">Almacenamiento</div>
+              </div>
+              <button id="btn-clear-cache" data-i18n="settings_clear_cache" style="color:var(--error);font-size:14px;background:none;border:none;cursor:pointer;padding:0">Borrar caché</button>
+            </div>
+          </div><!-- /.settings-danger -->
+
         </div><!-- /.settings-col (col 1) -->
 
         <!-- ── Columna 2: Apariencia · Almacenamiento · Limpiar home ── -->
@@ -454,32 +480,6 @@
         </div><!-- /.settings-col (col 2) -->
 
       </div><!-- /.settings-grid -->
-
-      <!-- ── Danger actions: Account + Logout + Clear cache — always last on mobile ── -->
-      <div class="settings-danger">
-        <div class="settings-row">
-          <div style="display:flex;align-items:center;gap:12px">
-            <div class="account-avatar" id="account-avatar">
-              <svg width="28" height="19" viewBox="0 0 48 32" fill="none" aria-hidden="true">
-                <path d="M6 22 C10 10, 14 10, 18 16 C22 22, 26 22, 30 16 C34 10, 38 10, 42 22"
-                      stroke="#4A88F5" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-              </svg>
-            </div>
-            <div>
-              <div class="settings-row-label" id="account-email">—</div>
-              <div class="settings-row-cat" data-i18n="settings_drive_linked">Google Drive vinculado</div>
-            </div>
-          </div>
-          <button id="btn-logout" data-i18n="logout" style="color:var(--error);font-size:14px;font-weight:500;background:none;border:none;cursor:pointer;padding:0">Cerrar sesión</button>
-        </div>
-        <div class="settings-row" style="border-bottom:none">
-          <div>
-            <div class="settings-row-label" data-i18n="settings_clear_cache">Borrar caché</div>
-            <div class="settings-row-cat" data-i18n="settings_storage">Almacenamiento</div>
-          </div>
-          <button id="btn-clear-cache" data-i18n="settings_clear_cache" style="color:var(--error);font-size:14px;background:none;border:none;cursor:pointer;padding:0">Borrar caché</button>
-        </div>
-      </div>
 
       <!-- DB Stats popup — fuera del grid para no afectar el layout -->
       <div id="overlay-db-stats" class="db-stats-overlay" style="display:none">
