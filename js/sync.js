@@ -492,6 +492,15 @@ const Sync = (() => {
       case 'home': {
         // Atomic home snapshot: restore all home-relevant state from a single file.
         // LWW: the manifest guarantees this file is newer, so we overwrite local state.
+
+        // Guard: if the user ran "clear home" more recently than this snapshot was pushed,
+        // the snapshot carries stale data (recents/playcounts/history that were just cleared).
+        // Skip it entirely — the debounced pushes will update the snapshot in Drive shortly,
+        // and the next restart will find a snapshot newer than homeCleared.
+        const _homeCleared  = await DB.getState('homeCleared').catch(() => 0) || 0;
+        const _snapshotTs   = (data || {}).ts || 0;
+        if (_homeCleared > 0 && _snapshotTs > 0 && _snapshotTs <= _homeCleared) break;
+
         const { pinned, pinnedOrder, recents, recentTombstones, playcounts, playlists, history } = data || {};
 
         if (pinned && typeof pinned === 'object') {

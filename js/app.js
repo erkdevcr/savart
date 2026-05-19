@@ -12908,6 +12908,12 @@ const App = (() => {
           };
           await Promise.all(checked.map(store => ops[store]?.()));
 
+          // Stamp a "cleared at" timestamp so readHome() / _applyRemote('home') can
+          // detect that the home snapshot in Drive is stale and skip it on next boot.
+          // Without this guard, readHome() would restore the old data from savart_home.json
+          // even though it was just cleared locally (the debounced push hasn't fired yet).
+          await DB.setState('homeCleared', Date.now());
+
           // Push affected sync stores to Drive so other devices see the cleared state.
           // Sync.push() is void (starts a debounced timer) — do NOT call .catch() on it.
           const syncKeys = {
