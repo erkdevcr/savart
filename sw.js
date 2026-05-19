@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.210';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.210 — Fix: _applyRemote case 'home' now propagates clear for recents/playcounts/playlists/history when remote arrays are empty
+const APP_VERSION  = '3.5.211';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.211 — Fix: _softScanItems no longer calls Meta.revoke before download (caused blank cover for full download duration); removed false re-scan of in-progress items from toPaint path
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

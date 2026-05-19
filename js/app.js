@@ -3173,25 +3173,17 @@ const App = (() => {
 
     // ── Already-scanned path — paint cover from DB meta or in-memory cache ──
     // Priority: Meta session cache (fresh Object URL) → DB coverBlob → external URL.
-    // If no cover is found anywhere AND softScannedAt was never written (scan was
-    // interrupted before completing), remove the item from the session guard and
-    // re-queue it for a real scan — covers must always show for embedded-art items.
+    // If the metaMap snapshot shows no coverBlob/softScannedAt, the scan is still
+    // in-progress (the worker set the session guard before downloading but hasn't
+    // written to DB yet).  Do NOT re-queue: the running worker will call
+    // _updateHomeCardThumbnail when it finishes.  Interrupted scans always delete
+    // their own session guard in the catch handler, so such items never reach
+    // toPaint — they land in toScan directly on the next _softScanItems call.
     toPaint.forEach(item => {
-      const m      = metaMap.get(item.id);
-      const cached = (typeof Meta !== 'undefined') ? Meta.getCached(item.id) : null;
-      if (cached?.coverUrl || m?.coverBlob) {
-        // Cover available — paint all visible surfaces now
-        _ensureCoverVisible(item.id, m);
-      } else if (!m?.softScannedAt) {
-        // Guard was set but scan never completed (interrupted / network error before DB write).
-        // Remove from session guard so it joins toScan and gets a proper retry.
-        _sessionScannedIds.delete(item.id);
-        toScan.push(item);
-      } else {
-        // Scan completed (softScannedAt set), confirmed no embedded cover — apply any
-        // external URL from DB (Last.fm / AudD) or leave placeholder; no re-download.
-        _ensureCoverVisible(item.id, m);
-      }
+      // Always attempt to paint from whatever DB/cache data is available right now.
+      // _ensureCoverVisible is a no-op when neither coverBlob nor a valid URL is set,
+      // so calling it unconditionally is safe.
+      _ensureCoverVisible(item.id, metaMap.get(item.id));
     });
 
     // ── ID3 scan path ────────────────────────────────────────────────────────
@@ -3258,14 +3250,14 @@ const App = (() => {
             } catch (_) { /* non-fatal — continue with whatever blob we have */ }
           }
 
-          // Always revoke any stale/partial Meta cache entry (e.g. a minimal
-          // {coverUrl} set by Meta.injectCover in Pass 0) before parsing.
-          // Without this, Meta.parse returns the cached stub instead of doing a
-          // real ID3 parse, so title/artist/coverBlob all come back null.
-          Meta.revoke(item.id);
-
           // Always force=true so we get a real parse with all fields including
           // coverBlob — never rely on a stale cache hit.
+          // NOTE: do NOT call Meta.revoke() before the download.  Revoking before
+          // the fetch starts tears down the blob: URL that the home card <img> is
+          // currently showing, causing a visible blank period for the entire download
+          // duration (100 ms – 2 s).  Meta.parse(force=true) already revokes the
+          // old cache entry internally — right before storing the new result — so
+          // the blank window shrinks to just the parse time (~5–30 ms, imperceptible).
           const meta = await Meta.parse(item.id, blob, true).catch(() => null);
 
           // REPLACE patch — ID3 is the source of truth for these fields.
