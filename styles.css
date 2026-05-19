@@ -2661,14 +2661,11 @@ img { display: block; }
 
 /* Hint text below the clear button */
 .clear-home-hint {
-  margin: 5px 0 0 0;
+  margin: 4px 16px 8px;
   font-size: 10px;
   line-height: 1.45;
   color: var(--text-secondary);
   opacity: 0.75;
-}
-.clear-home-hint-en {
-  opacity: 0.65;
 }
 
 .settings-section-title {

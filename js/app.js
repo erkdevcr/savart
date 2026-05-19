@@ -698,21 +698,16 @@ const App = (() => {
           if (dbMeta.year)        track.year        = dbMeta.year;
 
           // Cover art — resolve in priority order:
-          //   1. coverBlob in DB (embedded ID3 art) → create fresh Object URL
-          //   2. valid external thumbnailUrl (Last.fm / AudD / manual)
+          //   1. valid external thumbnailUrl (Last.fm / AudD / manual) — wins over ID3
+          //   2. coverBlob in DB (embedded ID3 art) → create fresh Object URL
           let coverUrl = null;
-          if (dbMeta.coverBlob && typeof Meta !== 'undefined') {
-            coverUrl = Meta.injectCover(track.id, dbMeta.coverBlob);
+          const _storedUrl = dbMeta.thumbnailUrl || dbMeta.coverUrl || null;
+          if (_storedUrl && _storedUrl !== 'id3' && !_storedUrl.startsWith('blob:')) {
+            coverUrl = _storedUrl;
+            if (typeof Meta !== 'undefined') Meta.patchCached(track.id, { coverUrl });
           }
-          if (!coverUrl) {
-            const stored = dbMeta.thumbnailUrl || dbMeta.coverUrl || null;
-            if (stored && stored !== 'id3' && !stored.startsWith('blob:')) {
-              coverUrl = stored;
-              // Populate Meta cache so _enrichTrack picks it up immediately
-              if (typeof Meta !== 'undefined') {
-                Meta.patchCached(track.id, { coverUrl });
-              }
-            }
+          if (!coverUrl && dbMeta.coverBlob && typeof Meta !== 'undefined') {
+            coverUrl = Meta.injectCover(track.id, dbMeta.coverBlob);
           }
 
           const reEnriched = _enrichTrack(track);
@@ -816,13 +811,12 @@ const App = (() => {
       // If the track has an embedded cover stored locally, inject it into the Meta
       // cache right now — the player cover shows immediately without waiting for
       // the full blob download and _onBlobReady to fire.
-      // Exception: if the user manually set a cover (manualAt > 0 + real URL in DB),
-      // skip blob injection so the manual cover keeps priority.
-      const _hasManualCover = (dbMeta?.manualAt || 0) > 0
-        && dbMeta?.thumbnailUrl
+      // Exception: if any external URL already exists (Last.fm / AudD / manual / rescanned),
+      // skip blob injection — external URL takes priority over ID3 blob.
+      const _hasExternalUrl = dbMeta?.thumbnailUrl
         && dbMeta.thumbnailUrl !== 'id3'
         && !dbMeta.thumbnailUrl.startsWith('blob:');
-      if (dbMeta?.coverBlob && !_hasManualCover && typeof Meta !== 'undefined') {
+      if (dbMeta?.coverBlob && !_hasExternalUrl && typeof Meta !== 'undefined') {
         const _injected = Meta.injectCover(track.id, dbMeta.coverBlob);
         if (_injected) bestThumb = _injected;
       }
@@ -3215,6 +3209,19 @@ const App = (() => {
           // Use fresh DB data as existing baseline (beats stale metaMap snapshot)
           const existing = freshMeta || metaMap.get(item.id) || null;
 
+          // ── Instant URL paint ────────────────────────────────────────────────────
+          // If the item already has an external URL in DB, paint it immediately
+          // before the download starts — one scanned, one shown, no waiting for others.
+          const _existingUrl = (existing?.thumbnailUrl && existing.thumbnailUrl !== 'id3'
+            && !existing.thumbnailUrl.startsWith('blob:')) ? existing.thumbnailUrl : null;
+          if (_existingUrl) {
+            _updateHomeCardThumbnail(item.id, _existingUrl, false);
+            _updateTopListThumb(item.id, _existingUrl, false);
+            _updatePinnedItemCover(item.id, _existingUrl, false);
+            _updateRowThumbnail(item.id, _existingUrl, false);
+            Player.patchQueueItem?.(item.id, { thumbnailUrl: _existingUrl });
+          }
+
           // Prefer local cached blob (free, full file — best quality).
           // Fall back to a 1MB head download (enough for most embedded cover art).
           let blob = await DB.getCachedBlob(item.id).catch(() => null);
@@ -3280,9 +3287,15 @@ const App = (() => {
             patch.year           = meta.year   || null;
             patch.coverBlob      = meta.coverBlob || null;
             if (meta.coverBlob) {
-              // Embedded cover found — mark as ID3 source; clear any stale external URL
-              patch.thumbnailUrl = 'id3';
-              patch.coverUrl     = null;
+              if (_existingUrl) {
+                // External URL already in DB (Last.fm / AudD / etc.) — it wins over ID3.
+                // Store the blob for offline use but don't touch thumbnailUrl/coverUrl
+                // so the display continues to show the external URL.
+              } else {
+                // No external URL — mark as ID3 source.
+                patch.thumbnailUrl = 'id3';
+                patch.coverUrl     = null;
+              }
             }
             // No embedded cover: thumbnailUrl/coverUrl deliberately omitted so
             // existing Last.fm / AudD / manual URL in DB is not overwritten with null.
@@ -3296,8 +3309,9 @@ const App = (() => {
           // overwrites with fresh ID3 data (including explicit nulls).
           await DB.bulkWriteMeta([{ ...existing, id: item.id, ...patch }]);
 
-          // Resolve cover URL for DOM update
-          const coverUrl = meta?.coverUrl
+          // Resolve cover URL for DOM update — external URL wins over ID3 blob
+          const coverUrl = _existingUrl
+            || meta?.coverUrl
             || (meta?.coverBlob ? Meta.injectCover(item.id, meta.coverBlob) : null)
             || null;
 
@@ -9388,19 +9402,26 @@ const App = (() => {
   function _ensureCoverVisible(fileId, dbMeta) {
     if (!dbMeta) return;
 
-    // Manual cover always wins — user explicitly chose this URL.
-    // Must be checked BEFORE coverBlob, otherwise ID3 art silently overrides it.
-    const hasManualUrl = (dbMeta.manualAt || 0) > 0
-      && dbMeta.thumbnailUrl
-      && dbMeta.thumbnailUrl !== 'id3'
-      && !dbMeta.thumbnailUrl.startsWith('blob:');
-    if (hasManualUrl) {
-      _updateHomeCardThumbnail(fileId, dbMeta.thumbnailUrl, false);
-      _updateRowThumbnail(fileId, dbMeta.thumbnailUrl, false);
-      _updateTopListThumb(fileId, dbMeta.thumbnailUrl, false);
+    // Priority order:
+    //  1. Manual URL (manualAt > 0) — user explicitly chose this, always wins
+    //  2. Any external HTTP URL (Last.fm / AudD / rescanned / etc.) — wins over ID3 blob
+    //  3. ID3 embedded blob — fallback when no external URL exists
+    const isExternalUrl = (url) => url && url !== 'id3' && !url.startsWith('blob:');
+
+    const manualUrl   = (dbMeta.manualAt || 0) > 0 && isExternalUrl(dbMeta.thumbnailUrl)
+      ? dbMeta.thumbnailUrl : null;
+    const externalUrl = !manualUrl && isExternalUrl(dbMeta.thumbnailUrl)
+      ? dbMeta.thumbnailUrl : null;
+    const displayUrl  = manualUrl || externalUrl;
+
+    if (displayUrl) {
+      _updateHomeCardThumbnail(fileId, displayUrl, false);
+      _updateRowThumbnail(fileId, displayUrl, false);
+      _updateTopListThumb(fileId, displayUrl, false);
       return;
     }
 
+    // No external URL — fall back to ID3 embedded cover
     if (dbMeta.coverBlob) {
       const url = Meta.injectCover(fileId, dbMeta.coverBlob);
       if (url) {
@@ -9408,10 +9429,6 @@ const App = (() => {
         _updateRowThumbnail(fileId, url, true);
         _updateTopListThumb(fileId, url, true);
       }
-    } else if (dbMeta.thumbnailUrl && dbMeta.thumbnailUrl !== 'id3') {
-      _updateHomeCardThumbnail(fileId, dbMeta.thumbnailUrl, false);
-      _updateRowThumbnail(fileId, dbMeta.thumbnailUrl, false);
-      _updateTopListThumb(fileId, dbMeta.thumbnailUrl, false);
     }
   }
 
@@ -9517,8 +9534,12 @@ const App = (() => {
       };
 
       if (parsed?.coverBlob && !existing?.coverBlob) {
-        patch.coverBlob    = parsed.coverBlob;
-        patch.thumbnailUrl = 'id3';
+        patch.coverBlob = parsed.coverBlob;
+        // Only mark as ID3 source if no external URL already exists.
+        // External URL (Last.fm / AudD / rescanned) takes priority over ID3 blob.
+        const _preHasUrl = existing?.thumbnailUrl && existing.thumbnailUrl !== 'id3'
+          && !existing.thumbnailUrl.startsWith('blob:');
+        if (!_preHasUrl) patch.thumbnailUrl = 'id3';
       }
 
       await DB.setMeta(item.id, { id: item.id, ...patch });
@@ -9533,14 +9554,15 @@ const App = (() => {
         UI.updateBrowseSongMeta(item.id, patch.artist, patch.album, patch.displayName);
       }
 
-      // Paint cover on EVERY visible surface (home card, browse row, top-list row)
-      if (patch.coverBlob) {
-        const coverUrl = Meta.injectCover(item.id, patch.coverBlob);
-        if (coverUrl) {
-          _updateHomeCardThumbnail(item.id, coverUrl, true);
-          _updateRowThumbnail(item.id, coverUrl, true);
-          _updateTopListThumb(item.id, coverUrl, true);
-        }
+      // Paint cover on EVERY visible surface — external URL wins over blob
+      const _preScanExternalUrl = existing?.thumbnailUrl && existing.thumbnailUrl !== 'id3'
+        && !existing.thumbnailUrl.startsWith('blob:') ? existing.thumbnailUrl : null;
+      const _preScanCoverUrl = _preScanExternalUrl
+        || (patch.coverBlob ? Meta.injectCover(item.id, patch.coverBlob) : null);
+      if (_preScanCoverUrl) {
+        _updateHomeCardThumbnail(item.id, _preScanCoverUrl, !_preScanExternalUrl);
+        _updateRowThumbnail(item.id, _preScanCoverUrl, !_preScanExternalUrl);
+        _updateTopListThumb(item.id, _preScanCoverUrl, !_preScanExternalUrl);
       }
 
       // Re-push recents so other devices get the enriched metadata (artist, name)

@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.215';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.215 — Fix: savart_playcounts.json now carries clearedAt timestamp; all merge paths (_applyRemote playcounts/home, init mergeStep) purge local records with playedAt <= clearedAt so Device B can no longer restore pre-clear items that Device A already wiped
+const APP_VERSION  = '3.5.217';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.217 — Cover priority: external URL (Last.fm/AudD) now wins over ID3 blob everywhere; soft scan paints URL immediately per item; blob no longer overwrites existing external URL
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
