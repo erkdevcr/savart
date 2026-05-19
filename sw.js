@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.212';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.212 — Fix: init() playcounts merge now propagates empty remote as a clear (not a no-op); playcounts homeDelay reduced from 3000ms to 1000ms to close race window
+const APP_VERSION  = '3.5.213';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.213 — UX: Clear Selected button is now orange (btn-warning); shows spinner + hint text "Esto puede tomar unos cuantos segundos / This may take a few seconds" while clearing
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

@@ -2632,6 +2632,45 @@ img { display: block; }
   cursor: not-allowed;
 }
 
+/* Warning/orange variant — used for Clear Selected */
+.btn-warning {
+  color: #e8a020;
+  border-color: rgba(232,160,32,0.35);
+}
+.btn-warning:not(:disabled):hover {
+  background: rgba(232,160,32,0.1);
+  border-color: rgba(232,160,32,0.6);
+  color: #d4900a;
+}
+.btn-warning:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+/* Clearing state — spinner + orange fill, matches ds-stopping */
+#btn-clear-home.clearing {
+  color: #e8a020;
+  border-color: rgba(232,160,32,0.45);
+  background: rgba(232,160,32,0.08);
+  cursor: not-allowed;
+  opacity: 0.9;
+}
+#btn-clear-home.clearing #btn-clear-home-icon {
+  animation: clear-home-spin 0.75s linear infinite;
+}
+@keyframes clear-home-spin { to { transform: rotate(360deg); } }
+
+/* Hint text below the clear button */
+.clear-home-hint {
+  margin: 5px 0 0 0;
+  font-size: 10px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+  opacity: 0.75;
+}
+.clear-home-hint-en {
+  opacity: 0.65;
+}
+
 .settings-section-title {
   font-size: 10px;
   font-weight: 500;

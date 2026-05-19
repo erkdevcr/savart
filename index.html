@@ -470,10 +470,14 @@
             </div>
 
             <div class="settings-row" style="padding-top:4px">
-              <button id="btn-clear-home" class="btn-sort-toggle btn-danger" disabled>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+              <button id="btn-clear-home" class="btn-sort-toggle btn-warning" disabled>
+                <svg id="btn-clear-home-icon" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
                 <span data-i18n="settings_clear_selected">Limpiar seleccionados</span>
               </button>
+              <p class="clear-home-hint" id="clear-home-hint" style="display:none">
+                <span data-i18n="settings_clear_hint_es">Esto puede tomar unos cuantos segundos</span><br>
+                <span data-i18n="settings_clear_hint_en" class="clear-home-hint-en">This may take a few seconds</span>
+              </p>
             </div>
           </div><!-- /Limpiar home -->
 

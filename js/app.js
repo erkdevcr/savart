@@ -12989,11 +12989,27 @@ const App = (() => {
           UI.showToast(UI.t('settings_clear_selected') + ': 0', 'error');
           return;
         }
-        // Show "Cleaning…" in the button label while the operation runs
-        const _clearSpan = _clearHomeBtn.querySelector('span');
+        // Show spinner + "Cleaning…" in the button label while the operation runs
+        const _clearSpan  = _clearHomeBtn.querySelector('span');
+        const _clearIcon  = document.getElementById('btn-clear-home-icon');
+        const _clearHint  = document.getElementById('clear-home-hint');
         const _clearOrigLabel = _clearSpan?.textContent || '';
+        // Swap trash icon → spinner SVG
+        const _spinnerSvg = '<svg id="btn-clear-home-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="9" stroke-dasharray="28 56" stroke-dashoffset="0"/></svg>';
         _clearHomeBtn.disabled = true;
+        _clearHomeBtn.classList.add('clearing');
+        if (_clearIcon) _clearIcon.outerHTML = _spinnerSvg;
         if (_clearSpan) _clearSpan.textContent = UI.t('settings_clearing');
+        if (_clearHint) _clearHint.style.display = '';
+
+        const _restoreBtn = () => {
+          _clearHomeBtn.classList.remove('clearing');
+          // Restore trash icon
+          const _curIcon = document.getElementById('btn-clear-home-icon');
+          if (_curIcon) _curIcon.outerHTML = '<svg id="btn-clear-home-icon" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>';
+          if (_clearSpan) _clearSpan.textContent = _clearOrigLabel;
+          if (_clearHint) _clearHint.style.display = 'none';
+        };
 
         try {
           const ops = {
@@ -13030,12 +13046,12 @@ const App = (() => {
 
           // Uncheck all, restore button, show success
           document.querySelectorAll('.clear-home-cb').forEach(c => { c.checked = false; });
-          if (_clearSpan) _clearSpan.textContent = _clearOrigLabel;
+          _restoreBtn();
           _syncClearBtn();
           UI.showToast(UI.t('toast_cleared'));
         } catch (err) {
           console.error('[App] clearHome error:', err);
-          if (_clearSpan) _clearSpan.textContent = _clearOrigLabel;
+          _restoreBtn();
           UI.showToast(UI.t('toast_clear_error'), 'error');
           // Still uncheck and try to refresh home even on error
           document.querySelectorAll('.clear-home-cb').forEach(c => { c.checked = false; });
