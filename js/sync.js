@@ -1499,12 +1499,19 @@ const Sync = (() => {
       _prog(86);
 
       // Push merged state back + update manifest.
-      // Skip any type whose merge step failed (prevents data-poisoning via LWW).
-      // Also skip SKIP_ON_INIT types (e.g. 'hot' — transient delta, not pushed at init).
-      // Skipped (fresh) types are still pushed: they may carry offline local changes
-      // that weren't flushed before the last session closed.
+      // Only push types that were actually stale (downloaded + merged this session).
+      // Fresh/skipped types are NOT re-pushed — their remote snapshot is already
+      // up-to-date, and pushing identical data would bump timestamps and force all
+      // other devices to re-download unnecessarily (cascade download loop).
+      // Live push() already handles in-session changes (with debounce + _localTs persist).
+      // Skip types whose merge step failed (prevents data-poisoning via LWW).
+      // Skip SKIP_ON_INIT types (e.g. 'hot' — transient delta, not pushed at init).
       const now = Date.now();
-      const safeToPush = Object.keys(FILENAMES).filter(t => !_failedTypes.has(t) && !SKIP_ON_INIT.has(t));
+      const safeToPush = Object.keys(FILENAMES).filter(t =>
+        !_failedTypes.has(t) &&
+        !SKIP_ON_INIT.has(t) &&
+        !_skippedTypes.has(t)   // fresh types: remote already has latest data — don't re-push
+      );
       await Promise.allSettled(safeToPush.map(t => _pushFns[t]()));
       for (const t of safeToPush) _localTs[t] = now;
       if (safeToPush.length) await _bumpManifest(safeToPush);
@@ -1569,6 +1576,10 @@ const Sync = (() => {
       try {
         await _pushFns[type]?.();
         await _bumpManifest([type]);
+        // Update and persist _localTs so next session knows this type is already
+        // up-to-date and skips the download — fixes the re-download loop.
+        _localTs[type] = Date.now();
+        await DB.setState('sync_localTs', { ..._localTs }).catch(() => {});
       } catch (err) {
         if (err.isScope) return;
         console.warn(`[Sync] push(${type}) failed:`, err.message);
