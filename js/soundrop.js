@@ -63,8 +63,11 @@ const Soundrop = (() => {
       const durStr  = detail?.contentDetails?.duration || '';
       const durSec  = _parseDuration(durStr);
 
+      // Decode HTML entities — YouTube API encodes ' → &#39;, & → &amp;, etc.
+      const rawTitle   = _decodeHtml(snippet.title || '');
+      const channelTitle = _decodeHtml(snippet.channelTitle || '');
+
       // Heuristic title split: "Artist - Title"
-      const rawTitle = snippet.title || '';
       let artist = '', title = rawTitle;
       const dash = rawTitle.indexOf(' - ');
       if (dash > 0) {
@@ -82,7 +85,7 @@ const Soundrop = (() => {
         album:        '',
         year:         (snippet.publishedAt || '').slice(0, 4),
         thumbnailUrl: snippet.thumbnails?.medium?.url || snippet.thumbnails?.default?.url || '',
-        channelTitle: snippet.channelTitle || '',
+        channelTitle: channelTitle,
         mimeType:     'audio/mpeg',
         durationSec:  durSec,
         size:         0,
@@ -156,6 +159,20 @@ const Soundrop = (() => {
   }
 
   // ── Helpers ───────────────────────────────────────────────
+
+  /**
+   * Decode HTML entities returned by the YouTube Data API.
+   * e.g. &#39; → '   &amp; → &   &quot; → "
+   * Uses a temporary textarea so the browser's HTML parser handles all cases.
+   * @param {string} str
+   * @returns {string}
+   */
+  function _decodeHtml(str) {
+    if (!str) return '';
+    const el = document.createElement('textarea');
+    el.innerHTML = str;
+    return el.value;
+  }
 
   /**
    * Parse ISO 8601 duration string (e.g. "PT3M45S") to seconds.
