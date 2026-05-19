@@ -152,7 +152,7 @@ const Soundrop = (() => {
 
     // Upload via multipart
     const fileId = await Drive.uploadFile(blob, filename, 'audio/mpeg', folderId);
-    return fileId;
+    return { fileId, folderId, filename };
   }
 
   // ── Helpers ───────────────────────────────────────────────

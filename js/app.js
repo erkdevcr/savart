@@ -12268,23 +12268,28 @@ const App = (() => {
         // 2. Download blob
         const blob = await Soundrop.fetchBlob(audioUrl);
         // 3. Upload to Drive "Soundrop" folder
-        const driveId = await Soundrop.saveToDrive(blob, meta);
-        const filename = `${[meta.artist, meta.title].filter(Boolean).join(' - ')}.mp3`;
+        const { fileId: driveId, folderId: driveFolderId, filename } = await Soundrop.saveToDrive(blob, meta);
 
         // 4. Write Drive metadata to DB.
-        // manualAt prevents _preScanBeforePlay from replacing the clean YouTube
-        // thumbnail (mqdefault, 16:9, no bars) with ID3 art embedded in the MP3
-        // by the worker (hqdefault, 4:3, black bars already baked into the image).
+        // manualAt is always stamped (user manually entered all fields).
+        // It acts as the LWW guard that prevents auto-enrichment (ID3/AudD/MB)
+        // from overwriting the clean YouTube thumbnail and user-entered text.
+        // folderId is included so other devices can build the correct album/folder
+        // hierarchy without needing to rescan.
         await DB.setMeta(driveId, {
           name:         filename,
           displayName:  meta.title,
-          artist:       meta.artist,
-          album:        meta.album,
-          year:         meta.year,
-          thumbnailUrl: track.thumbnailUrl || null,
-          manualAt:     track.thumbnailUrl ? Date.now() : undefined,
-        }).catch(() => {});
+          artist:       meta.artist || undefined,
+          album:        meta.album  || undefined,
+          year:         meta.year   || undefined,
+          folderId:     driveFolderId,
+          thumbnailUrl: track.thumbnailUrl || undefined,
+          manualAt:     Date.now(),
+        });
+        // Push full metadata sync (debounced 2 s)
         Sync.push('metadata');
+        // Push hot delta immediately so other devices see this track in ~3 s
+        Sync.pushHot([{ id: driveId }]).catch(() => {});
 
         // 5. Remove the Soundrop recent entry (sd_ id) and add the Drive one
         //    so Home no longer shows the SD chip for this track.
@@ -12314,11 +12319,14 @@ const App = (() => {
           artist:      meta.artist,
           album:       meta.album,
           year:        meta.year,
+          folderId:    driveFolderId,
           thumbnailUrl: track.thumbnailUrl || null,
           mimeType:    'audio/mpeg',
           isSoundrop:  false,
           videoId:     null,
         };
+        // Register in in-memory item map so resolvers find it without a DB round-trip
+        _cacheItem(driveTrack);
         Player.patchQueueItem(track.id, driveTrack);
 
         // Only update player UI if the saved track is the one currently loaded
