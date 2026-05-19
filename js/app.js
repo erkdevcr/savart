@@ -12896,7 +12896,12 @@ const App = (() => {
           UI.showToast(UI.t('settings_clear_selected') + ': 0', 'error');
           return;
         }
+        // Show "Cleaning…" in the button label while the operation runs
+        const _clearSpan = _clearHomeBtn.querySelector('span');
+        const _clearOrigLabel = _clearSpan?.textContent || '';
         _clearHomeBtn.disabled = true;
+        if (_clearSpan) _clearSpan.textContent = UI.t('settings_clearing');
+
         try {
           const ops = {
             recents:    () => DB.clearRecents(),
@@ -12926,13 +12931,18 @@ const App = (() => {
           };
           checked.forEach(store => { if (syncKeys[store]) Sync.push(syncKeys[store]); });
 
-          // Uncheck all, refresh home
+          // Await the home re-render so the user sees the cleared state immediately
+          // when they navigate back — not after a second async render cycle.
+          await _loadHomeData();
+
+          // Uncheck all, restore button, show success
           document.querySelectorAll('.clear-home-cb').forEach(c => { c.checked = false; });
+          if (_clearSpan) _clearSpan.textContent = _clearOrigLabel;
           _syncClearBtn();
-          _loadHomeData();
           UI.showToast(UI.t('toast_cleared'));
         } catch (err) {
           console.error('[App] clearHome error:', err);
+          if (_clearSpan) _clearSpan.textContent = _clearOrigLabel;
           UI.showToast(UI.t('toast_clear_error'), 'error');
           // Still uncheck and try to refresh home even on error
           document.querySelectorAll('.clear-home-cb').forEach(c => { c.checked = false; });
