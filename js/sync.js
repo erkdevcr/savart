@@ -451,13 +451,32 @@ const Sync = (() => {
       }
 
       case 'playcounts': {
+        // Support new { clearedAt, items } format and legacy plain array.
+        const remoteClearedAt = (!Array.isArray(data) && data?.clearedAt) || 0;
+        const remoteItems     = Array.isArray(data) ? data
+          : (Array.isArray(data?.items) ? data.items : []);
+
+        // Discard remote items that pre-date the clear timestamp.
+        const validCounts = remoteItems.filter(r => r && r.id &&
+          (remoteClearedAt === 0 || (r.playedAt || 0) > remoteClearedAt));
+
+        if (remoteClearedAt > 0) {
+          // Purge any local playcount records that pre-date the remote clear.
+          // This handles Device B that still has items played before Device A's clear.
+          const local     = await DB.getAllPlaycounts();
+          const surviving = local.filter(r => (r.playedAt || 0) > remoteClearedAt);
+          if (surviving.length < local.length) {
+            await DB.clearPlaycounts();
+            if (surviving.length) await DB.bulkApplyPlaycounts(surviving);
+          }
+        }
+
         // MAX(local, remote) per song — prevents a lower remote count from overwriting
         // a higher local count when two devices have played the same song differently.
-        const validCounts = (data || []).filter(r => r && r.id);
         if (validCounts.length) {
           await DB.bulkApplyPlaycounts(validCounts);
-        } else {
-          // Remote cleared playcounts — propagate the clear.
+        } else if (!remoteClearedAt) {
+          // Empty remote without a clearedAt signal → remote explicitly cleared.
           await DB.clearPlaycounts();
         }
         break;
@@ -572,12 +591,26 @@ const Sync = (() => {
         }
 
         if (Array.isArray(playcounts)) {
-          // MAX(local, remote) per song (same as case 'playcounts')
-          const valid = playcounts.filter(m => m && m.id);
+          // MAX(local, remote) per song (same as case 'playcounts').
+          // playCountsClearedAt: timestamp from Device A's clear → discard older local records.
+          const cut   = data.playCountsClearedAt || 0;
+          const valid = playcounts.filter(m => m && m.id &&
+            (cut === 0 || (m.playedAt || 0) > cut));
+
+          if (cut > 0) {
+            // Purge any local records that pre-date Device A's clear.
+            const local     = await DB.getAllPlaycounts();
+            const surviving = local.filter(r => (r.playedAt || 0) > cut);
+            if (surviving.length < local.length) {
+              await DB.clearPlaycounts();
+              if (surviving.length) await DB.bulkApplyPlaycounts(surviving);
+            }
+          }
+
           if (valid.length) {
             await DB.bulkApplyPlaycounts(valid);
-          } else {
-            // playcounts: [] — Device A cleared play counts; propagate the clear.
+          } else if (!cut) {
+            // playcounts: [] without a clearedAt signal — Device A cleared; propagate.
             await DB.clearPlaycounts();
           }
         }
@@ -879,13 +912,21 @@ const Sync = (() => {
   async function _pushPlaycounts() {
     // getAllPlaycounts includes songs hidden from top-played so other devices
     // receive the hiddenFromTopPlayed flag and can hide them locally too.
-    const played = await DB.getAllPlaycounts();
-    await _writeFile(FILENAMES.playcounts, played.map(m => ({
-      id: m.id, name: m.name || null, displayName: m.displayName || m.name || null,
-      artist: m.artist || null, folderId: m.folderId || null, playCount: m.playCount || 0,
-      thumbnailUrl: (m.thumbnailUrl && !m.thumbnailUrl.startsWith('blob:') && m.thumbnailUrl !== 'id3') ? m.thumbnailUrl : null,
-      ...(m.hiddenFromTopPlayed ? { hiddenFromTopPlayed: true } : {}),
-    })));
+    const played    = await DB.getAllPlaycounts();
+    const clearedAt = await DB.getState('homeCleared').catch(() => 0) || 0;
+    // Format: { clearedAt, items } — allows other devices to discard their own
+    // local playcount records that pre-date this clear, even when items is non-empty
+    // (e.g. songs played AFTER the clear that survive legitimately).
+    await _writeFile(FILENAMES.playcounts, {
+      clearedAt,
+      items: played.map(m => ({
+        id: m.id, name: m.name || null, displayName: m.displayName || m.name || null,
+        artist: m.artist || null, folderId: m.folderId || null, playCount: m.playCount || 0,
+        playedAt: m.playedAt || 0,
+        thumbnailUrl: (m.thumbnailUrl && !m.thumbnailUrl.startsWith('blob:') && m.thumbnailUrl !== 'id3') ? m.thumbnailUrl : null,
+        ...(m.hiddenFromTopPlayed ? { hiddenFromTopPlayed: true } : {}),
+      })),
+    });
     console.log(`[Sync] Pushed playcounts (${played.length})`);
   }
 
@@ -1014,13 +1055,14 @@ const Sync = (() => {
       && !u.includes('googleapis.com');
     const cleanUrl = u => isExternal(u) ? u : null;
 
-    let [pinnedMeta, pinnedOrder, allRecents, playcounts, playlists, history] = await Promise.all([
+    let [pinnedMeta, pinnedOrder, allRecents, playcounts, playlists, history, _homeClearedTs] = await Promise.all([
       DB.getState('pinnedMeta'),
       DB.getState('pinned'),
       DB.getRecentsAll(),          // ALL records including tombstones
       DB.getAllPlaycounts(),   // includes hidden songs so other devices get hiddenFromTopPlayed
       DB.getPlaylists(),
       DB.getHistory(CONFIG.HISTORY_MAX),
+      DB.getState('homeCleared').catch(() => 0),
     ]);
     // Unwrap corrupted format if present
     if (pinnedMeta && typeof pinnedMeta.meta === 'object' && !Array.isArray(pinnedMeta.meta)
@@ -1045,9 +1087,10 @@ const Sync = (() => {
     );
 
     const payload = {
-      ts:          Date.now(),
-      pinned:      pinnedMeta  || {},
-      pinnedOrder: pinnedOrder || [],
+      ts:                  Date.now(),
+      playCountsClearedAt: _homeClearedTs || 0,
+      pinned:              pinnedMeta  || {},
+      pinnedOrder:         pinnedOrder || [],
       recents: recentsLive.map((r, i) => {
         const m = recentMetaRecords[i];
         const isSd = r.isSoundrop || m?.isSoundrop || false;
@@ -1072,6 +1115,7 @@ const Sync = (() => {
       playcounts: (playcounts || []).map(m => ({
         id: m.id, name: m.name || null, displayName: m.displayName || m.name || null,
         artist: m.artist || null, folderId: m.folderId || null, playCount: m.playCount || 0,
+        playedAt: m.playedAt || 0,
         thumbnailUrl: cleanUrl(m.thumbnailUrl),
         ...(m.hiddenFromTopPlayed ? { hiddenFromTopPlayed: true } : {}),
       })),
@@ -1363,17 +1407,46 @@ const Sync = (() => {
       // ── Merge play counts ─────────────────────────────────
       await _mergeStep('playcounts', async () => {
         if (remotePlaycounts === null) return; // file unreadable / skipped — don't touch local
-        const validRemote = Array.isArray(remotePlaycounts) ? remotePlaycounts.filter(r => r && r.id) : [];
-        if (!validRemote.length) {
-          // Remote file exists but is empty — Device A cleared play counts. Propagate the clear.
+
+        // Unwrap new { clearedAt, items } format; fall back to legacy plain array.
+        const remoteClearedAt = (!Array.isArray(remotePlaycounts) && remotePlaycounts?.clearedAt) || 0;
+        const remoteItems     = Array.isArray(remotePlaycounts) ? remotePlaycounts
+          : (Array.isArray(remotePlaycounts?.items) ? remotePlaycounts.items : []);
+
+        // Effective clear timestamp: the later of the remote signal OR this device's own clear.
+        // homeCleared handles the case where this device cleared but its push timer hadn't fired.
+        // remoteClearedAt handles the case where another device cleared and pushed the signal.
+        const _homeCleared = await DB.getState('homeCleared').catch(() => 0) || 0;
+        const cut          = Math.max(remoteClearedAt, _homeCleared);
+
+        // Filter remote items: discard any that pre-date the clear.
+        const validRemote = remoteItems.filter(r => r && r.id &&
+          (cut === 0 || (r.playedAt || 0) > cut));
+
+        // Read local once; compute which survive the clear cut.
+        const local        = await DB.getAllPlaycounts();
+        const survivingLocal = cut > 0 ? local.filter(r => (r.playedAt || 0) > cut) : local;
+
+        // Purge local records that pre-date the clear.
+        if (survivingLocal.length < local.length) {
           await DB.clearPlaycounts();
-          console.log('[Sync] Remote playcounts empty — cleared local play counts');
+          if (survivingLocal.length) await DB.bulkApplyPlaycounts(survivingLocal);
+          console.log(`[Sync] Purged ${local.length - survivingLocal.length} local playcounts that pre-date clear`);
+        }
+
+        if (!validRemote.length) {
+          // Remote is empty / all items pre-date the clear → nothing to merge in.
+          // If there was no cut signal either, treat it as an explicit remote clear.
+          if (cut === 0 && local.length > 0) await DB.clearPlaycounts();
+          console.log('[Sync] Remote playcounts: no valid items after clear filter');
           return;
         }
-        // Use getAllPlaycounts (includes hidden) so removed items aren't re-upserted
-        // as if they were brand-new remote records by _mergePlaycounts.
-        const local = await DB.getAllPlaycounts();
-        const { toUpsert } = _mergePlaycounts(local, validRemote);
+
+        // MAX-merge remaining remote into remaining local.
+        // Use getAllPlaycounts again to get the post-purge state.
+        const localAfterPurge = survivingLocal.length < local.length
+          ? await DB.getAllPlaycounts() : local;
+        const { toUpsert } = _mergePlaycounts(localAfterPurge, validRemote);
         if (toUpsert.length) {
           await DB.bulkPutMeta(toUpsert);
           console.log(`[Sync] Merged ${toUpsert.length} remote playcounts`);

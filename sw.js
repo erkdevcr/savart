@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.213';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.213 — UX: Clear Selected button is now orange (btn-warning); shows spinner + hint text "Esto puede tomar unos cuantos segundos / This may take a few seconds" while clearing
+const APP_VERSION  = '3.5.215';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.215 — Fix: savart_playcounts.json now carries clearedAt timestamp; all merge paths (_applyRemote playcounts/home, init mergeStep) purge local records with playedAt <= clearedAt so Device B can no longer restore pre-clear items that Device A already wiped
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
