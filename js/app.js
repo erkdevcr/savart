@@ -3272,7 +3272,10 @@ const App = (() => {
           // FULL REPLACE from ID3 — clear existing data, apply only what the file says.
           // Soft scan is strictly ID3-only: no Last.fm, no AudD, no Drive thumbnail.
           // If the file has no title → displayName = null.
-          // If the file has no cover → coverBlob = null, thumbnailUrl = null.
+          // If the file has a cover → coverBlob set, thumbnailUrl = 'id3'.
+          // If the file has no cover → coverBlob = null; thumbnailUrl/coverUrl are
+          //   intentionally OMITTED from the patch so any external URL already in DB
+          //   (Last.fm / AudD / manual) is preserved — not wiped by the soft scan.
           // Guard: if meta === null the parse itself failed (corrupted header, network
           // glitch after download, etc.) — in that case we do NOT wipe existing data,
           // only stamp softScannedAt so we don't retry endlessly.
@@ -3284,8 +3287,13 @@ const App = (() => {
             patch.album          = meta.album  || null;
             patch.year           = meta.year   || null;
             patch.coverBlob      = meta.coverBlob || null;
-            patch.thumbnailUrl   = meta.coverBlob ? 'id3' : null;
-            patch.coverUrl       = null; // clear stale external URL (Last.fm/AudD)
+            if (meta.coverBlob) {
+              // Embedded cover found — mark as ID3 source; clear any stale external URL
+              patch.thumbnailUrl = 'id3';
+              patch.coverUrl     = null;
+            }
+            // No embedded cover: thumbnailUrl/coverUrl deliberately omitted so
+            // existing Last.fm / AudD / manual URL in DB is not overwritten with null.
             // Duration: only from TLEN ID3 frame or FLAC STREAMINFO (reliable).
             if (meta.durationSec > 0) patch.durationSec = meta.durationSec;
           }
