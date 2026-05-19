@@ -4921,26 +4921,34 @@ const App = (() => {
   // Last song results from a search — used by the "Play results" button
   let _lastSearchFiles = [];
 
-  // Cached raw results from the last Drive / Soundrop search.
-  // Re-used when the user switches filter chips so we never re-fetch.
+  // Cached raw results from the last Drive search.
+  // Re-used when the user switches between Drive filter chips (all/songs/folders).
   let _cachedSearchResults = null;
   let _cachedSearchTerm    = '';
 
-  /**
-   * Re-render the search results from cache with a different filter.
-   * Called by filter chip clicks — no network request needed.
-   */
+  // Separate cache for Soundrop (YouTube) results.
+  // Kept independently so switching to a Drive filter never wipes SD results —
+  // switching back to the Soundrop chip re-renders instantly without re-fetching.
+  let _cachedSdResults = null;
+  let _cachedSdTerm    = '';
+
   /**
    * Re-render cached search results with a new filter.
    * Returns true if cache was available, false if a fresh fetch is needed.
    */
   function _renderCachedSearch(filter) {
-    if (!_cachedSearchResults) return false;
-    // Soundrop chip selected but cached results are from Drive (or vice versa):
-    // the result shapes are incompatible — do a fresh search.
-    const hasSd    = !!_cachedSearchResults.soundrop;
-    const needsSd  = filter === 'soundrop';
-    if (hasSd !== needsSd) return false;
+    const term = document.getElementById('search-input')?.value.trim() || '';
+    if (filter === 'soundrop') {
+      // Use the dedicated SD cache; term must match to avoid stale results.
+      if (_cachedSdResults && _cachedSdTerm === term) {
+        UI.renderSearchResults(_cachedSdResults, 'soundrop');
+        UI.setActiveSongRow(Player.getCurrentTrack()?.id ?? null);
+        return true;
+      }
+      return false;
+    }
+    // Drive filters — use the Drive cache.
+    if (!_cachedSearchResults || _cachedSearchTerm !== term) return false;
     UI.renderSearchResults(_cachedSearchResults, filter);
     UI.setActiveSongRow(Player.getCurrentTrack()?.id ?? null);
     return true;
@@ -4965,10 +4973,10 @@ const App = (() => {
       try {
         const sdTracks = await Soundrop.search(term);
         sdTracks.forEach(t => _cacheItem(t));
-        _lastSearchFiles     = sdTracks;
-        _cachedSearchResults = { soundrop: sdTracks };
-        _cachedSearchTerm    = term;
-        UI.renderSearchResults(_cachedSearchResults, 'soundrop');
+        _lastSearchFiles = sdTracks;
+        _cachedSdResults = { soundrop: sdTracks };
+        _cachedSdTerm    = term;
+        UI.renderSearchResults(_cachedSdResults, 'soundrop');
         UI.setActiveSongRow(Player.getCurrentTrack()?.id ?? null);
       } catch (err) {
         console.error('[App] Soundrop search error:', err);
