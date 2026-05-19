@@ -12907,9 +12907,19 @@ const App = (() => {
             starred:    () => DB.clearStarred(),
           };
           await Promise.all(checked.map(store => ops[store]?.()));
-          // Push affected sync stores back to Drive
-          const syncKeys = { recents: 'recents', pinned: 'pinned', history: 'history', playlists: 'playlists' };
-          checked.forEach(store => { if (syncKeys[store]) Sync.push(syncKeys[store]).catch(() => {}); });
+
+          // Push affected sync stores to Drive so other devices see the cleared state.
+          // Sync.push() is void (starts a debounced timer) — do NOT call .catch() on it.
+          const syncKeys = {
+            recents:    'recents',
+            pinned:     'pinned',
+            history:    'history',
+            playlists:  'playlists',
+            playcounts: 'playcounts',  // clearPlaycounts modifies metadata IDB store
+            starred:    'favorites',   // clearStarred → sync type is 'favorites'
+          };
+          checked.forEach(store => { if (syncKeys[store]) Sync.push(syncKeys[store]); });
+
           // Uncheck all, refresh home
           document.querySelectorAll('.clear-home-cb').forEach(c => { c.checked = false; });
           _syncClearBtn();
@@ -12918,7 +12928,10 @@ const App = (() => {
         } catch (err) {
           console.error('[App] clearHome error:', err);
           UI.showToast(UI.t('toast_clear_error'), 'error');
+          // Still uncheck and try to refresh home even on error
+          document.querySelectorAll('.clear-home-cb').forEach(c => { c.checked = false; });
           _syncClearBtn();
+          _loadHomeData().catch(() => {});
         }
       });
     }
