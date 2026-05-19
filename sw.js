@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.211';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.211 — Fix: _softScanItems no longer calls Meta.revoke before download (caused blank cover for full download duration); removed false re-scan of in-progress items from toPaint path
+const APP_VERSION  = '3.5.212';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.212 — Fix: init() playcounts merge now propagates empty remote as a clear (not a no-op); playcounts homeDelay reduced from 3000ms to 1000ms to close race window
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

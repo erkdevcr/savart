@@ -1362,9 +1362,14 @@ const Sync = (() => {
 
       // ── Merge play counts ─────────────────────────────────
       await _mergeStep('playcounts', async () => {
-        if (!Array.isArray(remotePlaycounts) || remotePlaycounts.length === 0) return;
-        const validRemote = remotePlaycounts.filter(r => r && r.id);
-        if (!validRemote.length) return;
+        if (remotePlaycounts === null) return; // file unreadable / skipped — don't touch local
+        const validRemote = Array.isArray(remotePlaycounts) ? remotePlaycounts.filter(r => r && r.id) : [];
+        if (!validRemote.length) {
+          // Remote file exists but is empty — Device A cleared play counts. Propagate the clear.
+          await DB.clearPlaycounts();
+          console.log('[Sync] Remote playcounts empty — cleared local play counts');
+          return;
+        }
         // Use getAllPlaycounts (includes hidden) so removed items aren't re-upserted
         // as if they were brand-new remote records by _mergePlaycounts.
         const local = await DB.getAllPlaycounts();
@@ -1628,10 +1633,10 @@ const Sync = (() => {
     }, delay);
 
     // Any change to a home-relevant type also triggers a home snapshot push.
-    // For recents/history: 1 s after the fast individual push so home reflects
-    // the new song quickly. Other types use 3 s to let their push complete first.
+    // For recents/history/playcounts: 1 s after the fast individual push so home
+    // reflects the new song (or cleared counts) quickly. Other types use 3 s.
     if (HOME_TYPES.has(type)) {
-      const homeDelay = (type === 'recents' || type === 'history') ? 1000 : 3000;
+      const homeDelay = (type === 'recents' || type === 'history' || type === 'playcounts') ? 1000 : 3000;
       if (_timers._home) clearTimeout(_timers._home);
       _timers._home = setTimeout(async () => {
         try {
