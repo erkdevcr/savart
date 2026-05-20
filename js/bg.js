@@ -14,14 +14,12 @@
   if (!canvasMain) return;
 
   const ctxMain = canvasMain.getContext('2d');
-  const ctxExp  = canvasExp  ? canvasExp.getContext('2d') : null;
+  const ctxExp  = canvasExp ? canvasExp.getContext('2d') : null;
 
   const SPACING = 17;
   const DOT_R   = 0.9;
   const SPEED   = 0.0625; // base cycles/s — 16 s per full cycle
 
-  // sp  = individual speed multiplier (each blob drifts at its own rate)
-  // ax2/ay2, px2/py2 = second wave for extra randomness
   const blobs = [
     { bx:0.08, by:0.12, r:0.18, ax:0.07, ay:0.05, px:0.00, py:1.00, sp:1.00, ax2:0.03, ay2:0.04, px2:0.50, py2:1.30 },
     { bx:0.35, by:0.05, r:0.14, ax:0.06, ay:0.07, px:1.20, py:0.30, sp:1.37, ax2:0.04, ay2:0.02, px2:2.10, py2:0.70 },
@@ -32,13 +30,15 @@
     { bx:0.72, by:0.82, r:0.20, ax:0.06, ay:0.08, px:1.60, py:0.40, sp:1.43, ax2:0.06, ay2:0.03, px2:0.50, py2:2.10 },
   ];
 
-  // Global canvas dimensions (full viewport)
+  // Global canvas state
   let W, H, cols, rows, gridX, gridY;
-  // Expanded-player canvas dimensions (its own bounding box)
-  let Wexp, Hexp, colsExp, rowsExp, gridXexp, gridYexp;
+  // Expanded-player canvas state
+  let Wexp = 0, Hexp = 0, colsExp, rowsExp, gridXexp, gridYexp;
   let then = null, t = 0;
 
-  function resize() {
+  /* ── Resize helpers ──────────────────────────────────────── */
+
+  function resizeMain() {
     W = canvasMain.width  = window.innerWidth;
     H = canvasMain.height = window.innerHeight;
     cols = Math.ceil(W / SPACING) + 1;
@@ -47,33 +47,47 @@
     gridY = new Float32Array(rows);
     for (let c = 0; c < cols; c++) gridX[c] = c * SPACING + SPACING / 2;
     for (let r = 0; r < rows; r++) gridY[r] = r * SPACING + SPACING / 2;
-
-    if (canvasExp) {
-      // Use the parent element's size (the player panel)
-      const parent = canvasExp.parentElement;
-      Wexp = canvasExp.width  = parent ? parent.offsetWidth  : window.innerWidth;
-      Hexp = canvasExp.height = parent ? parent.offsetHeight : window.innerHeight;
-      colsExp = Math.ceil(Wexp / SPACING) + 1;
-      rowsExp = Math.ceil(Hexp / SPACING) + 1;
-      gridXexp = new Float32Array(colsExp);
-      gridYexp = new Float32Array(rowsExp);
-      for (let c = 0; c < colsExp; c++) gridXexp[c] = c * SPACING + SPACING / 2;
-      for (let r = 0; r < rowsExp; r++) gridYexp[r] = r * SPACING + SPACING / 2;
-    }
   }
 
+  function resizeExp(w, h) {
+    if (!canvasExp) return;
+    Wexp = canvasExp.width  = w;
+    Hexp = canvasExp.height = h;
+    colsExp = Math.ceil(Wexp / SPACING) + 1;
+    rowsExp = Math.ceil(Hexp / SPACING) + 1;
+    gridXexp = new Float32Array(colsExp);
+    gridYexp = new Float32Array(rowsExp);
+    for (let c = 0; c < colsExp; c++) gridXexp[c] = c * SPACING + SPACING / 2;
+    for (let r = 0; r < rowsExp; r++) gridYexp[r] = r * SPACING + SPACING / 2;
+  }
+
+  /* ResizeObserver watches the player element — fires whenever it becomes
+     visible or changes size, even if window.resize hasn't fired.
+     This is the key fix for mobile: the player is display:none at boot,
+     so offsetWidth/Height are 0 until the user opens it. */
+  if (canvasExp && window.ResizeObserver) {
+    const ro = new ResizeObserver(entries => {
+      for (const entry of entries) {
+        const { inlineSize: w, blockSize: h } = entry.contentBoxSize?.[0] ||
+          { inlineSize: entry.contentRect.width, blockSize: entry.contentRect.height };
+        if (w > 0 && h > 0) resizeExp(Math.round(w), Math.round(h));
+      }
+    });
+    ro.observe(canvasExp.parentElement); // observe #player-expanded
+  }
+
+  /* ── Draw grid on any canvas ─────────────────────────────── */
+
   function drawGrid(ctx, gW, gH, gCols, gRows, gX, gY, bPos) {
+    ctx.clearRect(0, 0, gW, gH);
     const maxDim = Math.max(gW, gH);
-    // Re-scale blob positions for this canvas's dimensions
-    const localBPos = blobs.map((b, i) => ({
-      x:  bPos[i].nx * gW,
-      y:  bPos[i].ny * gH,
-      r2: (b.r * maxDim) ** 2,
+    const localBPos = bPos.map((p, i) => ({
+      x:  p.nx * gW,
+      y:  p.ny * gH,
+      r2: (blobs[i].r * maxDim) ** 2,
     }));
 
     ctx.fillStyle = 'rgb(80,150,255)';
-    ctx.clearRect(0, 0, gW, gH);
-
     for (let c = 0; c < gCols; c++) {
       const x = gX[c];
       for (let r = 0; r < gRows; r++) {
@@ -98,13 +112,15 @@
     ctx.globalAlpha = 1;
   }
 
+  /* ── Animation loop ──────────────────────────────────────── */
+
   function frame(now) {
     requestAnimationFrame(frame);
     if (then === null) then = now;
     t += (now - then) / 1000;
     then = now;
 
-    // Compute normalised blob positions (0–1) once, shared by both canvases
+    // Compute normalised blob positions once — shared by both canvases
     const bPos = blobs.map(b => {
       const f  = t * SPEED * Math.PI * 2 * b.sp;
       const f2 = t * SPEED * Math.PI * 2 * b.sp * 1.618;
@@ -114,16 +130,14 @@
       };
     });
 
-    // Draw on the global background canvas
     drawGrid(ctxMain, W, H, cols, rows, gridX, gridY, bPos);
 
-    // Draw on the expanded-player canvas (only when it's visible)
     if (ctxExp && Wexp > 0 && Hexp > 0) {
       drawGrid(ctxExp, Wexp, Hexp, colsExp, rowsExp, gridXexp, gridYexp, bPos);
     }
   }
 
-  window.addEventListener('resize', resize);
-  resize();
+  window.addEventListener('resize', resizeMain);
+  resizeMain();
   requestAnimationFrame(frame);
 })();
