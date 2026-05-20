@@ -6763,35 +6763,29 @@ body.queue-open #mini-player { z-index: 65; }
   padding: 0 6px;
 }
 
-/* ── Deep scan type switch (Álbum ↔ Colección) ── */
-.ds-type-switch {
-  display: flex;
-  gap: 4px;
+/* ── Deep scan convert button (single, shows opposite type) ── */
+.ds-convert-btn {
   flex-shrink: 0;
-}
-.ds-type-btn {
-  flex-shrink: 0;
-  background: transparent;
-  border: 1px solid var(--border);
-  color: var(--text-secondary);
   border-radius: var(--radius-sm);
-  padding: 4px 8px;
+  padding: 4px 10px;
   font-size: 11px;
   cursor: pointer;
   white-space: nowrap;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  font-weight: 500;
+  transition: background 0.15s, color 0.15s, border-color 0.15s, opacity 0.15s;
 }
-/* Album button active — purple (matches folder-type-chip--album) */
-.ds-type-btn--album.ds-type-btn--on {
-  background: rgba(139,92,246,0.18);
-  color: #a78bfa;
-  border-color: rgba(139,92,246,0.4);
-}
-/* Collection button active — accent blue (matches folder-type-chip--collection) */
-.ds-type-btn--col.ds-type-btn--on {
+.ds-convert-btn:hover { opacity: 0.85; }
+/* "Convertir a Colección" — blue (collection color) */
+.ds-convert-btn--to-col {
   background: rgba(var(--accent-rgb,74,136,245),0.18);
   color: var(--accent,#4a88f5);
-  border-color: rgba(var(--accent-rgb,74,136,245),0.4);
+  border: 1px solid rgba(var(--accent-rgb,74,136,245),0.4);
+}
+/* "Convertir a Álbum" — purple (album color) */
+.ds-convert-btn--to-album {
+  background: rgba(139,92,246,0.18);
+  color: #a78bfa;
+  border: 1px solid rgba(139,92,246,0.4);
 }
 /* Field visibility by panel mode */
 .ds-field-col-only   { display: none; }

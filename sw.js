@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.248';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.248 — DS: persist folder.name in session on save so re-renders show the updated name
+const APP_VERSION  = '3.5.249';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.249 — DS: single convert button replaces two-state type switch
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

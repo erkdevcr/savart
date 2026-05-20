@@ -7267,10 +7267,7 @@ const App = (() => {
       </div>
       <div class="album-edit-panel ds-album-edit-panel${isCollection ? ' ds-mode-collection' : ''}">
         <div class="album-edit-actions">
-          <div class="ds-type-switch">
-            <button class="ds-type-btn ds-type-btn--album${!isCollection ? ' ds-type-btn--on' : ''}" data-type="album">${UI.t('lbl_album_chip')}</button>
-            <button class="ds-type-btn ds-type-btn--col${isCollection ? ' ds-type-btn--on' : ''}" data-type="collection">${UI.t('lbl_collection')}</button>
-          </div>
+          <button class="ds-convert-btn ${isCollection ? 'ds-convert-btn--to-album' : 'ds-convert-btn--to-col'}" data-type="${isCollection ? 'album' : 'collection'}">${isCollection ? UI.t('ds_convert_to_album') : UI.t('ds_convert_to_col')}</button>
           <button class="ds-panel-save-btn album-edit-save-btn">${UI.t('save_btn')}</button>
         </div>
         <div class="album-edit-row ds-field-col-only">
@@ -7375,12 +7372,10 @@ const App = (() => {
       UI.showContextMenu(e, 'ds_folder', { id: folder.id, folderId: folder.id, name: leaf, isFolder: true });
     });
 
-    // Type switch
-    row.querySelectorAll('.ds-type-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        _dsToggleFolderType(folder.id, row, btn.dataset.type);
-      });
+    // Convert button (single toggle — shows the other type)
+    row.querySelector('.ds-convert-btn')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      _dsToggleFolderType(folder.id, row, e.currentTarget.dataset.type);
     });
 
     // Save button
@@ -7732,11 +7727,7 @@ const App = (() => {
           <button class="ds-panel-save-btn album-edit-save-btn">${UI.t('save_btn')}</button>
         </div>
         <div class="album-edit-row">
-          <label class="album-edit-label">${UI.t('lbl_tipo')}</label>
-          <div class="ds-type-switch">
-            <button class="ds-type-btn ds-type-btn--album${ftKey !== 'collection' ? ' ds-type-btn--on' : ''}" data-type="album">${UI.t('lbl_album_chip')}</button>
-            <button class="ds-type-btn ds-type-btn--col${ftKey === 'collection' ? ' ds-type-btn--on' : ''}" data-type="collection">${UI.t('lbl_collection')}</button>
-          </div>
+          <button class="ds-convert-btn ${ftKey === 'collection' ? 'ds-convert-btn--to-album' : 'ds-convert-btn--to-col'}" data-type="${ftKey === 'collection' ? 'album' : 'collection'}">${ftKey === 'collection' ? UI.t('ds_convert_to_album') : UI.t('ds_convert_to_col')}</button>
         </div>
         <div class="album-edit-row ds-field-col-only">
           <label class="album-edit-label">${UI.t('lbl_col_name')}</label>
@@ -7789,12 +7780,10 @@ const App = (() => {
       _dsToggleIgnore(folder.id, row);
     });
 
-    // Type switch (Album / Collection)
-    row.querySelectorAll('.ds-type-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        _dsToggleFolderType(folder.id, row, btn.dataset.type);
-      });
+    // Convert button (single — shows the other type)
+    row.querySelector('.ds-convert-btn')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      _dsToggleFolderType(folder.id, row, e.currentTarget.dataset.type);
     });
 
     // Save button
@@ -8018,9 +8007,14 @@ const App = (() => {
       }
       const isCol = newType === 'collection';
       // Toggle button active states
-      rowEl.querySelectorAll('.ds-type-btn').forEach(btn => {
-        btn.classList.toggle('ds-type-btn--on', btn.dataset.type === newType);
-      });
+      // Update the single convert button to offer the reverse conversion
+      const convertBtn = rowEl.querySelector('.ds-convert-btn');
+      if (convertBtn) {
+        const nextType = isCol ? 'album' : 'collection';
+        convertBtn.dataset.type = nextType;
+        convertBtn.className    = `ds-convert-btn ${isCol ? 'ds-convert-btn--to-album' : 'ds-convert-btn--to-col'}`;
+        convertBtn.textContent  = isCol ? UI.t('ds_convert_to_album') : UI.t('ds_convert_to_col');
+      }
       // Switch panel field visibility
       const panel = rowEl.querySelector('.album-edit-panel');
       if (panel) panel.classList.toggle('ds-mode-collection', isCol);
