@@ -12079,7 +12079,7 @@ const App = (() => {
     const fill = `${line} L${W},${H} L0,${H} Z`;
 
     const eqOn    = document.getElementById('eq-toggle')?.classList.contains('on') ?? true;
-    const color   = eqOn ? '#4A88F5' : '#666';
+    const color   = eqOn ? '#4A88F5' : 'rgb(40,40,40)';
     const opacity = eqOn ? '0.25'    : '0.10';
 
     svg.innerHTML = `
