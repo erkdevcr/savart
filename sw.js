@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.258';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.258 — eq-preamp-balance-row padding-bottom 4→14px
+const APP_VERSION  = '3.5.260';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.260 — EQ curve visible on mobile
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

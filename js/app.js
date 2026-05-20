@@ -12078,13 +12078,17 @@ const App = (() => {
 
     const fill = `${line} L${W},${H} L0,${H} Z`;
 
+    const eqOn    = document.getElementById('eq-toggle')?.classList.contains('on') ?? true;
+    const color   = eqOn ? '#4A88F5' : '#666';
+    const opacity = eqOn ? '0.25'    : '0.10';
+
     svg.innerHTML = `
       <defs><linearGradient id="cg" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stop-color="#4A88F5" stop-opacity="0.25"/>
-        <stop offset="100%" stop-color="#4A88F5" stop-opacity="0"/>
+        <stop offset="0%" stop-color="${color}" stop-opacity="${opacity}"/>
+        <stop offset="100%" stop-color="${color}" stop-opacity="0"/>
       </linearGradient></defs>
       <path d="${fill}" fill="url(#cg)" stroke="none"/>
-      <path d="${line}" fill="none" stroke="#4A88F5" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="${line}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
     `;
   }
 

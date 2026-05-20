@@ -3935,10 +3935,6 @@ body.queue-open #mini-player { z-index: 65; }
     width: auto !important;
     min-width: 0;
   }
-  /* Hide only the EQ curve in the overlay on mobile (pre-amp/balance remain visible) */
-  #overlay-eq .eq-curve-wrap {
-    display: none !important;
-  }
 }
 
 /* ── Mobile narrow-screen shrink ─────────────────────────── */
@@ -5614,9 +5610,9 @@ body.queue-open #mini-player { z-index: 65; }
   transition: opacity 0.2s;
 }
 
-/* EQ curve — standalone block between sliders and presets */
+/* EQ curve — visible on all screen sizes */
 .eq-curve-wrap {
-  display: none;          /* hidden on mobile; shown on desktop via media query */
+  display: block;
   height: 76px;
   padding: 4px 16px 8px;
   box-sizing: border-box;
