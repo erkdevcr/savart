@@ -3935,9 +3935,8 @@ body.queue-open #mini-player { z-index: 65; }
     width: auto !important;
     min-width: 0;
   }
-  /* Hide the EQ curve and pre-amp/balance row in the overlay on mobile */
-  #overlay-eq .eq-curve-wrap,
-  #overlay-eq .eq-preamp-balance-row {
+  /* Hide only the EQ curve in the overlay on mobile (pre-amp/balance remain visible) */
+  #overlay-eq .eq-curve-wrap {
     display: none !important;
   }
 }
@@ -5696,6 +5695,27 @@ body.queue-open #mini-player { z-index: 65; }
   border: none;
   cursor: pointer;
   box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+}
+
+/* Slider wrapper + center tick */
+.eq-pb-slider-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.eq-pb-slider-wrap .eq-pb-slider {
+  width: 100%;
+}
+.eq-pb-center-tick {
+  position: absolute;
+  left: 50%;
+  bottom: -5px;
+  width: 2px;
+  height: 5px;
+  background: rgba(255,255,255,0.25);
+  border-radius: 1px;
+  transform: translateX(-50%);
+  pointer-events: none;
 }
 
 /* Custom presets section wrapper */

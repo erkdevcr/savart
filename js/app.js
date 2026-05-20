@@ -12059,7 +12059,7 @@ const App = (() => {
 
     const pts = gains.map((g, i) => ({
       x: (i / (n - 1)) * W,
-      y: H / 2 - (g / 12) * (H / 2 - 6),
+      y: H / 2 - (g / 12) * (H / 2 - 14),
     }));
 
     // Catmull-Rom → cubic Bezier (smooth curve through all points)
