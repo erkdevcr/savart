@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.240';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.240 — fix Most Played sync: separate playCountsClearedAt from homeCleared
+const APP_VERSION  = '3.5.241';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.241 — expanded player: solid dark bg + own dot-grid canvas (bg-dots-exp)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

@@ -1,13 +1,20 @@
 /* ============================================================
    Savart — Animated dot-grid background canvas
+   Draws on two canvases simultaneously:
+     #bg-dots      — global fixed background (behind all page content)
+     #bg-dots-exp  — inside #player-expanded (above its solid dark bg,
+                     below its in-flow content via z-index: -1)
    Each blob has its own speed multiplier + dual-frequency drift
    so motion stays organic and never fully repeats.
    ============================================================ */
 
 (() => {
-  const canvas = document.getElementById('bg-dots');
-  if (!canvas) return;
-  const ctx = canvas.getContext('2d');
+  const canvasMain = document.getElementById('bg-dots');
+  const canvasExp  = document.getElementById('bg-dots-exp');
+  if (!canvasMain) return;
+
+  const ctxMain = canvasMain.getContext('2d');
+  const ctxExp  = canvasExp  ? canvasExp.getContext('2d') : null;
 
   const SPACING = 17;
   const DOT_R   = 0.9;
@@ -25,48 +32,54 @@
     { bx:0.72, by:0.82, r:0.20, ax:0.06, ay:0.08, px:1.60, py:0.40, sp:1.43, ax2:0.06, ay2:0.03, px2:0.50, py2:2.10 },
   ];
 
-  let W, H, cols, rows, gridX, gridY, then = null, t = 0;
+  // Global canvas dimensions (full viewport)
+  let W, H, cols, rows, gridX, gridY;
+  // Expanded-player canvas dimensions (its own bounding box)
+  let Wexp, Hexp, colsExp, rowsExp, gridXexp, gridYexp;
+  let then = null, t = 0;
 
   function resize() {
-    W = canvas.width  = window.innerWidth;
-    H = canvas.height = window.innerHeight;
+    W = canvasMain.width  = window.innerWidth;
+    H = canvasMain.height = window.innerHeight;
     cols = Math.ceil(W / SPACING) + 1;
     rows = Math.ceil(H / SPACING) + 1;
     gridX = new Float32Array(cols);
     gridY = new Float32Array(rows);
     for (let c = 0; c < cols; c++) gridX[c] = c * SPACING + SPACING / 2;
     for (let r = 0; r < rows; r++) gridY[r] = r * SPACING + SPACING / 2;
+
+    if (canvasExp) {
+      // Use the parent element's size (the player panel)
+      const parent = canvasExp.parentElement;
+      Wexp = canvasExp.width  = parent ? parent.offsetWidth  : window.innerWidth;
+      Hexp = canvasExp.height = parent ? parent.offsetHeight : window.innerHeight;
+      colsExp = Math.ceil(Wexp / SPACING) + 1;
+      rowsExp = Math.ceil(Hexp / SPACING) + 1;
+      gridXexp = new Float32Array(colsExp);
+      gridYexp = new Float32Array(rowsExp);
+      for (let c = 0; c < colsExp; c++) gridXexp[c] = c * SPACING + SPACING / 2;
+      for (let r = 0; r < rowsExp; r++) gridYexp[r] = r * SPACING + SPACING / 2;
+    }
   }
 
-  function frame(now) {
-    requestAnimationFrame(frame);
-    if (then === null) then = now;
-    t += (now - then) / 1000;
-    then = now;
-
-    ctx.clearRect(0, 0, W, H);
-
-    const maxDim = Math.max(W, H);
-    const bPos = blobs.map(b => {
-      const f  = t * SPEED * Math.PI * 2 * b.sp;
-      const f2 = t * SPEED * Math.PI * 2 * b.sp * 1.618; // golden ratio offset for second wave
-      return {
-        x:  (b.bx + Math.sin(f  + b.px)  * b.ax
-                  + Math.sin(f2 + b.px2) * b.ax2) * W,
-        y:  (b.by + Math.cos(f  + b.py)  * b.ay
-                  + Math.cos(f2 + b.py2) * b.ay2) * H,
-        r2: (b.r * maxDim) ** 2,
-      };
-    });
+  function drawGrid(ctx, gW, gH, gCols, gRows, gX, gY, bPos) {
+    const maxDim = Math.max(gW, gH);
+    // Re-scale blob positions for this canvas's dimensions
+    const localBPos = blobs.map((b, i) => ({
+      x:  bPos[i].nx * gW,
+      y:  bPos[i].ny * gH,
+      r2: (b.r * maxDim) ** 2,
+    }));
 
     ctx.fillStyle = 'rgb(80,150,255)';
+    ctx.clearRect(0, 0, gW, gH);
 
-    for (let c = 0; c < cols; c++) {
-      const x = gridX[c];
-      for (let r = 0; r < rows; r++) {
-        const y = gridY[r];
+    for (let c = 0; c < gCols; c++) {
+      const x = gX[c];
+      for (let r = 0; r < gRows; r++) {
+        const y = gY[r];
         let minRatio = Infinity;
-        for (const b of bPos) {
+        for (const b of localBPos) {
           const dx = x - b.x, dy = y - b.y;
           const ratio = (dx * dx + dy * dy) / b.r2;
           if (ratio < minRatio) minRatio = ratio;
@@ -83,6 +96,31 @@
       }
     }
     ctx.globalAlpha = 1;
+  }
+
+  function frame(now) {
+    requestAnimationFrame(frame);
+    if (then === null) then = now;
+    t += (now - then) / 1000;
+    then = now;
+
+    // Compute normalised blob positions (0–1) once, shared by both canvases
+    const bPos = blobs.map(b => {
+      const f  = t * SPEED * Math.PI * 2 * b.sp;
+      const f2 = t * SPEED * Math.PI * 2 * b.sp * 1.618;
+      return {
+        nx: b.bx + Math.sin(f  + b.px)  * b.ax + Math.sin(f2 + b.px2) * b.ax2,
+        ny: b.by + Math.cos(f  + b.py)  * b.ay + Math.cos(f2 + b.py2) * b.ay2,
+      };
+    });
+
+    // Draw on the global background canvas
+    drawGrid(ctxMain, W, H, cols, rows, gridX, gridY, bPos);
+
+    // Draw on the expanded-player canvas (only when it's visible)
+    if (ctxExp && Wexp > 0 && Hexp > 0) {
+      drawGrid(ctxExp, Wexp, Hexp, colsExp, rowsExp, gridXexp, gridYexp, bPos);
+    }
   }
 
   window.addEventListener('resize', resize);
