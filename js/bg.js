@@ -1,9 +1,7 @@
 /* ============================================================
-   Savart — Dot-grid background canvas
-   Draws a white dot grid over the base background, with
-   "blobs" that fade the dots near their centres, creating
-   organic dark zones across the surface.
-   Redraws on window resize (debounced 150 ms).
+   Savart — Animated dot-grid background canvas
+   Blobs drift slowly with sine/cosine motion, creating organic
+   dark zones that float across the dot grid.
    ============================================================ */
 
 (() => {
@@ -11,66 +9,80 @@
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
 
-  /* Blob positions (relative to viewport) and radii */
-  const BLOBS = [
-    { x: 0.08, y: 0.12, r: 0.18 },
-    { x: 0.35, y: 0.05, r: 0.14 },
-    { x: 0.65, y: 0.18, r: 0.20 },
-    { x: 0.90, y: 0.08, r: 0.16 },
-    { x: 0.15, y: 0.50, r: 0.17 },
-    { x: 0.50, y: 0.45, r: 0.22 },
-    { x: 0.80, y: 0.55, r: 0.15 },
-    { x: 0.05, y: 0.85, r: 0.19 },
-    { x: 0.40, y: 0.90, r: 0.16 },
-    { x: 0.72, y: 0.82, r: 0.20 },
-    { x: 0.95, y: 0.75, r: 0.14 },
-    { x: 0.25, y: 0.70, r: 0.13 },
+  const SPACING = 17;
+  const DOT_R   = 0.9;
+  const SPEED   = 0.4; // cycles per second — lower = slower
+
+  const blobs = [
+    { bx:0.08, by:0.12, r:0.18, ax:0.06, ay:0.04, px:0.00, py:1.00 },
+    { bx:0.35, by:0.05, r:0.14, ax:0.05, ay:0.06, px:1.20, py:0.30 },
+    { bx:0.65, by:0.18, r:0.20, ax:0.07, ay:0.05, px:2.10, py:0.80 },
+    { bx:0.90, by:0.08, r:0.16, ax:0.04, ay:0.07, px:0.70, py:1.50 },
+    { bx:0.15, by:0.50, r:0.17, ax:0.06, ay:0.05, px:1.80, py:0.20 },
+    { bx:0.50, by:0.45, r:0.22, ax:0.05, ay:0.06, px:0.40, py:2.00 },
+    { bx:0.80, by:0.55, r:0.15, ax:0.07, ay:0.04, px:2.50, py:0.60 },
+    { bx:0.05, by:0.85, r:0.19, ax:0.04, ay:0.06, px:1.00, py:1.20 },
+    { bx:0.40, by:0.90, r:0.16, ax:0.06, ay:0.05, px:0.20, py:0.90 },
+    { bx:0.72, by:0.82, r:0.20, ax:0.05, ay:0.07, px:1.60, py:0.40 },
+    { bx:0.95, by:0.75, r:0.14, ax:0.07, ay:0.04, px:3.00, py:1.80 },
+    { bx:0.25, by:0.70, r:0.13, ax:0.05, ay:0.06, px:0.90, py:2.20 },
   ];
 
-  const SPACING = 17; // px between dot centres
-  const DOT_R   = 0.9;  // dot radius in px (−10 %)
+  let W, H, cols, rows, gridX, gridY, then = null, t = 0;
 
-  function draw() {
-    const W = window.innerWidth;
-    const H = window.innerHeight;
-    canvas.width  = W;
-    canvas.height = H;
+  function resize() {
+    W = canvas.width  = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+    cols = Math.ceil(W / SPACING) + 1;
+    rows = Math.ceil(H / SPACING) + 1;
+    gridX = new Float32Array(cols);
+    gridY = new Float32Array(rows);
+    for (let c = 0; c < cols; c++) gridX[c] = c * SPACING + SPACING / 2;
+    for (let r = 0; r < rows; r++) gridY[r] = r * SPACING + SPACING / 2;
+  }
+
+  function frame(now) {
+    requestAnimationFrame(frame);
+    if (then === null) then = now;
+    t += (now - then) / 1000;
+    then = now;
+
+    ctx.clearRect(0, 0, W, H);
 
     const maxDim = Math.max(W, H);
+    const bPos = blobs.map(b => ({
+      x:  (b.bx + Math.sin(t * SPEED * Math.PI * 2 + b.px) * b.ax) * W,
+      y:  (b.by + Math.cos(t * SPEED * Math.PI * 2 + b.py) * b.ay) * H,
+      r2: (b.r * maxDim) ** 2,
+    }));
 
-    for (let x = SPACING / 2; x < W; x += SPACING) {
-      for (let y = SPACING / 2; y < H; y += SPACING) {
-        /* Find the closest blob (normalized distance) */
-        let minDist = Infinity;
-        for (const b of BLOBS) {
-          const bx = b.x * W, by = b.y * H, br = b.r * maxDim;
-          const dx = x - bx, dy = y - by;
-          const d = Math.sqrt(dx * dx + dy * dy) / br;
-          if (d < minDist) minDist = d;
+    ctx.fillStyle = 'rgb(80,150,255)';
+
+    for (let c = 0; c < cols; c++) {
+      const x = gridX[c];
+      for (let r = 0; r < rows; r++) {
+        const y = gridY[r];
+        let minRatio = Infinity;
+        for (const b of bPos) {
+          const dx = x - b.x, dy = y - b.y;
+          const ratio = (dx * dx + dy * dy) / b.r2;
+          if (ratio < minRatio) minRatio = ratio;
         }
-
-        /* Alpha: fade to 0 near blob centres */
         let alpha;
-        if      (minDist < 0.5) { alpha = 0; }
-        else if (minDist < 1.0) { alpha = (minDist - 0.5) / 0.5; }
-        else                    { alpha = 1; }
-
-        if (alpha <= 0) continue;
-
+        if      (minRatio < 0.25) alpha = 0;
+        else if (minRatio < 1.00) alpha = (minRatio - 0.25) / 0.75;
+        else                      alpha = 1;
+        if (alpha <= 0.01) continue;
+        ctx.globalAlpha = alpha * 0.25;
         ctx.beginPath();
         ctx.arc(x, y, DOT_R, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(80,150,255,${(0.25 * alpha).toFixed(3)})`;
         ctx.fill();
       }
     }
+    ctx.globalAlpha = 1;
   }
 
-  /* Debounced resize */
-  let _resizeTimer = null;
-  window.addEventListener('resize', () => {
-    clearTimeout(_resizeTimer);
-    _resizeTimer = setTimeout(draw, 150);
-  });
-
-  draw();
+  window.addEventListener('resize', resize);
+  resize();
+  requestAnimationFrame(frame);
 })();
