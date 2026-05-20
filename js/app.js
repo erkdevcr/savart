@@ -1289,12 +1289,14 @@ const App = (() => {
   async function _onBlobReady(item, blob) {
     if (typeof Meta === 'undefined') return;
     try {
-      let meta = await Meta.parse(item.id, blob);
+      // Pass 1: parse a 1MB head slice — avoids loading a 50MB+ ArrayBuffer into memory
+      // just to read a tag that is almost always in the first few hundred KB.
+      // This is the single biggest RAM savings for large audio files (FLAC, high-bitrate MP3).
+      const _headBlob = blob.size > 1024 * 1024 ? blob.slice(0, 1024 * 1024) : blob;
+      let meta = await Meta.parse(item.id, _headBlob);
 
-      // If the cache returned a result with no cover (e.g. soft scan parsed a 1MB head
-      // that didn't reach the APIC frame) and we now have a larger blob (the full audio
-      // file), force a fresh full-file parse so covers embedded beyond 1MB are found.
-      // This is the primary fix for large embedded cover art (>1MB APIC frames).
+      // Pass 2: if no cover was found and the full file is larger, retry with the full blob.
+      // Covers embedded beyond the 1MB boundary (rare, usually hi-res art) are found here.
       if (!meta.coverUrl && !meta.coverBlob && blob.size > 1024 * 1024) {
         const fullMeta = await Meta.parse(item.id, blob, true).catch(() => null);
         if (fullMeta?.coverUrl) meta = fullMeta;

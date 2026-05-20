@@ -37,9 +37,10 @@ const Meta = (() => {
   const _objectUrls = new Set();
 
   // Maximum number of entries kept in the cache.
-  // Home screen shows ≤ 50 songs simultaneously; 80 gives comfortable headroom
-  // for pinned items, currently playing track, and recently browsed songs.
-  const _MAX_CACHE = 80;
+  // Home screen shows ≤ 50 songs simultaneously; 40 is enough for the currently
+  // playing track, visible home cards, and recently browsed items — while keeping
+  // RAM usage low (each entry holds a cover blob: URL that occupies live memory).
+  const _MAX_CACHE = 40;
 
   /* ── LRU helpers ─────────────────────────────────────────── */
 

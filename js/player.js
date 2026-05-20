@@ -719,8 +719,12 @@ const Player = (() => {
         try { _onBlobReady(item, blob); } catch (e) { console.warn('[Player] onBlobReady error:', e); }
       }
 
-      // Revoke previous blob URL to free memory
+      // Release previous audio: clear src FIRST so Chrome's media engine drops its
+      // internal decoded PCM buffer, THEN revoke the object URL so the GC can free
+      // the underlying blob data. Without src='', Chrome holds decoded audio in the
+      // renderer heap even after the blob URL is revoked.
       if (_currentBlob) {
+        _audio.src = '';
         URL.revokeObjectURL(_currentBlob);
         _currentBlob = null;
       }
