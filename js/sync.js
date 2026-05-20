@@ -725,9 +725,17 @@ const Sync = (() => {
             if (remoteManualAt > 0) {
               merged.thumbnailUrl = item.thumbnailUrl; // manual edit — always propagate
             } else {
-              const hasLocalCover = (merged.thumbnailUrl && merged.thumbnailUrl !== 'id3')
-                                  || merged.coverBlob;
-              if (!hasLocalCover) merged.thumbnailUrl = item.thumbnailUrl;
+              // Fill-only: apply only when local has no *external* thumbnail URL.
+              // coverBlob (ID3 embedded art) is intentionally excluded from this check —
+              // it is used for offline audio playback but is NOT a syncable external URL.
+              // A song can have coverBlob for local playback AND a remote-sourced thumbnailUrl
+              // for display/sync; the two fields serve different purposes.
+              // Example bug without this fix: Device B has coverBlob+thumbnailUrl='id3',
+              // Device A auto-enriched with a Last.fm URL → Device B never received it.
+              const hasLocalExternalUrl = merged.thumbnailUrl
+                && merged.thumbnailUrl !== 'id3'
+                && !merged.thumbnailUrl.startsWith('blob:');
+              if (!hasLocalExternalUrl) merged.thumbnailUrl = item.thumbnailUrl;
             }
           }
           // coverUrl (album folder header cover) — same manual-override / fill-only rules.
@@ -1541,9 +1549,10 @@ const Sync = (() => {
             if (remoteManualAt > 0) {
               merged.thumbnailUrl = item.thumbnailUrl; // manual edit — always propagate
             } else {
-              const hasLocalCover = (merged.thumbnailUrl && merged.thumbnailUrl !== 'id3')
-                                  || merged.coverBlob;
-              if (!hasLocalCover) merged.thumbnailUrl = item.thumbnailUrl;
+              const hasLocalExternalUrl = merged.thumbnailUrl
+                                       && merged.thumbnailUrl !== 'id3'
+                                       && !merged.thumbnailUrl.startsWith('blob:');
+              if (!hasLocalExternalUrl) merged.thumbnailUrl = item.thumbnailUrl;
             }
           }
           // coverUrl (album folder header cover) — same rules
