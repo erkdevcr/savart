@@ -6178,6 +6178,17 @@ body.queue-open #mini-player { z-index: 65; }
 #screen-deep-scan {
   background: var(--bg-base);
   overflow: hidden; /* ds-header is sticky; inner lists scroll independently */
+  position: relative;
+  isolation: isolate; /* stacking context so z-index:-1 canvas stays above bg */
+}
+#bg-dots-ds {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  pointer-events: none;
+  display: block;
 }
 
 /* ── Header ─────────────────────────────────────────────────── */

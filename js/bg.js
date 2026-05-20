@@ -1,9 +1,10 @@
 /* ============================================================
    Savart — Animated dot-grid background canvas
-   Draws on two canvases simultaneously:
+   Draws on three canvases simultaneously:
      #bg-dots      — global fixed background (behind all page content)
      #bg-dots-exp  — inside #player-expanded (above its solid dark bg,
                      below its in-flow content via z-index: -1)
+     #bg-dots-ds   — inside #screen-deep-scan (same layering as exp)
    Each blob has its own speed multiplier + dual-frequency drift
    so motion stays organic and never fully repeats.
    ============================================================ */
@@ -11,10 +12,12 @@
 (() => {
   const canvasMain = document.getElementById('bg-dots');
   const canvasExp  = document.getElementById('bg-dots-exp');
+  const canvasDs   = document.getElementById('bg-dots-ds');
   if (!canvasMain) return;
 
   const ctxMain = canvasMain.getContext('2d');
   const ctxExp  = canvasExp ? canvasExp.getContext('2d') : null;
+  const ctxDs   = canvasDs  ? canvasDs.getContext('2d')  : null;
 
   const SPACING = 17;
   const DOT_R   = 0.9;
@@ -34,6 +37,8 @@
   let W, H, cols, rows, gridX, gridY;
   // Expanded-player canvas state
   let Wexp = 0, Hexp = 0, colsExp, rowsExp, gridXexp, gridYexp;
+  // Deep-scan screen canvas state
+  let Wds = 0, Hds = 0, colsDs, rowsDs, gridXds, gridYds;
   let then = null, t = 0;
 
   /* ── Resize helpers ──────────────────────────────────────── */
@@ -61,19 +66,42 @@
     for (let r = 0; r < rowsExp; r++) gridYexp[r] = r * SPACING + SPACING / 2;
   }
 
-  /* ResizeObserver watches the player element — fires whenever it becomes
-     visible or changes size, even if window.resize hasn't fired.
-     This is the key fix for mobile: the player is display:none at boot,
-     so offsetWidth/Height are 0 until the user opens it. */
-  if (canvasExp && window.ResizeObserver) {
-    const ro = new ResizeObserver(entries => {
-      for (const entry of entries) {
-        const { inlineSize: w, blockSize: h } = entry.contentBoxSize?.[0] ||
-          { inlineSize: entry.contentRect.width, blockSize: entry.contentRect.height };
-        if (w > 0 && h > 0) resizeExp(Math.round(w), Math.round(h));
-      }
-    });
-    ro.observe(canvasExp.parentElement); // observe #player-expanded
+  function resizeDs(w, h) {
+    if (!canvasDs) return;
+    Wds = canvasDs.width  = w;
+    Hds = canvasDs.height = h;
+    colsDs = Math.ceil(Wds / SPACING) + 1;
+    rowsDs = Math.ceil(Hds / SPACING) + 1;
+    gridXds = new Float32Array(colsDs);
+    gridYds = new Float32Array(rowsDs);
+    for (let c = 0; c < colsDs; c++) gridXds[c] = c * SPACING + SPACING / 2;
+    for (let r = 0; r < rowsDs; r++) gridYds[r] = r * SPACING + SPACING / 2;
+  }
+
+  /* ResizeObserver watches container elements — fires whenever they become
+     visible or change size, even if window.resize hasn't fired.
+     Key fix for mobile: sections are display:none at boot. */
+  if (window.ResizeObserver) {
+    if (canvasExp) {
+      const ro = new ResizeObserver(entries => {
+        for (const entry of entries) {
+          const { inlineSize: w, blockSize: h } = entry.contentBoxSize?.[0] ||
+            { inlineSize: entry.contentRect.width, blockSize: entry.contentRect.height };
+          if (w > 0 && h > 0) resizeExp(Math.round(w), Math.round(h));
+        }
+      });
+      ro.observe(canvasExp.parentElement); // observe #player-expanded
+    }
+    if (canvasDs) {
+      const ro = new ResizeObserver(entries => {
+        for (const entry of entries) {
+          const { inlineSize: w, blockSize: h } = entry.contentBoxSize?.[0] ||
+            { inlineSize: entry.contentRect.width, blockSize: entry.contentRect.height };
+          if (w > 0 && h > 0) resizeDs(Math.round(w), Math.round(h));
+        }
+      });
+      ro.observe(canvasDs.parentElement); // observe #screen-deep-scan
+    }
   }
 
   /* ── Draw grid on any canvas ─────────────────────────────── */
@@ -120,7 +148,7 @@
     t += (now - then) / 1000;
     then = now;
 
-    // Compute normalised blob positions once — shared by both canvases
+    // Compute normalised blob positions once — shared by all canvases
     const bPos = blobs.map(b => {
       const f  = t * SPEED * Math.PI * 2 * b.sp;
       const f2 = t * SPEED * Math.PI * 2 * b.sp * 1.618;
@@ -134,6 +162,10 @@
 
     if (ctxExp && Wexp > 0 && Hexp > 0) {
       drawGrid(ctxExp, Wexp, Hexp, colsExp, rowsExp, gridXexp, gridYexp, bPos);
+    }
+
+    if (ctxDs && Wds > 0 && Hds > 0) {
+      drawGrid(ctxDs, Wds, Hds, colsDs, rowsDs, gridXds, gridYds, bPos);
     }
   }
 

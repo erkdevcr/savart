@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.250';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.250 — DS: convert button aligned left via margin-right:auto
+const APP_VERSION  = '3.5.251';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.251 — dot grid in DS section (#bg-dots-ds canvas, ResizeObserver)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
