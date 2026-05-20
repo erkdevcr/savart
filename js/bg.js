@@ -27,7 +27,7 @@
     { x: 0.25, y: 0.70, r: 0.13 },
   ];
 
-  const SPACING = 20; // px between dot centres (−10 % from 22)
+  const SPACING = 17; // px between dot centres
   const DOT_R   = 0.9;  // dot radius in px (−10 %)
 
   function draw() {
