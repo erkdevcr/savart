@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.247';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.247 — thumbnailUrl sync: coverBlob no longer blocks external URL propagation
+const APP_VERSION  = '3.5.248';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.248 — DS: persist folder.name in session on save so re-renders show the updated name
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

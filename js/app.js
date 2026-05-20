@@ -7922,6 +7922,16 @@ const App = (() => {
         const skippedEntry = _dsSession?.skippedList?.[folderId];
         if (skippedEntry) skippedEntry.coverUrl = coverUrl;
       }
+      // Persist the display name so list re-renders (toggle / nav back) show the new name.
+      // In collection mode the user edits colName; in album mode they edit album.
+      const _newDisplayName = isColMode ? colName : album;
+      if (_newDisplayName) {
+        if (sessionFolder) sessionFolder.name = _newDisplayName;
+        const _completedEntry = _dsSession?.completedList?.[folderId];
+        if (_completedEntry) _completedEntry.name = _newDisplayName;
+        const _skippedEntry = _dsSession?.skippedList?.[folderId];
+        if (_skippedEntry) _skippedEntry.name = _newDisplayName;
+      }
 
       if (sessionFolder) {
         sessionFolder.attended = true;
