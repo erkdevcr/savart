@@ -10910,6 +10910,9 @@ const App = (() => {
   async function onSongEdit(songId, patch) {
     if (!songId) throw new Error('songId required');
 
+    // Read existing meta BEFORE the write — needed for Soundrop reorganization comparison
+    const existingMeta = await DB.getMeta(songId).catch(() => null);
+
     const dbPatch = { manualAt: Date.now() };
     if (patch.displayName) dbPatch.displayName  = patch.displayName;
     if (patch.artist)      dbPatch.artist       = patch.artist;
@@ -10940,6 +10943,67 @@ const App = (() => {
 
     // Refresh home if visible so recents/top-played cards show updated info
     if (UI.getCurrentView() === 'home') _loadHomeData().catch(() => {});
+
+    // Soundrop file reorganization — only for files saved from Soundrop to Drive.
+    // Runs in background (non-blocking) — a toast notifies on success.
+    if (existingMeta?.soundropSaved && (patch.artist || patch.album || patch.displayName)) {
+      _reorganizeSoundropFile(songId, existingMeta, patch).catch(err => {
+        console.warn('[App] Soundrop reorganize failed:', err?.message);
+      });
+    }
+  }
+
+  /**
+   * Move and/or rename a Soundrop-saved Drive file to match updated metadata.
+   * Target path: Soundrop/{Artist}/{Album}/{Artist - Title.mp3}
+   * Only reorganizes if the artist, album, or title actually changed.
+   * Runs in the background — failures are non-fatal (logged only).
+   *
+   * @param {string} songId       — Drive file ID
+   * @param {object} oldMeta      — DB meta snapshot before the edit
+   * @param {object} patch        — fields that were just edited (may be partial)
+   */
+  async function _reorganizeSoundropFile(songId, oldMeta, patch) {
+    if (!Auth.isAuthenticated() || typeof Drive === 'undefined') return;
+
+    // Resolve effective values: edited value → existing DB value → empty
+    const artist = (patch.artist      ?? oldMeta.artist      ?? '').trim();
+    const album  = (patch.album       ?? oldMeta.album       ?? '').trim();
+    const title  = (patch.displayName ?? oldMeta.displayName ?? oldMeta.name ?? '').trim();
+
+    // Build new target folder path inside Soundrop root
+    const soundropRootId = await Drive.findOrCreateFolder('Soundrop', CONFIG.ROOT_FOLDER_ID);
+    let newFolderId = soundropRootId;
+    if (artist) {
+      newFolderId = await Drive.findOrCreateFolder(artist, soundropRootId);
+      if (album) {
+        newFolderId = await Drive.findOrCreateFolder(album, newFolderId);
+      }
+    }
+
+    const oldFolderId = oldMeta.folderId;
+    const folderChanged = oldFolderId && oldFolderId !== newFolderId;
+
+    // Build new filename: "Artist - Title.mp3"  (or just "Title.mp3" if no artist)
+    const newName = artist ? `${artist} - ${title}.mp3` : `${title}.mp3`;
+    const nameChanged = newName !== (oldMeta.name ?? '');
+
+    if (!folderChanged && !nameChanged) return; // nothing to do
+
+    // Single PATCH call: move + rename together when both change
+    await Drive.updateFileMeta(songId, {
+      ...(nameChanged   ? { name: newName }                                    : {}),
+      ...(folderChanged ? { addParents: newFolderId, removeParents: oldFolderId } : {}),
+    });
+
+    // Keep DB in sync with the new Drive state
+    const dbUpdate = {};
+    if (folderChanged) dbUpdate.folderId = newFolderId;
+    if (nameChanged)   dbUpdate.name     = newName;
+    await DB.setMeta(songId, dbUpdate);
+
+    console.log(`[App] Soundrop reorganized: "${newName}" → ${artist || '(root)'}/${album || ''}`);
+    UI.showToast(`📁 ${newName}`, 'success');
   }
 
   /**
@@ -12402,6 +12466,7 @@ const App = (() => {
           folderId:     driveFolderId,
           thumbnailUrl: track.thumbnailUrl || undefined,
           manualAt:     Date.now(),
+          soundropSaved: true,  // marks this as a Soundrop-saved file eligible for auto-reorganize
         });
         // Push full metadata sync (debounced 2 s)
         Sync.push('metadata');

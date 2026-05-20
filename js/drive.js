@@ -577,6 +577,34 @@ const Drive = (() => {
     return data.id;
   }
 
+  /* ── updateFileMeta ─────────────────────────────────────── */
+  /**
+   * Move and/or rename a Drive file in a single PATCH request.
+   *
+   * @param {string} fileId
+   * @param {object} opts
+   * @param {string} [opts.name]          — new filename (omit to keep current)
+   * @param {string} [opts.addParents]    — new parent folder ID
+   * @param {string} [opts.removeParents] — old parent folder ID to remove
+   * @returns {Promise<{id, name, parents}>}
+   */
+  async function updateFileMeta(fileId, { name, addParents, removeParents } = {}) {
+    const params = new URLSearchParams({ fields: 'id,name,parents' });
+    if (addParents)    params.set('addParents',    addParents);
+    if (removeParents) params.set('removeParents', removeParents);
+
+    const body = {};
+    if (name) body.name = name;
+
+    const url = `${CONFIG.API_BASE}/files/${fileId}?${params}`;
+    const res = await _fetch(url, {
+      method:  'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(body),
+    });
+    return await res.json();
+  }
+
   /* ── Expose ─────────────────────────────────────────────── */
   return {
     listFolder,
@@ -592,6 +620,7 @@ const Drive = (() => {
     setAppProperties,
     findOrCreateFolder,
     uploadFile,
+    updateFileMeta,
     AuthError,
     DriveError,
   };
