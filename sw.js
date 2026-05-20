@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.251';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.251 — dot grid in DS section (#bg-dots-ds canvas, ResizeObserver)
+const APP_VERSION  = '3.5.252';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.252 — desktop volume slider above action buttons, resets to 100% on login
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

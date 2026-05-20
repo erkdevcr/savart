@@ -3110,6 +3110,11 @@ img { display: block; }
   box-shadow: 0 3px 12px rgba(74,136,245,0.3);
 }
 
+/* Desktop volume slider — hidden on mobile */
+.pexp-volume-row {
+  display: none; /* shown only in the desktop media query below */
+}
+
 /* Action shortcuts */
 .pexp-actions {
   display: flex;
@@ -3238,12 +3243,68 @@ img { display: block; }
   .pexp-play-btn { width: 52px; height: 52px; }
   .pexp-ctrl-btn { width: 40px; height: 40px; }
 
+  /* Volume slider row */
+  .pexp-volume-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 4px 12px;
+    margin-top: auto;
+  }
+  .pexp-vol-icon {
+    flex-shrink: 0;
+    color: var(--text-secondary);
+  }
+  .pexp-volume-slider {
+    flex: 1;
+    -webkit-appearance: none;
+    appearance: none;
+    height: 3px;
+    border-radius: 2px;
+    background: linear-gradient(
+      to right,
+      var(--accent, #4a88f5) 0%,
+      var(--accent, #4a88f5) var(--vol-pct, 100%),
+      var(--bg-hover, rgba(255,255,255,0.1)) var(--vol-pct, 100%),
+      var(--bg-hover, rgba(255,255,255,0.1)) 100%
+    );
+    outline: none;
+    cursor: pointer;
+  }
+  .pexp-volume-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 13px;
+    height: 13px;
+    border-radius: 50%;
+    background: var(--text-primary, #fff);
+    cursor: pointer;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+    transition: transform 0.1s;
+  }
+  .pexp-volume-slider::-webkit-slider-thumb:hover { transform: scale(1.2); }
+  .pexp-volume-slider::-moz-range-thumb {
+    width: 13px;
+    height: 13px;
+    border-radius: 50%;
+    background: var(--text-primary, #fff);
+    border: none;
+    cursor: pointer;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+  }
+  .pexp-vol-label {
+    font-size: 11px;
+    color: var(--text-secondary);
+    min-width: 30px;
+    text-align: right;
+    flex-shrink: 0;
+  }
+
   /* Action buttons: compact icon-only column layout */
   .pexp-actions {
     padding-top: 10px;
     justify-content: space-around;
     gap: 0;
-    margin-top: auto;
+    margin-top: 0;
     flex-wrap: wrap;
   }
 

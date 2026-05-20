@@ -366,6 +366,16 @@ const App = (() => {
     const reconnecting = document.getElementById('login-reconnecting');
     if (reconnecting) reconnecting.style.display = 'none';
 
+    // Reset desktop volume slider to 100% on every login
+    const _volSlider = document.getElementById('pexp-volume-slider');
+    if (_volSlider) {
+      _volSlider.value = 100;
+      _volSlider.style.setProperty('--vol-pct', '100%');
+      const _volLabel = document.getElementById('pexp-vol-label');
+      if (_volLabel) _volLabel.textContent = '100%';
+    }
+    Player.setVolume?.(1.0);
+
     // Show the "loading from cloud" toast while Drive data syncs.
     // Start hidden in HTML so it never flashes during login; show it here
     // explicitly with a fade-in and enforce a minimum display of 1.2 s so
@@ -12259,6 +12269,17 @@ const App = (() => {
       e.stopPropagation();
       const vol = parseInt(e.target.value) / 100;
       Player.setVolume?.(vol);
+    });
+
+    // Desktop expanded-player volume slider
+    document.getElementById('pexp-volume-slider')?.addEventListener('input', (e) => {
+      e.stopPropagation();
+      const pct = parseInt(e.target.value);
+      const vol = pct / 100;
+      Player.setVolume?.(vol);
+      const label = document.getElementById('pexp-vol-label');
+      if (label) label.textContent = pct + '%';
+      e.target.style.setProperty('--vol-pct', pct + '%');
     });
 
     // Browse sort button → toggle dropdown
