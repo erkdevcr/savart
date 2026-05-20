@@ -47,12 +47,58 @@ const Auth = (() => {
     _onExpiring = onExpiring || (() => {});
     _onLogout   = onLogout   || (() => {});
 
+    // In Capacitor (Android/iOS), GIS popups don't work — we use a direct
+    // OAuth redirect instead. Check if the page loaded with a token in the URL.
+    if (_tryExtractTokenFromUrl()) {
+      console.log('[Auth] Token extracted from redirect URL (Capacitor flow).');
+      _setupGestureRenewal();
+      return;
+    }
+
     // Try to create token client now; if GIS hasn't loaded yet,
     // it will be created lazily when requestToken() is called or
     // when onGISLoad() fires via the script's onload attribute.
     _tryCreateClient();
     _setupGestureRenewal();
     console.log('[Auth] Initialized.');
+  }
+
+  /**
+   * Returns true if running inside a Capacitor native app (Android / iOS).
+   * Primary check: custom UA token injected via capacitor.config.json.
+   * Fallback: Capacitor bridge API.
+   */
+  function _isCapacitor() {
+    return navigator.userAgent.includes('SavartNative') ||
+           !!(window.Capacitor?.isNativePlatform?.());
+  }
+
+  /**
+   * After a Capacitor OAuth redirect, Google returns to the app URL with
+   * #access_token=...&expires_in=... in the hash. Parse it, store the
+   * token, clean the URL, and fire _onReady().
+   * Returns true if a token was found and consumed.
+   */
+  function _tryExtractTokenFromUrl() {
+    const hash = window.location.hash;
+    if (!hash || !hash.includes('access_token')) return false;
+    const params = new URLSearchParams(hash.substring(1));
+    const token     = params.get('access_token');
+    const expiresIn = params.get('expires_in');
+    if (!token) return false;
+
+    // Clean the token from the URL so it's not visible or reused on refresh
+    try { history.replaceState(null, '', window.location.pathname + window.location.search); } catch (_) {}
+
+    const expiresInMs = (parseInt(expiresIn, 10) || 3600) * 1000;
+    _saveToken(token, expiresInMs);
+
+    // Fire onReady asynchronously so the rest of init() can finish first
+    setTimeout(() => {
+      try { _onReady(); } catch (err) { console.error('[Auth] _onReady() threw:', err); }
+    }, 0);
+
+    return true;
   }
 
   /**
@@ -363,6 +409,21 @@ const Auth = (() => {
    * may complete immediately without user interaction.
    */
   function requestToken() {
+    // ── Capacitor: use direct OAuth redirect (GIS popups don't work) ──
+    if (_isCapacitor()) {
+      const redirectUri = 'https://erkdevcr.github.io/savart';
+      const params = new URLSearchParams({
+        client_id:     CONFIG.CLIENT_ID,
+        redirect_uri:  redirectUri,
+        response_type: 'token',
+        scope:         CONFIG.SCOPES,
+        prompt:        'select_account',
+      });
+      window.location.href = 'https://accounts.google.com/o/oauth2/v2/auth?' + params.toString();
+      return;
+    }
+
+    // ── Web: use GIS token client ───────────────────────────────────
     _tryCreateClient(); // last-chance init if GIS loaded after init()
     if (!_tokenClient) {
       console.error('[Auth] GIS not ready yet — try again in a moment');
