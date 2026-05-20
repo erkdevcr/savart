@@ -12052,7 +12052,9 @@ const App = (() => {
   function _drawEQCurve() {
     const svg = document.getElementById('eq-curve-svg');
     if (!svg) return;
-    const gains = Player.getEQGains();
+    // When EQ is bypassed (off), _eqBypassedGains holds the real user values;
+    // Player.getEQGains() would return zeros in that case — always draw the real shape.
+    const gains = _eqBypassedGains ?? Player.getEQGains();
     const W = 900, H = 80, n = gains.length;
 
     const pts = gains.map((g, i) => ({
@@ -13068,6 +13070,7 @@ const App = (() => {
           _eqBypassedGains = null;
         }
       }
+      _drawEQCurve(); // redraw — bypassed state changed, curve must reflect real gains
       _saveSettings();
     });
 
