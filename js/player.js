@@ -29,6 +29,8 @@ const Player = (() => {
   let _audioCtx     = null;      // AudioContext
   let _sourceNode   = null;      // MediaElementAudioSourceNode for _audio
   let _gainNode     = null;      // GainNode (master volume)
+  let _preAmpNode   = null;      // GainNode (pre-amp, before EQ) — default 1.0 (0 dB)
+  let _pannerNode   = null;      // StereoPannerNode (balance) — default 0 (center)
   let _eqNodes      = [];        // Array of 12 BiquadFilterNode
 
   let _queue        = [];        // DriveItem[]
@@ -295,6 +297,12 @@ const Player = (() => {
     _sdSourceNode = _audioCtx.createMediaElementSource(_sdAudio);
     _gainNode     = _audioCtx.createGain();
     _gainNode.gain.value = _volume;
+    _preAmpNode   = _audioCtx.createGain();
+    _preAmpNode.gain.value = 1.0; // 0 dB
+    _pannerNode   = _audioCtx.createStereoPanner
+                  ? _audioCtx.createStereoPanner()
+                  : null; // fallback: not all browsers support StereoPanner
+    if (_pannerNode) _pannerNode.pan.value = 0; // center
 
     // 12-band EQ
     _eqNodes = CONFIG.EQ_BANDS.map((freq, i) => {
@@ -306,16 +314,22 @@ const Player = (() => {
       return f;
     });
 
-    // Both sources feed into the same EQ → gain → destination chain.
+    // Graph: sources → preAmp → EQ[12] → volume → panner → destination
     // _sourceNode: Drive tracks  |  _sdSourceNode: Soundrop tracks (crossOrigin).
     // When one is paused it produces silence, so only the active one is heard.
-    _sourceNode.connect(_eqNodes[0]);
-    _sdSourceNode.connect(_eqNodes[0]);
+    _sourceNode.connect(_preAmpNode);
+    _sdSourceNode.connect(_preAmpNode);
+    _preAmpNode.connect(_eqNodes[0]);
     for (let i = 0; i < _eqNodes.length - 1; i++) {
       _eqNodes[i].connect(_eqNodes[i + 1]);
     }
     _eqNodes[_eqNodes.length - 1].connect(_gainNode);
-    _gainNode.connect(_audioCtx.destination);
+    if (_pannerNode) {
+      _gainNode.connect(_pannerNode);
+      _pannerNode.connect(_audioCtx.destination);
+    } else {
+      _gainNode.connect(_audioCtx.destination);
+    }
 
     _audioCtx.resume();
     console.log('[Player] Web Audio graph built (Drive + Soundrop sources).');
@@ -556,6 +570,23 @@ const Player = (() => {
   }
 
   function getVolume() { return _volume; }
+
+  /**
+   * Set pre-amp gain in dB (-12 to +12).
+   * Applied before the EQ chain so all bands are boosted/cut uniformly.
+   */
+  function setPreAmp(db) {
+    const clamped = Math.max(-12, Math.min(12, db));
+    if (_preAmpNode) _preAmpNode.gain.value = Math.pow(10, clamped / 20);
+  }
+
+  /**
+   * Set stereo balance (-1 = full left, 0 = center, +1 = full right).
+   */
+  function setBalance(pan) {
+    const clamped = Math.max(-1, Math.min(1, pan));
+    if (_pannerNode) _pannerNode.pan.value = clamped;
+  }
 
   /* ── Tempo (playback rate) ──────────────────────────────── */
 
@@ -976,6 +1007,9 @@ const Player = (() => {
     // Volume
     setVolume,
     getVolume,
+    // Pre-amp & Balance
+    setPreAmp,
+    setBalance,
     // Tempo
     setTempo,
     getTempo,

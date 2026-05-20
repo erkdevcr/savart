@@ -376,6 +376,9 @@ const App = (() => {
     }
     Player.setVolume?.(1.0);
 
+    // Reset pre-amp and balance on every login
+    _resetPreAmpBalance();
+
     // Show the "loading from cloud" toast while Drive data syncs.
     // Start hidden in HTML so it never flashes during login; show it here
     // explicitly with a fade-in and enforce a minimum display of 1.2 s so
@@ -12090,6 +12093,25 @@ const App = (() => {
     _renderCustomPresets();
   }
 
+  function _resetPreAmpBalance() {
+    Player.setPreAmp?.(0);
+    Player.setBalance?.(0);
+    const preampSlider = document.getElementById('eq-preamp-slider');
+    if (preampSlider) {
+      preampSlider.value = 0;
+      preampSlider.style.setProperty('--pb-pct', '50%');
+    }
+    const preampLabel = document.getElementById('eq-preamp-value');
+    if (preampLabel) preampLabel.textContent = '0 dB';
+    const balanceSlider = document.getElementById('eq-balance-slider');
+    if (balanceSlider) {
+      balanceSlider.value = 0;
+      balanceSlider.style.setProperty('--pb-pct', '50%');
+    }
+    const balanceLabel = document.getElementById('eq-balance-value');
+    if (balanceLabel) balanceLabel.textContent = UI.t('eq_balance_center') || 'Centro';
+  }
+
   function _saveCustomPreset(name) {
     const gains = Player.getEQGains();
     const preset = { id: Date.now(), name, gains, savedAt: new Date().toLocaleDateString() };
@@ -13049,10 +13071,36 @@ const App = (() => {
       _saveSettings();
     });
 
+    // EQ pre-amp slider
+    document.getElementById('eq-preamp-slider')?.addEventListener('input', (e) => {
+      const db  = parseFloat(e.target.value);
+      Player.setPreAmp?.(db);
+      const label = document.getElementById('eq-preamp-value');
+      if (label) label.textContent = (db >= 0 ? '+' : '') + db.toFixed(1) + ' dB';
+      const pct = ((db + 12) / 24 * 100).toFixed(1);
+      e.target.style.setProperty('--pb-pct', pct + '%');
+    });
+
+    // EQ balance slider
+    document.getElementById('eq-balance-slider')?.addEventListener('input', (e) => {
+      const val = parseInt(e.target.value);
+      Player.setBalance?.(val / 100);
+      const label = document.getElementById('eq-balance-value');
+      if (label) {
+        label.textContent = val === 0
+          ? (UI.t('eq_balance_center') || 'Centro')
+          : (val < 0 ? 'L ' + Math.abs(val) : 'R ' + val);
+      }
+      const pct = ((val + 100) / 200 * 100).toFixed(1);
+      e.target.style.setProperty('--pb-pct', pct + '%');
+    });
+
     // EQ reset
     document.getElementById('btn-eq-reset')?.addEventListener('click', () => {
       Player.resetEQ();
       _applyEQPreset('flat'); // _applyEQPreset already calls _saveSettings
+      // Also reset pre-amp and balance
+      _resetPreAmpBalance();
     });
 
     // EQ factory preset chips

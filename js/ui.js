@@ -163,6 +163,9 @@ const UI = (() => {
       settings_deep_scan:       'Escaneo y edición',
       settings_deep_scan_desc:  'Detecta canciones sin metadatos y permite editarlos',
       // ── EQ ────────────────────────────────────────────────
+      eq_preamp:       'Pre-amp',
+      eq_balance:      'Balance',
+      eq_balance_center: 'Centro',
       eq_reset_btn:    'Resetear',
       eq_my_presets:   'Mis presets',
       eq_save_current: 'Guardar actual',
@@ -519,6 +522,9 @@ const UI = (() => {
       settings_deep_scan:       'Scan & edit',
       settings_deep_scan_desc:  'Detects songs without metadata and lets you edit them',
       // ── EQ ────────────────────────────────────────────────
+      eq_preamp:         'Pre-amp',
+      eq_balance:        'Balance',
+      eq_balance_center: 'Center',
       eq_reset_btn:    'Reset',
       eq_my_presets:   'My presets',
       eq_save_current: 'Save current',

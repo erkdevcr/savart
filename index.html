@@ -1317,6 +1317,25 @@
     <div class="eq-curve-wrap" id="eq-curve-wrap">
       <svg id="eq-curve-svg" viewBox="0 0 900 80" preserveAspectRatio="none"></svg>
     </div>
+
+    <!-- Pre-amp & Balance -->
+    <div class="eq-preamp-balance-row">
+      <div class="eq-pb-col">
+        <div class="eq-pb-header">
+          <span class="eq-pb-title" data-i18n="eq_preamp">Pre-amp</span>
+          <span class="eq-pb-value" id="eq-preamp-value">0 dB</span>
+        </div>
+        <input type="range" id="eq-preamp-slider" class="eq-pb-slider" min="-12" max="12" value="0" step="0.5">
+      </div>
+      <div class="eq-pb-col">
+        <div class="eq-pb-header">
+          <span class="eq-pb-title" data-i18n="eq_balance">Balance</span>
+          <span class="eq-pb-value" id="eq-balance-value">Centro</span>
+        </div>
+        <input type="range" id="eq-balance-slider" class="eq-pb-slider eq-pb-slider--balance" min="-100" max="100" value="0" step="1">
+      </div>
+    </div>
+
     <div class="eq-custom-section">
       <!-- Save button row — always visible, understated style -->
       <div class="eq-save-row">

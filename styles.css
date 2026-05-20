@@ -3935,8 +3935,9 @@ body.queue-open #mini-player { z-index: 65; }
     width: auto !important;
     min-width: 0;
   }
-  /* Hide the EQ curve in the overlay on mobile */
-  #overlay-eq .eq-curve-wrap {
+  /* Hide the EQ curve and pre-amp/balance row in the overlay on mobile */
+  #overlay-eq .eq-curve-wrap,
+  #overlay-eq .eq-preamp-balance-row {
     display: none !important;
   }
 }
@@ -5626,6 +5627,75 @@ body.queue-open #mini-player { z-index: 65; }
   width: 100%;
   height: 100%;
   display: block;
+}
+
+/* ── Pre-amp & Balance row ───────────────────────────────── */
+.eq-preamp-balance-row {
+  display: flex;
+  gap: 16px;
+  padding: 8px 16px 4px;
+}
+.eq-pb-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.eq-pb-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px;
+}
+.eq-pb-title {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.eq-pb-value {
+  font-size: 11px;
+  color: var(--accent, #4a88f5);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+.eq-pb-slider {
+  width: 100%;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 3px;
+  border-radius: 2px;
+  background: linear-gradient(
+    to right,
+    var(--accent, #4a88f5) 0%,
+    var(--accent, #4a88f5) var(--pb-pct, 50%),
+    var(--bg-hover, rgba(255,255,255,0.1)) var(--pb-pct, 50%),
+    var(--bg-hover, rgba(255,255,255,0.1)) 100%
+  );
+  outline: none;
+  cursor: pointer;
+}
+.eq-pb-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--text-primary, #fff);
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+  transition: transform 0.1s;
+}
+.eq-pb-slider::-webkit-slider-thumb:hover { transform: scale(1.2); }
+.eq-pb-slider::-moz-range-thumb {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--text-primary, #fff);
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.4);
 }
 
 /* Custom presets section wrapper */
