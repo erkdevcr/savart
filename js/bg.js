@@ -27,8 +27,8 @@
     { x: 0.25, y: 0.70, r: 0.13 },
   ];
 
-  const SPACING = 22; // px between dot centres
-  const DOT_R   = 1;  // dot radius in px
+  const SPACING = 20; // px between dot centres (−10 % from 22)
+  const DOT_R   = 0.9;  // dot radius in px (−10 %)
 
   function draw() {
     const W = window.innerWidth;
@@ -59,7 +59,7 @@
 
         ctx.beginPath();
         ctx.arc(x, y, DOT_R, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(255,255,255,${(0.25 * alpha).toFixed(3)})`;
+        ctx.fillStyle = `rgba(255,255,255,${(0.17 * alpha).toFixed(3)})`;
         ctx.fill();
       }
     }

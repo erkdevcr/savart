@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.223';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.223 — incrementPlayCount now stamps playedAt; fixes Most Played wiped on re-login after manual clear
+const APP_VERSION  = '3.5.224';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.224 — dot grid: alpha 0.25→0.17, spacing 22→20px, dot radius 1→0.9px
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
