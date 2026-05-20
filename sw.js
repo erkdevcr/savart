@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.249';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.249 — DS: single convert button replaces two-state type switch
+const APP_VERSION  = '3.5.250';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.250 — DS: convert button aligned left via margin-right:auto
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

@@ -2211,6 +2211,9 @@ img { display: block; }
   padding-bottom: 6px;
   border-bottom: 1px solid var(--border-color, rgba(255,255,255,0.08));
 }
+.album-edit-actions .ds-convert-btn {
+  margin-right: auto;
+}
 /* "Resetear ID3" — secondary action, pushed to the left */
 .album-edit-reset-id3-btn {
   margin-right: auto;
