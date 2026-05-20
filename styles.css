@@ -1129,6 +1129,7 @@ img { display: block; }
 
 .folder-row:hover  { background: var(--item-hover); }
 .folder-row:active { background: var(--item-tap); transition: background 0s; }
+.folder-row        { border-bottom: 1px solid rgba(255,255,255,0.04); }
 
 .folder-icon {
   position: relative;
@@ -1291,6 +1292,7 @@ img { display: block; }
 
 .song-row:hover  { background: var(--item-hover); }
 .song-row:active { background: var(--item-tap); transition: background 0s; }
+.song-row        { border-bottom: 1px solid rgba(255,255,255,0.04); }
 
 /* Go-to-folder highlight: brief flash to mark the target song */
 .song-row.goto-highlight {
@@ -2755,7 +2757,7 @@ img { display: block; }
   inset: 0;
   bottom: 0; /* full-height; bottom-nav floats on top via z-index:70 */
   z-index: 60;
-  background: var(--bg-base);
+  background: transparent; /* let the dot-grid canvas show through */
   display: none;
   flex-direction: column;
   overflow: hidden;
