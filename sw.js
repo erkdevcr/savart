@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.244';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.244 — bg-dots-exp: ResizeObserver fixes zero-size canvas on mobile (player hidden at boot)
+const APP_VERSION  = '3.5.245';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.245 — dot grid alpha 0.28→0.35
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
