@@ -610,10 +610,10 @@ const Player = (() => {
    * @param {number} gainDb    - -12 to +12
    */
   function setEQBand(bandIndex, gainDb) {
-    if (bandIndex < 0 || bandIndex >= _eqNodes.length) return;
-    _eqGains[bandIndex] = gainDb;
+    if (bandIndex < 0 || bandIndex >= CONFIG.EQ_BANDS.length) return;
+    _eqGains[bandIndex] = gainDb;           // always update state (even before audio graph is built)
     if (_eqNodes[bandIndex]) {
-      _eqNodes[bandIndex].gain.value = gainDb;
+      _eqNodes[bandIndex].gain.value = gainDb; // update audio node only once graph exists
     }
   }
 
