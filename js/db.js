@@ -298,6 +298,7 @@ const DB = (() => {
   async function incrementPlayCount(fileId) {
     const meta = await getMeta(fileId) || { id: fileId, playCount: 0, starred: false };
     meta.playCount = (meta.playCount || 0) + 1;
+    meta.playedAt  = Date.now(); // stamp time of play — used by clearedAt merge to decide if this record survives
     // Re-surface the song if it was previously hidden from top-played
     delete meta.hiddenFromTopPlayed;
     return setMeta(fileId, meta);
