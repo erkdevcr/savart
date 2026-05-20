@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.242';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.242 — desktop player: position relative so bg-dots-exp canvas anchors correctly
+const APP_VERSION  = '3.5.243';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.243 — browse divider opacity 4%→10%
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
