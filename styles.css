@@ -3136,7 +3136,7 @@ img { display: block; }
 @media (min-width: 768px) {
   /* ── Now-playing panel: permanent right column ───────────── */
   #player-expanded {
-    position: static !important;   /* out of fixed stack, into flex row */
+    position: relative !important; /* in flex flow + containing block for #bg-dots-exp */
     display: flex !important;       /* always visible regardless of .visible */
     width: var(--now-playing-w);
     flex-shrink: 0;
