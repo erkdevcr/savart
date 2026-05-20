@@ -81,7 +81,7 @@
         else if (minRatio < 1.00) alpha = (minRatio - 0.25) / 0.75;
         else                      alpha = 1;
         if (alpha <= 0.01) continue;
-        ctx.globalAlpha = alpha * 0.25;
+        ctx.globalAlpha = alpha * 0.35;
         ctx.beginPath();
         ctx.arc(x, y, DOT_R, 0, Math.PI * 2);
         ctx.fill();
