@@ -1663,10 +1663,22 @@ const App = (() => {
       }));
     }
 
+    // ── Pass 1: in-memory Meta cache (synchronous — zero latency) ───────────────
+    // Runs BEFORE the async DB pass so covers already in the session cache appear
+    // in the same tick as the row render — no visible flash of missing covers.
+    // Only fills rows that have no cover yet.
+    if (typeof Meta !== 'undefined') {
+      files.forEach(file => {
+        if (_rowHasCover(file.id)) return;
+        const meta = Meta.getCached(file.id);
+        if (meta?.coverUrl) _updateRowThumbnail(file.id, meta.coverUrl, !!meta.coverBlob);
+      });
+    }
+
     // ── Pass 0: Drive appProperties + IndexedDB (instant, no network) ─────────
     // 0a. appProperties.s_cover — synced cover from another device via Drive API
-    // 0b. coverBlob             — ID3 embedded art saved locally (highest quality)
-    // 0c. coverUrl / thumbnailUrl — external URL persisted from a prior session
+    // 0b. external URL (Last.fm / AudD / rescanned) — wins over ID3 blob
+    // 0c. coverBlob — ID3 embedded art; used when no external URL exists
     // Skipped on force-rescan so stale synced values don't prevent MB from re-running.
     if (!force) {
       await Promise.allSettled(files.map(async file => {
@@ -1675,13 +1687,8 @@ const App = (() => {
           if (ap?.s_cover) {
             const apDbMeta   = await DB.getMeta(file.id).catch(() => null);
             const apManual   = (apDbMeta?.manualAt || 0) > 0;
-            // Embedded-art guard: if local DB already has a coverBlob or thumbnailUrl:'id3'
-            // (set by a reset or a prior scan), the embedded art takes priority over the
-            // stale appProperties URL — don't let Drive re-introduce it every session open.
             const hasEmbedded = apDbMeta?.coverBlob || apDbMeta?.thumbnailUrl === 'id3';
             if (!apManual && !hasEmbedded) {
-              // Sync cover from Drive appProperties only when user hasn't set a custom cover
-              // and there is no locally-embedded art to prefer.
               _updateRowThumbnail(file.id, ap.s_cover);
               const save = { thumbnailUrl: ap.s_cover };
               if (ap.s_title)  save.displayName = ap.s_title;
@@ -1691,42 +1698,31 @@ const App = (() => {
               DB.setMeta(file.id, save).catch(() => {});
               return;
             }
-            // Has manual cover or embedded art — don't apply appProperties URL.
-            // Fall through so the coverBlob / manualUrl paths below handle rendering.
           }
           const dbMeta = await DB.getMeta(file.id);
           if (!dbMeta) return;
-          // Manual-edit guard: if the user explicitly set a cover URL (manualAt > 0),
-          // that choice always wins over the embedded blob.  Without this guard the
-          // blob path (isId3=true) would silently overwrite the manual URL every time
-          // the folder is opened, causing the cover to revert on every session start.
-          const _manualUrl = ((dbMeta.manualAt || 0) > 0)
-            && dbMeta.thumbnailUrl
-            && !dbMeta.thumbnailUrl.startsWith('blob:')
-            && dbMeta.thumbnailUrl !== 'id3'
+
+          // Priority order (mirrors _ensureCoverVisible):
+          //  1. Manual URL  — user explicitly chose this
+          //  2. External URL (Last.fm / AudD / rescanned) — wins over ID3 blob
+          //  3. ID3 blob    — fallback when no external URL exists
+          const isExternal = (url) => url && url !== 'id3' && !url.startsWith('blob:');
+          const manualUrl   = (dbMeta.manualAt || 0) > 0 && isExternal(dbMeta.thumbnailUrl)
             ? dbMeta.thumbnailUrl : null;
-          if (_manualUrl) {
-            _updateRowThumbnail(file.id, _manualUrl);
+          const externalUrl = !manualUrl && isExternal(dbMeta.thumbnailUrl)
+            ? dbMeta.thumbnailUrl : (isExternal(dbMeta.coverUrl) ? dbMeta.coverUrl : null);
+
+          if (manualUrl || externalUrl) {
+            _updateRowThumbnail(file.id, manualUrl || externalUrl);
             return;
           }
           if (dbMeta.coverBlob && typeof Meta !== 'undefined') {
             const url = Meta.injectCover(file.id, dbMeta.coverBlob);
             if (url) { _updateRowThumbnail(file.id, url, true); return; }
           }
-          const persistedUrl = dbMeta.coverUrl || dbMeta.thumbnailUrl;
-          if (persistedUrl) _updateRowThumbnail(file.id, persistedUrl);
         } catch (_) {}
       }));
     }
-
-    // ── Pass 1: in-memory Meta cache (always ID3, session) ────────────────────
-    // Only fills rows that have no cover yet — never replaces a cover that the
-    // initial DB pass already loaded (which may be a user's manually-set cover).
-    files.forEach(file => {
-      if (_rowHasCover(file.id)) return; // already has a cover — don't overwrite
-      const meta = (typeof Meta !== 'undefined') ? Meta.getCached(file.id) : null;
-      if (meta?.coverUrl) _updateRowThumbnail(file.id, meta.coverUrl, true);
-    });
 
     // ── Force pre-pass: ID3 first (when force=true) ──────────────────────────
     // In force mode, ID3 runs BEFORE MusicBrainz so MB gets clean artist/album context
@@ -5109,6 +5105,7 @@ const App = (() => {
       // Prefetch covers (same pipeline as Browse)
       if (result.files?.length) {
         _prefetchAndApplyFolderCovers(null, result.files).catch(() => {});
+        _softScanItems(result.files).catch(() => {});
       }
     } catch (err) {
       console.error('[App] Search error:', err);

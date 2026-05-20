@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.217';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.217 — Cover priority: external URL (Last.fm/AudD) now wins over ID3 blob everywhere; soft scan paints URL immediately per item; blob no longer overwrites existing external URL
+const APP_VERSION  = '3.5.218';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.218 — Browse search now runs soft scan on results; session-cache covers (Pass 1) applied before async DB reads in _prefetchAndApplyFolderCovers
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
