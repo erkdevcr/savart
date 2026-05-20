@@ -11,7 +11,7 @@
 
   const SPACING = 17;
   const DOT_R   = 0.9;
-  const SPEED   = 0.125; // base cycles/s — 8 s per full cycle
+  const SPEED   = 0.0625; // base cycles/s — 16 s per full cycle
 
   // sp  = individual speed multiplier (each blob drifts at its own rate)
   // ax2/ay2, px2/py2 = second wave for extra randomness
