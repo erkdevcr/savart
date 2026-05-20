@@ -5618,7 +5618,7 @@ body.queue-open #mini-player { z-index: 65; }
 /* EQ curve — standalone block between sliders and presets */
 .eq-curve-wrap {
   display: none;          /* hidden on mobile; shown on desktop via media query */
-  height: 72px;
+  height: 76px;
   padding: 4px 16px 8px;
   box-sizing: border-box;
 }
