@@ -1979,14 +1979,17 @@ const UI = (() => {
 
   /** Mark a song row as the currently active track. */
   function setActiveSongRow(fileId) {
+    // EQ bars only appear when audio is actually playing.
+    // body.audio-playing is toggled by _onPlayPause and _onTrackChange in app.js.
+    const audioPlaying = document.body.classList.contains('audio-playing');
     // Handle both .song-row and .top-list-item rows
     document.querySelectorAll('.song-row, .top-list-item').forEach(row => {
       const isActive = row.dataset.id === fileId;
       row.classList.toggle('active', isActive);
-      // EQ bars: show as overlay on the active row in any screen
+      // EQ bars: only show on the active row while audio is playing
       const eqBars = row.querySelector('.eq-bars');
       if (eqBars) {
-        eqBars.style.display = isActive ? 'flex' : '';
+        eqBars.style.display = isActive && audioPlaying ? 'flex' : '';
       }
     });
   }

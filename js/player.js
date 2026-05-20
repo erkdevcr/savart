@@ -460,8 +460,11 @@ const Player = (() => {
       if (_repeatMode === 'all') {
         _queueIndex = 0;
         _playCurrentTrack();
+      } else {
+        // End of queue — notify UI so EQ bars and play state indicators clear
+        _msSetPlaybackState('paused');
+        _onPlayPause?.(false);
       }
-      // else: end of queue, stop
       return;
     }
     _queueIndex = nextIndex;

@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.219';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.219 — RAM optimisation: _onBlobReady parses 1MB head slice first (avoids 50MB+ ArrayBuffer); audio src='' before blob URL revoke; Meta cache 80→40
+const APP_VERSION  = '3.5.220';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.220 — EQ bars hide when audio stops: body.audio-playing class drives visibility; next() fires _onPlayPause(false) at end of queue
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

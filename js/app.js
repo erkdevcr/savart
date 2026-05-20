@@ -762,6 +762,7 @@ const App = (() => {
     const enriched = _enrichTrack(track);
     UI.updateMiniPlayer(enriched, true);
     UI.updateExpandedPlayer(enriched, true);
+    document.body.classList.add('audio-playing'); // track change = playback starting
     UI.setActiveSongRow(track?.id);
     document.title = track ? `${enriched.displayName} — Savart` : 'Savart';
 
@@ -948,12 +949,14 @@ const App = (() => {
   function _onPlayPause(isPlaying) {
     // Cancel loading spinner the moment audio actually starts playing
     if (isPlaying) _cancelLoadingSpinner();
+    // Body class drives EQ bar visibility across all views — setActiveSongRow reads it
+    document.body.classList.toggle('audio-playing', !!isPlaying);
     const track = Player.getCurrentTrack();
     const enriched = _enrichTrack(track);
     UI.updateMiniPlayer(enriched, isPlaying);
     UI.updateExpandedPlayer(enriched, isPlaying);
     // Re-mark active row — renderHome (and other renders) create fresh DOM nodes
-    // that lose the .active class; re-applying here keeps EQ bars visible.
+    // that lose the .active class; re-applying here keeps EQ bars in sync.
     UI.setActiveSongRow(track?.id ?? null);
   }
 
