@@ -1,7 +1,7 @@
 /* ============================================================
    Savart — Animated dot-grid background canvas
-   Blobs drift slowly with sine/cosine motion, creating organic
-   dark zones that float across the dot grid.
+   Each blob has its own speed multiplier + dual-frequency drift
+   so motion stays organic and never fully repeats.
    ============================================================ */
 
 (() => {
@@ -11,21 +11,23 @@
 
   const SPACING = 17;
   const DOT_R   = 0.9;
-  const SPEED   = 0.667; // cycles per second — 1.5 s per full cycle
+  const SPEED   = 0.333; // base cycles/s — 3 s per full cycle
 
+  // sp  = individual speed multiplier (each blob drifts at its own rate)
+  // ax2/ay2, px2/py2 = second wave for extra randomness
   const blobs = [
-    { bx:0.08, by:0.12, r:0.18, ax:0.06, ay:0.04, px:0.00, py:1.00 },
-    { bx:0.35, by:0.05, r:0.14, ax:0.05, ay:0.06, px:1.20, py:0.30 },
-    { bx:0.65, by:0.18, r:0.20, ax:0.07, ay:0.05, px:2.10, py:0.80 },
-    { bx:0.90, by:0.08, r:0.16, ax:0.04, ay:0.07, px:0.70, py:1.50 },
-    { bx:0.15, by:0.50, r:0.17, ax:0.06, ay:0.05, px:1.80, py:0.20 },
-    { bx:0.50, by:0.45, r:0.22, ax:0.05, ay:0.06, px:0.40, py:2.00 },
-    { bx:0.80, by:0.55, r:0.15, ax:0.07, ay:0.04, px:2.50, py:0.60 },
-    { bx:0.05, by:0.85, r:0.19, ax:0.04, ay:0.06, px:1.00, py:1.20 },
-    { bx:0.40, by:0.90, r:0.16, ax:0.06, ay:0.05, px:0.20, py:0.90 },
-    { bx:0.72, by:0.82, r:0.20, ax:0.05, ay:0.07, px:1.60, py:0.40 },
-    { bx:0.95, by:0.75, r:0.14, ax:0.07, ay:0.04, px:3.00, py:1.80 },
-    { bx:0.25, by:0.70, r:0.13, ax:0.05, ay:0.06, px:0.90, py:2.20 },
+    { bx:0.08, by:0.12, r:0.18, ax:0.07, ay:0.05, px:0.00, py:1.00, sp:1.00, ax2:0.03, ay2:0.04, px2:0.50, py2:1.30 },
+    { bx:0.35, by:0.05, r:0.14, ax:0.06, ay:0.07, px:1.20, py:0.30, sp:1.37, ax2:0.04, ay2:0.02, px2:2.10, py2:0.70 },
+    { bx:0.65, by:0.18, r:0.20, ax:0.08, ay:0.06, px:2.10, py:0.80, sp:0.83, ax2:0.02, ay2:0.05, px2:0.90, py2:2.00 },
+    { bx:0.90, by:0.08, r:0.16, ax:0.05, ay:0.08, px:0.70, py:1.50, sp:1.21, ax2:0.05, ay2:0.03, px2:1.60, py2:0.40 },
+    { bx:0.15, by:0.50, r:0.17, ax:0.07, ay:0.06, px:1.80, py:0.20, sp:0.74, ax2:0.03, ay2:0.06, px2:2.80, py2:1.10 },
+    { bx:0.50, by:0.45, r:0.22, ax:0.06, ay:0.07, px:0.40, py:2.00, sp:1.55, ax2:0.06, ay2:0.03, px2:0.30, py2:1.80 },
+    { bx:0.80, by:0.55, r:0.15, ax:0.08, ay:0.05, px:2.50, py:0.60, sp:0.91, ax2:0.04, ay2:0.05, px2:1.20, py2:2.50 },
+    { bx:0.05, by:0.85, r:0.19, ax:0.05, ay:0.07, px:1.00, py:1.20, sp:1.18, ax2:0.05, ay2:0.04, px2:0.70, py2:0.60 },
+    { bx:0.40, by:0.90, r:0.16, ax:0.07, ay:0.06, px:0.20, py:0.90, sp:0.66, ax2:0.03, ay2:0.06, px2:2.20, py2:1.40 },
+    { bx:0.72, by:0.82, r:0.20, ax:0.06, ay:0.08, px:1.60, py:0.40, sp:1.43, ax2:0.06, ay2:0.03, px2:0.50, py2:2.10 },
+    { bx:0.95, by:0.75, r:0.14, ax:0.08, ay:0.05, px:3.00, py:1.80, sp:0.79, ax2:0.04, ay2:0.05, px2:1.80, py2:0.30 },
+    { bx:0.25, by:0.70, r:0.13, ax:0.06, ay:0.07, px:0.90, py:2.20, sp:1.30, ax2:0.05, ay2:0.04, px2:0.10, py2:1.70 },
   ];
 
   let W, H, cols, rows, gridX, gridY, then = null, t = 0;
@@ -50,11 +52,17 @@
     ctx.clearRect(0, 0, W, H);
 
     const maxDim = Math.max(W, H);
-    const bPos = blobs.map(b => ({
-      x:  (b.bx + Math.sin(t * SPEED * Math.PI * 2 + b.px) * b.ax) * W,
-      y:  (b.by + Math.cos(t * SPEED * Math.PI * 2 + b.py) * b.ay) * H,
-      r2: (b.r * maxDim) ** 2,
-    }));
+    const bPos = blobs.map(b => {
+      const f  = t * SPEED * Math.PI * 2 * b.sp;
+      const f2 = t * SPEED * Math.PI * 2 * b.sp * 1.618; // golden ratio offset for second wave
+      return {
+        x:  (b.bx + Math.sin(f  + b.px)  * b.ax
+                  + Math.sin(f2 + b.px2) * b.ax2) * W,
+        y:  (b.by + Math.cos(f  + b.py)  * b.ay
+                  + Math.cos(f2 + b.py2) * b.ay2) * H,
+        r2: (b.r * maxDim) ** 2,
+      };
+    });
 
     ctx.fillStyle = 'rgb(80,150,255)';
 
