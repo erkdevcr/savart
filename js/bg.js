@@ -59,7 +59,7 @@
 
         ctx.beginPath();
         ctx.arc(x, y, DOT_R, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(255,255,255,${(0.25 * alpha).toFixed(3)})`;
+        ctx.fillStyle = `rgba(80,150,255,${(0.25 * alpha).toFixed(3)})`;
         ctx.fill();
       }
     }
