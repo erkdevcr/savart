@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.239';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.239 — thin divider lines between browse items
+const APP_VERSION  = '3.5.240';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.240 — fix Most Played sync: separate playCountsClearedAt from homeCleared
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

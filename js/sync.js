@@ -913,7 +913,11 @@ const Sync = (() => {
     // getAllPlaycounts includes songs hidden from top-played so other devices
     // receive the hiddenFromTopPlayed flag and can hide them locally too.
     const played    = await DB.getAllPlaycounts();
-    const clearedAt = await DB.getState('homeCleared').catch(() => 0) || 0;
+    // Use playCountsClearedAt — stamped ONLY when playcounts are explicitly cleared.
+    // homeCleared is a broader signal (any section cleared) and must NOT be used here:
+    // clearing Recents would set homeCleared=now and tell other devices to throw away
+    // all their Most Played data even though playcounts were never touched.
+    const clearedAt = await DB.getState('playCountsClearedAt').catch(() => 0) || 0;
     // Format: { clearedAt, items } — allows other devices to discard their own
     // local playcount records that pre-date this clear, even when items is non-empty
     // (e.g. songs played AFTER the clear that survive legitimately).
@@ -1055,14 +1059,14 @@ const Sync = (() => {
       && !u.includes('googleapis.com');
     const cleanUrl = u => isExternal(u) ? u : null;
 
-    let [pinnedMeta, pinnedOrder, allRecents, playcounts, playlists, history, _homeClearedTs] = await Promise.all([
+    let [pinnedMeta, pinnedOrder, allRecents, playcounts, playlists, history, _playCountsClearedTs] = await Promise.all([
       DB.getState('pinnedMeta'),
       DB.getState('pinned'),
       DB.getRecentsAll(),          // ALL records including tombstones
       DB.getAllPlaycounts(),   // includes hidden songs so other devices get hiddenFromTopPlayed
       DB.getPlaylists(),
       DB.getHistory(CONFIG.HISTORY_MAX),
-      DB.getState('homeCleared').catch(() => 0),
+      DB.getState('playCountsClearedAt').catch(() => 0), // ONLY stamped when playcounts are actually cleared
     ]);
     // Unwrap corrupted format if present
     if (pinnedMeta && typeof pinnedMeta.meta === 'object' && !Array.isArray(pinnedMeta.meta)
@@ -1088,7 +1092,7 @@ const Sync = (() => {
 
     const payload = {
       ts:                  Date.now(),
-      playCountsClearedAt: _homeClearedTs || 0,
+      playCountsClearedAt: _playCountsClearedTs || 0,
       pinned:              pinnedMeta  || {},
       pinnedOrder:         pinnedOrder || [],
       recents: recentsLive.map((r, i) => {
@@ -1414,10 +1418,11 @@ const Sync = (() => {
           : (Array.isArray(remotePlaycounts?.items) ? remotePlaycounts.items : []);
 
         // Effective clear timestamp: the later of the remote signal OR this device's own clear.
-        // homeCleared handles the case where this device cleared but its push timer hadn't fired.
-        // remoteClearedAt handles the case where another device cleared and pushed the signal.
-        const _homeCleared = await DB.getState('homeCleared').catch(() => 0) || 0;
-        const cut          = Math.max(remoteClearedAt, _homeCleared);
+        // playCountsClearedAt handles the case where this device cleared playcounts but the
+        // push timer hadn't fired yet.  homeCleared must NOT be used here — it fires for any
+        // section clear (Recents, History…) and would wrongly discard valid playcount data.
+        const _localClearedAt = await DB.getState('playCountsClearedAt').catch(() => 0) || 0;
+        const cut             = Math.max(remoteClearedAt, _localClearedAt);
 
         // Filter remote items: discard any that pre-date the clear.
         const validRemote = remoteItems.filter(r => r && r.id &&

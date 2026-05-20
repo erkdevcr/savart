@@ -13111,11 +13111,19 @@ const App = (() => {
           };
           await Promise.all(checked.map(store => ops[store]?.()));
 
-          // Stamp a "cleared at" timestamp so readHome() / _applyRemote('home') can
-          // detect that the home snapshot in Drive is stale and skip it on next boot.
-          // Without this guard, readHome() would restore the old data from savart_home.json
-          // even though it was just cleared locally (the debounced push hasn't fired yet).
-          await DB.setState('homeCleared', Date.now());
+          // Stamp homeCleared so readHome() / _applyRemote('home') can skip a stale
+          // home snapshot on next boot (guards ALL sections, not just playcounts).
+          const _nowTs = Date.now();
+          await DB.setState('homeCleared', _nowTs);
+
+          // Stamp playCountsClearedAt ONLY when playcounts were actually cleared.
+          // This is the signal _pushPlaycounts() and _pushHome() embed so OTHER devices
+          // know to discard their old playcount records.  Using homeCleared for this was
+          // wrong: clearing Recents would also poison the playcounts clearedAt signal,
+          // making Device B throw away all Most Played data it never cleared.
+          if (checked.includes('playcounts')) {
+            await DB.setState('playCountsClearedAt', _nowTs);
+          }
 
           // Push affected sync stores to Drive so other devices see the cleared state.
           // Sync.push() is void (starts a debounced timer) — do NOT call .catch() on it.
