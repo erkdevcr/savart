@@ -11,7 +11,7 @@
 
   const SPACING = 17;
   const DOT_R   = 0.9;
-  const SPEED   = 0.4; // cycles per second — lower = slower
+  const SPEED   = 0.667; // cycles per second — 1.5 s per full cycle
 
   const blobs = [
     { bx:0.08, by:0.12, r:0.18, ax:0.06, ay:0.04, px:0.00, py:1.00 },
