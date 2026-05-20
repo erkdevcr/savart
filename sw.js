@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.225';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.225 — dot grid spacing 20→17px
+const APP_VERSION  = '3.5.226';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.226 — dot grid alpha back to 0.25
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
