@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.221';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.221 — Soundrop file auto-reorganize on Edit Song: Drive.updateFileMeta moves+renames in one PATCH; soundropSaved flag marks eligible files
+const APP_VERSION  = '3.5.222';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.222 — Dot-grid background canvas (bg.js); pointer-events:none, z-index:-1, debounced resize
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
@@ -38,6 +38,7 @@ const SHELL_FILES = [
   `${BASE}/js/soundrop.js`,
   `${BASE}/js/ui.js`,
   `${BASE}/js/app.js`,
+  `${BASE}/js/bg.js`,
   `${BASE}/manifest.json`,
   `${BASE}/icons/icon-192.png`,
   `${BASE}/icons/icon-512.png`,
