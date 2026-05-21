@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.263';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.263 — Capacitor OAuth redirect flow
+const APP_VERSION  = '3.5.262';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.262 — mobile queue-list padding-bottom fix (166px)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
@@ -54,6 +54,7 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return cache.addAll(SHELL_FILES).catch((err) => {
+        // Non-fatal: some files may not exist yet (e.g. icons)
         console.warn('[SW] Precache partial error:', err);
       });
     }).then(() => self.skipWaiting())
@@ -79,25 +80,33 @@ self.addEventListener('activate', (event) => {
 /* ── Fetch ───────────────────────────────────────────────── */
 
 self.addEventListener('fetch', (event) => {
+  // Cache API only supports GET — let all other methods go straight to network
   if (event.request.method !== 'GET') return;
 
   const url = new URL(event.request.url);
 
+  // Let Drive API and GIS requests go through to network always
   if (url.hostname.includes('googleapis.com') ||
       url.hostname.includes('accounts.google.com')) {
-    return;
+    return; // Don't intercept — browser handles normally
   }
 
+  // Google Fonts: Cache First
   if (url.hostname.includes('fonts.googleapis.com') ||
       url.hostname.includes('fonts.gstatic.com')) {
     event.respondWith(cacheFirst(event.request, 'savart-fonts'));
     return;
   }
 
+  // Cross-origin requests (Discogs CDN, Last.fm, AudD, lrclib, etc.) must NOT
+  // be intercepted — their servers don't send CORS headers for SW fetch(),
+  // which causes the browser to block the request and throw a network error.
+  // The browser handles these directly without the service worker.
   if (url.origin !== self.location.origin) {
     return;
   }
 
+  // App shell (same-origin only): Cache First
   event.respondWith(cacheFirst(event.request, CACHE_NAME));
 });
 
@@ -115,6 +124,7 @@ async function cacheFirst(request, cacheName) {
     }
     return response;
   } catch (err) {
+    // Offline and not cached — return a minimal offline page if it's navigation
     if (request.mode === 'navigate') {
       const offlinePage = await cache.match(`${BASE}/index.html`);
       if (offlinePage) return offlinePage;

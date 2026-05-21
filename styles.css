@@ -3553,6 +3553,13 @@ body.queue-open #mini-player { z-index: 65; }
   padding: 6px 0 16px;
 }
 
+/* Mobile: extra bottom padding so last rows clear the floating mini player */
+@media (max-width: 767px) {
+  body.queue-open .queue-list {
+    padding-bottom: 166px; /* 70px mini + 60px bottom nav + 16px margin + 20px extra */
+  }
+}
+
 /* Section labels inside queue list */
 .queue-section-label {
   font-size: 10px;
