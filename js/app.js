@@ -12935,10 +12935,7 @@ const App = (() => {
 
     document.getElementById('btn-home-info')?.addEventListener('click', () => {
       if (!_aboutOverlay) return;
-      // App version from config
-      const appVerEl = document.getElementById('about-app-version');
-      if (appVerEl) appVerEl.textContent = `v${CONFIG.VERSION}`;
-      // SW version via message channel
+      // SW version via message channel — shown as "V x.x.xxx"
       const swVerEl = document.getElementById('about-sw-version');
       if (swVerEl) {
         swVerEl.textContent = '…';
@@ -12948,7 +12945,7 @@ const App = (() => {
             if (sw) {
               const mc = new MessageChannel();
               mc.port1.onmessage = e => {
-                if (e.data?.version) swVerEl.textContent = `v${e.data.version}`;
+                if (e.data?.version) swVerEl.textContent = `V ${e.data.version}`;
               };
               sw.postMessage({ type: 'GET_VERSION' }, [mc.port2]);
             }
