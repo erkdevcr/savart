@@ -3502,6 +3502,13 @@ img { display: block; }
 /* Mobile: raise mini-player above queue overlay */
 body.queue-open #mini-player { z-index: 65; }
 
+/* Mobile: bottom padding so mini-player doesn't cover last rows of queue */
+@media (max-width: 767px) {
+  body.queue-open .queue-list {
+    padding-bottom: calc(var(--mini-player-h) + var(--bottom-nav-h) + var(--mini-margin) * 2 + 20px);
+  }
+}
+
 @media (min-width: 768px) {
   /* Show micro player when queue is open on desktop */
   #player-expanded.showing-queue #desk-micro-player { display: flex; }

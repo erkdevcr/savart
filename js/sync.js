@@ -422,13 +422,15 @@ const Sync = (() => {
 
       case 'recents': {
         // LWW per-item by accessedAt — keep whichever device accessed each song more recently.
-        // Avoids wiping a song just played on this device (within the debounce window)
-        // when an older push from another device arrives.
-        // savart_recents.json includes tombstones; _mergeRecents handles them correctly.
-        const remote = (data || []).filter(r => r && r.id);
+        // Supports new { clearedAt, items } format and legacy plain-array format.
+        const remoteClearedAt = (!Array.isArray(data) && data?.clearedAt) || 0;
+        const remoteArray     = Array.isArray(data) ? data : (Array.isArray(data?.items) ? data.items : []);
+        const remote = remoteArray.filter(r => r && r.id);
         if (!remote.length) {
-          // Remote has no live items — Device A cleared recents; propagate the clear.
-          await DB.clearRecents();
+          // Only propagate the clear if there is an explicit clearedAt signal.
+          // An empty array without clearedAt could be an accidental push from a
+          // fresh install with an empty IDB — never wipe on ambiguous data.
+          if (remoteClearedAt > 0) await DB.clearRecents();
           break;
         }
         const local = await DB.getRecentsAll(); // include local tombstones
@@ -498,10 +500,13 @@ const Sync = (() => {
 
       case 'history': {
         // LWW per-item by playedAt — keep the most recent play record for each song.
-        const remote = (data || []).filter(r => r && r.id);
+        // Supports new { clearedAt, items } format and legacy plain-array format.
+        const remoteClearedAt = (!Array.isArray(data) && data?.clearedAt) || 0;
+        const remoteArray     = Array.isArray(data) ? data : (Array.isArray(data?.items) ? data.items : []);
+        const remote = remoteArray.filter(r => r && r.id);
         if (!remote.length) {
-          // Remote cleared history — propagate the clear.
-          await DB.clearHistory();
+          // Only propagate the clear if there is an explicit clearedAt signal.
+          if (remoteClearedAt > 0) await DB.clearHistory();
           break;
         }
         const local   = await DB.getHistory();
@@ -580,14 +585,18 @@ const Sync = (() => {
           const allToWrite = [...mergedR, ...localTombstones, ...newRemoteTombstones];
           if (allToWrite.length) await DB.bulkPutRecents(allToWrite);
         } else if (Array.isArray(recents)) {
-          // recents: [] — Device A cleared home. Preserve only items played after the snapshot.
-          const snapshotTs = data.ts || 0;
-          const local = await DB.getRecentsAll();
-          const survived = snapshotTs > 0
-            ? local.filter(r => !r.removedAt && (r.accessedAt || 0) > snapshotTs)
-            : [];
-          await DB.clearRecents();
-          if (survived.length) await DB.bulkPutRecents(survived);
+          // recents: [] — only clear if the snapshot carries an explicit recentsClearedAt
+          // signal. Without it the snapshot may have been built when IDB was empty (fresh
+          // install) and propagating that clear would wipe other devices' data.
+          if ((data.recentsClearedAt || 0) > 0) {
+            const snapshotTs = data.ts || 0;
+            const local = await DB.getRecentsAll();
+            const survived = snapshotTs > 0
+              ? local.filter(r => !r.removedAt && (r.accessedAt || 0) > snapshotTs)
+              : [];
+            await DB.clearRecents();
+            if (survived.length) await DB.bulkPutRecents(survived);
+          }
         }
 
         if (Array.isArray(playcounts)) {
@@ -649,8 +658,8 @@ const Sync = (() => {
           await DB.clearHistory();
           if (mergedH.length) await DB.bulkPutHistory(mergedH);
         } else if (Array.isArray(history)) {
-          // history: [] — Device A cleared history; propagate the clear.
-          await DB.clearHistory();
+          // history: [] — only clear if the snapshot carries an explicit historyClearedAt signal.
+          if ((data.historyClearedAt || 0) > 0) await DB.clearHistory();
         }
         break;
       }
@@ -913,7 +922,10 @@ const Sync = (() => {
       .filter(r => r.removedAt && r.removedAt > week)
       .map(r => ({ id: r.id, removedAt: r.removedAt }));
 
-    await _writeFile(FILENAMES.recents, [...live, ...tombstones]);
+    // Format: { clearedAt, items } — clearedAt > 0 lets other devices distinguish an
+    // intentional user-clear from an accidental empty push (e.g. race on first install).
+    const clearedAt = await DB.getState('recentsClearedAt').catch(() => 0) || 0;
+    await _writeFile(FILENAMES.recents, { clearedAt, items: [...live, ...tombstones] });
     console.log(`[Sync] Pushed recents (${live.length} live, ${tombstones.length} tombstones)`);
   }
 
@@ -956,16 +968,23 @@ const Sync = (() => {
   }
 
   async function _pushHistory() {
-    const history = await DB.getHistory(CONFIG.HISTORY_MAX);
-    await _writeFile(FILENAMES.history, history.map(h => ({
-      id:           h.id,
-      name:         h.name         || null,
-      displayName:  h.displayName  || h.name || null,
-      artist:       h.artist       || null,
-      folderId:     h.folderId     || null,
-      thumbnailUrl: (h.thumbnailUrl && !h.thumbnailUrl.startsWith('blob:') && h.thumbnailUrl !== 'id3') ? h.thumbnailUrl : null,
-      playedAt:     h.playedAt     ?? Date.now(),
-    })));
+    const history   = await DB.getHistory(CONFIG.HISTORY_MAX);
+    // Format: { clearedAt, items } — mirrors _pushRecents / _pushPlaycounts so an
+    // intentional user-clear propagates correctly (clearedAt > 0) vs an accidental
+    // empty push on first install (clearedAt = 0 → other devices ignore the empty).
+    const clearedAt = await DB.getState('historyClearedAt').catch(() => 0) || 0;
+    await _writeFile(FILENAMES.history, {
+      clearedAt,
+      items: history.map(h => ({
+        id:           h.id,
+        name:         h.name         || null,
+        displayName:  h.displayName  || h.name || null,
+        artist:       h.artist       || null,
+        folderId:     h.folderId     || null,
+        thumbnailUrl: (h.thumbnailUrl && !h.thumbnailUrl.startsWith('blob:') && h.thumbnailUrl !== 'id3') ? h.thumbnailUrl : null,
+        playedAt:     h.playedAt     ?? Date.now(),
+      })),
+    });
     console.log(`[Sync] Pushed history (${history.length})`);
   }
 
@@ -1067,14 +1086,17 @@ const Sync = (() => {
       && !u.includes('googleapis.com');
     const cleanUrl = u => isExternal(u) ? u : null;
 
-    let [pinnedMeta, pinnedOrder, allRecents, playcounts, playlists, history, _playCountsClearedTs] = await Promise.all([
+    let [pinnedMeta, pinnedOrder, allRecents, playcounts, playlists, history,
+         _playCountsClearedTs, _recentsClearedTs, _historyClearedTs] = await Promise.all([
       DB.getState('pinnedMeta'),
       DB.getState('pinned'),
       DB.getRecentsAll(),          // ALL records including tombstones
       DB.getAllPlaycounts(),   // includes hidden songs so other devices get hiddenFromTopPlayed
       DB.getPlaylists(),
       DB.getHistory(CONFIG.HISTORY_MAX),
-      DB.getState('playCountsClearedAt').catch(() => 0), // ONLY stamped when playcounts are actually cleared
+      DB.getState('playCountsClearedAt').catch(() => 0),
+      DB.getState('recentsClearedAt').catch(() => 0),
+      DB.getState('historyClearedAt').catch(() => 0),
     ]);
     // Unwrap corrupted format if present
     if (pinnedMeta && typeof pinnedMeta.meta === 'object' && !Array.isArray(pinnedMeta.meta)
@@ -1101,6 +1123,8 @@ const Sync = (() => {
     const payload = {
       ts:                  Date.now(),
       playCountsClearedAt: _playCountsClearedTs || 0,
+      recentsClearedAt:    _recentsClearedTs    || 0,
+      historyClearedAt:    _historyClearedTs    || 0,
       pinned:              pinnedMeta  || {},
       pinnedOrder:         pinnedOrder || [],
       recents: recentsLive.map((r, i) => {

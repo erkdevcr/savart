@@ -1,13 +1,18 @@
 /* ============================================================
    Savart — Auth module
-   Google Identity Services (GIS) — token client (implicit flow)
+   Dual-mode: Web (GIS implicit flow) + Android nativo (Capacitor)
    ============================================================
-   Key behaviors:
-   - Access tokens last ~1h. GIS does NOT provide silent refresh.
-   - requestToken() MUST be called from a user gesture (click).
-   - We monitor expiry and show a renewal banner before it happens.
-   - Tokens are kept in memory + localStorage (timestamp only, not
-     the token itself — the actual token lives only in memory).
+   En navegador web: usa Google Identity Services (GIS), igual que antes.
+   En Android nativo (Capacitor): usa @codetrix-studio/capacitor-google-auth
+   que invoca el Google Sign-In SDK nativo de Android.
+
+   Detección de plataforma:
+     _isNative() → window.Capacitor?.isNativePlatform() === true
+
+   Token management nativo:
+   - signIn()   → abre el selector de cuenta nativo de Google
+   - refresh()  → refresca el token silenciosamente (sin UI)
+   - signOut()  → cierra sesión
    ============================================================ */
 
 const Auth = (() => {
@@ -16,29 +21,163 @@ const Auth = (() => {
   let _accessToken  = null;   // lives in memory only
   let _expiresAt    = 0;      // epoch ms
   let _warnTimer    = null;   // setTimeout id for expiry warning
-  let _onReady          = null;   // callback when a fresh token arrives (initial login only)
-  let _onExpiring       = null;   // callback when token is about to expire
-  let _onLogout         = null;   // callback when user logs out
-  let _onAutoLoginFail  = null;   // callback when silent re-auth fails
+  let _onReady          = null;
+  let _onExpiring       = null;
+  let _onLogout         = null;
+  let _onAutoLoginFail  = null;
   let _initialized      = false;
-  let _isSilentRenew    = false;  // true while a background token renewal is in flight
-  let _renewTimeoutId   = null;   // safety timeout for silent renewal
-  let _renewOnGesture   = false;  // renewal queued — fire on next user tap/click
+  let _isSilentRenew    = false;
+  let _renewTimeoutId   = null;
+  let _renewOnGesture   = false;
+  let _nativeInitialized = false;  // true after GoogleAuth.initialize() completes
 
   /* ── LocalStorage keys ─────────────────────────────────── */
   const LS_EXPIRY  = 'savart_token_expiry';
-  const LS_AUTHED  = 'savart_authed';       // "1" = user was authenticated before
+  const LS_AUTHED  = 'savart_authed';
+
+  /* ── Platform detection ────────────────────────────────── */
+  function _isNative() {
+    return !!(window.Capacitor?.isNativePlatform?.());
+  }
+
+  function _getGoogleAuthPlugin() {
+    return window.Capacitor?.Plugins?.GoogleAuth || null;
+  }
+
+  /* ── Native auth helpers ────────────────────────────────── */
+
+  /**
+   * Inicializa el GoogleSignInClient en Android.
+   * DEBE llamarse antes de signIn() o refresh().
+   * Lee el clientId y scopes de CONFIG para mantener consistencia con la web app.
+   */
+  async function _initNativeGoogleAuth() {
+    const GoogleAuth = _getGoogleAuthPlugin();
+    if (!GoogleAuth) {
+      console.error('[Auth] GoogleAuth plugin no disponible.');
+      return;
+    }
+    try {
+      await GoogleAuth.initialize({
+        clientId: CONFIG.CLIENT_ID,
+        scopes: [
+          'email',
+          'profile',
+          'https://www.googleapis.com/auth/drive.readonly',
+          'https://www.googleapis.com/auth/drive.appdata',
+          'https://www.googleapis.com/auth/drive.file',
+        ],
+        grantOfflineAccess: true,
+      });
+      _nativeInitialized = true;
+      console.log('[Auth] GoogleAuth inicializado correctamente.');
+    } catch (err) {
+      console.error('[Auth] Error al inicializar GoogleAuth:', err);
+    }
+  }
+
+  async function _nativeSignIn(silent = false) {
+    const GoogleAuth = _getGoogleAuthPlugin();
+    if (!GoogleAuth) {
+      console.error('[Auth] GoogleAuth plugin no disponible en modo nativo.');
+      const cb = _onAutoLoginFail;
+      _onAutoLoginFail = null;
+      cb?.('plugin_not_available');
+      return;
+    }
+
+    // Asegurar que el plugin esté inicializado antes de cualquier operación
+    if (!_nativeInitialized) {
+      await _initNativeGoogleAuth();
+    }
+
+    try {
+      if (silent) {
+        console.log('[Auth] Native: intentando refresh silencioso…');
+        try {
+          const refreshed = await GoogleAuth.refresh();
+          if (refreshed?.accessToken) {
+            _saveToken(refreshed.accessToken, 55 * 60 * 1000);
+            console.log('[Auth] Native: refresh silencioso exitoso.');
+            _onAutoLoginFail = null;
+            _onReady?.();
+            return;
+          }
+        } catch (refreshErr) {
+          console.log('[Auth] Native: refresh silencioso falló (' + (refreshErr?.message || refreshErr) + ')');
+        }
+        // Refresh falló → notificar para mostrar pantalla de login
+        const cb = _onAutoLoginFail;
+        _onAutoLoginFail = null;
+        cb?.('silent_failed');
+        return;
+      }
+
+      // Sign-in completo (muestra selector de cuenta nativo)
+      console.log('[Auth] Native: abriendo Google Sign-In…');
+      const user = await GoogleAuth.signIn();
+      const token = user?.authentication?.accessToken;
+      if (!token) throw new Error('No access token en la respuesta de sign-in');
+
+      _saveToken(token, 55 * 60 * 1000);
+      console.log('[Auth] Native: sign-in exitoso.');
+      _onAutoLoginFail = null;
+      _onReady?.();
+
+    } catch (err) {
+      console.error('[Auth] Native sign-in error:', err);
+      _isSilentRenew = false;
+      const errMsg = err?.message || String(err) || 'unknown';
+
+      if (_onAutoLoginFail) {
+        const cb = _onAutoLoginFail;
+        _onAutoLoginFail = null;
+        cb(errMsg);
+      } else {
+        // 12501 = usuario canceló el diálogo de cuentas
+        if (!errMsg.includes('cancel') && !errMsg.includes('12501')) {
+          UI?.showToast('No se pudo iniciar sesión con Google: ' + errMsg, 'error');
+        }
+      }
+    }
+  }
+
+  async function _nativeRefresh() {
+    const GoogleAuth = _getGoogleAuthPlugin();
+    if (!GoogleAuth) { _onExpiring?.(); return; }
+
+    if (_renewTimeoutId) { clearTimeout(_renewTimeoutId); _renewTimeoutId = null; }
+    console.log('[Auth] Native: refresh en background…');
+    _isSilentRenew = true;
+
+    _renewTimeoutId = setTimeout(() => {
+      _renewTimeoutId = null;
+      if (_isSilentRenew) {
+        _isSilentRenew = false;
+        console.warn('[Auth] Native: refresh timeout — mostrando banner de renovación');
+        _onExpiring?.();
+      }
+    }, 15_000);
+
+    try {
+      const refreshed = await GoogleAuth.refresh();
+      if (_renewTimeoutId) { clearTimeout(_renewTimeoutId); _renewTimeoutId = null; }
+      if (refreshed?.accessToken) {
+        _isSilentRenew = false;
+        _saveToken(refreshed.accessToken, 55 * 60 * 1000);
+        console.log('[Auth] Native: refresh en background exitoso.');
+      } else {
+        throw new Error('No accessToken en la respuesta de refresh');
+      }
+    } catch (err) {
+      if (_renewTimeoutId) { clearTimeout(_renewTimeoutId); _renewTimeoutId = null; }
+      _isSilentRenew = false;
+      console.warn('[Auth] Native: refresh en background falló:', err?.message || err);
+      _onExpiring?.();
+    }
+  }
 
   /* ── Init ──────────────────────────────────────────────── */
-  /**
-   * Initialize GIS token client.
-   * Must be called after the GIS script has loaded.
-   *
-   * @param {Object} callbacks
-   * @param {Function} callbacks.onReady    - called with no args when a valid token is available
-   * @param {Function} callbacks.onExpiring - called when token will expire soon (show banner)
-   * @param {Function} callbacks.onLogout   - called after logout
-   */
   function init({ onReady, onExpiring, onLogout } = {}) {
     if (_initialized) return;
     _initialized = true;
@@ -47,55 +186,45 @@ const Auth = (() => {
     _onExpiring = onExpiring || (() => {});
     _onLogout   = onLogout   || (() => {});
 
-    // Try to create token client now; if GIS hasn't loaded yet,
-    // it will be created lazily when requestToken() is called or
-    // when onGISLoad() fires via the script's onload attribute.
+    if (_isNative()) {
+      console.log('[Auth] Modo Android nativo — inicializando Capacitor GoogleAuth.');
+      _initNativeGoogleAuth();
+      return;
+    }
+
     _tryCreateClient();
     _setupGestureRenewal();
-    console.log('[Auth] Initialized.');
+    console.log('[Auth] Inicializado (modo web).');
   }
 
-  /**
-   * Creates the GIS token client if GIS is ready and client doesn't exist yet.
-   * Called on init() and again via onGISLoad() / requestToken() as fallback.
-   */
+  /* ── Web-mode GIS helpers ───────────────────────────────── */
   function _tryCreateClient() {
-    if (_tokenClient) return;                          // already created
-    if (!window.google?.accounts?.oauth2) return;      // GIS not loaded yet
+    if (_tokenClient) return;
+    if (!window.google?.accounts?.oauth2) return;
     _tokenClient = google.accounts.oauth2.initTokenClient({
       client_id: CONFIG.CLIENT_ID,
       scope: CONFIG.SCOPES,
       callback: _handleTokenResponse,
       error_callback: _handleTokenError,
     });
-    console.log('[Auth] GIS token client ready.');
+    console.log('[Auth] GIS token client listo.');
   }
 
-  /**
-   * Called by the GIS script's onload attribute.
-   * Ensures the token client is created even if init() ran before GIS loaded.
-   * Also fires any pending silent re-auth that was queued before GIS was ready.
-   */
   function onGISLoad() {
+    if (_isNative()) return;
     _tryCreateClient();
-    // If tryAutoLogin() was called before GIS loaded, _onAutoLoginFail will be
-    // set but no requestAccessToken will have been sent yet. Fire it now.
     if (_onAutoLoginFail && _tokenClient) {
-      console.log('[Auth] GIS now ready — firing deferred silent re-auth');
+      console.log('[Auth] GIS cargado — ejecutando re-auth silenciosa diferida');
       _tokenClient.requestAccessToken({ prompt: 'none' });
     }
   }
 
-  /* ── Token response handler ────────────────────────────── */
   function _handleTokenResponse(response) {
-    // Clear the silent-renewal safety timeout if one was running
     if (_renewTimeoutId) { clearTimeout(_renewTimeoutId); _renewTimeoutId = null; }
-
-    console.log('[Auth] Token callback fired. Silent?', _isSilentRenew, 'Error?', response?.error || 'none');
+    console.log('[Auth] Token callback. Silent?', _isSilentRenew, 'Error?', response?.error || 'none');
     if (response.error) {
       console.error('[Auth] Token error:', response.error, response.error_description);
       _isSilentRenew = false;
-      // If this was a silent re-auth attempt that failed, notify caller
       if (_onAutoLoginFail) {
         const cb = _onAutoLoginFail;
         _onAutoLoginFail = null;
@@ -105,44 +234,28 @@ const Auth = (() => {
       }
       return;
     }
-
-    // Success — clear any pending fail callback
     _onAutoLoginFail = null;
-
     const expiresInMs = (parseInt(response.expires_in, 10) || 3600) * 1000;
     _saveToken(response.access_token, expiresInMs);
-
     if (_isSilentRenew) {
-      // Background renewal — just refresh the token, do NOT re-run app boot
       _isSilentRenew = false;
-      console.log('[Auth] Silent renewal succeeded — token refreshed silently.');
+      console.log('[Auth] Renovación silenciosa exitosa.');
       return;
     }
-
-    console.log('[Auth] Token saved. Calling _onReady, fn=', typeof _onReady);
-    try {
-      _onReady();
-      console.log('[Auth] _onReady() completed OK');
-    } catch(err) {
-      console.error('[Auth] _onReady() threw:', err.message, err.stack);
-    }
+    console.log('[Auth] Token guardado. Llamando _onReady');
+    try { _onReady(); } catch(err) { console.error('[Auth] _onReady() error:', err.message); }
   }
 
   function _handleTokenError(error) {
     console.error('[Auth] GIS error:', error);
     if (_renewTimeoutId) { clearTimeout(_renewTimeoutId); _renewTimeoutId = null; }
     _isSilentRenew = false;
-
-    // If this was a silent re-auth attempt, route the failure to the caller
-    // (skip toasts — this is expected when the session has expired)
     if (_onAutoLoginFail) {
       const cb = _onAutoLoginFail;
       _onAutoLoginFail = null;
       cb(error.type || 'unknown');
       return;
     }
-
-    // popup_closed_by_user is not a real error, user just closed the consent window
     if (error.type === 'popup_closed') return;
     if (error.type === 'popup_failed_to_open') {
       UI?.showToast('El popup fue bloqueado. Permite popups para localhost en Chrome.', 'error');
@@ -155,13 +268,10 @@ const Auth = (() => {
   function _saveToken(token, expiresInMs) {
     _accessToken = token;
     _expiresAt   = Date.now() + expiresInMs;
-
-    // Persist expiry time (not the token) so we know the user was authenticated
     try {
       localStorage.setItem(LS_EXPIRY, String(_expiresAt));
       localStorage.setItem(LS_AUTHED, '1');
-    } catch (_) { /* private browsing — ignore */ }
-
+    } catch (_) {}
     _scheduleExpiryWarning(expiresInMs);
   }
 
@@ -175,161 +285,104 @@ const Auth = (() => {
     }
   }
 
-  /**
-   * Called when the token is close to expiry (CONFIG.TOKEN_WARN_BEFORE_EXPIRY_MS
-   * before it runs out, default 5 min).
-   *
-   * Strategy — three tiers:
-   *   1. Proactive silent renewal: call requestAccessToken({ prompt:'none' })
-   *      directly from the timer — no user gesture required. Works as long as
-   *      the user's Google session is still active in the browser. Same as
-   *      tryAutoLogin() used on page load.
-   *   2. Gesture fallback: if tier-1 fails (mobile popup block, expired Google
-   *      session, etc.), set _renewOnGesture so the next user tap renews silently
-   *      via prompt:'' inside a real gesture context.
-   *   3. Banner: if neither fires before the token fully expires, show the renewal
-   *      banner as a last resort.
-   */
   function _queueGestureRenewal() {
-    _tryCreateClient();
-    if (!_tokenClient) {
-      console.warn('[Auth] GIS not ready — showing renewal banner');
-      _onExpiring();
+    // Modo nativo: refresh silencioso directo (no requiere gesto del usuario)
+    if (_isNative()) {
+      _nativeRefresh();
       return;
     }
 
-    // ── Tier 1: proactive silent renewal from the timer ──────────
-    console.log('[Auth] Token expiring — attempting proactive silent renewal (prompt:none)…');
+    // Modo web: lógica original con GIS
+    _tryCreateClient();
+    if (!_tokenClient) {
+      console.warn('[Auth] GIS no listo — mostrando banner');
+      _onExpiring();
+      return;
+    }
+    console.log('[Auth] Token expirando — intentando renovación proactiva (prompt:none)…');
     _isSilentRenew = true;
-
-    // Safety net: if GIS doesn't answer within 12 s, drop to tier 2
     if (_renewTimeoutId) clearTimeout(_renewTimeoutId);
     _renewTimeoutId = setTimeout(() => {
       _renewTimeoutId = null;
       if (_isSilentRenew) {
         _isSilentRenew = false;
-        console.warn('[Auth] Proactive renewal timed out — falling back to gesture renewal');
+        console.warn('[Auth] Renovación proactiva timeout — fallback a gesto');
         _fallbackToGestureRenewal();
       }
     }, 12_000);
-
-    // If GIS returns an error (session expired, popup blocked, etc.) → tier 2
     _onAutoLoginFail = (err) => {
       _onAutoLoginFail = null;
       _isSilentRenew   = false;
-      console.warn('[Auth] Proactive silent renewal failed (' + err + ') — falling back to gesture renewal');
+      console.warn('[Auth] Renovación proactiva falló (' + err + ') — fallback a gesto');
       _fallbackToGestureRenewal();
     };
-
     _tokenClient.requestAccessToken({ prompt: 'none' });
   }
 
-  /**
-   * Tier-2 fallback: set the gesture flag so the next user click/tap
-   * renews the token with prompt:''.  If the token fully expires before
-   * any gesture arrives, show the renewal banner (tier 3).
-   */
   function _fallbackToGestureRenewal() {
     _renewOnGesture = true;
     const msUntilExpiry = Math.max(0, _expiresAt - Date.now());
     if (_renewTimeoutId) clearTimeout(_renewTimeoutId);
     if (msUntilExpiry > 0) {
-      console.log('[Auth] Renewal queued for next user gesture (' + Math.round(msUntilExpiry / 1000) + 's until expiry)');
       _renewTimeoutId = setTimeout(() => {
         _renewTimeoutId = null;
         if (_renewOnGesture) {
           _renewOnGesture = false;
-          console.warn('[Auth] Token expired before a user gesture — showing banner');
+          console.warn('[Auth] Token expiró sin gesto del usuario — mostrando banner');
           _onExpiring();
         }
       }, msUntilExpiry);
     } else {
-      // Token already expired — show banner immediately
       _renewOnGesture = false;
-      console.warn('[Auth] Token already expired — showing banner');
+      console.warn('[Auth] Token ya expirado — mostrando banner');
       _onExpiring();
     }
   }
 
-  /**
-   * Wires global tap/click listeners.
-   * When _renewOnGesture is true, the next interaction triggers a silent
-   * requestAccessToken({ prompt:'' }) — GIS can open and close the popup
-   * instantly because it's called from a real user gesture.
-   * Called once from init().
-   */
   function _setupGestureRenewal() {
     const _attemptRenewal = () => {
       if (!_renewOnGesture || !_tokenClient || _isSilentRenew) return;
       _renewOnGesture = false;
       if (_renewTimeoutId) { clearTimeout(_renewTimeoutId); _renewTimeoutId = null; }
-
-      console.log('[Auth] Renewing token on user gesture (prompt:\'\')…');
+      console.log('[Auth] Renovando token en gesto de usuario (prompt:\'\')…');
       _isSilentRenew = true;
-
-      // Safety net: if GIS returns no callback within 12 s, show banner
       _renewTimeoutId = setTimeout(() => {
         _renewTimeoutId = null;
         if (_isSilentRenew) {
           _isSilentRenew = false;
-          console.warn('[Auth] Gesture renewal timed out — showing banner');
+          console.warn('[Auth] Renovación por gesto timeout — mostrando banner');
           _onExpiring();
         }
       }, 12_000);
-
       _onAutoLoginFail = (err) => {
         _onAutoLoginFail = null;
         _isSilentRenew   = false;
-        console.warn('[Auth] Gesture renewal failed:', err, '— showing banner');
+        console.warn('[Auth] Renovación por gesto falló:', err);
         _onExpiring();
       };
-
-      // prompt:'' = no consent screen if already granted; GIS closes the popup
-      // instantly when the Google session is still active.
       _tokenClient.requestAccessToken({ prompt: '' });
     };
-
     document.addEventListener('click',      _attemptRenewal, { passive: true, capture: true });
     document.addEventListener('touchstart', _attemptRenewal, { passive: true, capture: true });
   }
 
   /* ── Public API ─────────────────────────────────────────── */
 
-  /**
-   * Attempt a silent re-authentication without any UI.
-   * Uses prompt:'none' — succeeds if there is an active Google session
-   * and the user has previously granted the required scopes.
-   * If it fails, the error_callback fires (popup_failed / access_denied)
-   * and the caller should fall back to showing the login screen.
-   * Safe to call on page load without a user gesture.
-   */
-  /**
-   * Attempt a silent re-authentication without any UI.
-   * Uses prompt:'none' — succeeds if there is an active Google session
-   * and the user has previously granted the required scopes.
-   *
-   * @param {Function} [onFail] - called with an error type string if silent auth fails.
-   *   Use this to reveal the manual login button.
-   *   If omitted, failure is silent.
-   */
   function tryAutoLogin(onFail) {
     _onAutoLoginFail = typeof onFail === 'function' ? onFail : null;
-    _tryCreateClient();
-    if (!_tokenClient) {
-      // GIS not loaded yet — will be retried when onGISLoad() fires.
-      // Store onFail so it can still be called if GIS fails to load entirely.
-      console.log('[Auth] GIS not ready for auto-login, will retry on load');
+    if (_isNative()) {
+      _nativeSignIn(/* silent= */ true);
       return;
     }
-    console.log('[Auth] Attempting silent re-auth (prompt:none)...');
+    _tryCreateClient();
+    if (!_tokenClient) {
+      console.log('[Auth] GIS no listo para auto-login, reintentará al cargar');
+      return;
+    }
+    console.log('[Auth] Intentando re-auth silenciosa (prompt:none)...');
     _tokenClient.requestAccessToken({ prompt: 'none' });
   }
 
-  /**
-   * Fetch the authenticated user's profile from Google.
-   * Returns { email, name, picture } or null on error.
-   * Call after a valid token is available.
-   */
   async function fetchUserInfo() {
     const token = getValidToken();
     if (!token) return null;
@@ -338,86 +391,69 @@ const Auth = (() => {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) return null;
-      return res.json(); // { id, email, name, given_name, picture, ... }
-    } catch (_) {
-      return null;
-    }
+      return res.json();
+    } catch (_) { return null; }
   }
 
-  /**
-   * Request a token forcing the Google consent screen.
-   * Use when a new scope was added and the existing token doesn't include it.
-   * MUST be called from a user gesture.
-   */
   function requestTokenWithConsent() {
+    if (_isNative()) {
+      _nativeSignIn(/* silent= */ false);
+      return;
+    }
     _tryCreateClient();
     if (!_tokenClient) return;
-    console.log('[Auth] Requesting token with forced consent screen');
+    console.log('[Auth] Solicitando token con pantalla de consentimiento');
     _tokenClient.requestAccessToken({ prompt: 'consent' });
   }
 
-  /**
-   * Request a new access token.
-   * MUST be called from a user-driven event (click/tap).
-   * If the user already has an active Google session, the GIS popup
-   * may complete immediately without user interaction.
-   */
   function requestToken() {
-    _tryCreateClient(); // last-chance init if GIS loaded after init()
+    if (_isNative()) {
+      _nativeSignIn(/* silent= */ false);
+      return;
+    }
+    _tryCreateClient();
     if (!_tokenClient) {
-      console.error('[Auth] GIS not ready yet — try again in a moment');
+      console.error('[Auth] GIS aún no cargado — intenta de nuevo en un momento');
       if (typeof UI !== 'undefined') {
         UI.showToast('Google Sign-In aún cargando, intenta de nuevo', 'error');
       }
       return;
     }
-    // prompt: '' — skip consent screen if user already granted this scope
     _tokenClient.requestAccessToken({ prompt: '' });
   }
 
-  /**
-   * Returns the current valid access token, or null if expired/missing.
-   * Call this before every Drive API request.
-   */
   function getValidToken() {
     if (!_accessToken) return null;
-    // Consider token invalid 30s before it actually expires (clock skew buffer)
     if (Date.now() > _expiresAt - 30_000) return null;
     return _accessToken;
   }
 
-  /**
-   * Returns true if we have a valid (non-expired) token in memory.
-   */
   function isAuthenticated() {
     return !!getValidToken();
   }
 
-  /**
-   * Returns true if the user was authenticated before (even if token expired).
-   * Used to decide whether to auto-show the renewal banner vs the full login screen.
-   */
   function wasAuthenticated() {
     try {
       return localStorage.getItem(LS_AUTHED) === '1';
     } catch (_) { return false; }
   }
 
-  /**
-   * Returns ms remaining until token expires (0 if already expired).
-   */
   function tokenTimeRemaining() {
     return Math.max(0, _expiresAt - Date.now());
   }
 
-  /**
-   * Log out: revoke token, clear state.
-   */
-  function logout() {
-    if (_accessToken) {
-      google.accounts.oauth2.revoke(_accessToken, () => {
-        console.log('[Auth] Token revoked.');
-      });
+  async function logout() {
+    if (_isNative()) {
+      const GoogleAuth = _getGoogleAuthPlugin();
+      if (GoogleAuth) {
+        try { await GoogleAuth.signOut(); } catch (_) {}
+      }
+    } else if (_accessToken) {
+      try {
+        google.accounts.oauth2.revoke(_accessToken, () => {
+          console.log('[Auth] Token revocado.');
+        });
+      } catch (_) {}
     }
     _accessToken    = null;
     _expiresAt      = 0;
@@ -429,7 +465,7 @@ const Auth = (() => {
       localStorage.removeItem(LS_EXPIRY);
       localStorage.removeItem(LS_AUTHED);
     } catch (_) {}
-    _onLogout();
+    _onLogout?.();
   }
 
   /* ── Expose ─────────────────────────────────────────────── */

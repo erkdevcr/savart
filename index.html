@@ -1372,7 +1372,21 @@
 ════════════════════════════════════════════════════════ -->
 
 <!-- Google Identity Services -->
-<script src="https://accounts.google.com/gsi/client" onload="Auth?.onGISLoad()" async defer></script>
+<!--
+  GIS (Google Identity Services) — solo se carga en modo web/PWA.
+  En Android nativo (Capacitor) no se usa: auth.js detecta window.Capacitor
+  y usa el plugin @codetrix-studio/capacitor-google-auth en su lugar.
+-->
+<script>
+  if (!window.Capacitor) {
+    const gisScript = document.createElement('script');
+    gisScript.src = 'https://accounts.google.com/gsi/client';
+    gisScript.onload = () => Auth?.onGISLoad();
+    gisScript.async = true;
+    gisScript.defer = true;
+    document.head.appendChild(gisScript);
+  }
+</script>
 
 <!-- Savart modules -->
 <script src="js/config.js"></script>
@@ -1457,11 +1471,11 @@
   });
 
   // ── PWA service worker registration ────────────────────
-  if ('serviceWorker' in navigator) {
-    // Track the controller that was active when this page loaded.
-    // On first install there is no previous controller, so we skip
-    // the reload (nothing to refresh). On SW update the old controller
-    // exists, so we reload once to serve the freshly-cached shell.
+  // En modo Capacitor (Android nativo) el SW no es necesario —
+  // Capacitor sirve los archivos localmente sin red, así que lo omitimos.
+  const _isCapacitorNative = !!(window.Capacitor?.isNativePlatform?.());
+
+  if (!_isCapacitorNative && 'serviceWorker' in navigator) {
     const _prevController = navigator.serviceWorker.controller;
     let _reloading = false;
     navigator.serviceWorker.addEventListener('controllerchange', () => {

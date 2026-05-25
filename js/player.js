@@ -140,37 +140,139 @@ const Player = (() => {
   // Registers this PWA as a media app with the OS so audio keeps
   // playing when the screen locks and shows lock-screen controls.
 
-  function _msRegisterHandlers() {
-    if (!('mediaSession' in navigator)) return;
-    const ms = navigator.mediaSession;
-    ms.setActionHandler('play',          () => { play(); });
-    ms.setActionHandler('pause',         () => { pause(); });
-    ms.setActionHandler('previoustrack', () => { prev(); });
-    ms.setActionHandler('nexttrack',     () => { next(); });
-    ms.setActionHandler('seekto',        (e) => { if (e.seekTime != null) seekTo(e.seekTime); });
-    ms.setActionHandler('seekforward',   (e) => { seekTo(Math.min(getDuration(), getCurrentTime() + (e.seekOffset || 10))); });
-    ms.setActionHandler('seekbackward',  (e) => { seekTo(Math.max(0, getCurrentTime() - (e.seekOffset || 10))); });
+  // ── Native MediaSession bridge (Android Capacitor) ───────────────────────
+  function _nativeMS() {
+    return window.Capacitor?.isNativePlatform?.()
+      ? window.Capacitor?.Plugins?.MediaSession
+      : null;
   }
 
-  function _msSetMetadata(item) {
-    if (!('mediaSession' in navigator)) return;
-    // Only use absolute http(s) URLs for artwork — blob: URLs are not allowed
-    const artworkUrl = (item.thumbnailUrl && item.thumbnailUrl.startsWith('http'))
-      ? item.thumbnailUrl
-      : null;
-    navigator.mediaSession.metadata = new MediaMetadata({
-      title:  item.displayName || item.name || '',
-      artist: item.artist      || '',
-      album:  item.albumName   || item.album || '',
-      artwork: artworkUrl
-        ? [{ src: artworkUrl, sizes: '250x250', type: 'image/jpeg' }]
-        : [],
+  function _nativeMSRegister() {
+    const plugin = _nativeMS();
+    if (!plugin) return;
+
+    // Transport controls from notification / lock screen
+    plugin.addListener('play',     () => play());
+    plugin.addListener('pause',    () => pause());
+    plugin.addListener('next',     () => next());
+    plugin.addListener('previous', () => prev());
+    plugin.addListener('seekto',   (e) => { if (e.seekTime != null) seekTo(e.seekTime); });
+
+    // Audio Focus events — handle notification sounds / calls gracefully
+    let _preDuckVolume = 1.0;
+    let _pausedByFocus = false;
+    let _fadeTimer     = null;
+
+    // Smoothly animate audio volume from current to target over `ms` milliseconds
+    function _fadeVolume(target, ms) {
+      const audio = _getAudio();
+      if (!audio) return;
+      if (_fadeTimer) { clearInterval(_fadeTimer); _fadeTimer = null; }
+      const steps    = Math.max(1, Math.round(ms / 16)); // ~60fps
+      const start    = audio.volume;
+      const delta    = (target - start) / steps;
+      let   step     = 0;
+      _fadeTimer = setInterval(() => {
+        step++;
+        audio.volume = Math.min(1, Math.max(0, start + delta * step));
+        if (step >= steps) {
+          audio.volume = target;
+          clearInterval(_fadeTimer);
+          _fadeTimer = null;
+        }
+      }, 16);
+    }
+
+    plugin.addListener('audioFocusDuck', (e) => {
+      // Notification sound → fade down to 20% over 200ms, keep playing
+      const audio = _getAudio();
+      if (audio) _preDuckVolume = audio.volume;
+      _fadeVolume(e.volume ?? 0.2, 200);
+    });
+
+    plugin.addListener('audioFocusGain', () => {
+      // Restore volume with a gentle fade-in over 400ms
+      _fadeVolume(_preDuckVolume, 400);
+      if (_pausedByFocus) {
+        _pausedByFocus = false;
+        play();
+      }
+    });
+
+    plugin.addListener('audioFocusLossTransient', () => {
+      // Phone call / navigation voice → pause, will resume on gain
+      const audio = _getAudio();
+      if (audio && !audio.paused) {
+        _pausedByFocus = true;
+        pause();
+      }
+    });
+
+    plugin.addListener('audioFocusLoss', () => {
+      // Another music app took focus permanently → just pause, don't auto-resume
+      _pausedByFocus = false;
+      pause();
+    });
+
+    // Bluetooth / headphones disconnected → pause so audio doesn't blare from speaker
+    plugin.addListener('audioBecomingNoisy', () => {
+      pause();
     });
   }
 
+  function _msRegisterHandlers() {
+    // Web Media Session (browser / PWA)
+    if ('mediaSession' in navigator) {
+      const ms = navigator.mediaSession;
+      ms.setActionHandler('play',          () => { play(); });
+      ms.setActionHandler('pause',         () => { pause(); });
+      ms.setActionHandler('previoustrack', () => { prev(); });
+      ms.setActionHandler('nexttrack',     () => { next(); });
+      ms.setActionHandler('seekto',        (e) => { if (e.seekTime != null) seekTo(e.seekTime); });
+      ms.setActionHandler('seekforward',   (e) => { seekTo(Math.min(getDuration(), getCurrentTime() + (e.seekOffset || 10))); });
+      ms.setActionHandler('seekbackward',  (e) => { seekTo(Math.max(0, getCurrentTime() - (e.seekOffset || 10))); });
+    }
+    // Native bridge
+    _nativeMSRegister();
+  }
+
+  function _msSetMetadata(item) {
+    const artworkUrl = (item.thumbnailUrl && item.thumbnailUrl.startsWith('http'))
+      ? item.thumbnailUrl
+      : null;
+    // Web Media Session
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title:  item.displayName || item.name || '',
+        artist: item.artist      || '',
+        album:  item.albumName   || item.album || '',
+        artwork: artworkUrl
+          ? [{ src: artworkUrl, sizes: '250x250', type: 'image/jpeg' }]
+          : [],
+      });
+    }
+    // Native bridge
+    const plugin = _nativeMS();
+    if (plugin) {
+      plugin.updateMetadata({
+        title:      item.displayName || item.name || '',
+        artist:     item.artist      || '',
+        album:      item.albumName   || item.album || '',
+        artworkUrl: artworkUrl || '',
+      }).catch(() => {});
+    }
+  }
+
   function _msSetPlaybackState(state) {
-    if (!('mediaSession' in navigator)) return;
-    navigator.mediaSession.playbackState = state; // 'playing' | 'paused' | 'none'
+    // Web Media Session
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.playbackState = state;
+    }
+    // Native bridge
+    const plugin = _nativeMS();
+    if (plugin) {
+      plugin.setPlaybackState({ state }).catch(() => {});
+    }
   }
 
   function _msUpdatePositionState() {

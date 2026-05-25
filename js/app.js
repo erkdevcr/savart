@@ -433,31 +433,34 @@ const App = (() => {
     _refreshCollectionCache().catch(() => {});
 
     // Fast path: read home snapshot from Drive (~1 API call, ~300 ms).
-    // Re-renders home with cross-device state before the full init() merge finishes.
-    Sync.readHome().then(data => {
-      if (data) _loadHomeData();
-    }).catch(() => {});
-
-    // Full sync in background — merges all types, pushes merged state back.
-    // When complete, refresh UI so any data that wasn't in the home snapshot appears.
+    // Fast path: read home snapshot first (serialized — init() only starts AFTER
+    // readHome() finishes so clearRecents/clearHistory inside _applyRemote('home')
+    // never races with init()'s push phase, which would push empty IDB state to Drive
+    // and wipe other devices via the LWW propagation logic.
     const _bootBarFill = document.querySelector('.boot-toast-bar-fill');
     const _onBootProgress = (pct) => {
       if (_bootBarFill) _bootBarFill.style.width = pct + '%';
     };
-    Sync.init({ onProgress: _onBootProgress }).then(() => {
-      _restoreSettings();
-      _loadHomeData();
-      const view = UI.getCurrentView();
-      if (view === 'library') _setLibTab(_currentLibTab || 'albums');
-      // Start live 3-second polling (Last-Write-Wins)
-      Sync.startLiveSync(_onSyncDataChanged);
-    }).catch(() => {}).finally(() => {
-      _hideBootToast();
-      // Boot ID3 refresh — 5 s after sync completes (or fails).
-      // Revokes stale blob: URLs and creates fresh session URLs for every home item
-      // whose cover is embedded in the ID3 tags, so they never show blank on startup.
-      setTimeout(() => _bootId3Refresh().catch(() => {}), 5000);
-    });
+    Sync.readHome()
+      .then(data => { if (data) _loadHomeData(); })
+      .catch(() => {})
+      .finally(() => {
+        // Full sync in background — merges all types, pushes merged state back.
+        // Runs only after readHome() completes (success or fail) to prevent the
+        // race where readHome()'s clearRecents() fires during init()'s push phase.
+        Sync.init({ onProgress: _onBootProgress }).then(() => {
+          _restoreSettings();
+          _loadHomeData();
+          const view = UI.getCurrentView();
+          if (view === 'library') _setLibTab(_currentLibTab || 'albums');
+          // Start live 3-second polling (Last-Write-Wins)
+          Sync.startLiveSync(_onSyncDataChanged);
+        }).catch(() => {}).finally(() => {
+          _hideBootToast();
+          // Boot ID3 refresh — 5 s after sync completes (or fails).
+          setTimeout(() => _bootId3Refresh().catch(() => {}), 5000);
+        });
+      });
 
     // Auto-open Deep Scan if launched from "Abrir en pestaña"
     if (location.hash === '#deep-scan' || location.hash === '#deep-scan-artists') {
@@ -12583,7 +12586,9 @@ const App = (() => {
         console.error('[App] SD save error:', err);
         saveBtn.disabled = false;
         saveLabel.textContent = 'Guardar';
-        UI.showToast(UI.t('toast_sd_save_error'), 'error');
+        // Show the specific error step so it's easy to diagnose
+        const msg = err?.message || UI.t('toast_sd_save_error');
+        UI.showToast(msg, 'error', 6000);
       }
     });
 
@@ -13196,13 +13201,19 @@ const App = (() => {
           const _nowTs = Date.now();
           await DB.setState('homeCleared', _nowTs);
 
-          // Stamp playCountsClearedAt ONLY when playcounts were actually cleared.
-          // This is the signal _pushPlaycounts() and _pushHome() embed so OTHER devices
-          // know to discard their old playcount records.  Using homeCleared for this was
-          // wrong: clearing Recents would also poison the playcounts clearedAt signal,
-          // making Device B throw away all Most Played data it never cleared.
+          // Stamp per-section clearedAt timestamps ONLY when that section was actually cleared.
+          // Each timestamp is the signal _push* and _pushHome() embed so OTHER devices
+          // know to discard their own records for that section.  Using a single homeCleared
+          // for all sections was wrong: clearing Recents would also poison the playcounts
+          // clearedAt signal, making Device B throw away Most Played data it never cleared.
           if (checked.includes('playcounts')) {
             await DB.setState('playCountsClearedAt', _nowTs);
+          }
+          if (checked.includes('recents')) {
+            await DB.setState('recentsClearedAt', _nowTs);
+          }
+          if (checked.includes('history')) {
+            await DB.setState('historyClearedAt', _nowTs);
           }
 
           // Push affected sync stores to Drive so other devices see the cleared state.

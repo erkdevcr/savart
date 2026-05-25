@@ -102,10 +102,18 @@ const Soundrop = (() => {
    */
   async function getAudioLink(videoId) {
     const url = `${WORKER_URL}?id=${encodeURIComponent(videoId)}`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(30000) });
-    if (!res.ok) throw new Error(`Worker error ${res.status}`);
-    const data = await res.json();
-    if (data.status !== 'ok' || !data.link) throw new Error(data.msg || 'Worker returned no audio link');
+    let res;
+    try {
+      res = await fetch(url, { signal: AbortSignal.timeout(30000) });
+    } catch (err) {
+      throw new Error(`[Soundrop] Worker no responde: ${err.message}`);
+    }
+    if (!res.ok) throw new Error(`[Soundrop] Worker HTTP ${res.status}`);
+    let data;
+    try { data = await res.json(); } catch { throw new Error('[Soundrop] Worker respuesta inválida'); }
+    if (data.status !== 'ok' || !data.link) {
+      throw new Error(`[Soundrop] Worker: ${data.msg || 'sin link de audio'}`);
+    }
     return data.link;
   }
 
@@ -117,9 +125,18 @@ const Soundrop = (() => {
    * @returns {Promise<Blob>}
    */
   async function fetchBlob(audioUrl) {
-    const res = await fetch(audioUrl);
-    if (!res.ok) throw new Error(`Blob fetch error ${res.status}`);
-    return await res.blob();
+    let res;
+    try {
+      res = await fetch(audioUrl, { signal: AbortSignal.timeout(120000) });
+    } catch (err) {
+      throw new Error(`[Soundrop] Descarga falló: ${err.message}`);
+    }
+    if (!res.ok) throw new Error(`[Soundrop] Descarga HTTP ${res.status}`);
+    try {
+      return await res.blob();
+    } catch (err) {
+      throw new Error(`[Soundrop] Error leyendo blob: ${err.message}`);
+    }
   }
 
   // ── Upload to Drive ───────────────────────────────────────
