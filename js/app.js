@@ -3386,6 +3386,14 @@ const App = (() => {
             _updatePinnedItemCover(item.id, coverUrl, true);
             _updateRowThumbnail(item.id, coverUrl, true);
             Player.patchQueueItem?.(item.id, { thumbnailUrl: coverUrl });
+            // Sync Meta cache with the winning URL.
+            // Meta.parse(force=true) above may have stored an ID3 blob URL in the
+            // cache, but if an external URL takes priority (_existingUrl wins),
+            // the player would still show the stale ID3 cover via _enrichTrack.
+            // Patching the cache here ensures browse rows and player are consistent.
+            if (_existingUrl && typeof Meta !== 'undefined') {
+              Meta.patchCached(item.id, { coverUrl: _existingUrl });
+            }
           }
           if (meta?.title) {
             _updateHomeCardName(item.id, meta.title);

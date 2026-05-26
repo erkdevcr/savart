@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.277';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.277 — fix nombres/artista también perdidos al regresar a búsqueda (toPaint repinta texto + cover)
+const APP_VERSION  = '3.5.278';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.278 — fix player muestra cover ID3 cuando browse muestra URL externa (sincronizar Meta cache)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
