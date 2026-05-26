@@ -3213,9 +3213,16 @@ const App = (() => {
 
     // ── Mandatory DB-read path (rescannedAt / manualAt) ─────────────────────
     // These items have authoritative data — paint whatever's in DB to DOM now.
-    toApply.forEach(item => _ensureCoverVisible(item.id, metaMap.get(item.id)));
+    toApply.forEach(item => {
+      const m = metaMap.get(item.id);
+      _ensureCoverVisible(item.id, m);
+      if (m && (m.displayName || m.artist)) {
+        _patchMetaText(item.id, { title: m.displayName || null, artist: m.artist || null,
+                                  album: m.album || null, year: m.year || null });
+      }
+    });
 
-    // ── Already-scanned path — paint cover from DB meta or in-memory cache ──
+    // ── Already-scanned path — paint cover + text from DB meta or in-memory cache ──
     // Priority: Meta session cache (fresh Object URL) → DB coverBlob → external URL.
     // If the metaMap snapshot shows no coverBlob/softScannedAt, the scan is still
     // in-progress (the worker set the session guard before downloading but hasn't
@@ -3227,7 +3234,14 @@ const App = (() => {
       // Always attempt to paint from whatever DB/cache data is available right now.
       // _ensureCoverVisible is a no-op when neither coverBlob nor a valid URL is set,
       // so calling it unconditionally is safe.
-      _ensureCoverVisible(item.id, metaMap.get(item.id));
+      const m = metaMap.get(item.id);
+      _ensureCoverVisible(item.id, m);
+      // Also repaint text — critical when the DOM is rebuilt (e.g. returning to search
+      // results) and the previously-painted displayName/artist would otherwise be lost.
+      if (m && (m.displayName || m.artist)) {
+        _patchMetaText(item.id, { title: m.displayName || null, artist: m.artist || null,
+                                  album: m.album || null, year: m.year || null });
+      }
     });
 
     // ── ID3 scan path ────────────────────────────────────────────────────────
