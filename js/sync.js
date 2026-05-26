@@ -477,10 +477,9 @@ const Sync = (() => {
         // a higher local count when two devices have played the same song differently.
         if (validCounts.length) {
           await DB.bulkApplyPlaycounts(validCounts);
-        } else if (!remoteClearedAt) {
-          // Empty remote without a clearedAt signal → remote explicitly cleared.
-          await DB.clearPlaycounts();
         }
+        // NOTE: empty remote with clearedAt===0 means "fresh device, no plays yet" — NOT a clear.
+        // We never wipe local playcounts on an ambiguous empty push; only clearedAt>0 (above) clears.
         break;
       }
 
@@ -1486,8 +1485,9 @@ const Sync = (() => {
 
         if (!validRemote.length) {
           // Remote is empty / all items pre-date the clear → nothing to merge in.
-          // If there was no cut signal either, treat it as an explicit remote clear.
-          if (cut === 0 && local.length > 0) await DB.clearPlaycounts();
+          // Do NOT treat empty remote + no clearedAt as an explicit clear:
+          // this happens on a fresh device that has never tracked plays.
+          // Wiping local Most Played in that case would be data loss.
           console.log('[Sync] Remote playcounts: no valid items after clear filter');
           return;
         }

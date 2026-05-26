@@ -684,7 +684,39 @@ const App = (() => {
   async function _restorePlayerState() {
     try {
       const state = await DB.getState('player_state');
-      if (!state?.queue?.length) return;
+      if (!state?.queue?.length) {
+        // No saved queue — on mobile, fall back to last history item so the
+        // mini-player shows the last played track (paused) on login.
+        const isMobile = !window.matchMedia('(min-width: 768px)').matches;
+        if (isMobile) {
+          const history = await DB.getHistory(1).catch(() => []);
+          if (history.length) {
+            const track = history[0];
+            Player.loadState([track], 0);
+            const enriched = _enrichTrack(track);
+            UI.updateMiniPlayer(enriched, false);
+            UI.updateExpandedPlayer(enriched, false);
+            // Patch with DB meta for correct artwork / display name
+            DB.getMeta(track.id).catch(() => null).then(dbMeta => {
+              if (!dbMeta) return;
+              if (Player.getCurrentTrack()?.id !== track.id) return;
+              if (dbMeta.displayName) track.displayName = dbMeta.displayName;
+              if (dbMeta.artist)      track.artist      = dbMeta.artist;
+              let coverUrl = null;
+              const _storedUrl = dbMeta.thumbnailUrl || dbMeta.coverUrl || null;
+              if (_storedUrl && _storedUrl !== 'id3' && !_storedUrl.startsWith('blob:')) {
+                coverUrl = _storedUrl;
+                if (typeof Meta !== 'undefined') Meta.patchCached(track.id, { coverUrl });
+              }
+              if (!coverUrl && dbMeta.coverBlob && typeof Meta !== 'undefined') {
+                coverUrl = Meta.injectCover(track.id, dbMeta.coverBlob);
+              }
+              UI.updateMiniPlayer(_enrichTrack(track), false);
+            });
+          }
+        }
+        return;
+      }
 
       const { queue, queueIndex = 0 } = state;
       Player.loadState(queue, queueIndex);
