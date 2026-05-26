@@ -62,6 +62,22 @@ html, body {
   overflow: hidden;
 }
 
+/* ── Broken-image suppression ─────────────────────────────── */
+/* Hide the browser's native broken-image icon in ALL contexts.
+   The JS global error-capture listener covers runtime failures;
+   these CSS rules cover the static cases (no src / empty src)
+   before JS has a chance to run. */
+img:not([src]),
+img[src=""] {
+  display: none !important;
+}
+/* color:transparent hides the alt-text that some browsers render
+   alongside the broken-image icon when the image is visible but
+   fails to decode (e.g. WebView on Android). */
+img {
+  color: transparent;
+}
+
 body {
   font-family: 'DM Sans', system-ui, sans-serif;
   font-size: 13px;
@@ -6225,8 +6241,8 @@ body.queue-open #mini-player { z-index: 65; }
     overflow: hidden; /* clip art if somehow still too large (safety net) */
     /* Anchor art to the bottom so it grows upward toward the "now playing" label */
     justify-content: flex-end;
-    padding-top: 6px;   /* minimal top gap — art reaches up toward "now playing" */
-    padding-bottom: 44px; /* +30px vs before → shifts art 30px upward */
+    padding-top: 20px;  /* top gap so cover doesn't overlap the "now playing" header */
+    padding-bottom: 44px; /* shifts art upward away from the mini-player */
   }
 
   .pexp-art {
@@ -6234,7 +6250,7 @@ body.queue-open #mini-player { z-index: 65; }
       min() picks the smallest of:
         100%       — panel content width (never overflow sideways)
         363px      — absolute max size cap
-        calc(100cqh - 6px) — keeps art within the panel height
+        calc(100cqh - 20px) — keeps art within the panel height (matches padding-top)
       Result: art is always a square that fits in the available space.
 
       flex-shrink: 0 is critical — without it, the flex column algorithm can
@@ -6242,7 +6258,7 @@ body.queue-open #mini-player { z-index: 65; }
       and making the container wider-than-tall → image gets clipped on the sides.
     */
     flex-shrink: 0;
-    width: min(100%, 363px, calc(100cqh - 6px));
+    width: min(100%, 363px, calc(100cqh - 20px));
     max-width: unset;
     aspect-ratio: 1;  /* height = width → always square */
     /* Safety net: never taller than the panel (cqh fallback for older WebViews) */

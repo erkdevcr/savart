@@ -13452,6 +13452,15 @@ const App = (() => {
   };
 })();
 
+/* ── Global image-error guard ─────────────────────────────── */
+// Captures ALL <img> load failures in the capture phase (before onerror).
+// Hides the element immediately so the browser's broken-image icon never renders.
+document.addEventListener('error', (e) => {
+  if (e.target && e.target.tagName === 'IMG') {
+    e.target.style.display = 'none';
+  }
+}, true /* capture: fires even for imgs without an onerror attr */);
+
 /* ── Auto-boot when DOM is ready ──────────────────────────── */
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', App.boot);
