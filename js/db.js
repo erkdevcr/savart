@@ -845,7 +845,7 @@ const DB = (() => {
     const entries = await _promisify(store.getAll());
     const cutoff  = Date.now() - CONFIG.HISTORY_MAX_DAYS * 24 * 60 * 60 * 1000;
     return entries
-      .filter(e => e.playedAt >= cutoff)
+      .filter(e => !e.removedAt && (e.playedAt || 0) >= cutoff)  // hide tombstones
       .sort((a, b) => b.playedAt - a.playedAt)
       .slice(0, limit);
   }
@@ -877,8 +877,16 @@ const DB = (() => {
    * @param {string} id
    */
   async function removeFromHistory(id) {
-    const store = _tx('history', 'readwrite');
-    return _promisify(store.delete(id));
+    // Tombstone — same pattern as removeRecent — so sync LWW doesn't restore the item on next login.
+    const store    = _tx('history', 'readwrite');
+    const existing = await _promisify(store.get(id));
+    await _promisify(store.put({ ...(existing || {}), id, removedAt: Date.now() }));
+  }
+
+  /** Returns ALL history store records, including tombstones. Used by sync push. */
+  async function getHistoryAll() {
+    const store = _tx('history');
+    return _promisify(store.getAll());
   }
 
   /**
@@ -932,14 +940,17 @@ const DB = (() => {
     const store   = _tx('history', 'readwrite');
     const entries = await _promisify(store.getAll());
     const cutoff  = Date.now() - CONFIG.HISTORY_MAX_DAYS * 24 * 60 * 60 * 1000;
+    const week    = Date.now() - 7 * 24 * 60 * 60 * 1000;
 
-    // Drop stale entries by age
+    // Purge tombstones older than 7 days (they've propagated to all devices by then)
+    // Drop stale live entries by age
     for (const e of entries) {
-      if (e.playedAt < cutoff) await _promisify(store.delete(e.id));
+      if (e.removedAt && e.removedAt < week)  { await _promisify(store.delete(e.id)); continue; }
+      if (!e.removedAt && (e.playedAt || 0) < cutoff) await _promisify(store.delete(e.id));
     }
 
-    // Trim to hard limit (keep most recent)
-    const remaining = entries.filter(e => e.playedAt >= cutoff);
+    // Trim live entries to hard limit (keep most recent); tombstones don't count toward limit
+    const remaining = entries.filter(e => !e.removedAt && (e.playedAt || 0) >= cutoff);
     if (remaining.length <= CONFIG.HISTORY_MAX) return;
     remaining.sort((a, b) => a.playedAt - b.playedAt);
     const toDelete = remaining.slice(0, remaining.length - CONFIG.HISTORY_MAX);
@@ -1239,6 +1250,7 @@ const DB = (() => {
     // History
     addToHistory,
     getHistory,
+    getHistoryAll,
     bulkPutHistory,
     removeFromHistory,
     clearHistory,

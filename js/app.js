@@ -4313,6 +4313,12 @@ const App = (() => {
       const enrichedRecents = recents.map(r => {
         const dbMeta = metaMap.get(r.id);
         const inMem  = (typeof Meta !== 'undefined') ? Meta.getCached(r.id) : null;
+        // Soundrop items always have IDs of the form "sd_<videoId>".
+        // Reconstruct isSoundrop/videoId from the ID so that items played
+        // before v3.5.288 (which didn't persist these fields) still show
+        // the SD chip and can be replayed correctly.
+        const _isSd  = r.isSoundrop || (r.id || '').startsWith('sd_');
+        const _vidId = r.videoId   || (_isSd ? (r.id || '').slice(3) : null);
         return {
           ...r,
           type:         'song',  // history is always songs
@@ -4323,6 +4329,8 @@ const App = (() => {
           folderId:     dbMeta?.folderId || r.folderId || null,
           folderType:   _stampFolderType(r, dbMeta),
           accessedAt:   r.playedAt || r.accessedAt,  // renderHome/recentMap may use accessedAt
+          isSoundrop:   _isSd  || false,
+          videoId:      _vidId || null,
         };
       });
 
@@ -4922,6 +4930,10 @@ const App = (() => {
         if (!coverUrl) {
           coverUrl = _pick(_safeUrl(dbMeta?.thumbnailUrl), _safeUrl(dbMeta?.coverUrl), _safeUrl(item.thumbnailUrl)) || null;
         }
+        // Reconstruct isSoundrop/videoId from the ID prefix so items played
+        // before v3.5.288 still show the SD chip and replay correctly.
+        const _isSd  = item.isSoundrop || (item.id || '').startsWith('sd_');
+        const _vidId = item.videoId   || (_isSd ? (item.id || '').slice(3) : null);
         return {
           ...item,
           // dbMeta (metadata store) reflects the latest rescan result — always
@@ -4931,6 +4943,8 @@ const App = (() => {
           artist:       _pick(inMem?.artist,   dbMeta?.artist,      item.artist),
           albumName:    _pick(inMem?.album,     dbMeta?.album,       item.albumName),
           thumbnailUrl: coverUrl,
+          isSoundrop:   _isSd  || false,
+          videoId:      _vidId || null,
         };
       });
 

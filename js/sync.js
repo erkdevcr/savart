@@ -499,6 +499,8 @@ const Sync = (() => {
 
       case 'history': {
         // LWW per-item by playedAt — keep the most recent play record for each song.
+        // Tombstone-aware: removedAt on an item means it was deleted; deletion wins over
+        // older plays so items don't come back after logout/login.
         // Supports new { clearedAt, items } format and legacy plain-array format.
         const remoteClearedAt = (!Array.isArray(data) && data?.clearedAt) || 0;
         const remoteArray     = Array.isArray(data) ? data : (Array.isArray(data?.items) ? data.items : []);
@@ -508,18 +510,29 @@ const Sync = (() => {
           if (remoteClearedAt > 0) await DB.clearHistory();
           break;
         }
-        const local   = await DB.getHistory();
-        const map     = new Map();
-        for (const item of local)  map.set(item.id, item);
+        const local = await DB.getHistoryAll(); // include local tombstones
+        const map   = new Map();
+        for (const item of local) map.set(item.id, item);
         for (const item of remote) {
           const ex = map.get(item.id);
+          // Remote is a tombstone — apply if newer than what we have locally.
+          if (item.removedAt) {
+            if (!ex || item.removedAt > (ex.removedAt || 0)) map.set(item.id, { id: item.id, removedAt: item.removedAt });
+            continue;
+          }
+          // Local tombstone wins if the deletion timestamp is newer than the remote play.
+          if (ex?.removedAt && (item.playedAt || 0) <= ex.removedAt) continue;
+          // Normal LWW by playedAt.
           if (!ex || (item.playedAt || 0) > (ex.playedAt || 0)) map.set(item.id, item);
         }
-        const cutoff  = Date.now() - CONFIG.HISTORY_MAX_DAYS * 24 * 60 * 60 * 1000;
-        const merged  = Array.from(map.values())
-          .filter(e => (e.playedAt || 0) >= cutoff)
-          .sort((a, b) => (b.playedAt || 0) - (a.playedAt || 0))
-          .slice(0, CONFIG.HISTORY_MAX);
+        const cutoff = Date.now() - CONFIG.HISTORY_MAX_DAYS * 24 * 60 * 60 * 1000;
+        const week   = Date.now() - 7 * 24 * 60 * 60 * 1000;
+        const allH   = Array.from(map.values());
+        const live   = allH.filter(e => !e.removedAt && (e.playedAt || 0) >= cutoff)
+                           .sort((a, b) => (b.playedAt || 0) - (a.playedAt || 0))
+                           .slice(0, CONFIG.HISTORY_MAX);
+        const tombs  = allH.filter(e => e.removedAt && e.removedAt >= week);
+        const merged = [...live, ...tombs];
         await DB.clearHistory();
         if (merged.length) await DB.bulkPutHistory(merged);
         break;
@@ -640,20 +653,28 @@ const Sync = (() => {
         }
 
         if (Array.isArray(history) && history.length) {
-          // Per-item LWW by playedAt (same as case 'history')
-          const remote  = history.filter(r => r && r.id);
-          const local   = await DB.getHistory();
-          const map     = new Map();
-          for (const item of local)  map.set(item.id, item);
+          // Per-item LWW by playedAt — tombstone-aware (same logic as case 'history').
+          const remote = history.filter(r => r && r.id);
+          const local  = await DB.getHistoryAll(); // include local tombstones
+          const map    = new Map();
+          for (const item of local) map.set(item.id, item);
           for (const item of remote) {
             const ex = map.get(item.id);
+            if (item.removedAt) {
+              if (!ex || item.removedAt > (ex.removedAt || 0)) map.set(item.id, { id: item.id, removedAt: item.removedAt });
+              continue;
+            }
+            if (ex?.removedAt && (item.playedAt || 0) <= ex.removedAt) continue;
             if (!ex || (item.playedAt || 0) > (ex.playedAt || 0)) map.set(item.id, item);
           }
           const cutoff  = Date.now() - CONFIG.HISTORY_MAX_DAYS * 24 * 60 * 60 * 1000;
-          const mergedH = Array.from(map.values())
-            .filter(e => (e.playedAt || 0) >= cutoff)
-            .sort((a, b) => (b.playedAt || 0) - (a.playedAt || 0))
-            .slice(0, CONFIG.HISTORY_MAX);
+          const week    = Date.now() - 7 * 24 * 60 * 60 * 1000;
+          const allHH   = Array.from(map.values());
+          const liveH   = allHH.filter(e => !e.removedAt && (e.playedAt || 0) >= cutoff)
+                               .sort((a, b) => (b.playedAt || 0) - (a.playedAt || 0))
+                               .slice(0, CONFIG.HISTORY_MAX);
+          const tombsH  = allHH.filter(e => e.removedAt && e.removedAt >= week);
+          const mergedH = [...liveH, ...tombsH];
           await DB.clearHistory();
           if (mergedH.length) await DB.bulkPutHistory(mergedH);
         } else if (Array.isArray(history)) {
@@ -967,10 +988,7 @@ const Sync = (() => {
   }
 
   async function _pushHistory() {
-    const history   = await DB.getHistory(CONFIG.HISTORY_MAX);
-    // Format: { clearedAt, items } — mirrors _pushRecents / _pushPlaycounts so an
-    // intentional user-clear propagates correctly (clearedAt > 0) vs an accidental
-    // empty push on first install (clearedAt = 0 → other devices ignore the empty).
+    const history   = await DB.getHistoryAll(); // include tombstones so deletions propagate
     const clearedAt = await DB.getState('historyClearedAt').catch(() => 0) || 0;
     await _writeFile(FILENAMES.history, {
       clearedAt,
@@ -983,10 +1001,12 @@ const Sync = (() => {
         thumbnailUrl: (h.thumbnailUrl && !h.thumbnailUrl.startsWith('blob:') && h.thumbnailUrl !== 'id3') ? h.thumbnailUrl : null,
         isSoundrop:   h.isSoundrop   || false,
         videoId:      h.videoId      || null,
-        playedAt:     h.playedAt     ?? Date.now(),
+        playedAt:     h.playedAt     || null,
+        removedAt:    h.removedAt    || null,  // tombstone — prevents remote re-add on next login
       })),
     });
-    console.log(`[Sync] Pushed history (${history.length})`);
+    const live = history.filter(h => !h.removedAt).length;
+    console.log(`[Sync] Pushed history (${live} live, ${history.length - live} tombstones)`);
   }
 
   async function _pushCollections() {

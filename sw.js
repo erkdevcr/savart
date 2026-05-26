@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.288';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.288 — fix Soundrop en home: addToHistory guarda isSoundrop+videoId; pushHistory los incluye
+const APP_VERSION  = '3.5.290';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.290 — SD chip + replay en history/home: reconstruye isSoundrop/videoId desde id "sd_*"
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
