@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.283';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.283 — álbumes y colecciones: SVG fallback centrado y 25% del contenedor
+const APP_VERSION  = '3.5.284';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.284 — fix avatares artistas ovalados en mobile: aspect-ratio:1
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
