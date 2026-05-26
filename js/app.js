@@ -1269,14 +1269,46 @@ const App = (() => {
       // Exact artist match (accent-sensitive, case-insensitive).
       const _artistMatches = a => _normStr(a) === _normArtist;
 
+      // ── Fuzzy title dedup ──────────────────────────────────────
+      // Normalizes a song title for near-duplicate detection:
+      //   - strips file extension
+      //   - strips leading track numbers ("01 - ", "1. ")
+      //   - strips common variant tags: (Live), [Remaster], (Acoustic), (feat. X), etc.
+      //   - strips accents, punctuation, and collapses whitespace
+      // Two songs whose normalized titles match are considered the same song,
+      // even when they live in different folders or have different file IDs.
+      const _normTitle = name => (name || '')
+        .replace(/\.[^.]+$/, '')                     // strip extension
+        .normalize('NFD').replace(/[̀-ͯ]/g, '')  // strip accents
+        .toLowerCase()
+        .replace(/^\d+[\s.\-_]+/, '')                // strip leading track# "01 - "
+        .replace(/\s*[\(\[]\s*(?:live|en vivo|acoustic|acustico|remaster(?:ed)?|version|versión|edition|edición|demo|instrumental|radio\s*edit|feat\.?|ft\.?|con\s+|with\s+)[^\)\]]*[\)\]]\s*/gi, '')
+        .replace(/['''""".,/#!$%^&*;:{}=`~()[\]]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      // Pre-seed seen titles from already-blocked items (current queue + past radio adds)
+      // so we don't add a title that's essentially the same as what's already playing.
+      const _seenTitles = new Set();
+      for (const id of blocked) {
+        const qi = queue.find(q => q.id === id) || _itemCache.get(id);
+        if (qi) {
+          const t = _normTitle(qi.displayName || qi.name);
+          if (t) _seenTitles.add(t);
+        }
+      }
+
       const candidates = [];
       const seen       = new Set();
 
       const _collect = (f) => {
-        if (!seen.has(f.id) && !blocked.has(f.id) && isPlayable(f.mimeType)) {
-          seen.add(f.id);
-          candidates.push(f);
-        }
+        if (seen.has(f.id) || blocked.has(f.id) || !isPlayable(f.mimeType)) return;
+        // Fuzzy title check — skip near-duplicate titles (same song, different version)
+        const normT = _normTitle(f.displayName || f.name);
+        if (normT && _seenTitles.has(normT)) return;
+        seen.add(f.id);
+        if (normT) _seenTitles.add(normT);
+        candidates.push(f);
       };
 
       // Direct audio files: accept ONLY if the cached artist tag matches.
@@ -1581,10 +1613,13 @@ const App = (() => {
       }
 
       // Radio mode: trigger initial Drive search once, after full identification.
-      // Priority: pre-seeded _radioArtist (from item selection) → meta.artist
-      // (ID3/AudD) → filename/folder extraction as last resort.
+      // Priority: meta.artist (ID3/AudD — most accurate, from the actual file)
+      //         → _radioArtist (pre-seeded at click time from item.artist or folder guess)
+      //         → filename/folder extraction as last resort.
+      // meta.artist must come FIRST so a pre-seeded folder-name guess (_radioArtist)
+      // never overrides the real artist found by AudD during this playback session.
       if (_radioModeActive && !_radioTriggered) {
-        const radioArtist = _radioArtist || meta.artist || _guessArtistFromItem(item);
+        const radioArtist = meta.artist || _radioArtist || _guessArtistFromItem(item);
         if (radioArtist) {
           _radioTriggered = true;
           _radioArtist    = radioArtist;
@@ -5579,7 +5614,7 @@ const App = (() => {
     const eid = CSS.escape(id);
 
     if (title) {
-      // Browse rows (title only — no artist line in browse)
+      // Browse / search rows — song title
       document.querySelectorAll(`.song-row[data-id="${eid}"] .song-row-title`).forEach(el => {
         el.textContent = title;
       });
@@ -5594,6 +5629,32 @@ const App = (() => {
       // Top-played & history list
       document.querySelectorAll(`.top-list-item[data-id="${eid}"] .top-list-title`).forEach(el => {
         el.textContent = title;
+      });
+    }
+
+    // ── Browse / search row meta line (artist · album) ───────────
+    // .song-row-meta-left is the second line in every song row showing
+    // "artist · album". This covers both folder browse and search results.
+    if (artist || album) {
+      const metaText = [
+        (artist || '').split(';')[0].trim(),
+        (album  || '').trim(),
+      ].filter(Boolean).join(' · ');
+      document.querySelectorAll(`.song-row[data-id="${eid}"] .song-row-meta`).forEach(metaEl => {
+        let leftEl = metaEl.querySelector('.song-row-meta-left');
+        if (leftEl) {
+          leftEl.textContent = metaText;
+        } else if (metaText) {
+          // Row had no child spans (built with empty meta) — inject proper structure,
+          // preserving any existing .song-row-meta-dur (duration) span.
+          const existingDur = metaEl.querySelector('.song-row-meta-dur');
+          metaEl.textContent = '';
+          const newLeft = document.createElement('span');
+          newLeft.className = 'song-row-meta-left';
+          newLeft.textContent = metaText;
+          metaEl.appendChild(newLeft);
+          if (existingDur) metaEl.appendChild(existingDur);
+        }
       });
     }
 
