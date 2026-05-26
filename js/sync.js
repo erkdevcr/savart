@@ -1539,26 +1539,12 @@ const Sync = (() => {
       _prog(68);
 
       // ── Merge history ─────────────────────────────────────
+      // Delegates to _applyRemote('history') so tombstone-aware logic is shared in
+      // one place — prevents deleted items from being restored on the next login
+      // when the remote file still carries the pre-deletion entry.
       await _mergeStep('history', async () => {
         if (remoteHistory === null) return; // skipped or download failed — don't touch local
-        // Unwrap new { clearedAt, items } format; fall back to legacy plain array.
-        const remoteHistoryArr = Array.isArray(remoteHistory) ? remoteHistory
-          : (Array.isArray(remoteHistory?.items) ? remoteHistory.items : null);
-        if (!remoteHistoryArr || remoteHistoryArr.length === 0) return;
-        const validRemote = remoteHistoryArr.filter(r => r && r.id);
-        if (!validRemote.length) return;
-        const local = await DB.getHistory(CONFIG.HISTORY_MAX);
-        const { merged } = _mergeHistory(local, validRemote);
-        if (!merged.length) return;
-        const localMap = new Map(local.map(r => [r.id, r]));
-        const toWrite  = merged.filter(m => {
-          const l = localMap.get(m.id);
-          return !l || m.playedAt > (l.playedAt || 0);
-        });
-        if (toWrite.length) {
-          await DB.bulkPutHistory(toWrite);
-          console.log(`[Sync] Merged history: ${toWrite.filter(m => !localMap.has(m.id)).length} added, ${toWrite.filter(m => localMap.has(m.id)).length} updated`);
-        }
+        await _applyRemote('history', remoteHistory);
       });
       _prog(74);
 

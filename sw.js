@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.291';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.291 — al guardar Soundrop: reemplaza sd_ en history+recents con Drive entry; chip desaparece
+const APP_VERSION  = '3.5.292';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.292 — init mergeStep history usa _applyRemote: tombstones no se sobreescriben al reiniciar
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
