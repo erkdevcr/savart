@@ -19,7 +19,7 @@
   const ctxExp  = canvasExp ? canvasExp.getContext('2d') : null;
   const ctxDs   = canvasDs  ? canvasDs.getContext('2d')  : null;
 
-  const SPACING = 17;
+  const SPACING = 11;
   const DOT_R   = 0.9;
   const SPEED   = 0.0625; // base cycles/s — 16 s per full cycle
 
@@ -131,7 +131,7 @@
         else if (minRatio < 1.00) alpha = (minRatio - 0.25) / 0.75;
         else                      alpha = 1;
         if (alpha <= 0.01) continue;
-        ctx.globalAlpha = alpha * 0.35;
+        ctx.globalAlpha = alpha * 0.5;
         ctx.beginPath();
         ctx.arc(x, y, DOT_R, 0, Math.PI * 2);
         ctx.fill();
