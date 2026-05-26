@@ -12667,10 +12667,10 @@ const App = (() => {
         // Push hot delta immediately so other devices see this track in ~3 s
         Sync.pushHot([{ id: driveId }]).catch(() => {});
 
-        // 5. Remove the Soundrop recent entry (sd_ id) and add the Drive one
-        //    so Home no longer shows the SD chip for this track.
-        await DB.removeRecent?.(track.id).catch(() => {});
-        await DB.addRecent({
+        // 5. Replace the Soundrop entry (sd_ id) with the Drive entry in both
+        //    recents AND history, so the SD chip disappears and the card shows
+        //    the correct metadata everywhere.
+        const _savedDriveItem = {
           id:           driveId,
           name:         filename,
           displayName:  meta.title,
@@ -12680,9 +12680,20 @@ const App = (() => {
           artist:       meta.artist,
           album:        meta.album,
           year:         meta.year,
-          folderId:     null,
-        }).catch(() => {});
+          folderId:     driveFolderId || null,
+          isSoundrop:   false,
+          videoId:      null,
+        };
+
+        // Recents store
+        await DB.removeRecent?.(track.id).catch(() => {});
+        await DB.addRecent(_savedDriveItem).catch(() => {});
         Sync.push('recents');
+
+        // History store — tombstone sd_ entry and add the Drive entry
+        await DB.removeFromHistory(track.id).catch(() => {});
+        await DB.addToHistory(_savedDriveItem).catch(() => {});
+        Sync.push('history');
 
         modal.style.display = 'none';
         modal._sdItem = null;
