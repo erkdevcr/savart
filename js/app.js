@@ -4878,10 +4878,10 @@ const App = (() => {
   }
 
   async function onRemoveFromHistory(item) {
-    await DB.removeRecent(item.id).catch(() => {});
+    await DB.removeFromHistory(item.id).catch(() => {});  // home reads from history store, not recents
     UI.showToast(UI.t('toast_removed_history'));
     _loadHomeData();
-    Sync.push('recents'); // propagate tombstone to other devices
+    Sync.push('history'); // propagate tombstone to other devices
   }
 
   async function onRemoveFromHistoryItem(item) {
