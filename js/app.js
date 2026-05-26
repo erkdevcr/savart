@@ -5110,6 +5110,11 @@ const App = (() => {
     if (!_cachedSearchResults || _cachedSearchTerm !== term) return false;
     UI.renderSearchResults(_cachedSearchResults, filter);
     UI.setActiveSongRow(Player.getCurrentTrack()?.id ?? null);
+    // Re-apply covers to the freshly re-rendered DOM nodes.
+    // Items already in _sessionScannedIds go through the toPaint path —
+    // no re-downloads needed; covers are painted directly from DB/Meta cache.
+    const files = _cachedSearchResults.files || [];
+    if (files.length) _softScanItems(files).catch(() => {});
     return true;
   }
 
@@ -12973,28 +12978,22 @@ const App = (() => {
       // SW version via message channel — shown as "V x.x.xxx"
       const swVerEl = document.getElementById('about-sw-version');
       if (swVerEl) {
-        // Fallback: window.SAVART_VERSION is set inline in index.html — always available,
-        // even on Android/Capacitor where the Service Worker is not registered.
-        const _fallback = () => {
-          swVerEl.textContent = window.SAVART_VERSION ? `V ${window.SAVART_VERSION}` : '—';
-        };
-        swVerEl.textContent = '…';
+        // Show version immediately from the global — always reliable on both
+        // web and Android/Capacitor (set inline in index.html, bumped in sync
+        // with sw.js so the value is always correct).
+        swVerEl.textContent = window.SAVART_VERSION ? `V ${window.SAVART_VERSION}` : '—';
+        // Optionally confirm via active SW message (pure bonus — won't change
+        // anything on Android/Capacitor where SW never registers).
         if ('serviceWorker' in navigator) {
           navigator.serviceWorker.ready.then(reg => {
             const sw = reg.active;
-            if (!sw) { _fallback(); return; }
+            if (!sw) return;
             const mc = new MessageChannel();
-            // If SW doesn't reply within 1 s (e.g. Capacitor WebView quirk) fall back
-            const timeout = setTimeout(_fallback, 1000);
             mc.port1.onmessage = e => {
-              clearTimeout(timeout);
               if (e.data?.version) swVerEl.textContent = `V ${e.data.version}`;
-              else _fallback();
             };
             sw.postMessage({ type: 'GET_VERSION' }, [mc.port2]);
-          }).catch(_fallback);
-        } else {
-          _fallback();
+          }).catch(() => {});
         }
       }
       // Current year
