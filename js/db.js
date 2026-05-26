@@ -818,8 +818,8 @@ const DB = (() => {
   async function addToHistory(item) {
     if (!item || !item.id) return;
     const store = _tx('history', 'readwrite');
-    const safeThumb = (item.thumbnailUrl && !item.thumbnailUrl.startsWith('blob:'))
-      ? item.thumbnailUrl : (item.thumbnailLink || null);
+    const safeThumb = (item.thumbnailUrl && !item.thumbnailUrl.startsWith('blob:') && item.thumbnailUrl !== 'id3')
+      ? item.thumbnailUrl : (item.thumbnailLink || null); // thumbnailLink = stable Drive CDN fallback
     await _promisify(store.put({
       id:           item.id,
       name:         item.name        || '',

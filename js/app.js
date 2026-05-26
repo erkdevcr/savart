@@ -477,7 +477,7 @@ const App = (() => {
     console.log('[App] Live sync applied:', types);
     const view = UI.getCurrentView();
 
-    const needsHome = types.some(t => ['recents', 'pinned', 'playcounts', 'favorites', 'playlists', 'home'].includes(t));
+    const needsHome = types.some(t => ['recents', 'history', 'pinned', 'playcounts', 'favorites', 'playlists', 'home'].includes(t));
     // Debounce: live sync fires every 3 s — collapse rapid refreshes into one render
     if (needsHome) _loadHomeData({ debounce: true });
 
@@ -892,12 +892,13 @@ const App = (() => {
 
       // Add to playback history
       DB.addToHistory({
-        id:          track.id,
-        name:        track.name,
-        displayName: bestName,
-        artist:      bestArtist,
-        thumbnailUrl: bestThumb,
-        folderId:    track.parents?.[0] || track.folderId || null,
+        id:           track.id,
+        name:         track.name,
+        displayName:  bestName,
+        artist:       bestArtist,
+        thumbnailUrl: bestThumb,           // may be blob:/id3 — db.js filters those out
+        thumbnailLink: track.thumbnailLink || null, // stable Drive CDN URL as fallback
+        folderId:     track.parents?.[0] || track.folderId || null,
       }).then(() => Sync.push('history')).catch(() => {});
 
       // Persist display fields to metadata store so topPlayed can show them.
@@ -4132,16 +4133,16 @@ const App = (() => {
     try {
       const [pinned, recents, topPlayedRaw, rawPlaylists] = await Promise.all([
         DB.getPinnedFolders(),
-        DB.getRecents(24),   // fetch extra so we have ≥12 songs after type-filtering
+        DB.getHistory(24),   // home "recents" = playback history — only played songs, sorted by playedAt
         DB.getTopPlayed(12),
         DB.getPlaylists(),
       ]);
 
-      // Load metadata store records for all song recents AND topPlayed items.
-      // Using a unified map keyed by file ID so both sections get fresh DB values —
-      // topPlayed items not in recents would otherwise be enriched with stale data.
+      // Load metadata store records for all history (recents) AND topPlayed items.
+      // Using a unified map keyed by file ID so both sections get fresh DB values.
+      // History items are always songs — no type filter needed.
       const songIdsSet = new Set([
-        ...recents.filter(r => r.type === 'song').map(r => r.id),
+        ...recents.map(r => r.id),
         ...topPlayedRaw.map(t => t.id),
       ]);
       const songIdsList   = [...songIdsSet];
@@ -4218,19 +4219,21 @@ const App = (() => {
         };
       });
 
-      // Enrich recents songs with metadata store data (fixes bare/empty-name records)
+      // Enrich history items (shown as "recents" on home) with metadata store data.
+      // History items are always songs — no type filter. They have playedAt (not accessedAt).
       const enrichedRecents = recents.map(r => {
-        if (r.type !== 'song') return r;
         const dbMeta = metaMap.get(r.id);
         const inMem  = (typeof Meta !== 'undefined') ? Meta.getCached(r.id) : null;
         return {
           ...r,
+          type:         'song',  // history is always songs
           displayName:  _pick(dbMeta?.displayName, dbMeta?.name, inMem?.title,   r.displayName,  r.name),
           name:         _pick(dbMeta?.name,          r.name),
           thumbnailUrl: _resolveCoverUrl(r.id, dbMeta, inMem, _safeUrl(dbMeta?.thumbnailUrl), _safeUrl(dbMeta?.coverUrl), inMem?.coverUrl, _safeUrl(r.thumbnailUrl), _safeUrl(r.thumbnailLink)),
           artist:       _pick(dbMeta?.artist,        inMem?.artist,   r.artist),
           folderId:     dbMeta?.folderId || r.folderId || null,
           folderType:   _stampFolderType(r, dbMeta),
+          accessedAt:   r.playedAt || r.accessedAt,  // renderHome/recentMap may use accessedAt
         };
       });
 
@@ -12938,20 +12941,28 @@ const App = (() => {
       // SW version via message channel — shown as "V x.x.xxx"
       const swVerEl = document.getElementById('about-sw-version');
       if (swVerEl) {
+        // Fallback: window.SAVART_VERSION is set inline in index.html — always available,
+        // even on Android/Capacitor where the Service Worker is not registered.
+        const _fallback = () => {
+          swVerEl.textContent = window.SAVART_VERSION ? `V ${window.SAVART_VERSION}` : '—';
+        };
         swVerEl.textContent = '…';
         if ('serviceWorker' in navigator) {
           navigator.serviceWorker.ready.then(reg => {
             const sw = reg.active;
-            if (sw) {
-              const mc = new MessageChannel();
-              mc.port1.onmessage = e => {
-                if (e.data?.version) swVerEl.textContent = `V ${e.data.version}`;
-              };
-              sw.postMessage({ type: 'GET_VERSION' }, [mc.port2]);
-            }
-          }).catch(() => { swVerEl.textContent = '—'; });
+            if (!sw) { _fallback(); return; }
+            const mc = new MessageChannel();
+            // If SW doesn't reply within 1 s (e.g. Capacitor WebView quirk) fall back
+            const timeout = setTimeout(_fallback, 1000);
+            mc.port1.onmessage = e => {
+              clearTimeout(timeout);
+              if (e.data?.version) swVerEl.textContent = `V ${e.data.version}`;
+              else _fallback();
+            };
+            sw.postMessage({ type: 'GET_VERSION' }, [mc.port2]);
+          }).catch(_fallback);
         } else {
-          swVerEl.textContent = '—';
+          _fallback();
         }
       }
       // Current year
