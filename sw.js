@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.280';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.280 — radio fuzzy dedup: descarta variantes del mismo título (Live, Remaster, Acoustic, feat., etc.)
+const APP_VERSION  = '3.5.281';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.281 — colecciones: cover single image (como álbumes), sin grilla 2x2; fallback al icono SVG de colecciones
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

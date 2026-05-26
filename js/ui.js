@@ -4048,22 +4048,20 @@ const UI = (() => {
     card.dataset.searchKey = norm(col.name);
     if (col.folderId) card.dataset.folderId = col.folderId;
 
-    // Cover: manual URL → single image; everything else → 2×2 mosaic (same as home playlists).
-    // Empty mosaic slots show a colored cell with a note icon; blob covers are injected async
-    // into the first empty cell by _patchGridBlobCovers after render.
+    // Cover: manual URL → single image; any song cover → single image; nothing → SVG icon.
+    // Blob covers without a URL are injected async by _patchGridBlobCovers after render.
+    const _colIcon = `<svg width="38" height="33" viewBox="0 0 361.54 315.2" fill="currentColor" style="color:var(--text-muted)"><path d="M136.81,41.58C61.25,41.58,0,102.83,0,178.39s61.25,136.81,136.81,136.81,136.81-61.25,136.81-136.81S212.37,41.58,136.81,41.58ZM136.81,239.6c-33.8,0-61.21-27.4-61.21-61.21s27.4-61.21,61.21-61.21,61.21,27.4,61.21,61.21-27.4,61.21-61.21,61.21ZM136.81,191.78c-7.39,0-13.39-5.99-13.39-13.39s5.99-13.39,13.39-13.39,13.39,5.99,13.39,13.39-5.99,13.39-13.39,13.39ZM361.54,126.94c0,54.17-33.93,100.4-81.69,118.63,9.59-20.39,14.96-43.16,14.96-67.18,0-78.52-57.28-143.65-132.33-155.91C182.95,8.31,207.8,0,234.6,0c70.11,0,126.94,56.83,126.94,126.94Z"/></svg>`;
+    const _coverUrl = col.manualCoverUrl || (col.mosaicUrls?.length ? col.mosaicUrls[0] : null);
     let artHtml;
     let artClass = 'home-card-art lib-collection-art';
     let artStyle = `background:${colBg}`;
 
-    if (col.manualCoverUrl) {
-      artHtml = `<img src="${escHtml(col.manualCoverUrl)}" alt="" loading="lazy"` +
+    if (_coverUrl) {
+      artHtml = `<img src="${escHtml(_coverUrl)}" alt="" loading="lazy"` +
         ` style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-md)"` +
         ` onerror="this.style.display='none'">`;
     } else {
-      const urls = (col.mosaicUrls || []).slice(0, 4);
-      artHtml   = _buildPlaylistMosaic(urls, col.name);
-      artClass += ' home-card-art--mosaic';
-      artStyle  = ''; // mosaic cells carry their own background colors
+      artHtml = _colIcon;
     }
 
     const hasMeta = col.rescannedAt || col.hasManual || col.format;
@@ -4194,11 +4192,10 @@ const UI = (() => {
       }
     }
 
+    const _detailCoverUrl = collection.manualCoverUrl || (_localMosaicUrls.length ? _localMosaicUrls[0] : null);
     let artHtml;
-    if (collection.manualCoverUrl) {
-      artHtml = `<img src="${escHtml(collection.manualCoverUrl)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)" onerror="this.style.display='none'">`;
-    } else if (_localMosaicUrls.length > 0) {
-      artHtml = _buildMosaicThumb(_localMosaicUrls, collection.name);
+    if (_detailCoverUrl) {
+      artHtml = `<img src="${escHtml(_detailCoverUrl)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)" onerror="this.style.display='none'">`;
     } else {
       artHtml = `<svg width="25" height="22" viewBox="0 0 361.54 315.2" fill="currentColor" style="color:var(--text-secondary)"><path d="M136.81,41.58C61.25,41.58,0,102.83,0,178.39s61.25,136.81,136.81,136.81,136.81-61.25,136.81-136.81S212.37,41.58,136.81,41.58ZM136.81,239.6c-33.8,0-61.21-27.4-61.21-61.21s27.4-61.21,61.21-61.21,61.21,27.4,61.21,61.21-27.4,61.21-61.21,61.21ZM136.81,191.78c-7.39,0-13.39-5.99-13.39-13.39s5.99-13.39,13.39-13.39,13.39,5.99,13.39,13.39-5.99,13.39-13.39,13.39ZM361.54,126.94c0,54.17-33.93,100.4-81.69,118.63,9.59-20.39,14.96-43.16,14.96-67.18,0-78.52-57.28-143.65-132.33-155.91C182.95,8.31,207.8,0,234.6,0c70.11,0,126.94,56.83,126.94,126.94Z"/></svg>`;
     }
