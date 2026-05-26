@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.281';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.281 — colecciones: cover single image (como álbumes), sin grilla 2x2; fallback al icono SVG de colecciones
+const APP_VERSION  = '3.5.283';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.283 — álbumes y colecciones: SVG fallback centrado y 25% del contenedor
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
