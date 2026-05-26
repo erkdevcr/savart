@@ -827,6 +827,8 @@ const DB = (() => {
       artist:       item.artist      || '',
       thumbnailUrl: safeThumb,
       folderId:     item.parents?.[0] || item.folderId || null,
+      isSoundrop:   item.isSoundrop  || false,
+      videoId:      item.videoId     || null,
       playedAt:     Date.now(),
     }));
     await _trimHistory();

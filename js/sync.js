@@ -981,6 +981,8 @@ const Sync = (() => {
         artist:       h.artist       || null,
         folderId:     h.folderId     || null,
         thumbnailUrl: (h.thumbnailUrl && !h.thumbnailUrl.startsWith('blob:') && h.thumbnailUrl !== 'id3') ? h.thumbnailUrl : null,
+        isSoundrop:   h.isSoundrop   || false,
+        videoId:      h.videoId      || null,
         playedAt:     h.playedAt     ?? Date.now(),
       })),
     });
