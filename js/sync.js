@@ -1320,8 +1320,17 @@ const Sync = (() => {
       }
 
       // ── Phase 2: pull only stale types in parallel ───────────────────────────
-      const _pull = (type) =>
-        _skippedTypes.has(type) ? Promise.resolve(null) : _readFile(FILENAMES[type]).catch(() => null);
+      // Track types whose download failed (network error / corrupt response).
+      // These are distinct from "file not found" — we must NOT push empty local data
+      // for them because it would wipe the remote copy via LWW.
+      const _downloadFailed = new Set();
+      const _pull = (type) => {
+        if (_skippedTypes.has(type)) return Promise.resolve(null);
+        return _readFile(FILENAMES[type]).catch(() => {
+          _downloadFailed.add(type);
+          return null;
+        });
+      };
 
       const [
         remoteFavs, remotePlaylists, remotePinned,
@@ -1412,8 +1421,12 @@ const Sync = (() => {
 
       // ── Merge recents ─────────────────────────────────────
       await _mergeStep('recents', async () => {
-        if (!Array.isArray(remoteRecents) || remoteRecents.length === 0) return;
-        const validRemote = remoteRecents.filter(r => r && r.id);
+        if (remoteRecents === null) return; // skipped or download failed — don't touch local
+        // Unwrap new { clearedAt, items } format; fall back to legacy plain array.
+        const remoteRecentsArr = Array.isArray(remoteRecents) ? remoteRecents
+          : (Array.isArray(remoteRecents?.items) ? remoteRecents.items : null);
+        if (!remoteRecentsArr || remoteRecentsArr.length === 0) return;
+        const validRemote = remoteRecentsArr.filter(r => r && r.id);
         if (!validRemote.length) return;
         const local = await DB.getRecentsAll(); // includes local tombstones
         const { merged, tombstoneRecords } = _mergeRecents(local, validRemote);
@@ -1505,8 +1518,12 @@ const Sync = (() => {
 
       // ── Merge history ─────────────────────────────────────
       await _mergeStep('history', async () => {
-        if (!Array.isArray(remoteHistory) || remoteHistory.length === 0) return;
-        const validRemote = remoteHistory.filter(r => r && r.id);
+        if (remoteHistory === null) return; // skipped or download failed — don't touch local
+        // Unwrap new { clearedAt, items } format; fall back to legacy plain array.
+        const remoteHistoryArr = Array.isArray(remoteHistory) ? remoteHistory
+          : (Array.isArray(remoteHistory?.items) ? remoteHistory.items : null);
+        if (!remoteHistoryArr || remoteHistoryArr.length === 0) return;
+        const validRemote = remoteHistoryArr.filter(r => r && r.id);
         if (!validRemote.length) return;
         const local = await DB.getHistory(CONFIG.HISTORY_MAX);
         const { merged } = _mergeHistory(local, validRemote);
@@ -1666,6 +1683,7 @@ const Sync = (() => {
       const now = Date.now();
       const safeToPush = Object.keys(FILENAMES).filter(t =>
         !_failedTypes.has(t) &&
+        !_downloadFailed.has(t) && // download failed → don't push empty local state over valid remote
         !SKIP_ON_INIT.has(t) &&
         !_skippedTypes.has(t)   // fresh types: remote already has latest data — don't re-push
       );
@@ -1673,6 +1691,7 @@ const Sync = (() => {
       for (const t of safeToPush) _localTs[t] = now;
       if (safeToPush.length) await _bumpManifest(safeToPush);
       if (_failedTypes.size) console.warn('[Sync] Skipped push for failed types:', [..._failedTypes]);
+      if (_downloadFailed.size) console.warn('[Sync] Skipped push for download-failed types:', [..._downloadFailed]);
       _prog(95);
 
       // Push home snapshot last — after all individual types are merged and pushed,
