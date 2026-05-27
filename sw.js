@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.305';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.305 — player 3-dot menu desktop: ancla por getBoundingClientRect (anchorRect) 25px bajo el botón
+const APP_VERSION  = '3.5.306';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.306 — player 3-dot menu: anchorRect usa style.right para anclar borde derecho al botón
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

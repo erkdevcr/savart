@@ -2337,26 +2337,30 @@ const UI = (() => {
 
     menu.style.visibility = '';
 
-    let x, y;
     if (options.anchorRect) {
-      // Anchor mode: right-align menu to the element's right edge, drop below it
-      const ar  = options.anchorRect;
-      const gap = options.anchorGap ?? 4;
-      x = ar.right - mw;   // right-align menu to anchor element
-      y = ar.bottom + gap;
+      // Anchor mode: use CSS `right` so the menu's right edge locks to the
+      // button's right edge regardless of menu width or viewport size.
+      const ar          = options.anchorRect;
+      const gap         = options.anchorGap ?? 4;
+      const rightOffset = Math.max(margin, vw - ar.right);
+      let y             = ar.bottom + gap;
+      y = Math.min(y, vh - mh - safeBottom);
+      y = Math.max(margin, y);
+      menu.style.right = `${rightOffset}px`;
+      menu.style.left  = 'auto';
+      menu.style.top   = `${y}px`;
     } else {
-      x = e.clientX || (e.touches?.[0]?.clientX || 0);
-      y = e.clientY || (e.touches?.[0]?.clientY || 0);
+      let x = e.clientX || (e.touches?.[0]?.clientX || 0);
+      let y = e.clientY || (e.touches?.[0]?.clientY || 0);
+      // Clamp so the menu never overflows the visible viewport
+      x = Math.min(x, vw - mw - margin);
+      x = Math.max(margin, x);
+      y = Math.min(y, vh - mh - safeBottom);
+      y = Math.max(margin, y);
+      menu.style.right = 'auto';
+      menu.style.left  = `${x}px`;
+      menu.style.top   = `${y}px`;
     }
-
-    // Clamp so the menu never overflows the visible viewport
-    x = Math.min(x, vw - mw - margin);
-    x = Math.max(margin, x);
-    y = Math.min(y, vh - mh - safeBottom);
-    y = Math.max(margin, y);
-
-    menu.style.left = `${x}px`;
-    menu.style.top  = `${y}px`;
 
     // Click outside OR any scroll → dismiss.
     // Use capture phase for click so stopPropagation() in child handlers
