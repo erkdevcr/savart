@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.292';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.292 — init mergeStep history usa _applyRemote: tombstones no se sobreescriben al reiniciar
+const APP_VERSION  = '3.5.293';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.293 — init() solo lee/mergea, nunca pushea a Drive; evita que datos viejos corrompan el estado global
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

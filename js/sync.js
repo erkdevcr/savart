@@ -1680,40 +1680,32 @@ const Sync = (() => {
       });
       _prog(86);
 
-      // Push merged state back + update manifest.
-      // Only push types that were actually stale (downloaded + merged this session).
-      // Fresh/skipped types are NOT re-pushed — their remote snapshot is already
-      // up-to-date, and pushing identical data would bump timestamps and force all
-      // other devices to re-download unnecessarily (cascade download loop).
-      // Live push() already handles in-session changes (with debounce + _localTs persist).
-      // Skip types whose merge step failed (prevents data-poisoning via LWW).
-      // Skip SKIP_ON_INIT types (e.g. 'hot' — transient delta, not pushed at init).
-      const now = Date.now();
-      const safeToPush = Object.keys(FILENAMES).filter(t =>
+      // ── init() is READ-ONLY with respect to Drive ────────────────────────────
+      // We never push anything back to Drive during init().
+      //
+      // Rationale: if a device was offline for hours, its local IDB may have stale
+      // entries that "win" the LWW merge (e.g. tombstones, old recents, old playcounts).
+      // Pushing that merged state would overwrite Drive with corrupted data that then
+      // propagates to every other device on the next poll.
+      //
+      // Writes to Drive happen ONLY through Sync.push() — triggered by explicit user
+      // actions (play a song, edit metadata, star/unstar, etc.).  The live push() calls
+      // that fire during normal use keep Drive up to date without init() needing to push.
+      //
+      // What we DO here: update _localTs to the remote snapshot timestamps so next
+      // session knows these types are already merged and skips the download.
+      const mergedTypes = Object.keys(FILENAMES).filter(t =>
         !_failedTypes.has(t) &&
-        !_downloadFailed.has(t) && // download failed → don't push empty local state over valid remote
+        !_downloadFailed.has(t) &&
         !SKIP_ON_INIT.has(t) &&
-        !_skippedTypes.has(t)   // fresh types: remote already has latest data — don't re-push
+        !_skippedTypes.has(t)
       );
-      await Promise.allSettled(safeToPush.map(t => _pushFns[t]()));
-      for (const t of safeToPush) _localTs[t] = now;
-      if (safeToPush.length) await _bumpManifest(safeToPush);
-      if (_failedTypes.size) console.warn('[Sync] Skipped push for failed types:', [..._failedTypes]);
-      if (_downloadFailed.size) console.warn('[Sync] Skipped push for download-failed types:', [..._downloadFailed]);
+      for (const t of mergedTypes) _localTs[t] = _remoteTs[t] || Date.now();
+      if (_failedTypes.size)    console.warn('[Sync] Merge failed for types:', [..._failedTypes]);
+      if (_downloadFailed.size) console.warn('[Sync] Download failed for types:', [..._downloadFailed]);
       _prog(95);
 
-      // Push home snapshot last — after all individual types are merged and pushed,
-      // so the snapshot reflects the fully-merged state (not stale pre-merge data).
-      try {
-        await _pushHome();
-        const homeTs = Date.now();
-        _localTs.home  = homeTs;
-        _remoteTs.home = homeTs;
-        await _bumpManifest(['home']);
-      } catch (_) {}
-
       // ── Persist local timestamps so next session can skip fresh types ────────
-      // Saved AFTER all pushes so the stored values reflect what was actually written.
       await DB.setState('sync_localTs', { ..._localTs }).catch(() => {});
 
       _prog(100);
