@@ -425,12 +425,16 @@ const Sync = (() => {
         // Supports new { clearedAt, items } format and legacy plain-array format.
         const remoteClearedAt = (!Array.isArray(data) && data?.clearedAt) || 0;
         const remoteArray     = Array.isArray(data) ? data : (Array.isArray(data?.items) ? data.items : []);
-        const remote = remoteArray.filter(r => r && r.id);
+        // Respect local clear: skip remote items that pre-date this device's own clear.
+        // This prevents old Drive data (from another device) from restoring items after a clear.
+        const localClearedAt  = await DB.getState('recentsClearedAt').catch(() => 0) || 0;
+        const cut             = Math.max(remoteClearedAt, localClearedAt);
+        const remote = remoteArray.filter(r => r && r.id &&
+          (cut === 0 || (r.accessedAt || 0) > cut));
         if (!remote.length) {
-          // Only propagate the clear if there is an explicit clearedAt signal.
-          // An empty array without clearedAt could be an accidental push from a
-          // fresh install with an empty IDB — never wipe on ambiguous data.
-          if (remoteClearedAt > 0) await DB.clearRecents();
+          // Remote cleared or all items pre-date the cut.
+          // Only wipe local when there is an explicit clear signal — not an accidental empty push.
+          if (cut > 0) await DB.clearRecents();
           break;
         }
         const local = await DB.getRecentsAll(); // include local tombstones
@@ -504,10 +508,15 @@ const Sync = (() => {
         // Supports new { clearedAt, items } format and legacy plain-array format.
         const remoteClearedAt = (!Array.isArray(data) && data?.clearedAt) || 0;
         const remoteArray     = Array.isArray(data) ? data : (Array.isArray(data?.items) ? data.items : []);
-        const remote = remoteArray.filter(r => r && r.id);
+        // Respect local clear: skip remote items/tombstones that pre-date this device's own clear.
+        const localClearedAt  = await DB.getState('historyClearedAt').catch(() => 0) || 0;
+        const cut             = Math.max(remoteClearedAt, localClearedAt);
+        // For tombstones use removedAt; for live items use playedAt.
+        const remote = remoteArray.filter(r => r && r.id &&
+          (cut === 0 || (r.removedAt ? r.removedAt > cut : (r.playedAt || 0) > cut)));
         if (!remote.length) {
-          // Only propagate the clear if there is an explicit clearedAt signal.
-          if (remoteClearedAt > 0) await DB.clearHistory();
+          // Remote cleared or all items pre-date the cut.
+          if (cut > 0) await DB.clearHistory();
           break;
         }
         const local = await DB.getHistoryAll(); // include local tombstones
@@ -1444,10 +1453,19 @@ const Sync = (() => {
       await _mergeStep('recents', async () => {
         if (remoteRecents === null) return; // skipped or download failed — don't touch local
         // Unwrap new { clearedAt, items } format; fall back to legacy plain array.
+        const remoteClearedAt  = (!Array.isArray(remoteRecents) && remoteRecents?.clearedAt) || 0;
         const remoteRecentsArr = Array.isArray(remoteRecents) ? remoteRecents
           : (Array.isArray(remoteRecents?.items) ? remoteRecents.items : null);
-        if (!remoteRecentsArr || remoteRecentsArr.length === 0) return;
-        const validRemote = remoteRecentsArr.filter(r => r && r.id);
+        // Respect local clear: skip remote items pre-dating this device's own clear.
+        const localClearedAt   = await DB.getState('recentsClearedAt').catch(() => 0) || 0;
+        const cut              = Math.max(remoteClearedAt, localClearedAt);
+        if (!remoteRecentsArr || remoteRecentsArr.length === 0) {
+          // Remote is empty — propagate explicit remote clear only if newer than local
+          if (remoteClearedAt > localClearedAt) await DB.clearRecents();
+          return;
+        }
+        const validRemote = remoteRecentsArr.filter(r => r && r.id &&
+          (cut === 0 || (r.accessedAt || 0) > cut));
         if (!validRemote.length) return;
         const local = await DB.getRecentsAll(); // includes local tombstones
         const { merged, tombstoneRecords } = _mergeRecents(local, validRemote);
