@@ -2024,7 +2024,7 @@ const UI = (() => {
    * @param {'song'|'folder'} type
    * @param {DriveItem} item
    */
-  function showContextMenu(e, type, item) {
+  function showContextMenu(e, type, item, options = {}) {
     const menu = document.getElementById('context-menu');
     if (!menu) return;
 
@@ -2326,10 +2326,7 @@ const UI = (() => {
     // Extra bottom clearance for Android gesture bar / iOS home indicator
     const safeBottom = margin + 16;
 
-    let x = e.clientX || (e.touches?.[0]?.clientX || 0);
-    let y = e.clientY || (e.touches?.[0]?.clientY || 0);
-
-    // Render off-screen first so we can measure real dimensions
+    // Render off-screen first so we can measure real menu dimensions
     menu.style.left       = '-9999px';
     menu.style.top        = '-9999px';
     menu.style.visibility = 'hidden';
@@ -2339,6 +2336,18 @@ const UI = (() => {
     const mh = menu.offsetHeight || 200;
 
     menu.style.visibility = '';
+
+    let x, y;
+    if (options.anchorRect) {
+      // Anchor mode: right-align menu to the element's right edge, drop below it
+      const ar  = options.anchorRect;
+      const gap = options.anchorGap ?? 4;
+      x = ar.right - mw;   // right-align menu to anchor element
+      y = ar.bottom + gap;
+    } else {
+      x = e.clientX || (e.touches?.[0]?.clientX || 0);
+      y = e.clientY || (e.touches?.[0]?.clientY || 0);
+    }
 
     // Clamp so the menu never overflows the visible viewport
     x = Math.min(x, vw - mw - margin);

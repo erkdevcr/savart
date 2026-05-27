@@ -12593,10 +12593,12 @@ const App = (() => {
     });
 
     // Expanded player: ⋮ more options (desktop header) → same menu as mobile topbar
+    // Uses anchorRect so the menu right-aligns to the button, 25px below it.
     document.getElementById('btn-pexp-more-hdr')?.addEventListener('click', (e) => {
       e.stopPropagation();
       const track = Player.getCurrentTrack();
-      if (track) UI.showContextMenu(e, 'player_song', track);
+      if (track) UI.showContextMenu(e, 'player_song', track,
+        { anchorRect: e.currentTarget.getBoundingClientRect(), anchorGap: 25 });
     });
 
     // ── Soundrop download buttons (expanded + mini) ───────────
