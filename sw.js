@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.307';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.307 — anchorRect: usa window.innerWidth en vez de visualViewport; log debug btn-pexp-more-hdr
+const APP_VERSION  = '3.5.308';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.308 — _sdGainNode: 1.78 → 1.5
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
