@@ -2688,15 +2688,16 @@ const UI = (() => {
 
     document.body.appendChild(menu);
 
-    // Capture rect before RAF — button is in DOM and already laid out
-    const rect = triggerBtn.getBoundingClientRect();
-    const vw   = window.innerWidth;
-    const vh   = window.innerHeight;
-
-    // Measure after paint so offsetWidth/Height are accurate, then reveal
+    // Measure menu size AND button rect inside the same RAF so both are read
+    // after the browser has painted the menu into the DOM — avoids a reflow
+    // displacement that could shift the button's getBoundingClientRect result
+    // if measured before the frame that includes the newly-appended menu node.
     requestAnimationFrame(() => {
-      const mw = menu.offsetWidth  || 190;
-      const mh = menu.offsetHeight || 200;
+      const rect = triggerBtn.getBoundingClientRect();
+      const vw   = window.innerWidth;
+      const vh   = window.innerHeight;
+      const mw   = menu.offsetWidth  || 190;
+      const mh   = menu.offsetHeight || 200;
       let x = rect.right - mw;
       let y = rect.bottom + 4;
       x = Math.max(8, Math.min(x, vw - mw - 8));
