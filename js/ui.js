@@ -2688,21 +2688,20 @@ const UI = (() => {
 
     document.body.appendChild(menu);
 
-    // Measure menu size AND button rect inside the same RAF so both are read
-    // after the browser has painted the menu into the DOM — avoids a reflow
-    // displacement that could shift the button's getBoundingClientRect result
-    // if measured before the frame that includes the newly-appended menu node.
+    // Anchor the menu's right edge to the button's right edge using CSS `right`
+    // (viewport distance = vw - rect.right). This avoids any dependency on
+    // menu.offsetWidth, which varies with text length on desktop and caused a
+    // ~110px leftward shift when mw was larger than the 190px fallback.
     requestAnimationFrame(() => {
-      const rect = triggerBtn.getBoundingClientRect();
-      const vw   = window.innerWidth;
-      const vh   = window.innerHeight;
-      const mw   = menu.offsetWidth  || 190;
-      const mh   = menu.offsetHeight || 200;
-      let x = rect.right - mw;
-      let y = rect.bottom + 4;
-      x = Math.max(8, Math.min(x, vw - mw - 8));
+      const rect        = triggerBtn.getBoundingClientRect();
+      const vw          = window.innerWidth;
+      const vh          = window.innerHeight;
+      const mh          = menu.offsetHeight || 200;
+      const rightOffset = Math.max(8, vw - rect.right);
+      let y             = rect.bottom + 4;
       y = Math.min(y, vh - mh - 8);
-      menu.style.left       = `${x}px`;
+      menu.style.left       = 'auto';
+      menu.style.right      = `${rightOffset}px`;
       menu.style.top        = `${y}px`;
       menu.style.visibility = ''; // show only after correct position is set
     });
