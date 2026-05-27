@@ -2342,11 +2342,19 @@ const UI = (() => {
       // button's right edge regardless of menu width or viewport size.
       // Must use window.innerWidth (layout viewport), NOT visualViewport.width,
       // because getBoundingClientRect() is in layout-viewport coordinates.
-      const ar          = options.anchorRect;
-      const gap         = options.anchorGap ?? 4;
-      const lw          = window.innerWidth;                  // layout viewport width
-      const rightOffset = Math.max(margin, lw - ar.right);   // dist from button's right edge to viewport right
-      let y             = ar.bottom + gap;
+      const ar  = options.anchorRect;
+      const gap = options.anchorGap ?? 4;
+      const lw  = window.innerWidth;  // layout viewport width (same space as getBoundingClientRect)
+      // rightOffset = distance from menu's right edge to viewport's right edge.
+      // Start by aligning menu's right edge with button's right edge.
+      // Clamp so menu never overflows right (rightOffset >= margin)
+      // or left (menu left edge = lw - rightOffset - mw >= margin
+      //          → rightOffset <= lw - margin - mw).
+      let rightOffset = lw - ar.right;
+      rightOffset = Math.max(margin, rightOffset);                   // no right overflow
+      rightOffset = Math.min(rightOffset, lw - margin - mw);        // no left overflow
+      rightOffset = Math.max(margin, rightOffset);                   // safety: if viewport < mw+2*margin
+      let y = ar.bottom + gap;
       y = Math.min(y, vh - mh - safeBottom);
       y = Math.max(margin, y);
       menu.style.right = `${rightOffset}px`;

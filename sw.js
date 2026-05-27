@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.311';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.311 — anchorRect en todos los 3-dot: history, browse, librería, DS, playlists
+const APP_VERSION  = '3.5.312';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.312 — anchorRect: clampea desbordamiento izquierdo en móvil (home cards cerca del borde)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
