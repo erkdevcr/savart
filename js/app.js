@@ -12598,7 +12598,6 @@ const App = (() => {
       e.stopPropagation();
       const track = Player.getCurrentTrack();
       const rect  = e.currentTarget.getBoundingClientRect();
-      console.log('[Savart] btn-pexp-more-hdr clicked — rect:', JSON.stringify({right: rect.right, bottom: rect.bottom}), '— innerWidth:', window.innerWidth);
       if (track) UI.showContextMenu(e, 'player_song', track,
         { anchorRect: rect, anchorGap: 25 });
     });
