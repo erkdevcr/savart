@@ -720,6 +720,10 @@ const DB = (() => {
         folderId:     item.folderId     || item.parents?.[0]  || null,
         folderType:   item.folderType   || null,
         pinnedAt:     Date.now(),
+        // Preserve Soundrop identity so the SD chip and replay work correctly.
+        ...(item.isSoundrop || (item.id || '').startsWith('sd_')
+          ? { isSoundrop: true, videoId: item.videoId || item.id.slice(3) }
+          : {}),
       };
       await setState('pinned', pinned);
       await setState('pinnedMeta', stored);

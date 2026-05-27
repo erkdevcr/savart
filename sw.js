@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.294';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.294 — clear selected: filtra items remotos anteriores al clearedAt local para que el clear no se revierta al reiniciar
+const APP_VERSION  = '3.5.296';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.296 — SD gain boost x1.78 (+5 dB) para compensar -14 LUFS de YouTube vs -9 LUFS de Drive
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

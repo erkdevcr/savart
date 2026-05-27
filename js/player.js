@@ -23,6 +23,7 @@ const Player = (() => {
   let _audio        = null;      // HTMLAudioElement — Drive tracks (Web Audio graph)
   let _sdAudio      = null;      // HTMLAudioElement — Soundrop tracks (crossOrigin + same graph)
   let _sdSourceNode = null;      // MediaElementAudioSourceNode for _sdAudio
+  let _sdGainNode   = null;      // GainNode — compensates YouTube's -14 LUFS vs Drive's ~-9 LUFS
   let _sdActive      = false;    // true while a Soundrop track is playing
   let _sdPlaySession = 0;       // incremented on each SD play attempt
   let _sdSrcSession  = 0;       // session# when _sdAudio.src was last written; stale errors ignored
@@ -401,6 +402,10 @@ const Player = (() => {
     _gainNode.gain.value = _volume;
     _preAmpNode   = _audioCtx.createGain();
     _preAmpNode.gain.value = 1.0; // 0 dB
+    // YouTube normalizes to -14 LUFS; Drive MP3s average ~-9 LUFS (~5 dB gap).
+    // A 1.78x gain on the SD branch closes that gap without clipping typical tracks.
+    _sdGainNode   = _audioCtx.createGain();
+    _sdGainNode.gain.value = 1.78;
     _pannerNode   = _audioCtx.createStereoPanner
                   ? _audioCtx.createStereoPanner()
                   : null; // fallback: not all browsers support StereoPanner
@@ -420,7 +425,8 @@ const Player = (() => {
     // _sourceNode: Drive tracks  |  _sdSourceNode: Soundrop tracks (crossOrigin).
     // When one is paused it produces silence, so only the active one is heard.
     _sourceNode.connect(_preAmpNode);
-    _sdSourceNode.connect(_preAmpNode);
+    _sdSourceNode.connect(_sdGainNode);   // SD branch: boost to match Drive loudness
+    _sdGainNode.connect(_preAmpNode);
     _preAmpNode.connect(_eqNodes[0]);
     for (let i = 0; i < _eqNodes.length - 1; i++) {
       _eqNodes[i].connect(_eqNodes[i + 1]);

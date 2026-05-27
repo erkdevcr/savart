@@ -4298,6 +4298,10 @@ const App = (() => {
         }
         const dbMeta = pinnedMetaMap.get(p.id);
         const inMem  = (typeof Meta !== 'undefined') ? Meta.getCached(p.id) : null;
+        // Reconstruct Soundrop identity from ID prefix — covers items pinned before
+        // v3.5.295 when togglePin didn't persist isSoundrop/videoId.
+        const _isSd  = p.isSoundrop || dbMeta?.isSoundrop || (p.id || '').startsWith('sd_');
+        const _vidId = p.videoId    || dbMeta?.videoId    || (_isSd ? (p.id || '').slice(3) : null);
         return {
           ...p,
           displayName:  _pick(dbMeta?.displayName, dbMeta?.name, inMem?.title,   p.displayName,  p.name),
@@ -4305,6 +4309,8 @@ const App = (() => {
           thumbnailUrl: _resolveCoverUrl(p.id, dbMeta, inMem, _safeUrl(dbMeta?.thumbnailUrl), _safeUrl(dbMeta?.coverUrl), inMem?.coverUrl, _safeUrl(p.thumbnailUrl), _safeUrl(p.thumbnailLink)),
           folderId:     dbMeta?.folderId || p.folderId || null,
           folderType:   _stampFolderType(p, dbMeta),
+          isSoundrop:   _isSd  || false,
+          videoId:      _vidId || null,
         };
       });
 
