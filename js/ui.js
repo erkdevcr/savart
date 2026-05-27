@@ -2340,9 +2340,12 @@ const UI = (() => {
     if (options.anchorRect) {
       // Anchor mode: use CSS `right` so the menu's right edge locks to the
       // button's right edge regardless of menu width or viewport size.
+      // Must use window.innerWidth (layout viewport), NOT visualViewport.width,
+      // because getBoundingClientRect() is in layout-viewport coordinates.
       const ar          = options.anchorRect;
       const gap         = options.anchorGap ?? 4;
-      const rightOffset = Math.max(margin, vw - ar.right);
+      const lw          = window.innerWidth;                  // layout viewport width
+      const rightOffset = Math.max(margin, lw - ar.right);   // dist from button's right edge to viewport right
       let y             = ar.bottom + gap;
       y = Math.min(y, vh - mh - safeBottom);
       y = Math.max(margin, y);

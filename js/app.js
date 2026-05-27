@@ -12597,8 +12597,10 @@ const App = (() => {
     document.getElementById('btn-pexp-more-hdr')?.addEventListener('click', (e) => {
       e.stopPropagation();
       const track = Player.getCurrentTrack();
+      const rect  = e.currentTarget.getBoundingClientRect();
+      console.log('[Savart] btn-pexp-more-hdr clicked — rect:', JSON.stringify({right: rect.right, bottom: rect.bottom}), '— innerWidth:', window.innerWidth);
       if (track) UI.showContextMenu(e, 'player_song', track,
-        { anchorRect: e.currentTarget.getBoundingClientRect(), anchorGap: 25 });
+        { anchorRect: rect, anchorGap: 25 });
     });
 
     // ── Soundrop download buttons (expanded + mini) ───────────
