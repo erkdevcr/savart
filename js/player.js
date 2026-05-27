@@ -405,7 +405,7 @@ const Player = (() => {
     // YouTube normalizes to -14 LUFS; Drive MP3s average ~-9 LUFS (~5 dB gap).
     // A 1.78x gain on the SD branch closes that gap without clipping typical tracks.
     _sdGainNode   = _audioCtx.createGain();
-    _sdGainNode.gain.value = 1.78;
+    _sdGainNode.gain.value = 1.4;
     _pannerNode   = _audioCtx.createStereoPanner
                   ? _audioCtx.createStereoPanner()
                   : null; // fallback: not all browsers support StereoPanner
