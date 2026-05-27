@@ -9284,9 +9284,9 @@ const App = (() => {
     if (typeof Meta === 'undefined' || typeof Drive === 'undefined') return;
 
     try {
-      // Guard 1: folder already manually rescanned
+      // Guard 1: folder already rescanned OR manually edited at folder level → authoritative data exists
       const folderMeta = await DB.getMeta(folderId).catch(() => null);
-      if (folderMeta?.rescannedAt) return;
+      if (folderMeta?.rescannedAt || folderMeta?.manualAt) return;
 
       // Guard 2: build existing DB meta map
       const allMeta     = await DB.getAllMeta();
@@ -10356,6 +10356,8 @@ const App = (() => {
       _scrollDetailToTop();
       if (enriched.length > 0 && Auth.getValidToken()) {
         _prefetchAndApplyFolderCovers(collection.folderId, enriched).catch(() => {});
+        // Soft scan: lightweight ID3-only enrichment for songs not yet scanned.
+        _softScanFolder(collection.folderId, enriched).catch(() => {});
       }
     } catch (err) {
       console.error('[App] onCollectionClick error:', err);
@@ -10714,6 +10716,10 @@ const App = (() => {
       if (enriched.length > 0 && Auth.getValidToken()) {
         const folderId = enriched.find(s => s.folderId)?.folderId || null;
         _prefetchAndApplyFolderCovers(folderId, enriched).catch(() => {});
+        // Soft scan: lightweight ID3-only enrichment for songs not yet scanned.
+        // _softScanFolder respects per-file manualAt/rescannedAt/softScannedAt guards
+        // and the folder-level rescannedAt/manualAt guard internally.
+        _softScanFolder(folderId, enriched).catch(() => {});
       }
 
       // Duration is captured from the audio element when each song plays (_onProgress).
