@@ -2697,7 +2697,7 @@ const UI = (() => {
       const vw          = window.innerWidth;
       const vh          = window.innerHeight;
       const mh          = menu.offsetHeight || 200;
-      const rightOffset = Math.max(8, vw - rect.right);
+      const rightOffset = Math.max(8, vw - rect.right + 70);
       let y             = rect.bottom + 4;
       y = Math.min(y, vh - mh - 8);
       menu.style.left       = 'auto';

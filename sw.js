@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.303';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.303 — dropdown lib-detail: usa CSS right en vez de left para eliminar desplazamiento de 110px en desktop
+const APP_VERSION  = '3.5.304';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.304 — dropdown lib-detail: desplaza 70px adicionales a la izquierda
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
