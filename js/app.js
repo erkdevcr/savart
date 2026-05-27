@@ -7529,7 +7529,7 @@ const App = (() => {
     // ⋮ context menu
     entity.querySelector('.lib-detail-entity-more').addEventListener('click', (e) => {
       e.stopPropagation();
-      UI.showContextMenu(e, 'ds_folder', { id: folder.id, folderId: folder.id, name: leaf, isFolder: true }, { anchorRect: e.currentTarget.getBoundingClientRect() });
+      UI.showContextMenu(e, 'ds_folder', { id: folder.id, folderId: folder.id, name: leaf, isFolder: true });
     });
 
     // Convert button (single toggle — shows the other type)
@@ -7931,7 +7931,7 @@ const App = (() => {
     // ⋮ opens context menu
     entity.querySelector('.lib-detail-entity-more').addEventListener('click', (e) => {
       e.stopPropagation();
-      UI.showContextMenu(e, 'ds_folder', { id: folder.id, folderId: folder.id, name: leaf, isFolder: true }, { anchorRect: e.currentTarget.getBoundingClientRect() });
+      UI.showContextMenu(e, 'ds_folder', { id: folder.id, folderId: folder.id, name: leaf, isFolder: true });
     });
 
     // Ignore button

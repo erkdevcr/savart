@@ -1286,7 +1286,7 @@ const UI = (() => {
     // 3-dot button → context menu (anchored to button)
     card.querySelector('.pinned-card-more').addEventListener('click', (e) => {
       e.stopPropagation();
-      showContextMenu(e, 'pinned', item, { anchorRect: e.currentTarget.getBoundingClientRect() });
+      showContextMenu(e, 'pinned', item);
     });
 
     // Name / card body → navigate (open folder or play song)
@@ -1341,7 +1341,7 @@ const UI = (() => {
 
     el.querySelector('.btn-more')?.addEventListener('click', (e) => {
       e.stopPropagation();
-      showContextMenu(e, 'top_played', item, { anchorRect: e.currentTarget.getBoundingClientRect() });
+      showContextMenu(e, 'top_played', item);
     });
 
     return el;
@@ -1373,7 +1373,7 @@ const UI = (() => {
 
     card.querySelector('.home-card-more').addEventListener('click', (e) => {
       e.stopPropagation();
-      showContextMenu(e, isFolder ? 'home_folder' : 'home_song', item, { anchorRect: e.currentTarget.getBoundingClientRect() });
+      showContextMenu(e, isFolder ? 'home_folder' : 'home_song', item);
     });
 
     card.addEventListener('click', (e) => {
@@ -1476,7 +1476,7 @@ const UI = (() => {
 
     el.querySelector('.btn-more')?.addEventListener('click', (e) => {
       e.stopPropagation();
-      showContextMenu(e, 'history', item, { anchorRect: e.currentTarget.getBoundingClientRect() });
+      showContextMenu(e, 'history', item);
     });
 
     return el;
@@ -1905,7 +1905,7 @@ const UI = (() => {
 
     row.querySelector('.btn-more').addEventListener('click', (e) => {
       e.stopPropagation();
-      showContextMenu(e, 'folder', { ...folder, folderType: row.dataset.folderType || folder.folderType }, { anchorRect: e.currentTarget.getBoundingClientRect() });
+      showContextMenu(e, 'folder', { ...folder, folderType: row.dataset.folderType || folder.folderType });
     });
 
     // Long-press or right-click for context menu
@@ -1975,7 +1975,7 @@ const UI = (() => {
 
       row.querySelector('.btn-more').addEventListener('click', (e) => {
         e.stopPropagation();
-        showContextMenu(e, 'song', file, { anchorRect: e.currentTarget.getBoundingClientRect() });
+        showContextMenu(e, 'song', file);
       });
 
       row.addEventListener('contextmenu', (e) => {
@@ -3121,7 +3121,7 @@ const UI = (() => {
 
       row.querySelector('.btn-more').addEventListener('click', (e) => {
         e.stopPropagation();
-        showContextMenu(e, 'song', song, { anchorRect: e.currentTarget.getBoundingClientRect() });
+        showContextMenu(e, 'song', song);
       });
 
       row.addEventListener('click', (e) => {
@@ -3246,7 +3246,7 @@ const UI = (() => {
 
       row.querySelector('.btn-more').addEventListener('click', e => {
         e.stopPropagation();
-        showContextMenu(e, 'song', song, { anchorRect: e.currentTarget.getBoundingClientRect() });
+        showContextMenu(e, 'song', song);
       });
 
       row.addEventListener('click', e => {
@@ -3910,7 +3910,7 @@ const UI = (() => {
 
       row.querySelector('.btn-more').addEventListener('click', e => {
         e.stopPropagation();
-        showContextMenu(e, 'song', song, { anchorRect: e.currentTarget.getBoundingClientRect() });
+        showContextMenu(e, 'song', song);
       });
 
       row.addEventListener('click', e => {
@@ -4017,7 +4017,7 @@ const UI = (() => {
     // 3-dot → context menu
     card.querySelector('.album-card-more').addEventListener('click', (e) => {
       e.stopPropagation();
-      showContextMenu(e, 'lib_album', album, { anchorRect: e.currentTarget.getBoundingClientRect() });
+      showContextMenu(e, 'lib_album', album);
     });
 
     return card;
@@ -4129,7 +4129,7 @@ const UI = (() => {
     });
     card.querySelector('.collection-card-more').addEventListener('click', e => {
       e.stopPropagation();
-      showContextMenu(e, 'lib_collection', col, { anchorRect: e.currentTarget.getBoundingClientRect() });
+      showContextMenu(e, 'lib_collection', col);
     });
 
     return card;
@@ -4462,7 +4462,7 @@ const UI = (() => {
 
       row.querySelector('.btn-more').addEventListener('click', e => {
         e.stopPropagation();
-        showContextMenu(e, 'song', song, { anchorRect: e.currentTarget.getBoundingClientRect() });
+        showContextMenu(e, 'song', song);
       });
       row.addEventListener('click', e => {
         if (e.target.closest('.btn-more')) return;
@@ -4554,7 +4554,7 @@ const UI = (() => {
 
       item.querySelector('.pl-item-more').addEventListener('click', (e) => {
         e.stopPropagation();
-        showContextMenu(e, 'playlist', pl, { anchorRect: e.currentTarget.getBoundingClientRect() });
+        showContextMenu(e, 'playlist', pl);
       });
 
       listPane.appendChild(item);
