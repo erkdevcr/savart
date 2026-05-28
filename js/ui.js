@@ -1261,6 +1261,7 @@ const UI = (() => {
       <div class="pinned-card-art" data-id="${escHtml(item.id)}" style="background:${bg}">
         ${imgHtml}${iconHtml}
         <div class="pinned-art-play">${iconPlay(13)}</div>
+        ${item.isSoundrop ? `<span class="sd-thumb-chip">SD</span>` : ''}
       </div>
       <div class="pinned-card-type-banner" style="background:${bannerBg}">
         <span style="color:${bannerColor}">${bannerLabel}</span>
@@ -1324,6 +1325,7 @@ const UI = (() => {
       <span class="top-list-rank">${rank}</span>
       <div class="top-list-thumb">
         ${thumbHtml}
+        ${item.isSoundrop ? `<span class="sd-thumb-chip">SD</span>` : ''}
         <div class="eq-bars"><div class="eq-bar"></div><div class="eq-bar"></div><div class="eq-bar"></div><div class="eq-bar"></div></div>
       </div>
       <div class="top-list-info">
@@ -1460,6 +1462,7 @@ const UI = (() => {
       <span class="top-list-rank">${rank}</span>
       <div class="top-list-thumb">
         ${thumbHtml}
+        ${item.isSoundrop ? `<span class="sd-thumb-chip">SD</span>` : ''}
         <div class="eq-bars"><div class="eq-bar"></div><div class="eq-bar"></div><div class="eq-bar"></div><div class="eq-bar"></div></div>
       </div>
       <div class="top-list-info">
