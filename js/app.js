@@ -3361,10 +3361,11 @@ const App = (() => {
           }
 
           // Prefer local cached blob (free, full file — best quality).
-          // Fall back to a 1MB head download (enough for most embedded cover art).
+          // Fall back to a 500 KB head download (enough for most embedded cover art;
+          // the ID3 tag-size check below will fetch more bytes if the tag is larger).
           let blob = await DB.getCachedBlob(item.id).catch(() => null);
           const blobIsFullFile = !!blob;  // cached = full audio file, not a head slice
-          if (!blob) blob = await Drive.downloadFileHead(item.id, 1024 * 1024).catch(() => null);
+          if (!blob) blob = await Drive.downloadFileHead(item.id, 512 * 1024).catch(() => null);
 
           if (!blob) {
             // Network failure — release session slot so next sync/load can retry
@@ -3373,7 +3374,7 @@ const App = (() => {
           }
 
           // ── ID3 tag-size check ─────────────────────────────────────────────────
-          // If the full ID3 tag extends beyond the 1 MB we downloaded, the APIC
+          // If the full ID3 tag extends beyond the 500 KB we downloaded, the APIC
           // (cover art) frame may be truncated — the parser will hit the frame
           // boundary guard and skip it, so no cover is found even though the file
           // has embedded art.  Read the 10-byte ID3 header, decode the synchsafe
@@ -9743,15 +9744,15 @@ const App = (() => {
       }
 
       // ── Case 3: already soft-scanned on THIS device ──────────────────────────────
-      // The soft scan only downloads a 1MB head — if the APIC frame extends beyond that
-      // boundary the cover is missed. When the full audio blob is now available in cache
-      // (because the user is about to play the song), we get a second chance to find it.
+      // The soft scan only downloads a 500 KB head — if the APIC frame extends beyond
+      // that boundary the cover is missed. When the full audio blob is now available in
+      // cache (because the user is about to play the song), we get a second chance.
       if (existing?.softScannedAt) {
         if (!existing?.coverBlob) {
           // Soft scan found no cover — try the full cached blob (if available) to catch
-          // large embedded cover art that exceeds the 1MB head download.
+          // large embedded cover art that exceeds the 500 KB head download.
           const cachedBlob = await DB.getCachedBlob(item.id).catch(() => null);
-          if (cachedBlob && cachedBlob.size > 1024 * 1024) {
+          if (cachedBlob && cachedBlob.size > 512 * 1024) {
             // Force re-parse of the full file (bypass cache from the 1MB soft scan).
             const fullParsed = await Meta.parse(item.id, cachedBlob, true).catch(() => null);
             if (fullParsed?.coverBlob) {
@@ -9773,10 +9774,11 @@ const App = (() => {
       if (inBrowse()) UI.markBrowseSongScanning(item.id);
 
       // Prefer full cached blob (best quality, no network).
-      // Fall back to 1MB head download (standard size for ID3 tag parsing).
+      // Fall back to 500 KB head download (the ID3 tag-size check below fetches more
+      // if the tag overflows this boundary).
       let blob = await DB.getCachedBlob(item.id).catch(() => null);
       const blobIsFullFile = !!blob;
-      if (!blob) blob = await Drive.downloadFileHead(item.id, 1024 * 1024).catch(() => null);
+      if (!blob) blob = await Drive.downloadFileHead(item.id, 512 * 1024).catch(() => null);
 
       if (!blob) {
         // Network failure — don't mark softScannedAt so we can retry next time

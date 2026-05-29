@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.331';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.331 — _dsResetToOriginals: clear rescannedAt/manualAt from folder DB records; fix onDsResetRow folder lookup
+const APP_VERSION  = '3.5.332';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.332 — soft scan head download: 1 MB → 500 KB (ID3 tag-size guard handles overflow)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
