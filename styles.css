@@ -1089,6 +1089,12 @@ img { display: block; }
   min-width: 0;
 }
 
+/* 3-dot menu button pinned to the right of the browse title row */
+.browse-folder-more-btn {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
 /* Row 2: parent breadcrumb trail — hidden at root */
 .browse-path {
   display: flex;

@@ -19,9 +19,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&family=Baskervville:ital@0;1&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="styles.css?v=3.5.332">
+  <link rel="stylesheet" href="styles.css?v=3.5.333">
   <!-- Version global — fallback para Android donde el SW no se registra -->
-  <script>window.SAVART_VERSION = '3.5.332';</script>
+  <script>window.SAVART_VERSION = '3.5.333';</script>
 </head>
 <body>
 
@@ -151,6 +151,9 @@
         <div class="browse-title-row">
           <svg class="browse-folder-icon" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>
           <h1 class="browse-current-name" id="browse-folder-name">Mi Drive</h1>
+          <button id="btn-browse-folder-more" class="btn-more browse-folder-more-btn" aria-label="Más opciones" style="display:none">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
+          </button>
         </div>
         <!-- Row 1b: chip (album/collection) + item count — directly below title -->
         <div id="browse-item-count" class="browse-item-count"></div>
@@ -1387,22 +1390,22 @@
 </script>
 
 <!-- Savart modules -->
-<script src="js/config.js?v=3.5.332"></script>
-<script src="js/auth.js?v=3.5.332"></script>
-<script src="js/drive.js?v=3.5.332"></script>
-<script src="js/db.js?v=3.5.332"></script>
-<script src="js/sync.js?v=3.5.332"></script>
-<script src="js/player.js?v=3.5.332"></script>
-<script src="js/meta.js?v=3.5.332"></script>
-<script src="js/lastfm.js?v=3.5.332"></script>
-<script src="js/audd.js?v=3.5.332"></script>
-<script src="js/musicbrainz.js?v=3.5.332"></script>
-<script src="js/discogs.js?v=3.5.332"></script>
-<script src="js/lyrics.js?v=3.5.332"></script>
-<script src="js/soundrop.js?v=3.5.332"></script>
-<script src="js/ui.js?v=3.5.332"></script>
-<script src="js/app.js?v=3.5.332"></script>
-<script src="js/bg.js?v=3.5.332"></script>
+<script src="js/config.js?v=3.5.333"></script>
+<script src="js/auth.js?v=3.5.333"></script>
+<script src="js/drive.js?v=3.5.333"></script>
+<script src="js/db.js?v=3.5.333"></script>
+<script src="js/sync.js?v=3.5.333"></script>
+<script src="js/player.js?v=3.5.333"></script>
+<script src="js/meta.js?v=3.5.333"></script>
+<script src="js/lastfm.js?v=3.5.333"></script>
+<script src="js/audd.js?v=3.5.333"></script>
+<script src="js/musicbrainz.js?v=3.5.333"></script>
+<script src="js/discogs.js?v=3.5.333"></script>
+<script src="js/lyrics.js?v=3.5.333"></script>
+<script src="js/soundrop.js?v=3.5.333"></script>
+<script src="js/ui.js?v=3.5.333"></script>
+<script src="js/app.js?v=3.5.333"></script>
+<script src="js/bg.js?v=3.5.333"></script>
 
 <!-- Inline: additional bindings that need the DOM -->
 <script>

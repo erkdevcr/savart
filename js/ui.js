@@ -1584,6 +1584,10 @@ const UI = (() => {
     const backBtn = document.getElementById('btn-browse-back');
     if (backBtn) backBtn.style.display = trail.length >= 1 ? '' : 'none';
 
+    // ── 1c. Show folder 3-dot menu whenever we're inside any folder
+    const folderMoreBtn = document.getElementById('btn-browse-folder-more');
+    if (folderMoreBtn) folderMoreBtn.style.display = trail.length >= 1 ? '' : 'none';
+
     // ── 2. Render parent path (all crumbs except last) ─────
     const container = document.querySelector('#screen-browse .browse-path');
     if (!container) return;

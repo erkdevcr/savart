@@ -19,6 +19,7 @@ const App = (() => {
   let _breadcrumb      = [];    // [{ id, name }] from root to current
   let _rootFolderId    = 'root';
   let _browseFolderId  = null;  // current open folder id (for rescan)
+  let _browseFolder    = null;  // current open folder object { id, name, folderType } — for browse title 3-dot menu
   let _browseFiles     = [];    // current open folder audio files (for rescan)
   const _browseScrollMap = new Map(); // folderId → scrollTop, restored on Back
 
@@ -4701,9 +4702,12 @@ const App = (() => {
         }
       }
 
-      // Track current browse folder for rescan
+      // Track current browse folder for rescan and for the title-row 3-dot menu
       _browseFolderId = folder.id;
       _browseFiles    = result.files;
+      // Keep a full folder object so the browse title 3-dot menu can pass the right
+      // folderType (album / collection / null) to showContextMenu — same data as a subfolder row.
+      _browseFolder   = { id: folder.id, name: folder.name, folderType: curType || null };
       // Update the rescan dot: show green if this folder was previously scanned
       _updateBrowseLegend(folder.id);
 
@@ -12596,6 +12600,13 @@ const App = (() => {
 
     // Browse rescan button → force re-enrichment of current folder
     document.getElementById('btn-browse-rescan')?.addEventListener('click', onBrowseRescan);
+
+    // Browse title 3-dot menu → same context menu options as a subfolder row
+    document.getElementById('btn-browse-folder-more')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (!_browseFolder) return;
+      UI.showContextMenu(e, 'folder', _browseFolder);
+    });
 
     // "Play results" button → queue all song results from the last search
     document.getElementById('btn-play-search-results')?.addEventListener('click', () => {

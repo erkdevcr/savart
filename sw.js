@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.332';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.332 — soft scan head download: 1 MB → 500 KB (ID3 tag-size guard handles overflow)
+const APP_VERSION  = '3.5.333';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.333 — browse title row: 3-dot folder menu (same options as subfolder row)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
