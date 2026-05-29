@@ -11270,6 +11270,8 @@ const App = (() => {
         _libInDetail        = true;
         _libDetailRestoreFn = () => onPlaylistClick(fullPl || pl);
       }
+      // Soft scan: ID3 metadata + covers for all songs in the playlist
+      _softScanItems(songs).catch(() => {});
       // Drive fallback: fetch thumbnailLink for songs still without cover after local passes
       _driveThumbFallback(
         songs.filter(s => !s.thumbnailUrl),
