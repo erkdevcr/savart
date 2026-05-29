@@ -856,6 +856,10 @@ const UI = (() => {
     const btnSdMini = document.getElementById('btn-mini-sd-download');
     if (btnSdMini) btnSdMini.style.display = track?.isSoundrop ? '' : 'none';
 
+    // Show/hide SD chip on mini-player cover art
+    const miniSdChip = document.getElementById('mini-sd-chip');
+    if (miniSdChip) miniSdChip.style.display = track?.isSoundrop ? '' : 'none';
+
     // Sync desk micro player
     _updateDeskMicroPlayer(track, isPlaying);
   }
@@ -888,6 +892,10 @@ const UI = (() => {
     // Update play/pause icon
     const playBtn = document.getElementById('dmp-btn-play');
     if (playBtn) playBtn.innerHTML = isPlaying ? iconPause(18) : iconPlay(18);
+
+    // Show/hide SD chip on desk micro-player cover
+    const dmpSdChip = document.getElementById('dmp-sd-chip');
+    if (dmpSdChip) dmpSdChip.style.display = track?.isSoundrop ? '' : 'none';
   }
 
   /* ── Expanded player ────────────────────────────────────── */
@@ -3030,7 +3038,10 @@ const UI = (() => {
 
     el.innerHTML = `
       <span class="queue-item-num">${isActive ? '' : queueIndex}</span>
-      <div class="queue-item-thumb">${thumbHtml}</div>
+      <div class="queue-item-thumb">
+        ${thumbHtml}
+        ${item.isSoundrop ? `<span class="sd-thumb-chip">SD</span>` : ''}
+      </div>
       <div class="queue-item-info">
         <div class="queue-item-title">${escHtml(title)}</div>
         ${artist ? `<div class="queue-item-artist">${escHtml(artist)}</div>` : ''}

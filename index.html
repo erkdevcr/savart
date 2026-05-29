@@ -19,9 +19,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&family=Baskervville:ital@0;1&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="styles.css?v=3.5.316">
+  <link rel="stylesheet" href="styles.css?v=3.5.319">
   <!-- Version global — fallback para Android donde el SW no se registra -->
-  <script>window.SAVART_VERSION = '3.5.316';</script>
+  <script>window.SAVART_VERSION = '3.5.319';</script>
 </head>
 <body>
 
@@ -906,13 +906,12 @@
     <!-- Info + controls panel -->
     <div class="pexp-info-panel">
 
-      <!-- SD download bar — visible only for Soundrop tracks, sits above LETRA -->
-      <button id="btn-pexp-sd-download" class="sd-download-bar" aria-label="Descargar en Drive" style="display:none">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
-        <span>Descargar</span>
-      </button>
-
       <div class="pexp-panel-hdr">
+        <!-- SD download button — visible only for Soundrop tracks, same line as LETRA -->
+        <button id="btn-pexp-sd-download" class="sd-download-bar" aria-label="Descargar en Drive" style="display:none">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+          <span>Descargar</span>
+        </button>
         <button id="btn-pexp-lyrics" class="pexp-show-album-btn" aria-label="Letra">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm-1 1.5L18.5 9H13V3.5zM6 20V4h5v7h7v9H6zm2-7h8v1.5H8V13zm0 3h5v1.5H8V16z"/></svg>
           <span data-i18n="player_lyrics">LETRA</span>
@@ -1031,6 +1030,7 @@
       <div class="dmp-thumb">
         <img id="dmp-thumb-img" alt="" style="display:none">
         <svg id="dmp-thumb-icon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z"/></svg>
+        <span class="sd-thumb-chip" id="dmp-sd-chip" style="display:none">SD</span>
       </div>
       <div class="dmp-info">
         <div class="dmp-title" id="dmp-title">—</div>
@@ -1124,6 +1124,7 @@
       <div class="eq-bar"></div>
       <div class="eq-bar"></div>
     </div>
+    <span class="sd-thumb-chip" id="mini-sd-chip" style="display:none">SD</span>
   </div>
   <div class="mini-info">
     <div class="mini-title">—</div>
@@ -1386,22 +1387,22 @@
 </script>
 
 <!-- Savart modules -->
-<script src="js/config.js?v=3.5.316"></script>
-<script src="js/auth.js?v=3.5.316"></script>
-<script src="js/drive.js?v=3.5.316"></script>
-<script src="js/db.js?v=3.5.316"></script>
-<script src="js/sync.js?v=3.5.316"></script>
-<script src="js/player.js?v=3.5.316"></script>
-<script src="js/meta.js?v=3.5.316"></script>
-<script src="js/lastfm.js?v=3.5.316"></script>
-<script src="js/audd.js?v=3.5.316"></script>
-<script src="js/musicbrainz.js?v=3.5.316"></script>
-<script src="js/discogs.js?v=3.5.316"></script>
-<script src="js/lyrics.js?v=3.5.316"></script>
-<script src="js/soundrop.js?v=3.5.316"></script>
-<script src="js/ui.js?v=3.5.316"></script>
-<script src="js/app.js?v=3.5.316"></script>
-<script src="js/bg.js?v=3.5.316"></script>
+<script src="js/config.js?v=3.5.319"></script>
+<script src="js/auth.js?v=3.5.319"></script>
+<script src="js/drive.js?v=3.5.319"></script>
+<script src="js/db.js?v=3.5.319"></script>
+<script src="js/sync.js?v=3.5.319"></script>
+<script src="js/player.js?v=3.5.319"></script>
+<script src="js/meta.js?v=3.5.319"></script>
+<script src="js/lastfm.js?v=3.5.319"></script>
+<script src="js/audd.js?v=3.5.319"></script>
+<script src="js/musicbrainz.js?v=3.5.319"></script>
+<script src="js/discogs.js?v=3.5.319"></script>
+<script src="js/lyrics.js?v=3.5.319"></script>
+<script src="js/soundrop.js?v=3.5.319"></script>
+<script src="js/ui.js?v=3.5.319"></script>
+<script src="js/app.js?v=3.5.319"></script>
+<script src="js/bg.js?v=3.5.319"></script>
 
 <!-- Inline: additional bindings that need the DOM -->
 <script>
