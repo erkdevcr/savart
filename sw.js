@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.329';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.329 — _eraseRescanLegend: limpia labels de legend al resetear folder
+const APP_VERSION  = '3.5.330';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.330 — Meta._MAX_CACHE 40→300: covers no se pierden al escanear folders grandes
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

@@ -37,10 +37,12 @@ const Meta = (() => {
   const _objectUrls = new Set();
 
   // Maximum number of entries kept in the cache.
-  // Home screen shows ≤ 50 songs simultaneously; 40 is enough for the currently
-  // playing track, visible home cards, and recently browsed items — while keeping
-  // RAM usage low (each entry holds a cover blob: URL that occupies live memory).
-  const _MAX_CACHE = 40;
+  // Browse folders can have 100-200+ songs all visible at once — each needs its
+  // blob URL alive in the cache or the <img> shows a broken image when evicted.
+  // 300 entries × ~35 KB average cover ≈ 10 MB of blob memory, acceptable for
+  // a music player.  Old value of 40 caused covers to disappear mid-scan as the
+  // cache overflowed while _prefetchAndApplyFolderCovers batched large folders.
+  const _MAX_CACHE = 300;
 
   /* ── LRU helpers ─────────────────────────────────────────── */
 
