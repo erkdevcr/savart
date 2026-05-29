@@ -4988,7 +4988,12 @@ const App = (() => {
   async function onShowPlaylistPicker(e, item) {
     try {
       const playlists = await DB.getPlaylists();
-      UI.showPlaylistPicker(e, item, playlists);
+      // Tag folder items so onAddToPlaylist can bulk-add their songs
+      const isFolder  = item.isFolder || item.type === 'folder';
+      const taggedItem = isFolder
+        ? { ...item, _isFolder: true, _folderId: item.id }
+        : item;
+      UI.showPlaylistPicker(e, taggedItem, playlists);
     } catch (err) {
       UI.showToast(UI.t('toast_pl_load_error'), 'error');
     }
@@ -5009,6 +5014,13 @@ const App = (() => {
         const songs = await _resolveAlbumSongs(item._album);
         await Promise.all(songs.map(s => DB.addToPlaylist(playlistId, s.id)));
         UI.showToast(`${songs.length} ${UI.t('songs').toLowerCase()} → "${pl?.name || 'playlist'}"`);
+      } else if (item._isFolder && item._folderId) {
+        // Folder bulk-add: list all playable files inside the folder
+        const { files } = await Drive.listFolderAll(item._folderId);
+        const playable = files.filter(f => f.isPlayable);
+        if (playable.length === 0) { UI.showToast(UI.t('toast_no_playable'), 'error'); return; }
+        await Promise.all(playable.map(s => DB.addToPlaylist(playlistId, s.id).then(() => _saveItemMeta(s))));
+        UI.showToast(`${playable.length} ${UI.t('songs').toLowerCase()} → "${pl?.name || 'playlist'}"`);
       } else {
         await DB.addToPlaylist(playlistId, item.id);
         await _saveItemMeta(item);
@@ -5032,6 +5044,16 @@ const App = (() => {
       if (item._isAlbum && item._album) {
         const songs = await _resolveAlbumSongs(item._album);
         await Promise.all(songs.map(s => DB.addToPlaylist(pl.id, s.id)));
+      } else if (item._isFolder && item._folderId) {
+        // Folder bulk-add: list all playable files inside the folder
+        const { files } = await Drive.listFolderAll(item._folderId);
+        const playable = files.filter(f => f.isPlayable);
+        if (playable.length === 0) { UI.showToast(UI.t('toast_no_playable'), 'error'); return; }
+        await Promise.all(playable.map(s => DB.addToPlaylist(pl.id, s.id).then(() => _saveItemMeta(s))));
+        UI.showToast(`"${name}" — ${UI.t('toast_pl_created')} (${playable.length} ${UI.t('songs').toLowerCase()})`);
+        _loadPlaylists();
+        Sync.push('playlists');
+        return;
       } else {
         await DB.addToPlaylist(pl.id, item.id);
         await _saveItemMeta(item);
