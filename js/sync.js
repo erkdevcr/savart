@@ -1799,6 +1799,40 @@ const Sync = (() => {
   }
 
   /**
+   * Immediate push — no debounce. Use for destructive operations (e.g. delete
+   * playlist) where a delayed push risks the change being lost if the session
+   * ends before the debounce timer fires, causing the item to reappear on re-login.
+   * Cancels any pending debounced push for the same type, then writes to Drive
+   * immediately. Also pushes the home snapshot when the type is home-relevant.
+   * @param {string} type
+   */
+  async function pushNow(type) {
+    if (!_ready) return;
+    // Cancel any pending debounced push for this type
+    if (_timers[type]) { clearTimeout(_timers[type]); delete _timers[type]; }
+    try {
+      await _pushFns[type]?.();
+      await _bumpManifest([type]);
+      _localTs[type] = Date.now();
+      await DB.setState('sync_localTs', { ..._localTs }).catch(() => {});
+    } catch (err) {
+      if (err.isScope) return;
+      console.warn(`[Sync] pushNow(${type}) failed:`, err.message);
+    }
+    // Also push home snapshot immediately for home-relevant types
+    if (HOME_TYPES.has(type)) {
+      if (_timers._home) { clearTimeout(_timers._home); delete _timers._home; }
+      try {
+        await _pushHome();
+        await _bumpManifest(['home']);
+      } catch (err) {
+        if (err.isScope) return;
+        console.warn('[Sync] pushNow(home) failed:', err.message);
+      }
+    }
+  }
+
+  /**
    * Immediate (no debounce) hot-delta push for rescan results.
    * Writes only the rescanned songs to savart_hot.json (~5 KB) so other
    * devices see enriched metadata and album art within the next poll cycle (≤ 3 s).
@@ -1873,6 +1907,6 @@ const Sync = (() => {
     return { files: savartFiles, totalBytes };
   }
 
-  return { init, push, pushHot, readHome, startLiveSync, stopLiveSync, getDbStats };
+  return { init, push, pushNow, pushHot, readHome, startLiveSync, stopLiveSync, getDbStats };
 
 })();

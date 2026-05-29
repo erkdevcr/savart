@@ -7154,6 +7154,16 @@ const App = (() => {
         await DB.resetToVirgin(f.id).catch(() => {});
         if (typeof Meta !== 'undefined') Meta.revoke(f.id);
       }));
+      // Also clear folder-level rescannedAt / manualAt markers (stored on the folder's own
+      // DB record, not on songs — so resetToVirgin above doesn't touch them).
+      {
+        const folderRec = await DB.getMeta(id).catch(() => null);
+        if (folderRec && (folderRec.rescannedAt || folderRec.manualAt)) {
+          delete folderRec.rescannedAt;
+          delete folderRec.manualAt;
+          await DB.bulkWriteMeta([folderRec]).catch(() => {});
+        }
+      }
       _folderCoverCache.delete(id);
 
       // 3. Pin folder progress line and run recognition pass per-file (sequential)
@@ -8835,6 +8845,15 @@ const App = (() => {
       const songs   = allMeta.filter(m => m.folderId === folderId);
       for (const m of songs) {
         await DB.resetToVirgin(m.id).catch(() => {});
+      }
+
+      // Clear folder-level rescannedAt / manualAt from the folder's own DB record
+      // (setMeta strips nulls so we need bulkWriteMeta for a direct put without those fields)
+      const folderRec = allMeta.find(m => m.id === folderId && !m.folderId);
+      if (folderRec && (folderRec.rescannedAt || folderRec.manualAt)) {
+        delete folderRec.rescannedAt;
+        delete folderRec.manualAt;
+        await DB.bulkWriteMeta([folderRec]).catch(() => {});
       }
 
       // Delete collection record if it exists
@@ -11325,7 +11344,7 @@ const App = (() => {
     await DB.deletePlaylist(pl.id);
     UI.showToast(`"${pl.name}" — ${UI.t('ctx_delete').toLowerCase()}`);
     _loadPlaylists();
-    Sync.push('playlists');
+    Sync.pushNow('playlists'); // immediate — prevents reappearing on re-login if session ends before debounce fires
     // If this playlist was showing in detail pane, clear it
     const container = document.getElementById('lib-detail-content');
     if (container) container.innerHTML = '';
