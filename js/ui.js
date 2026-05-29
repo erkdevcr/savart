@@ -2803,8 +2803,8 @@ const UI = (() => {
     const plPickerCreate = document.getElementById('pl-picker-create-input');
     if (plPickerCreate) plPickerCreate.placeholder = t('pl_picker_name');
 
-    // Queue panel title
-    const queueHeaderTitle = document.querySelector('.queue-header-title');
+    // Queue panel title (only the queue view header, not the lyrics header)
+    const queueHeaderTitle = document.querySelector('#pexp-queue-view .queue-header-title');
     if (queueHeaderTitle) queueHeaderTitle.textContent = t('queue_title');
 
     // Library sidebar static items

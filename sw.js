@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.319';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.319 — Descargar + LETRA en misma línea del player
+const APP_VERSION  = '3.5.321';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.321 — lyrics panel: animación sheetUp/sheetDown + flecha abajo
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

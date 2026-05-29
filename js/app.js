@@ -11400,7 +11400,14 @@ const App = (() => {
 
   function _closeLyricsView() {
     const expanded = document.getElementById('player-expanded');
-    if (expanded) expanded.classList.remove('showing-lyrics');
+    if (!expanded) return;
+    expanded.classList.add('hiding-lyrics');
+    const lyricsView = expanded.querySelector('.pexp-lyrics-view');
+    const finish = () => expanded.classList.remove('showing-lyrics', 'hiding-lyrics');
+    if (lyricsView) {
+      lyricsView.addEventListener('animationend', finish, { once: true });
+    }
+    setTimeout(finish, 350); // fallback if animationend doesn't fire
   }
 
   async function _loadLyricsForCurrentTrack() {

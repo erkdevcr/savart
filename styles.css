@@ -3362,7 +3362,26 @@ img { display: block; }
 }
 
 #player-expanded.showing-lyrics .pexp-now-playing-view { display: none; }
-#player-expanded.showing-lyrics .pexp-lyrics-view       { display: flex; }
+#player-expanded.showing-lyrics .pexp-lyrics-view       { display: flex; animation: sheetUp 0.28s cubic-bezier(0.32, 0.72, 0, 1); }
+
+/* Lyrics exit: .hiding-lyrics keeps view visible while it animates out */
+#player-expanded.hiding-lyrics .pexp-lyrics-view       { display: flex; animation: sheetDown 0.22s cubic-bezier(0.32, 0.72, 0, 1) forwards; }
+#player-expanded.hiding-lyrics .pexp-now-playing-view  { display: none; }
+
+/* Mobile: lyrics covers the full expanded-player height */
+@media (max-width: 767px) {
+  #player-expanded.showing-lyrics .pexp-lyrics-view,
+  #player-expanded.hiding-lyrics  .pexp-lyrics-view {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+  }
+}
+
+/* Lyrics back-btn: arrow points down (rotate left-arrow -90°) */
+#pexp-lyrics-view .queue-back-btn svg {
+  transform: rotate(-90deg);
+}
 
 .lyrics-header {
   display: flex;
