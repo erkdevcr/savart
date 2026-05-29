@@ -201,6 +201,7 @@ const App = (() => {
       onReady:    _onTokenReady,
       onExpiring: _onTokenExpiring,
       onLogout:   _onLogout,
+      onRenewed:  _onTokenRenewed,
     });
 
     // 6. Bind static UI events
@@ -348,6 +349,23 @@ const App = (() => {
   /* ── Auth events ─────────────────────────────────────────── */
 
   function _onTokenReady() {
+    // Token renewal guard — if the user is already on a content view (not at boot,
+    // not on the login screen), this is a background token renewal (e.g. the user
+    // clicked "Renovar" on the expiry banner). In that case we must NOT re-initialise
+    // the whole app: doing so would navigate away from the current view, reset the
+    // volume/EQ, replay the boot toast, and kick off a full Sync.init() unnecessarily.
+    // null  → app just booted, hasn't shown any view yet → full init needed
+    // 'login' → user is on login screen → full init needed after sign-in
+    // anything else → user is mid-session → just hide the banner and resume
+    const _currentViewAtRenewal = UI.getCurrentView();
+    if (_currentViewAtRenewal !== null && _currentViewAtRenewal !== 'login') {
+      UI.hideTokenBanner();
+      // Resume live polling in case it was stopped while the token was expired
+      Sync.startLiveSync(_onSyncDataChanged);
+      console.log('[App] Token renovado — sesión continuada sin reiniciar.');
+      return;
+    }
+
     // One-time migration: reset all durationSec values that may have been saved
     // with a wrong value (v < 3.2.0 bug: stale audio.duration from previous track).
     // Setting to 0 is equivalent to "not set" since all checks use durationSec > 0.
@@ -784,7 +802,20 @@ const App = (() => {
   }
 
   function _onTokenExpiring() {
+    // Re-arm gesture renewal: the next user click anywhere on the page will silently
+    // renew the token — the user doesn't need to click "Renovar" specifically.
+    Auth.rearmGestureRenewal();
     UI.showTokenBanner();
+  }
+
+  /**
+   * Called by Auth when a mid-session silent renewal succeeds (gesture or silent path).
+   * Hides the token banner and resumes live polling without any app reinitialisation.
+   */
+  function _onTokenRenewed() {
+    UI.hideTokenBanner();
+    Sync.startLiveSync(_onSyncDataChanged); // idempotent — safe to call even if already running
+    console.log('[App] Token renovado silenciosamente — sesión continuada.');
   }
 
   function _onLogout() {

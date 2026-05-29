@@ -30,6 +30,9 @@ const Auth = (() => {
   let _renewTimeoutId   = null;
   let _renewOnGesture   = false;
   let _nativeInitialized = false;  // true after GoogleAuth.initialize() completes
+  let _onRenewed             = null;  // callback fired after a silent mid-session renewal
+  let _gestureRenewRetries   = 0;     // counts re-armed gesture renewal attempts
+  const MAX_GESTURE_RETRIES  = 3;     // give up re-arming after 3 failed popup attempts
 
   /* ── LocalStorage keys ─────────────────────────────────── */
   const LS_EXPIRY  = 'savart_token_expiry';
@@ -178,13 +181,14 @@ const Auth = (() => {
   }
 
   /* ── Init ──────────────────────────────────────────────── */
-  function init({ onReady, onExpiring, onLogout } = {}) {
+  function init({ onReady, onExpiring, onLogout, onRenewed } = {}) {
     if (_initialized) return;
     _initialized = true;
 
     _onReady    = onReady    || (() => {});
     _onExpiring = onExpiring || (() => {});
     _onLogout   = onLogout   || (() => {});
+    _onRenewed  = onRenewed  || null;
 
     if (_isNative()) {
       console.log('[Auth] Modo Android nativo — inicializando Capacitor GoogleAuth.');
@@ -239,7 +243,9 @@ const Auth = (() => {
     _saveToken(response.access_token, expiresInMs);
     if (_isSilentRenew) {
       _isSilentRenew = false;
+      _gestureRenewRetries = 0;   // reset on every successful silent renewal
       console.log('[Auth] Renovación silenciosa exitosa.');
+      try { _onRenewed?.(); } catch (_) {}
       return;
     }
     console.log('[Auth] Token guardado. Llamando _onReady');
@@ -407,6 +413,10 @@ const Auth = (() => {
   }
 
   function requestToken() {
+    // If a gesture-based silent renewal is already in flight (triggered by the
+    // capture-phase click listener before this handler fires), skip to avoid
+    // a double requestAccessToken call on the same user gesture.
+    if (_isSilentRenew) return;
     if (_isNative()) {
       _nativeSignIn(/* silent= */ false);
       return;
@@ -442,6 +452,23 @@ const Auth = (() => {
     return Math.max(0, _expiresAt - Date.now());
   }
 
+  /**
+   * Re-enables the gesture-based renewal so that the NEXT user click anywhere on
+   * the page will silently request a new token (no specific "Renovar" click needed).
+   * Called by the app when the token-expiry banner is displayed.
+   * Guards against infinite retry loops via MAX_GESTURE_RETRIES.
+   */
+  function rearmGestureRenewal() {
+    if (_isSilentRenew) return;  // renewal already in flight — nothing to do
+    if (_gestureRenewRetries >= MAX_GESTURE_RETRIES) {
+      console.warn('[Auth] Demasiados intentos de renovación por gesto — usuario debe hacer login de nuevo.');
+      return;
+    }
+    _gestureRenewRetries++;
+    _renewOnGesture = true;
+    console.log(`[Auth] Gesture renewal re-armado (intento ${_gestureRenewRetries}/${MAX_GESTURE_RETRIES}).`);
+  }
+
   async function logout() {
     if (_isNative()) {
       const GoogleAuth = _getGoogleAuthPlugin();
@@ -455,10 +482,11 @@ const Auth = (() => {
         });
       } catch (_) {}
     }
-    _accessToken    = null;
-    _expiresAt      = 0;
-    _isSilentRenew  = false;
-    _renewOnGesture = false;
+    _accessToken           = null;
+    _expiresAt             = 0;
+    _isSilentRenew         = false;
+    _renewOnGesture        = false;
+    _gestureRenewRetries   = 0;
     if (_warnTimer)      { clearTimeout(_warnTimer);      _warnTimer      = null; }
     if (_renewTimeoutId) { clearTimeout(_renewTimeoutId); _renewTimeoutId = null; }
     try {
@@ -476,6 +504,7 @@ const Auth = (() => {
     fetchUserInfo,
     requestToken,
     requestTokenWithConsent,
+    rearmGestureRenewal,
     getValidToken,
     isAuthenticated,
     wasAuthenticated,

@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.339';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.339 — entity header cover art: 48px → 64px (album + collection, library + browse)
+const APP_VERSION  = '3.5.341';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.341 — token renewal: auto-rearm gesture renewal on banner; onRenewed callback hides banner silently
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
