@@ -1645,6 +1645,15 @@ img { display: block; }
   line-height: 1.4;
 }
 
+/* Home-card chip — slightly larger to match the bigger art square */
+.home-card-art .sd-thumb-chip {
+  font-size: 12px;
+  padding: 2px 5px;
+  border-radius: 4px;
+  bottom: 5px;
+  right: 5px;
+}
+
 /* Expanded player art chip — 2.5× the base size */
 .sd-thumb-chip--exp {
   bottom: 18px;

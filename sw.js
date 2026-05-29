@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.322';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.322 — bulk add folder a playlist: un solo write, sin race condition
+const APP_VERSION  = '3.5.324';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.324 — SD chip home-card: font-size 12px
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
