@@ -3387,6 +3387,10 @@ img { display: block; }
 
 #player-expanded.showing-lyrics .pexp-now-playing-view { display: none; }
 #player-expanded.showing-lyrics .pexp-lyrics-view       { display: flex; animation: sheetUp 0.28s cubic-bezier(0.32, 0.72, 0, 1); }
+/* Hide topbar when lyrics panel is open — prevents "now playing" text and the close
+   chevron from showing above the lyrics header during the sheetUp slide animation */
+#player-expanded.showing-lyrics .pexp-topbar,
+#player-expanded.hiding-lyrics  .pexp-topbar { display: none; }
 
 /* Lyrics exit: .hiding-lyrics keeps view visible while it animates out */
 #player-expanded.hiding-lyrics .pexp-lyrics-view       { display: flex; animation: sheetDown 0.22s cubic-bezier(0.32, 0.72, 0, 1) forwards; }

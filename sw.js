@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.337';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.337 — browse entity header: album/collection identity row below search bar
+const APP_VERSION  = '3.5.338';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.338 — lyrics panel: hide topbar to fix "now playing" overlap and double arrow
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
