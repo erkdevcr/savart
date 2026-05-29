@@ -1875,6 +1875,8 @@ const App = (() => {
         try {
           const m = await DB.getMeta(file.id);
           if (m?.mbTried) continue;
+          // Skip external enrichment for songs explicitly reset to virgin (no auto-enrich on folder open)
+          if (!force && m?.skipAutoEnrich) continue;
           const title = m?.displayName || m?.name || file.name || '';
           if (!title) continue;
           // On force-rescan always query MB. On normal load, skip if all text fields are filled.
@@ -1940,6 +1942,8 @@ const App = (() => {
           const m = await DB.getMeta(file.id).catch(() => null);
           // Never overwrite a manually set cover
           if ((m?.manualAt || 0) > 0) continue;
+          // Skip external enrichment for songs explicitly reset to virgin (no auto-enrich on folder open)
+          if (!force && m?.skipAutoEnrich) continue;
           // In normal mode only process files that still lack a cover
           const needsCover = !_rowHasCover(file.id);
           if (!force && !needsCover) continue;
@@ -8742,8 +8746,11 @@ const App = (() => {
       const toReset = allMeta.filter(m => m.folderId && allFolderIds.has(m.folderId));
 
       // Reset each song to virgin state (preserves starred, playCount, addedAt)
+      // Also stamp skipAutoEnrich so opening the folder doesn't trigger MB/Discogs automatically.
+      // Cleared by resetToVirgin when the user runs an explicit rescan.
       for (const m of toReset) {
         await DB.resetToVirgin(m.id).catch(() => {});
+        await DB.setMeta(m.id, { skipAutoEnrich: true }).catch(() => {});
       }
 
       // Delete collection records for every tracked folder
@@ -8841,10 +8848,13 @@ const App = (() => {
 
     try {
       // Reset all songs in this folder to virgin state
+      // Also stamp skipAutoEnrich so opening the folder doesn't trigger MB/Discogs automatically.
+      // Cleared by resetToVirgin when the user runs an explicit rescan.
       const allMeta = await DB.getAllMeta().catch(() => []);
       const songs   = allMeta.filter(m => m.folderId === folderId);
       for (const m of songs) {
         await DB.resetToVirgin(m.id).catch(() => {});
+        await DB.setMeta(m.id, { skipAutoEnrich: true }).catch(() => {});
       }
 
       // Clear folder-level rescannedAt / manualAt from the folder's own DB record

@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.327';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.327 — deep scan reset limpia rescannedAt/manualAt del folder record
+const APP_VERSION  = '3.5.328';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.328 — skipAutoEnrich: reset folders no disparan MB/Discogs al entrar
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
