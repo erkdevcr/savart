@@ -5010,16 +5010,14 @@ const App = (() => {
       const playlists = await DB.getPlaylists();
       const pl = playlists.find(p => p.id === playlistId);
       if (item._isAlbum && item._album) {
-        // Album bulk-add: resolve all songs then add each one
         const songs = await _resolveAlbumSongs(item._album);
-        await Promise.all(songs.map(s => DB.addToPlaylist(playlistId, s.id)));
+        await _bulkAddSongsToPlaylist(playlistId, songs);
         UI.showToast(`${songs.length} ${UI.t('songs').toLowerCase()} → "${pl?.name || 'playlist'}"`);
       } else if (item._isFolder && item._folderId) {
-        // Folder bulk-add: list all playable files inside the folder
         const { files } = await Drive.listFolderAll(item._folderId);
         const playable = files.filter(f => f.isPlayable);
         if (playable.length === 0) { UI.showToast(UI.t('toast_no_playable'), 'error'); return; }
-        await Promise.all(playable.map(s => DB.addToPlaylist(playlistId, s.id).then(() => _saveItemMeta(s))));
+        await _bulkAddSongsToPlaylist(playlistId, playable);
         UI.showToast(`${playable.length} ${UI.t('songs').toLowerCase()} → "${pl?.name || 'playlist'}"`);
       } else {
         await DB.addToPlaylist(playlistId, item.id);
@@ -5043,27 +5041,41 @@ const App = (() => {
       const pl = await DB.createPlaylist(name);
       if (item._isAlbum && item._album) {
         const songs = await _resolveAlbumSongs(item._album);
-        await Promise.all(songs.map(s => DB.addToPlaylist(pl.id, s.id)));
+        await _bulkAddSongsToPlaylist(pl.id, songs);
+        UI.showToast(`"${name}" — ${UI.t('toast_pl_created')} (${songs.length} ${UI.t('songs').toLowerCase()})`);
       } else if (item._isFolder && item._folderId) {
-        // Folder bulk-add: list all playable files inside the folder
         const { files } = await Drive.listFolderAll(item._folderId);
         const playable = files.filter(f => f.isPlayable);
         if (playable.length === 0) { UI.showToast(UI.t('toast_no_playable'), 'error'); return; }
-        await Promise.all(playable.map(s => DB.addToPlaylist(pl.id, s.id).then(() => _saveItemMeta(s))));
+        await _bulkAddSongsToPlaylist(pl.id, playable);
         UI.showToast(`"${name}" — ${UI.t('toast_pl_created')} (${playable.length} ${UI.t('songs').toLowerCase()})`);
-        _loadPlaylists();
-        Sync.push('playlists');
-        return;
       } else {
         await DB.addToPlaylist(pl.id, item.id);
         await _saveItemMeta(item);
+        UI.showToast(`"${name}" — ${UI.t('toast_pl_created')}`);
       }
-      UI.showToast(`"${name}" — ${UI.t('toast_pl_created')}`);
-      _loadPlaylists(); // refresh Library if open
+      _loadPlaylists();
       Sync.push('playlists');
     } catch (err) {
       UI.showToast(UI.t('toast_pl_create_error'), 'error');
     }
+  }
+
+  /**
+   * Bulk-add an array of song items to a playlist in a single read-modify-write.
+   * Avoids race conditions from parallel DB.addToPlaylist calls.
+   * Also saves item metadata in parallel (each key is independent — no race).
+   */
+  async function _bulkAddSongsToPlaylist(playlistId, songs) {
+    const pl = await DB.getPlaylist(playlistId);
+    if (!pl) return;
+    const existing = new Set(pl.songIds);
+    const newIds   = songs.filter(s => !existing.has(s.id)).map(s => s.id);
+    if (newIds.length > 0) {
+      await DB.updatePlaylist(playlistId, { songIds: [...pl.songIds, ...newIds] });
+    }
+    // Save metadata in parallel — each song key is independent, no race
+    await Promise.all(songs.map(s => _saveItemMeta(s)));
   }
 
   /** Save all displayable metadata for an item to DB (never saves blob: URLs). */
