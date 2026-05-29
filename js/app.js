@@ -3362,11 +3362,11 @@ const App = (() => {
           }
 
           // Prefer local cached blob (free, full file — best quality).
-          // Fall back to a 500 KB head download (enough for most embedded cover art;
-          // the ID3 tag-size check below will fetch more bytes if the tag is larger).
+          // Fall back to a 300 KB head download (covers most embedded art; the ID3
+          // tag-size check below does a targeted second fetch if the tag is larger).
           let blob = await DB.getCachedBlob(item.id).catch(() => null);
           const blobIsFullFile = !!blob;  // cached = full audio file, not a head slice
-          if (!blob) blob = await Drive.downloadFileHead(item.id, 512 * 1024).catch(() => null);
+          if (!blob) blob = await Drive.downloadFileHead(item.id, 300 * 1024).catch(() => null);
 
           if (!blob) {
             // Network failure — release session slot so next sync/load can retry
@@ -3375,7 +3375,7 @@ const App = (() => {
           }
 
           // ── ID3 tag-size check ─────────────────────────────────────────────────
-          // If the full ID3 tag extends beyond the 500 KB we downloaded, the APIC
+          // If the full ID3 tag extends beyond the 300 KB we downloaded, the APIC
           // (cover art) frame may be truncated — the parser will hit the frame
           // boundary guard and skip it, so no cover is found even though the file
           // has embedded art.  Read the 10-byte ID3 header, decode the synchsafe
@@ -4679,14 +4679,14 @@ const App = (() => {
       // Update item count badge — include album/collection chip for current folder.
       // Priority: (1) folder.folderType from parent view, (2) files present = leaf folder.
       const total = result.folders.length + result.files.length;
+      // Declared outside the countEl block so _browseFolder (3-dot menu) can use it too.
+      const curType = folder.folderType
+        || (result.files.length > 0 || knownFolders?.has(folder.id)
+            ? (colCache.has(folder.id) ? 'collection' : 'album')
+            : null);
       const countEl = document.getElementById('browse-item-count');
       if (countEl) {
         countEl.textContent = '';
-        // curType uses only already-computed variables — zero extra DB cost
-        const curType = folder.folderType
-          || (result.files.length > 0 || knownFolders?.has(folder.id)
-              ? (colCache.has(folder.id) ? 'collection' : 'album')
-              : null);
         if (curType) {
           const chip = document.createElement('span');
           chip.className = curType === 'collection'
@@ -9748,15 +9748,15 @@ const App = (() => {
       }
 
       // ── Case 3: already soft-scanned on THIS device ──────────────────────────────
-      // The soft scan only downloads a 500 KB head — if the APIC frame extends beyond
+      // The soft scan only downloads a 300 KB head — if the APIC frame extends beyond
       // that boundary the cover is missed. When the full audio blob is now available in
       // cache (because the user is about to play the song), we get a second chance.
       if (existing?.softScannedAt) {
         if (!existing?.coverBlob) {
           // Soft scan found no cover — try the full cached blob (if available) to catch
-          // large embedded cover art that exceeds the 500 KB head download.
+          // large embedded cover art that exceeds the 300 KB head download.
           const cachedBlob = await DB.getCachedBlob(item.id).catch(() => null);
-          if (cachedBlob && cachedBlob.size > 512 * 1024) {
+          if (cachedBlob && cachedBlob.size > 300 * 1024) {
             // Force re-parse of the full file (bypass cache from the 1MB soft scan).
             const fullParsed = await Meta.parse(item.id, cachedBlob, true).catch(() => null);
             if (fullParsed?.coverBlob) {
@@ -9778,11 +9778,11 @@ const App = (() => {
       if (inBrowse()) UI.markBrowseSongScanning(item.id);
 
       // Prefer full cached blob (best quality, no network).
-      // Fall back to 500 KB head download (the ID3 tag-size check below fetches more
-      // if the tag overflows this boundary).
+      // Fall back to 300 KB head download (the ID3 tag-size check below does a targeted
+      // second fetch if the tag overflows this boundary).
       let blob = await DB.getCachedBlob(item.id).catch(() => null);
       const blobIsFullFile = !!blob;
-      if (!blob) blob = await Drive.downloadFileHead(item.id, 512 * 1024).catch(() => null);
+      if (!blob) blob = await Drive.downloadFileHead(item.id, 300 * 1024).catch(() => null);
 
       if (!blob) {
         // Network failure — don't mark softScannedAt so we can retry next time
