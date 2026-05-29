@@ -2375,8 +2375,8 @@ img { display: block; }
 /* In track-editing mode, prevent thumb from absorbing clicks */
 .top-list.track-editing .top-list-item { cursor: text; }
 .lib-detail-entity-art {
-  width: 48px;
-  height: 48px;
+  width: 64px;
+  height: 64px;
   border-radius: var(--radius-sm);
   background: var(--bg-card);
   display: flex;
