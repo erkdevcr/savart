@@ -2784,6 +2784,41 @@ const App = (() => {
   }
 
   /**
+   * Immediately erase all visible rescan/manual legend markers for a reset folder.
+   * Inverse of _stampRescanDot — called right after DB is cleared so the UI reflects
+   * the virgin state without waiting for the user to navigate away and back.
+   * @param {string} folderId
+   */
+  function _eraseRescanLegend(folderId) {
+    if (!folderId) return;
+
+    // 1. Browse header legend — only update if this folder is currently open in Browse
+    if (folderId === _browseFolderId) _updateBrowseLegend(folderId);
+
+    // 2. Browse subfolder row dots (parent folder is currently showing this folder as a row)
+    const folderRow = document.querySelector(`.folder-row[data-id="${CSS.escape(folderId)}"]`);
+    if (folderRow) {
+      const rDot = folderRow.querySelector('.folder-rescan-dot');
+      const mDot = folderRow.querySelector('.folder-manual-dot');
+      if (rDot) rDot.style.display = 'none';
+      if (mDot) mDot.style.display = 'none';
+    }
+
+    // 3. Library detail legend (album or collection detail view, if currently open)
+    const libContent = document.getElementById('lib-detail-content');
+    if (libContent) {
+      const rLegend = libContent.querySelector('.album-detail-legend-rescan, .col-detail-legend-rescan');
+      const mLegend = libContent.querySelector('.album-detail-legend-manual, .col-detail-legend-manual');
+      if (rLegend) rLegend.style.display = 'none';
+      if (mLegend) mLegend.style.display = 'none';
+
+      // 4. Library card rescan dot (green dot in album / collection grid)
+      const dot = libContent.querySelector(`.home-card[data-folder-id="${CSS.escape(folderId)}"] .album-rescan-dot`);
+      if (dot) dot.remove();
+    }
+  }
+
+  /**
    * Run the full rescan pipeline sequentially for a list of folder IDs.
    * Clears manual overrides before enriching so the guard doesn't block.
    */
@@ -8793,6 +8828,9 @@ const App = (() => {
         console.warn('[DS] Could not clear scan history on reset:', e);
       }
 
+      // Erase legend labels immediately for all reset folders
+      allFolderIds.forEach(id => _eraseRescanLegend(id));
+
       // Re-render the DS list area to reflect empty state
       _dsRenderAll();
 
@@ -8901,6 +8939,9 @@ const App = (() => {
           : _dsBuildFolderRow(sessionFolder);
         oldRow.parentNode.replaceChild(newRow, oldRow);
       }
+
+      // Erase legend labels immediately — no need to wait for next folder open
+      _eraseRescanLegend(folderId);
 
     } catch (err) {
       console.warn('[DS] onDsResetRow failed:', err);
