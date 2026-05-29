@@ -8795,6 +8795,19 @@ const App = (() => {
         _collectionFolderIdsCache?.delete?.(folderId);
       }
 
+      // Clear folder-level rescannedAt / manualAt from each tracked folder's own DB record.
+      // The toReset filter above only finds SONG records (m.folderId is set).
+      // Folder records themselves have m.id === folderId but no m.folderId, so they
+      // are never touched by that loop — we must clear them explicitly here.
+      for (const folderId of allFolderIds) {
+        const folderRec = allMeta.find(m => m.id === folderId);
+        if (folderRec && (folderRec.rescannedAt || folderRec.manualAt)) {
+          delete folderRec.rescannedAt;
+          delete folderRec.manualAt;
+          await DB.bulkWriteMeta([folderRec]).catch(() => {});
+        }
+      }
+
       // Clear session lists — keep folder selection and settings
       if (_dsSession) {
         _dsSession.folders       = {};
@@ -8897,7 +8910,7 @@ const App = (() => {
 
       // Clear folder-level rescannedAt / manualAt from the folder's own DB record
       // (setMeta strips nulls so we need bulkWriteMeta for a direct put without those fields)
-      const folderRec = allMeta.find(m => m.id === folderId && !m.folderId);
+      const folderRec = allMeta.find(m => m.id === folderId);
       if (folderRec && (folderRec.rescannedAt || folderRec.manualAt)) {
         delete folderRec.rescannedAt;
         delete folderRec.manualAt;
