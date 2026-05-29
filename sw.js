@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.335';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.335 — fix ReferenceError: curType out of scope → toast "Error loading folder" on every browse navigation
+const APP_VERSION  = '3.5.337';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.337 — browse entity header: album/collection identity row below search bar
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

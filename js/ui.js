@@ -4494,6 +4494,438 @@ const UI = (() => {
     container.appendChild(list);
   }
 
+  /* ── Browse entity headers (album / collection) ─────────── */
+
+  /**
+   * Render the album identity header inside #browse-entity-header.
+   * Identical to renderLibraryAlbumDetail but without back row and without song list.
+   * @param {Object}   album  — { folderId, name, artist, year, format, coverUrl, … }
+   * @param {Object[]} songs  — enriched song array (used for song count + save callbacks)
+   */
+  function renderBrowseAlbumHeader(album, songs) {
+    const container = document.getElementById('browse-entity-header');
+    if (!container) return;
+    container.innerHTML = '';
+
+    const folderId = album.folderId;
+
+    const ALBUM_COLORS = ['#1A1635','#0D2A1E','#0D1F35','#2A150D','#1A1220','#1A2A10','#2A1A10'];
+    const hash   = [...(album.name || '')].reduce((a, c) => a + c.charCodeAt(0), 0);
+    const albBg  = ALBUM_COLORS[Math.abs(hash) % ALBUM_COLORS.length];
+    const _artistSvg = `<svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>`;
+
+    const entity = document.createElement('div');
+    entity.className = 'lib-detail-entity';
+    entity.innerHTML = `
+      <div class="lib-detail-entity-art" style="background:${albBg};color:var(--text-secondary)">
+        ${album.coverUrl
+          ? `<img src="${album.coverUrl}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)" onerror="this.style.display='none';this.nextElementSibling.style.display=''"><div style="display:none">${_artistSvg}</div>`
+          : _artistSvg
+        }
+      </div>
+      <div class="lib-detail-entity-info">
+        ${(album.year || album.format) ? `<div class="lib-detail-entity-year">${[album.year ? `(${escHtml(album.year)})` : '', album.format ? `<span class="album-format-badge">${escHtml(album.format)}</span>` : ''].filter(Boolean).join(' ')}</div>` : ''}
+        <div class="lib-detail-entity-name">${escHtml(album.name)}</div>
+        <div class="lib-detail-entity-sub">${[album.artist, songs.length + ' ' + t('lbl_songs')].filter(Boolean).map(escHtml).join(' · ')}</div>
+      </div>
+      <button class="lib-detail-entity-more" title="${t('ctx_edit_album')}" aria-label="${t('ctx_edit_album')}">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
+      </button>
+      <button class="album-entity-close-btn" title="Cerrar" aria-label="Cerrar edición">✕</button>`;
+
+    const editPanel = document.createElement('div');
+    editPanel.className = 'album-edit-panel';
+    editPanel.innerHTML = `
+      <div class="album-edit-actions">
+        <button class="album-edit-reset-id3-btn">${t('btn_reset_id3')}</button>
+        <button class="album-edit-save-btn">${t('save_btn')}</button>
+      </div>
+      <div class="album-edit-row">
+        <label class="album-edit-label">${t('lbl_artist')}</label>
+        <input class="album-edit-input" data-field="artist" value="${escHtml(album.artist || '')}" placeholder="${t('lbl_artist')}">
+        <button class="album-edit-apply-btn" data-apply="artist" title="${t('lbl_apply_to_all')}">${t('lbl_apply_to_all')}</button>
+      </div>
+      <div class="album-edit-row">
+        <label class="album-edit-label">${t('lbl_album')}</label>
+        <input class="album-edit-input" data-field="album" value="${escHtml(album.name || '')}" placeholder="${t('lbl_album')}">
+        <button class="album-edit-apply-btn" data-apply="album" title="${t('lbl_apply_to_all')}">${t('lbl_apply_to_all')}</button>
+      </div>
+      <div class="album-edit-row">
+        <label class="album-edit-label">${t('lbl_year')}</label>
+        <input class="album-edit-input" data-field="year" value="${escHtml(album.year || '')}" placeholder="${t('lbl_year_ph')}" style="max-width:80px">
+        <button class="album-edit-apply-btn" data-apply="year" title="${t('lbl_apply_to_all')}">${t('lbl_apply_to_all')}</button>
+      </div>
+      <div class="album-edit-row">
+        <label class="album-edit-label">${t('lbl_cover_url')}</label>
+        <input class="album-edit-input" data-field="coverUrl"
+          value="${escHtml((album.coverUrl && !album.coverUrl.startsWith('blob:') && album.coverUrl !== 'id3') ? album.coverUrl : '')}"
+          placeholder="${(album.coverUrl && (album.coverUrl.startsWith('blob:') || album.coverUrl === 'id3')) ? t('lbl_embedded_cover') : 'https://…'}">
+        <button class="album-edit-apply-btn" data-apply="cover" title="${t('lbl_apply_to_all')}">${t('lbl_apply_to_all')}</button>
+      </div>`;
+
+    let _pendingApplyCoverToAll = false;
+
+    const _toggleEditPanel = () => {
+      const isOpen = editPanel.classList.toggle('open');
+      entity.classList.toggle('album-editing', isOpen);
+      if (isOpen) {
+        const nameEl = entity.querySelector('.lib-detail-entity-name');
+        if (nameEl) editPanel.querySelector('[data-field="album"]').value = nameEl.textContent.trim();
+        const subEl = entity.querySelector('.lib-detail-entity-sub');
+        if (subEl) {
+          const parts = subEl.textContent.split(' · ');
+          const artistText = parts.length > 1 ? parts.slice(0, -1).join(' · ') : parts[0] || '';
+          editPanel.querySelector('[data-field="artist"]').value = artistText.trim();
+        }
+        const yearEl = entity.querySelector('.lib-detail-entity-year');
+        if (yearEl) {
+          const yearMatch = yearEl.textContent.match(/\((\d{4})\)/);
+          editPanel.querySelector('[data-field="year"]').value = yearMatch ? yearMatch[1] : '';
+        }
+        const artImg = entity.querySelector('.lib-detail-entity-art img');
+        const artSrc = artImg ? (artImg.getAttribute('src') || '') : '';
+        const isEmbedded = artSrc.startsWith('blob:') || artSrc === 'id3';
+        const externalUrl = (artSrc && !isEmbedded) ? artSrc : '';
+        const coverInput = editPanel.querySelector('[data-field="coverUrl"]');
+        coverInput.value       = externalUrl;
+        coverInput.placeholder = (artSrc && !externalUrl) ? t('lbl_embedded_cover') : 'https://…';
+        _pendingApplyCoverToAll = false;
+        const coverApplyBtn = editPanel.querySelector('[data-apply="cover"]');
+        if (coverApplyBtn) {
+          coverApplyBtn.textContent = t('lbl_apply_to_all');
+          coverApplyBtn.classList.remove('album-edit-apply-btn--active');
+          coverApplyBtn.disabled = false;
+        }
+      }
+    };
+
+    entity.querySelector('.album-entity-close-btn').addEventListener('click', () => {
+      editPanel.classList.remove('open');
+      entity.classList.remove('album-editing');
+    });
+
+    entity.querySelector('.lib-detail-entity-more').addEventListener('click', e => {
+      e.stopPropagation();
+      const _iPlay   = iconPlay(14);
+      const _iScan   = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M9.5 6.5v3h-3v-3h3M11 5H5v6h6V5zm-1.5 9.5v3h-3v-3h3M11 13H5v6h6v-6zm6.5-6.5v3h-3v-3h3M19 5h-6v6h6V5zm-6 8h1.5v1.5H13V13zm1.5 1.5H16V16h-1.5v-1.5zM16 13h1.5v1.5H16V13zm-3 3h1.5v1.5H13V16zm1.5 1.5H16V19h-1.5v-1.5zM16 16h1.5v1.5H16V16zm1.5-1.5H19V16h-1.5v-1.5zm0 3H19V19h-1.5v-1.5zM22 7h-2V4h-3V2h5v5zm0 15v-5h-2v3h-3v2h5zM2 22h5v-2H4v-3H2v5zM2 2v5h2V4h3V2H2z"/></svg>`;
+      const _iPin    = iconPin(14);
+      const _iFolder = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>`;
+      const _iPlus   = iconPlus(14);
+      const _iEdit   = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zm18.71-10.8a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>`;
+      _showDetailDropdown(e.currentTarget, [
+        { icon: _iPlay,   label: t('ctx_play'),         action: () => App.onAlbumPlay?.(album) },
+        { icon: _iScan,   label: t('ctx_send_to_scan'), action: () => App.onSendToScan?.({id: folderId, name: album.name}) },
+        { icon: _iPin,    label: t('ctx_pin_to_home'),  action: () => App.onTogglePin?.({id: folderId, name: album.name, type: 'folder', isFolder: true, thumbnailUrl: album.coverUrl || null, folderType: 'album', artist: album.artist || null}) },
+        { icon: _iFolder, label: t('ctx_go_to_folder'), action: () => App.onAlbumGoToFolder?.({folderId, name: album.name}) },
+        { icon: _iPlus,   label: t('add_to_pl'),        action: ev => App.onAlbumShowPlaylistPicker?.(ev, album) },
+        { divider: true },
+        { icon: _iEdit,   label: t('ctx_edit_album'),   action: _toggleEditPanel },
+      ]);
+    });
+
+    editPanel.querySelectorAll('.album-edit-apply-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const field   = btn.dataset.apply;
+        const inputEl = editPanel.querySelector(`[data-field="${field === 'cover' ? 'coverUrl' : field}"]`);
+        const value   = inputEl?.value.trim();
+        if (!value) return;
+        btn.disabled = true;
+        const orig = btn.textContent;
+        btn.textContent = '…';
+        try {
+          if (field === 'cover') {
+            await App.onAlbumEdit?.(folderId, { coverUrl: value }, songs.map(s => s.id), { applyCoverToAll: true });
+            _pendingApplyCoverToAll = true;
+            btn.classList.add('album-edit-apply-btn--active');
+          } else {
+            await App.onAlbumEdit?.(folderId, { [field]: value }, songs.map(s => s.id));
+            if (field === 'artist') {
+              const subEl = entity.querySelector('.lib-detail-entity-sub');
+              if (subEl) subEl.textContent = [value, songs.length + ' ' + t('lbl_songs')].filter(Boolean).join(' · ');
+            }
+            if (field === 'album') {
+              const nameEl = entity.querySelector('.lib-detail-entity-name');
+              if (nameEl) nameEl.textContent = value;
+            }
+          }
+          btn.textContent = '✓';
+          setTimeout(() => { btn.disabled = false; btn.textContent = orig; }, 1500);
+        } catch {
+          btn.disabled = false; btn.textContent = orig;
+        }
+      });
+    });
+
+    editPanel.querySelector('.album-edit-reset-id3-btn').addEventListener('click', async () => {
+      const btn  = editPanel.querySelector('.album-edit-reset-id3-btn');
+      const orig = btn.textContent;
+      btn.disabled = true; btn.textContent = '…';
+      try {
+        await App.onAlbumResetId3?.(folderId, songs.map(s => s.id));
+        btn.textContent = '✓ ID3';
+        setTimeout(() => {
+          btn.disabled = false; btn.textContent = orig;
+          editPanel.classList.remove('open');
+          entity.classList.remove('album-editing');
+        }, 1500);
+      } catch {
+        btn.disabled = false; btn.textContent = orig;
+      }
+    });
+
+    editPanel.querySelector('.album-edit-save-btn').addEventListener('click', async () => {
+      const btn         = editPanel.querySelector('.album-edit-save-btn');
+      const artist      = editPanel.querySelector('[data-field="artist"]').value.trim();
+      const albumVal    = editPanel.querySelector('[data-field="album"]').value.trim();
+      const year        = editPanel.querySelector('[data-field="year"]').value.trim();
+      const coverUrl    = editPanel.querySelector('[data-field="coverUrl"]').value.trim();
+      const applyCoverToAll = _pendingApplyCoverToAll;
+      btn.disabled = true; btn.textContent = t('saving');
+      try {
+        await App.onAlbumEdit?.(folderId, { artist, album: albumVal, year, coverUrl }, songs.map(s => s.id), { applyCoverToAll });
+        btn.textContent = t('saved_ok');
+        const nameEl = entity.querySelector('.lib-detail-entity-name');
+        const subEl  = entity.querySelector('.lib-detail-entity-sub');
+        const yearEl = entity.querySelector('.lib-detail-entity-year');
+        const artEl  = entity.querySelector('.lib-detail-entity-art');
+        if (nameEl && albumVal) nameEl.textContent = albumVal;
+        if (subEl) subEl.textContent = [artist, `${songs.length} ${t('lbl_songs')}`].filter(Boolean).join(' · ');
+        if (year) {
+          if (yearEl) {
+            const badge = yearEl.querySelector('.album-format-badge');
+            yearEl.textContent = `(${year})`;
+            if (badge) { yearEl.appendChild(document.createTextNode(' ')); yearEl.appendChild(badge); }
+          } else {
+            const newYearEl = document.createElement('div');
+            newYearEl.className = 'lib-detail-entity-year';
+            newYearEl.textContent = `(${year})`;
+            const infoEl = entity.querySelector('.lib-detail-entity-info');
+            if (infoEl && nameEl) infoEl.insertBefore(newYearEl, nameEl);
+          }
+        }
+        if (artEl && coverUrl) {
+          artEl.innerHTML = `<img src="${escHtml(coverUrl)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)">`;
+        }
+        _pendingApplyCoverToAll = false;
+        setTimeout(() => {
+          btn.disabled = false; btn.textContent = t('save_btn');
+          editPanel.classList.remove('open');
+          entity.classList.remove('album-editing');
+        }, 1500);
+      } catch {
+        btn.disabled = false; btn.textContent = t('save_btn');
+      }
+    });
+
+    container.appendChild(entity);
+    container.appendChild(editPanel);
+
+    if (typeof App !== 'undefined' && App.getMetaSuggestions) {
+      const artistInput = editPanel.querySelector('[data-field="artist"]');
+      if (artistInput) _attachAutocomplete(artistInput, () => App.getMetaSuggestions().then(s => s.artists));
+      const albumInput = editPanel.querySelector('[data-field="album"]');
+      if (albumInput) _attachAutocomplete(albumInput, () => App.getMetaSuggestions().then(s => s.albums));
+    }
+  }
+
+  /**
+   * Render the collection identity header inside #browse-entity-header.
+   * Identical to renderLibraryCollectionDetail but without back row and without song list.
+   * @param {Object}   collection  — { folderId, name, manualCoverUrl, mosaicUrls, artistCount, … }
+   * @param {Object[]} songs       — enriched song array
+   */
+  function renderBrowseCollectionHeader(collection, songs) {
+    const container = document.getElementById('browse-entity-header');
+    if (!container) return;
+    container.innerHTML = '';
+
+    const folderId = collection.folderId;
+
+    const COL_COLORS = ['#1A1635','#0D2A1E','#0D1F35','#2A150D','#1A1220','#1A2A10','#2A1A10'];
+    const hash  = [...(collection.name || '')].reduce((a, c) => a + c.charCodeAt(0), 0);
+    const colBg = COL_COLORS[Math.abs(hash) % COL_COLORS.length];
+
+    const _localMosaicUrls = [];
+    { const seen = new Set();
+      for (const s of songs) {
+        if (_localMosaicUrls.length >= 4) break;
+        if (s.thumbnailUrl && !seen.has(s.thumbnailUrl)) {
+          seen.add(s.thumbnailUrl); _localMosaicUrls.push(s.thumbnailUrl);
+        }
+      }
+    }
+    const _detailCoverUrl = collection.manualCoverUrl || (_localMosaicUrls.length ? _localMosaicUrls[0] : null);
+    let artHtml;
+    if (_detailCoverUrl) {
+      artHtml = `<img src="${escHtml(_detailCoverUrl)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)" onerror="this.style.display='none'">`;
+    } else {
+      artHtml = `<svg viewBox="0 0 361.54 315.2" fill="currentColor" style="width:50%;height:auto;color:var(--text-secondary)"><path d="M136.81,41.58C61.25,41.58,0,102.83,0,178.39s61.25,136.81,136.81,136.81,136.81-61.25,136.81-136.81S212.37,41.58,136.81,41.58ZM136.81,239.6c-33.8,0-61.21-27.4-61.21-61.21s27.4-61.21,61.21-61.21,61.21,27.4,61.21,61.21-27.4,61.21-61.21,61.21ZM136.81,191.78c-7.39,0-13.39-5.99-13.39-13.39s5.99-13.39,13.39-13.39,13.39,5.99,13.39,13.39-5.99,13.39-13.39,13.39ZM361.54,126.94c0,54.17-33.93,100.4-81.69,118.63,9.59-20.39,14.96-43.16,14.96-67.18,0-78.52-57.28-143.65-132.33-155.91C182.95,8.31,207.8,0,234.6,0c70.11,0,126.94,56.83,126.94,126.94Z"/></svg>`;
+    }
+
+    const prefillCoverUrl = (collection.manualCoverUrl && !collection.manualCoverUrl.startsWith('blob:'))
+      ? collection.manualCoverUrl : '';
+
+    const entity = document.createElement('div');
+    entity.id        = 'browse-collection-hdr';
+    entity.className = 'lib-detail-entity';
+    entity.innerHTML = `
+      <div class="lib-detail-entity-art lib-col-detail-art" style="background:${colBg}">${artHtml}</div>
+      <div class="lib-detail-entity-info">
+        ${collection.format ? `<div class="lib-detail-entity-year"><span class="album-format-badge">${escHtml(collection.format)}</span></div>` : ''}
+        <div class="lib-detail-entity-name lib-col-detail-name">${escHtml(collection.name)}</div>
+        <div class="lib-detail-entity-sub">${escHtml(`${collection.artistCount || ''} artistas · ${songs.length} canciones`)}</div>
+      </div>
+      <button class="lib-detail-entity-more" title="${t('ctx_edit_collection')}" aria-label="${t('ctx_edit_collection')}">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
+      </button>
+      <button class="album-entity-close-btn" title="Cerrar" aria-label="Cerrar edición">✕</button>`;
+
+    const editPanel = document.createElement('div');
+    editPanel.className = 'album-edit-panel';
+    editPanel.innerHTML = `
+      <div class="album-edit-actions">
+        <button class="album-edit-reset-id3-btn">${t('btn_reset_id3')}</button>
+        <button class="album-edit-save-btn">${t('save_btn')}</button>
+      </div>
+      <div class="album-edit-row">
+        <label class="album-edit-label">${t('lbl_name')}</label>
+        <input class="album-edit-input" data-field="name" value="${escHtml(collection.name || '')}" placeholder="${t('lbl_name')}">
+      </div>
+      <div class="album-edit-row">
+        <label class="album-edit-label">${t('lbl_year')}</label>
+        <input class="album-edit-input" data-field="year" value="${escHtml(collection.year || '')}" placeholder="${t('lbl_year_ph')}" style="max-width:80px">
+        <button class="album-edit-apply-btn" data-apply="year" title="${t('lbl_apply_to_all')}">${t('lbl_apply_to_all')}</button>
+      </div>
+      <div class="album-edit-row">
+        <label class="album-edit-label">Cover URL</label>
+        <input class="album-edit-input" data-field="coverUrl" value="${escHtml(prefillCoverUrl)}" placeholder="https://…">
+        <button class="album-edit-apply-btn" data-apply="coverUrl" title="${t('lbl_apply_to_all')}">${t('lbl_apply_to_all')}</button>
+      </div>`;
+
+    const _toggleEditPanel = () => {
+      const isOpen = editPanel.classList.toggle('open');
+      entity.classList.toggle('album-editing', isOpen);
+    };
+
+    entity.querySelector('.album-entity-close-btn').addEventListener('click', () => {
+      editPanel.classList.remove('open');
+      entity.classList.remove('album-editing');
+    });
+
+    entity.querySelector('.lib-detail-entity-more').addEventListener('click', e => {
+      e.stopPropagation();
+      const _iPlay   = iconPlay(14);
+      const _iScan   = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M9.5 6.5v3h-3v-3h3M11 5H5v6h6V5zm-1.5 9.5v3h-3v-3h3M11 13H5v6h6v-6zm6.5-6.5v3h-3v-3h3M19 5h-6v6h6V5zm-6 8h1.5v1.5H13V13zm1.5 1.5H16V16h-1.5v-1.5zM16 13h1.5v1.5H16V13zm-3 3h1.5v1.5H13V16zm1.5 1.5H16V19h-1.5v-1.5zM16 16h1.5v1.5H16V16zm1.5-1.5H19V16h-1.5v-1.5zm0 3H19V19h-1.5v-1.5zM22 7h-2V4h-3V2h5v5zm0 15v-5h-2v3h-3v2h5zM2 22h5v-2H4v-3H2v5zM2 2v5h2V4h3V2H2z"/></svg>`;
+      const _iPin    = iconPin(14);
+      const _iFolder = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>`;
+      const _iPlus   = iconPlus(14);
+      const _iEdit   = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zm18.71-10.8a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>`;
+      _showDetailDropdown(e.currentTarget, [
+        { icon: _iPlay,   label: t('ctx_play'),         action: () => App.onCollectionPlay?.(collection) },
+        { icon: _iScan,   label: t('ctx_send_to_scan'), action: () => App.onSendToScan?.({id: folderId, name: collection.name}) },
+        { icon: _iPin,    label: t('ctx_pin_to_home'),  action: () => App.onTogglePin?.({id: folderId, name: collection.name, type: 'folder', isFolder: true, thumbnailUrl: collection.manualCoverUrl || null, folderType: 'collection'}) },
+        { icon: _iFolder, label: t('ctx_go_to_folder'), action: () => App.onAlbumGoToFolder?.({folderId, name: collection.name}) },
+        { icon: _iPlus,   label: t('add_to_pl'),        action: ev => App.onAlbumShowPlaylistPicker?.(ev, {folderId, name: collection.name, _isAlbum: true}) },
+        { divider: true },
+        { icon: _iEdit,   label: t('ctx_edit_collection'), action: _toggleEditPanel },
+      ]);
+    });
+
+    async function _getBrowseColTargets() {
+      if (songs.length > 0) return songs;
+      const all = await DB.getAllMeta();
+      return all.filter(m => m.folderId === folderId);
+    }
+
+    editPanel.querySelectorAll('.album-edit-apply-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const field = btn.dataset.apply;
+        const value = editPanel.querySelector(`[data-field="${field}"]`)?.value.trim();
+        if (!value || !folderId) return;
+        const orig = btn.textContent;
+        btn.disabled = true; btn.textContent = '…';
+        try {
+          const targets = await _getBrowseColTargets();
+          const nowTs   = Date.now();
+          let applied   = 0;
+          for (const m of targets) {
+            if (field === 'coverUrl') {
+              await DB.setMeta(m.id, { thumbnailUrl: value, manualAt: nowTs }).catch(() => {});
+            } else {
+              await DB.setMeta(m.id, { [field]: value, manualAt: nowTs }).catch(() => {});
+            }
+            applied++;
+          }
+          btn.textContent = `✓ ${applied}`;
+          setTimeout(() => { btn.disabled = false; btn.textContent = orig; }, 2500);
+        } catch (err) {
+          console.warn('[browse col apply-all]', err);
+          btn.disabled = false; btn.textContent = orig;
+        }
+      });
+    });
+
+    editPanel.querySelector('.album-edit-reset-id3-btn').addEventListener('click', async () => {
+      const btn  = editPanel.querySelector('.album-edit-reset-id3-btn');
+      const orig = btn.textContent;
+      btn.disabled = true; btn.textContent = '…';
+      try {
+        await App.onAlbumResetId3?.(folderId, songs.map(s => s.id));
+        btn.textContent = '✓ ID3';
+        setTimeout(() => {
+          btn.disabled = false; btn.textContent = orig;
+          editPanel.classList.remove('open');
+          entity.classList.remove('album-editing');
+        }, 1500);
+      } catch {
+        btn.disabled = false; btn.textContent = orig;
+      }
+    });
+
+    editPanel.querySelector('.album-edit-save-btn').addEventListener('click', async () => {
+      const btn      = editPanel.querySelector('.album-edit-save-btn');
+      const name     = editPanel.querySelector('[data-field="name"]').value.trim();
+      const year     = editPanel.querySelector('[data-field="year"]').value.trim();
+      const coverUrl = editPanel.querySelector('[data-field="coverUrl"]').value.trim();
+      btn.disabled = true; btn.textContent = t('saving');
+      try {
+        await DB.saveCollection(folderId, {
+          ...(name     ? { name }     : {}),
+          ...(year     ? { year }     : {}),
+          ...(coverUrl ? { coverUrl } : {}),
+        });
+        if (year) {
+          const targets = await _getBrowseColTargets();
+          const nowTs   = Date.now();
+          await Promise.all(targets.map(m => DB.setMeta(m.id, { year, manualAt: nowTs }).catch(() => {})));
+        }
+        btn.textContent = t('saved_ok');
+        const nameEl = entity.querySelector('.lib-col-detail-name');
+        const artEl  = entity.querySelector('.lib-col-detail-art');
+        if (nameEl && name)     nameEl.textContent = name;
+        if (artEl && coverUrl) {
+          artEl.innerHTML = `<img src="${escHtml(coverUrl)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)">`;
+        }
+        // Keep local reference up-to-date for dropdown callbacks
+        if (name)     collection = { ...collection, name };
+        if (coverUrl) collection = { ...collection, manualCoverUrl: coverUrl };
+        setTimeout(() => {
+          btn.disabled = false; btn.textContent = t('save_btn');
+          editPanel.classList.remove('open');
+          entity.classList.remove('album-editing');
+        }, 1500);
+      } catch { btn.disabled = false; btn.textContent = t('save_btn'); }
+    });
+
+    container.appendChild(entity);
+    container.appendChild(editPanel);
+
+    if (typeof App !== 'undefined' && App.getMetaSuggestions) {
+      const nameInput = editPanel.querySelector('[data-field="name"]');
+      if (nameInput) _attachAutocomplete(nameInput, () => App.getMetaSuggestions().then(s => s.albums));
+    }
+  }
+
   /* ── Library — Playlists ─────────────────────────────────── */
 
   // Playlist sort state (persists between renders)
@@ -5057,6 +5489,8 @@ const UI = (() => {
     renderLibraryAlbumDetail,
     renderCollections,
     renderLibraryCollectionDetail,
+    renderBrowseAlbumHeader,
+    renderBrowseCollectionHeader,
     renderPlaylists,
     updatePlaylistSidebarCover,
     updatePlaylistHomeCardCovers,

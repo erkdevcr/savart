@@ -1496,6 +1496,15 @@ img { display: block; }
   color: var(--text-muted);
 }
 
+/* ── Browse entity header (album/collection identity) ──────── */
+#browse-entity-header:empty { display: none; }
+#browse-entity-header {
+  padding: 0 0 4px;
+}
+#browse-entity-header .lib-detail-entity {
+  border-radius: var(--radius-sm);
+}
+
 /* ── Search bar (now lives inside Browse header) ─────────── */
 .browse-search-row {
   padding: 8px 12px 10px;
@@ -4441,6 +4450,8 @@ body.queue-open #mini-player { z-index: 65; }
   .top-list-item .btn-more { opacity: 1; }
   .song-row .btn-more,
   .folder-row .btn-more    { opacity: 1; }
+  /* Browse title row 3-dot: always visible (it's a header button, not a list row) */
+  .browse-folder-more-btn  { opacity: 1; }
 
   #toast-container {
     bottom: calc(var(--player-bar-h) + 16px);

@@ -2587,6 +2587,161 @@ const App = (() => {
   }
 
   /**
+   * Render (or clear) the album/collection identity header in Browse view.
+   * Fires after _openFolder sets _browseFolder — resolves DB songs + enriches covers,
+   * then calls the appropriate UI render function targeting #browse-entity-header.
+   * Clears the container when curType is null (regular folder or root).
+   *
+   * @param {string}      folderId — Drive ID of the opened folder
+   * @param {string|null} curType  — 'album' | 'collection' | null
+   */
+  async function _renderBrowseEntityHeader(folderId, curType) {
+    const hdr = document.getElementById('browse-entity-header');
+    if (!hdr) return;
+    hdr.innerHTML = '';
+    if (!curType || !folderId) return;
+
+    try {
+      const all   = await DB.getAllMeta();
+      const songs = all.filter(m => m.folderId === folderId);
+
+      // Helper: map a meta record to an enrichable song object
+      const _toSong = m => {
+        const cached = _itemCache.get(m.id);
+        return {
+          id:          m.id,
+          name:        m.name        || m.id,
+          displayName: m.displayName || m.name || m.id,
+          artist:      m.artist      || '',
+          album:       m.album       || '',
+          year:        m.year        || '',
+          track:       m.track       || '',
+          thumbnailUrl: m.thumbnailUrl || m.coverUrl || null,
+          folderId:    m.folderId    || null,
+          durationSec: m.durationSec || (cached?.durationMs > 0 ? cached.durationMs / 1000 : 0),
+        };
+      };
+
+      if (curType === 'album') {
+        // Build freshAlbum from DB songs (same logic as onAlbumClick)
+        const _topEntry = map => map.size > 0
+          ? [...map.entries()].sort((a, b) => b[1] - a[1])[0][0]
+          : null;
+        const freshYearCounts   = new Map();
+        const freshAlbumCounts  = new Map();
+        const freshArtistCounts = new Map();
+        let freshCoverUrl = null;
+        for (const m of songs) {
+          if (m.year)   freshYearCounts.set(m.year,   (freshYearCounts.get(m.year)   || 0) + 1);
+          if (m.album)  freshAlbumCounts.set(m.album,  (freshAlbumCounts.get(m.album)  || 0) + 1);
+          if (m.artist) freshArtistCounts.set(m.artist, (freshArtistCounts.get(m.artist) || 0) + 1);
+          if (!freshCoverUrl && _isStableCoverUrl(m.thumbnailUrl)) freshCoverUrl = m.thumbnailUrl;
+          if (!freshCoverUrl && m.coverBlob && typeof Meta !== 'undefined') {
+            freshCoverUrl = Meta.injectCover(m.id, m.coverBlob) || null;
+          }
+        }
+
+        const sorted = songs.map(_toSong).sort((a, b) => {
+          const ta = parseInt(a.track, 10), tb = parseInt(b.track, 10);
+          if (!isNaN(ta) && !isNaN(tb)) return ta - tb;
+          if (!isNaN(ta)) return -1; if (!isNaN(tb)) return 1;
+          return (a.displayName || a.name).localeCompare(b.displayName || b.name);
+        });
+        const enriched = await Promise.all(sorted.map(async s => {
+          const url = await _resolveCoverUrl(s.id, s.thumbnailUrl);
+          return url ? { ...s, thumbnailUrl: url } : s;
+        }));
+
+        const folderRec = all.find(m => m.id === folderId);
+        if (!freshCoverUrl) {
+          for (const s of enriched) { if (s.thumbnailUrl) { freshCoverUrl = s.thumbnailUrl; break; } }
+        }
+        if (!freshCoverUrl && _isStableCoverUrl(folderRec?.coverUrl)) {
+          freshCoverUrl = folderRec.coverUrl;
+        }
+
+        // Compute format badge
+        const fmtCounts = new Map();
+        songs.forEach(m => {
+          const fmt = _formatLabel(m.mimeType, m.name);
+          if (fmt) fmtCounts.set(fmt, (fmtCounts.get(fmt) || 0) + 1);
+        });
+        const computedFormat = fmtCounts.size > 0
+          ? [...fmtCounts.entries()].sort((a, b) => b[1] - a[1])[0][0]
+          : null;
+
+        const freshAlbum = {
+          folderId,
+          name:        _topEntry(freshAlbumCounts)  || folderRec?.name || '',
+          artist:      _topEntry(freshArtistCounts) || '',
+          year:        _topEntry(freshYearCounts)   || null,
+          format:      computedFormat,
+          coverUrl:    freshCoverUrl                || null,
+          rescannedAt: folderRec?.rescannedAt       || null,
+          hasManual:   songs.some(s => (s.manualAt || 0) > 0),
+        };
+
+        // Guard: abort if user navigated away before this async resolved
+        if (_browseFolderId !== folderId) return;
+        UI.renderBrowseAlbumHeader(freshAlbum, enriched);
+
+      } else if (curType === 'collection') {
+        const folderRec = all.find(m => m.id === folderId);
+        const savedCol  = await DB.getCollection(folderId).catch(() => null) || {};
+
+        const seenUrls = new Set();
+        const mosaicUrls = [];
+        for (const m of songs) {
+          if (mosaicUrls.length >= 4) break;
+          if (_isStableCoverUrl(m.thumbnailUrl) && !seenUrls.has(m.thumbnailUrl)) {
+            seenUrls.add(m.thumbnailUrl); mosaicUrls.push(m.thumbnailUrl);
+          }
+        }
+        let blobUrl = null;
+        if (mosaicUrls.length === 0 && !savedCol.coverUrl && typeof Meta !== 'undefined') {
+          const withBlob = songs.find(m => m.coverBlob);
+          if (withBlob) blobUrl = Meta.injectCover(withBlob.id, withBlob.coverBlob) || null;
+        }
+        const artistSet = new Set(songs.map(m => m.artist).filter(Boolean));
+        const fmtCounts = new Map();
+        songs.forEach(m => {
+          const fmt = _formatLabel(m.mimeType, m.name);
+          if (fmt) fmtCounts.set(fmt, (fmtCounts.get(fmt) || 0) + 1);
+        });
+        const computedFormat = fmtCounts.size > 0
+          ? [...fmtCounts.entries()].sort((a, b) => b[1] - a[1])[0][0]
+          : null;
+
+        const collection = {
+          folderId,
+          name:           savedCol.name     || folderRec?.name || '',
+          manualCoverUrl: savedCol.coverUrl || blobUrl         || null,
+          mosaicUrls,
+          artistCount:    artistSet.size,
+          format:         computedFormat,
+          year:           savedCol.year     || null,
+          rescannedAt:    folderRec?.rescannedAt || null,
+          hasManual:      !!(savedCol.manualAt) || songs.some(m => (m.manualAt || 0) > 0),
+        };
+
+        const sorted = songs.map(_toSong).sort((a, b) =>
+          (a.displayName || a.name).localeCompare(b.displayName || b.name)
+        );
+        const enriched = await Promise.all(sorted.map(async s => {
+          const url = await _resolveCoverUrl(s.id, s.thumbnailUrl);
+          return url ? { ...s, thumbnailUrl: url } : s;
+        }));
+
+        // Guard: abort if user navigated away
+        if (_browseFolderId !== folderId) return;
+        UI.renderBrowseCollectionHeader(collection, enriched);
+      }
+    } catch (err) {
+      console.warn('[App] _renderBrowseEntityHeader error:', err);
+    }
+  }
+
+  /**
    * Show the lib-rescan-dialog with a custom message.
    * Resolves true if confirmed, false if cancelled.
    * @param {string} message  — text to show in the description paragraph
@@ -4710,6 +4865,8 @@ const App = (() => {
       _browseFolder   = { id: folder.id, name: folder.name, folderType: curType || null };
       // Update the rescan dot: show green if this folder was previously scanned
       _updateBrowseLegend(folder.id);
+      // Render (or clear) the album/collection identity header below the search bar
+      _renderBrowseEntityHeader(folder.id, curType).catch(() => {});
 
       // Persist folder name in meta so _loadCollections can use the Drive name
       // without an extra API call.  We never overwrite a name the user typed.
