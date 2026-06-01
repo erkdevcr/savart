@@ -466,6 +466,17 @@ const Player = (() => {
     }
 
     _onQueueChange([..._queue], _queueIndex);
+
+    // Build the Web Audio graph NOW while still inside the user gesture context.
+    // _playCurrentTrack() is async and loses the gesture context through multiple
+    // awaits (_onBeforePlay → DB.getMeta, _getBlob → Drive.downloadFile).
+    // If _initAudioGraph() is called after those awaits, Chrome creates the
+    // AudioContext in 'suspended' state and resume() fails silently → no sound.
+    // Calling it here (synchronously, in the same call stack as the user's click)
+    // ensures the AudioContext is created and resumed in a trusted gesture context.
+    _initAudioGraph();
+    _audioCtx?.resume().catch(() => {});
+
     _playCurrentTrack();
   }
 

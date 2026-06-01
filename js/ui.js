@@ -2388,20 +2388,23 @@ const UI = (() => {
       menu.style.top   = `${y}px`;
     }
 
-    // Click outside OR any scroll → dismiss.
-    // Use capture phase for click so stopPropagation() in child handlers
-    // (album cards, folder rows, etc.) doesn't prevent the menu from closing.
+    // Click outside → dismiss.
+    // Use capture phase so stopPropagation() in child handlers doesn't prevent closing.
+    // rAF defers to next frame so the click that opened the menu doesn't immediately
+    // re-trigger hideContextMenu.
+    // NOTE: no scroll-based dismiss — after login _loadHomeData() rewrites the DOM
+    // which can cause a browser scroll event that fires right after the rAF adds the
+    // scroll listener, immediately closing the freshly opened menu (one-time-after-login
+    // bug). The menu is position:fixed so scroll doesn't move it; the user can tap
+    // outside or select an item to dismiss.
     requestAnimationFrame(() => {
-      document.addEventListener('click',  hideContextMenu, { once: true, capture: true });
-      document.addEventListener('scroll', hideContextMenu, { once: true, capture: true, passive: true });
+      document.addEventListener('click', hideContextMenu, { once: true, capture: true });
     });
   }
 
   function hideContextMenu() {
     document.getElementById('context-menu')?.classList.remove('visible');
-    // Remove both dismiss listeners (whichever didn't fire first)
-    document.removeEventListener('click',  hideContextMenu, { capture: true });
-    document.removeEventListener('scroll', hideContextMenu, { capture: true });
+    document.removeEventListener('click', hideContextMenu, { capture: true });
   }
 
   /* ── Song edit modal ─────────────────────────────────────── */

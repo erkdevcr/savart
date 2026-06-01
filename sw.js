@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.341';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.341 — token renewal: auto-rearm gesture renewal on banner; onRenewed callback hides banner silently
+const APP_VERSION  = '3.5.342';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.342 — first-login fixes: AudioContext in gesture context; context menu scroll-dismiss removed
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
