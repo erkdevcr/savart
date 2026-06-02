@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.351';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.351 — fix race: abort controller set before DB awaits
+const APP_VERSION  = '3.5.354';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.354 — badges: valor primero, luego etiqueta
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

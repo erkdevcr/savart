@@ -171,6 +171,10 @@ const UI = (() => {
       eq_save_current: 'Guardar actual',
       eq_preset_flat:  'Plano',
       eq_preset_classical: 'Clásica',
+      normalizer:      'Normalizador',
+      // ── Player badges ─────────────────────────────────────
+      badge_speed:     'vel.',
+      badge_norm:      'gan.',
       // ── Misc buttons ──────────────────────────────────────
       btn_update:  'Actualizar',
       btn_pick:    'Elegir',
@@ -530,6 +534,10 @@ const UI = (() => {
       eq_save_current: 'Save current',
       eq_preset_flat:  'Flat',
       eq_preset_classical: 'Classical',
+      normalizer:      'Normalizer',
+      // ── Player badges ─────────────────────────────────────
+      badge_speed:     'speed',
+      badge_norm:      'gain',
       // ── Misc buttons ──────────────────────────────────────
       btn_update:  'Update',
       btn_pick:    'Pick',

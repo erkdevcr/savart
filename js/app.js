@@ -57,6 +57,8 @@ const App = (() => {
   /* ── Normalizer state ───────────────────────────────────── */
   // Tracks which songs are currently being analyzed (prevents duplicate work)
   const _normalizingSet = new Set();
+  // Last known linear gain — used to re-render the norm badge on language change
+  let _lastNormLinearGain = null;
 
   /* ── Radio mode ──────────────────────────────────────────── */
   // Activated when the user plays a single song from Home, Search, or Library.
@@ -592,6 +594,7 @@ const App = (() => {
         const oVal      = document.getElementById('overlay-tempo-val');
         if (oSlider) oSlider.value        = sliderVal;
         if (oVal)    oVal.textContent     = display;
+        _updateSpeedBadge(tempo);
       }
 
       // ── Restore EQ enabled state ───────────────────────────
@@ -913,6 +916,9 @@ const App = (() => {
           _updateNormValueDisplay(null);
         }
       }
+
+      // Speed badge — always reflects the current global tempo
+      _updateSpeedBadge(Player.getTempo());
 
       const bestName   = dbMeta?.displayName || track.displayName || track.name || '';
       const bestArtist = dbMeta?.artist      || track.artist      || '';
@@ -1534,18 +1540,42 @@ const App = (() => {
   }
 
   /**
-   * Update the normalizer dB label in the EQ screen.
+   * Update the normalizer dB label in the EQ screen and the player badge.
    * @param {number|null} linearGain  – null = no data (shows "—")
    */
   function _updateNormValueDisplay(linearGain) {
-    const el = document.getElementById('eq-norm-value');
-    if (!el) return;
+    _lastNormLinearGain = linearGain; // kept for language-change re-render
+    const el          = document.getElementById('eq-norm-value');
+    const badge       = document.getElementById('pexp-badge-norm');
+    const normEnabled = Player.getNormalizerEnabled?.();
+
     if (linearGain == null) {
-      el.textContent = '—';
+      if (el) el.textContent = '—';
+      if (badge) badge.style.display = 'none';
       return;
     }
-    const db = 20 * Math.log10(linearGain);
-    el.textContent = (db >= 0 ? '+' : '') + db.toFixed(1) + ' dB';
+    const db    = 20 * Math.log10(linearGain);
+    const dbStr = (db >= 0 ? '+' : '') + db.toFixed(1) + ' dB';
+    if (el) el.textContent = dbStr;
+
+    // Show badge only when normalizer is active and we have a real value
+    if (badge) {
+      if (normEnabled) {
+        badge.textContent   = dbStr + ' ' + (UI.t('badge_norm') || 'gan.');
+        badge.style.display = '';
+      } else {
+        badge.style.display = 'none';
+      }
+    }
+  }
+
+  /**
+   * Update the speed badge in the expanded player with the current tempo.
+   * @param {number} rate  – playback rate (e.g. 1.0, 1.25)
+   */
+  function _updateSpeedBadge(rate) {
+    const badge = document.getElementById('pexp-badge-speed');
+    if (badge) badge.textContent = rate.toFixed(2) + '× ' + (UI.t('badge_speed') || 'vel.');
   }
 
   async function _onBlobReady(item, blob) {
@@ -12533,6 +12563,9 @@ const App = (() => {
     document.querySelectorAll('.lang-btn, [data-lang]').forEach(el => {
       el.classList.toggle('active', el.dataset.lang === lang);
     });
+    // Re-render dynamic player badges with new language prefix
+    _updateSpeedBadge(Player.getTempo());
+    if (_lastNormLinearGain != null) _updateNormValueDisplay(_lastNormLinearGain);
   }
 
   async function onClearCache() {
@@ -13142,6 +13175,7 @@ const App = (() => {
       if (s) s.value = e.target.value;
       const sv = document.getElementById('tempo-val');
       if (sv) sv.textContent = display;
+      _updateSpeedBadge(rate);
       _saveSettings();
     });
 
@@ -13844,7 +13878,9 @@ const App = (() => {
           }).catch(() => {});
         } else {
           Player.setNormalizerGain(1.0);
-          // Keep value display so user can see what was applied
+          // Keep EQ label so user can see what was applied; hide the player badge
+          const normBadge = document.getElementById('pexp-badge-norm');
+          if (normBadge) normBadge.style.display = 'none';
         }
       }
       _saveSettings();
