@@ -9289,6 +9289,12 @@ const App = (() => {
       // Erase legend labels immediately for all reset folders
       allFolderIds.forEach(id => _eraseRescanLegend(id));
 
+      // Push reset data to Drive so other devices see the virgin state
+      if (typeof Sync !== 'undefined') {
+        Sync.push('metadata');
+        Sync.push('collections');
+      }
+
       // Re-render the DS list area to reflect empty state
       _dsRenderAll();
 

@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.363';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.363 — folder dots: morado a la derecha cuando está solo, empujado a la izquierda cuando hay verde
+const APP_VERSION  = '3.5.364';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.364 — DS reset + reset ID3 (song/album) hacen push a Drive
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
