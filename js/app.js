@@ -2732,6 +2732,7 @@ const App = (() => {
           const d = row.querySelector('.folder-manual-dot');
           if (d) d.style.display = '';
         }
+        _syncFolderDots(row);
       }
     } catch (_) { /* non-fatal */ }
   }
@@ -3212,6 +3213,15 @@ const App = (() => {
    * the virgin state without waiting for the user to navigate away and back.
    * @param {string} folderId
    */
+  /** Adjust purple dot position depending on whether green is visible alongside it. */
+  function _syncFolderDots(row) {
+    const rDot = row.querySelector('.folder-rescan-dot');
+    const mDot = row.querySelector('.folder-manual-dot');
+    if (!rDot || !mDot) return;
+    const greenVisible = rDot.style.display !== 'none';
+    mDot.style.right = greenVisible ? '13px' : '3px';
+  }
+
   function _eraseRescanLegend(folderId) {
     if (!folderId) return;
 
@@ -3225,6 +3235,7 @@ const App = (() => {
       const mDot = folderRow.querySelector('.folder-manual-dot');
       if (rDot) rDot.style.display = 'none';
       if (mDot) mDot.style.display = 'none';
+      _syncFolderDots(folderRow);
     }
 
     // 3. Library detail legend (album or collection detail view, if currently open)
