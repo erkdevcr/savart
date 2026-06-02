@@ -816,6 +816,15 @@ const Player = (() => {
     }
     _fastStartActive = false;
 
+    // *** RACE-CONDITION FIX: create the session controller HERE — before any
+    // awaits — so that the *next* _playCurrentTrack() call can abort this one
+    // via _activeDownloadCtrl even while we are still inside a DB lookup or
+    // _onBeforePlay hook.  Without this, switching tracks while getCachedBlob /
+    // isCached is pending leaves _activeDownloadCtrl null and the old download
+    // keeps running in parallel with the new one. ***
+    const myCtrl = new AbortController();
+    _activeDownloadCtrl = myCtrl;
+
     const item = _queue[_queueIndex];
     _onTrackChange(item, _queueIndex, _queue.length);
 
@@ -824,6 +833,7 @@ const Player = (() => {
     if (_onBeforePlay) {
       try { await _onBeforePlay(item); } catch (_) {}
     }
+    if (myCtrl.signal.aborted) return; // switched during onBeforePlay
 
     try {
       // ── Soundrop track ────────────────────────────────────────
@@ -910,25 +920,24 @@ const Player = (() => {
       // Fast-start: for uncached files >5MB, download only the first 3MB to start
       // playback immediately, then fetch the full file in background and swap.
       // For cached files and small files, download the full blob as usual.
-      const FAST_START_THRESHOLD = 5  * 1024 * 1024; // 5MB
-      const FAST_START_HEAD_BYTES = 3 * 1024 * 1024; // 3MB initial chunk
-      const fileSize = item.size || 0;
-      const isCached = await DB.isCached(item.id).catch(() => false);
+      const FAST_START_THRESHOLD  = 5  * 1024 * 1024; // 5MB
+      const FAST_START_HEAD_BYTES = 3  * 1024 * 1024; // 3MB initial chunk
+      const fileSize  = item.size || 0;
+      const isCached  = await DB.isCached(item.id).catch(() => false);
+      if (myCtrl.signal.aborted) return; // switched while checking cache
       const useFastStart = !isCached && fileSize > FAST_START_THRESHOLD;
 
       let blob;
       if (useFastStart) {
-        const headCtrl = new AbortController();
-        _activeDownloadCtrl = headCtrl;
         console.log('[Player] Fast-start: downloading head for:', item.name);
-        try {
-          blob = await Drive.downloadFileHead(item.id, FAST_START_HEAD_BYTES, headCtrl.signal);
-        } finally {
-          if (_activeDownloadCtrl === headCtrl) _activeDownloadCtrl = null;
-        }
+        blob = await Drive.downloadFileHead(item.id, FAST_START_HEAD_BYTES, myCtrl.signal);
+        if (myCtrl.signal.aborted) return;
+        // Head done — clear ctrl so _finishFastStartDownload can set its own.
+        if (_activeDownloadCtrl === myCtrl) _activeDownloadCtrl = null;
         _fastStartActive = true;
       } else {
-        blob = await _getBlob(item);
+        blob = await _getBlob(item, myCtrl.signal);
+        if (_activeDownloadCtrl === myCtrl) _activeDownloadCtrl = null;
         _fastStartActive = false;
       }
 
@@ -1016,6 +1025,7 @@ const Player = (() => {
       if (useFastStart) _finishFastStartDownload(item);
 
     } catch (err) {
+      if (_activeDownloadCtrl === myCtrl) _activeDownloadCtrl = null;
       if (err.name === 'AbortError') {
         // User switched tracks mid-download — not an error, just bail out silently
         console.log('[Player] Download aborted (track switched):', item?.name);
@@ -1095,32 +1105,28 @@ const Player = (() => {
    * @param {DriveItem} item
    * @returns {Promise<Blob|null>}
    */
-  async function _getBlob(item) {
+  async function _getBlob(item, signal = null) {
     // Try cache first
     const cached = await DB.getCachedBlob(item.id);
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError'); // switched during cache check
     if (cached) {
       console.log('[Player] Cache hit:', item.name);
       return cached;
     }
 
-    // Create an AbortController so _playCurrentTrack can cancel this download
-    // immediately when the user selects a different track.
-    const ctrl = new AbortController();
-    _activeDownloadCtrl = ctrl;
-
-    // Download from Drive — retry once on failure (screen-off networks can hiccup)
+    // Download from Drive — retry once on failure (screen-off networks can hiccup).
+    // signal comes from _playCurrentTrack's myCtrl — already set on _activeDownloadCtrl
+    // before any await, so it is always abortable from the moment this play session starts.
     console.log('[Player] Downloading:', item.name);
     let blob = null;
     try {
-      blob = await Drive.downloadFile(item.id, null, ctrl.signal);
+      blob = await Drive.downloadFile(item.id, null, signal);
     } catch (firstErr) {
       if (firstErr.name === 'AbortError') throw firstErr; // propagate — user switched tracks
       console.warn('[Player] Download failed, retrying in 1s…', firstErr?.message);
       await new Promise(r => setTimeout(r, 1000));
-      if (ctrl.signal.aborted) throw new DOMException('Aborted', 'AbortError');
-      blob = await Drive.downloadFile(item.id, null, ctrl.signal);
-    } finally {
-      if (_activeDownloadCtrl === ctrl) _activeDownloadCtrl = null;
+      if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+      blob = await Drive.downloadFile(item.id, null, signal);
     }
 
     // Cache it
