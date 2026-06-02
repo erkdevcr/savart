@@ -5788,6 +5788,33 @@ body.queue-open #mini-player { z-index: 65; }
   pointer-events: none;
 }
 
+/* ── Normalizer column (narrower, toggle-only) ───────────── */
+.eq-pb-col--norm {
+  flex: 0 0 auto;
+  width: 82px;
+  align-items: center;
+}
+.eq-pb-col--norm .eq-pb-header {
+  width: 100%;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+.eq-pb-col--norm .eq-pb-title {
+  text-align: center;
+}
+.eq-norm-value {
+  font-size: 10px;
+  text-align: center;
+  min-height: 13px;
+}
+.eq-norm-toggle-wrap {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding-top: 2px;
+}
+
 /* Custom presets section wrapper */
 .eq-custom-section {
   border-top: 1px solid var(--bg-hover);

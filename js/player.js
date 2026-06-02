@@ -33,6 +33,9 @@ const Player = (() => {
   let _preAmpNode   = null;      // GainNode (pre-amp, before EQ) — default 1.0 (0 dB)
   let _pannerNode   = null;      // StereoPannerNode (balance) — default 0 (center)
   let _eqNodes      = [];        // Array of 12 BiquadFilterNode
+  let _normalNode   = null;      // GainNode — per-track loudness normalization
+  let _normalizerEnabled = false;// whether normalizer is active
+  let _normalizerGain    = 1.0;  // current track's linear gain (1.0 = no change)
 
   let _queue        = [];        // DriveItem[]
   let _queueIndex   = -1;        // current track index
@@ -411,6 +414,11 @@ const Player = (() => {
                   : null; // fallback: not all browsers support StereoPanner
     if (_pannerNode) _pannerNode.pan.value = 0; // center
 
+    // Normalizer — static per-track gain applied before EQ
+    _normalNode = _audioCtx.createGain();
+    _normalNode.gain.value = (_normalizerEnabled && _normalizerGain !== 1.0)
+      ? _normalizerGain : 1.0;
+
     // 12-band EQ
     _eqNodes = CONFIG.EQ_BANDS.map((freq, i) => {
       const f = _audioCtx.createBiquadFilter();
@@ -421,13 +429,14 @@ const Player = (() => {
       return f;
     });
 
-    // Graph: sources → preAmp → EQ[12] → volume → panner → destination
+    // Graph: sources → preAmp → normalizer → EQ[12] → volume → panner → destination
     // _sourceNode: Drive tracks  |  _sdSourceNode: Soundrop tracks (crossOrigin).
     // When one is paused it produces silence, so only the active one is heard.
     _sourceNode.connect(_preAmpNode);
     _sdSourceNode.connect(_sdGainNode);   // SD branch: boost to match Drive loudness
     _sdGainNode.connect(_preAmpNode);
-    _preAmpNode.connect(_eqNodes[0]);
+    _preAmpNode.connect(_normalNode);
+    _normalNode.connect(_eqNodes[0]);
     for (let i = 0; i < _eqNodes.length - 1; i++) {
       _eqNodes[i].connect(_eqNodes[i + 1]);
     }
@@ -706,6 +715,37 @@ const Player = (() => {
     const clamped = Math.max(-1, Math.min(1, pan));
     if (_pannerNode) _pannerNode.pan.value = clamped;
   }
+
+  /* ── Normalizer ─────────────────────────────────────────── */
+
+  /**
+   * Enable or disable the per-track loudness normalizer.
+   * When disabled, _normalNode gain is reset to 1.0 (bypass).
+   * @param {boolean} enabled
+   */
+  function setNormalizerEnabled(enabled) {
+    _normalizerEnabled = !!enabled;
+    if (_normalNode && _audioCtx) {
+      const target = (_normalizerEnabled && _normalizerGain !== 1.0) ? _normalizerGain : 1.0;
+      _normalNode.gain.setTargetAtTime(target, _audioCtx.currentTime, 0.07); // ~200ms fade
+    }
+  }
+
+  /**
+   * Apply a linear gain to the normalizer node for the current track.
+   * Call this after analyzing the track's loudness. Only takes effect if
+   * the normalizer is enabled.
+   * @param {number} linearGain  - e.g. 1.4 for +3dB, 0.7 for -3dB
+   */
+  function setNormalizerGain(linearGain) {
+    _normalizerGain = linearGain;
+    if (_normalNode && _audioCtx) {
+      const target = (_normalizerEnabled && _normalizerGain !== 1.0) ? _normalizerGain : 1.0;
+      _normalNode.gain.setTargetAtTime(target, _audioCtx.currentTime, 0.07); // ~200ms fade
+    }
+  }
+
+  function getNormalizerEnabled() { return _normalizerEnabled; }
 
   /* ── Tempo (playback rate) ──────────────────────────────── */
 
@@ -1129,6 +1169,10 @@ const Player = (() => {
     // Pre-amp & Balance
     setPreAmp,
     setBalance,
+    // Normalizer
+    setNormalizerEnabled,
+    setNormalizerGain,
+    getNormalizerEnabled,
     // Tempo
     setTempo,
     getTempo,

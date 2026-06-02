@@ -54,6 +54,10 @@ const App = (() => {
   // al iniciar" requirement without unbounded network usage.
   const _sessionScannedIds = new Set();
 
+  /* ── Normalizer state ───────────────────────────────────── */
+  // Tracks which songs are currently being analyzed (prevents duplicate work)
+  const _normalizingSet = new Set();
+
   /* ── Radio mode ──────────────────────────────────────────── */
   // Activated when the user plays a single song from Home, Search, or Library.
   // Automatically finds more songs by the same artist in Drive and appends
@@ -573,10 +577,11 @@ const App = (() => {
       const shared = (await DB.getState('settings')) || {};
 
       // Migration: if settings_local is empty, fall back to old 'settings' fields
-      const eqGains   = loc.eqGains   ?? shared.eqGains;
-      const eqEnabled = loc.eqEnabled ?? shared.eqEnabled;
-      const eqPreset  = loc.eqPreset  ?? shared.eqPreset;
-      const tempo     = loc.tempo     ?? shared.tempo;
+      const eqGains          = loc.eqGains   ?? shared.eqGains;
+      const eqEnabled        = loc.eqEnabled ?? shared.eqEnabled;
+      const eqPreset         = loc.eqPreset  ?? shared.eqPreset;
+      const tempo            = loc.tempo     ?? shared.tempo;
+      const normalizerEnabled = loc.normalizerEnabled ?? false;
 
       // ── Restore tempo ──────────────────────────────────────
       if (typeof tempo === 'number') {
@@ -596,6 +601,13 @@ const App = (() => {
         eqToggle.classList.toggle('on', isOn);
         document.getElementById('eq-sliders')?.classList.toggle('eq-off', !isOn);
         document.getElementById('screen-eq')?.classList.toggle('eq-controls-off', !isOn);
+      }
+
+      // ── Restore normalizer state ───────────────────────────
+      {
+        const normToggle = document.getElementById('eq-norm-toggle');
+        if (normToggle) normToggle.classList.toggle('on', !!normalizerEnabled);
+        Player.setNormalizerEnabled?.(!!normalizerEnabled);
       }
 
       // ── Restore EQ gains ───────────────────────────────────
@@ -669,10 +681,11 @@ const App = (() => {
 
     // Device-local EQ state — never synced
     DB.setState('settings_local', {
-      eqGains:   gains,
-      eqEnabled: eqOn,
-      eqPreset:  _currentPreset || null,
+      eqGains:          gains,
+      eqEnabled:        eqOn,
+      eqPreset:         _currentPreset || null,
       tempo,
+      normalizerEnabled: Player.getNormalizerEnabled?.() ?? false,
     }).catch(() => {});
 
     // Shared custom presets — synced across devices
@@ -880,6 +893,19 @@ const App = (() => {
 
       // Heart button
       if (stillCurrent) UI.setHeartActive(!!dbMeta?.starred);
+
+      // Normalizer — apply cached gain immediately (or reset if no data)
+      if (stillCurrent) {
+        const normEnabled = Player.getNormalizerEnabled?.();
+        if (normEnabled && typeof dbMeta?.normalGain === 'number') {
+          Player.setNormalizerGain(dbMeta.normalGain);
+          _updateNormValueDisplay(dbMeta.normalGain);
+        } else {
+          // No cached gain yet: reset to 1.0 (analysis will run in _onBlobReady)
+          Player.setNormalizerGain(1.0);
+          _updateNormValueDisplay(null);
+        }
+      }
 
       const bestName   = dbMeta?.displayName || track.displayName || track.name || '';
       const bestArtist = dbMeta?.artist      || track.artist      || '';
@@ -1402,6 +1428,106 @@ const App = (() => {
     }
   }
 
+  /* ── Volume Normalizer ───────────────────────────────────── */
+
+  /**
+   * Analyze the loudness of a blob and store the normalization gain in DB.
+   * Uses RMS (Root Mean Square) over the full decoded audio. Target: -14 dBFS.
+   * Analysis runs in the background — never blocks playback.
+   * @param {string} fileId
+   * @param {Blob}   blob
+   */
+  async function _analyzeTrackLoudness(fileId, blob) {
+    // Skip if already analyzed or in progress
+    if (_normalizingSet.has(fileId)) return;
+    const existing = await DB.getMeta(fileId).catch(() => null);
+    if (typeof existing?.normalGain === 'number') {
+      // Already have a cached gain — just apply it if this is the current track
+      _applyNormalizerForTrack(fileId, existing.normalGain);
+      return;
+    }
+
+    _normalizingSet.add(fileId);
+    try {
+      // Decode the full audio into a Float32 buffer via OfflineAudioContext
+      const arrayBuf = await blob.arrayBuffer();
+      // Temporary AudioContext just for decoding (does not produce sound)
+      const tmpCtx   = new (window.AudioContext || window.webkitAudioContext)();
+      let decoded;
+      try {
+        decoded = await tmpCtx.decodeAudioData(arrayBuf);
+      } finally {
+        tmpCtx.close().catch(() => {});
+      }
+
+      // Compute RMS across all channels
+      const numChannels = decoded.numberOfChannels;
+      let   sumSq       = 0;
+      let   totalSamples = 0;
+      for (let ch = 0; ch < numChannels; ch++) {
+        const data = decoded.getChannelData(ch);
+        for (let i = 0; i < data.length; i++) {
+          sumSq += data[i] * data[i];
+        }
+        totalSamples += data.length;
+      }
+      if (totalSamples === 0) return;
+
+      const rms    = Math.sqrt(sumSq / totalSamples);
+      if (rms === 0) return; // silence
+
+      // dBFS of the track's RMS level
+      const dbRMS    = 20 * Math.log10(rms);
+      // Target: -14 dBFS RMS (Spotify / streaming standard)
+      const TARGET_DB = -14;
+      const gainDb    = TARGET_DB - dbRMS;
+
+      // Clamp to ±12 dB to avoid extreme corrections on whisper-quiet or clipping tracks
+      const gainDbClamped = Math.max(-12, Math.min(12, gainDb));
+      const linearGain    = Math.pow(10, gainDbClamped / 20);
+
+      console.log(`[Normalizer] ${fileId}: RMS=${dbRMS.toFixed(1)} dBFS, gain=${gainDbClamped > 0 ? '+' : ''}${gainDbClamped.toFixed(1)} dB`);
+
+      // Persist
+      await DB.setMeta(fileId, { normalGain: linearGain, normalGainDb: gainDbClamped }).catch(() => {});
+
+      // Apply if this is still the current track and normalizer is enabled
+      _applyNormalizerForTrack(fileId, linearGain);
+
+    } catch (err) {
+      console.warn('[Normalizer] Analysis failed for', fileId, err?.message);
+    } finally {
+      _normalizingSet.delete(fileId);
+    }
+  }
+
+  /**
+   * Apply a cached normalization gain for the given track if it is still playing.
+   * @param {string} fileId
+   * @param {number} linearGain
+   */
+  function _applyNormalizerForTrack(fileId, linearGain) {
+    const current = Player.getCurrentTrack();
+    if (!current || current.id !== fileId) return;
+    Player.setNormalizerGain(linearGain);
+    _updateNormValueDisplay(linearGain);
+  }
+
+  /**
+   * Update the normalizer dB label in the EQ screen.
+   * @param {number|null} linearGain  – null = no data (shows "—")
+   */
+  function _updateNormValueDisplay(linearGain) {
+    const el = document.getElementById('eq-norm-value');
+    if (!el) return;
+    if (linearGain == null) {
+      el.textContent = '—';
+      return;
+    }
+    const db = 20 * Math.log10(linearGain);
+    el.textContent = (db >= 0 ? '+' : '') + db.toFixed(1) + ' dB';
+  }
+
   async function _onBlobReady(item, blob) {
     if (typeof Meta === 'undefined') return;
     try {
@@ -1658,6 +1784,9 @@ const App = (() => {
           _triggerRadio(radioArtist, item.id).catch(() => {});
         }
       }
+
+      // Loudness normalization — run in background, never blocks playback
+      _analyzeTrackLoudness(item.id, blob).catch(() => {});
 
     } catch (err) {
       console.warn('[App] Meta parse error:', err);
@@ -13595,6 +13724,33 @@ const App = (() => {
       }
       const pct = ((val + 100) / 200 * 100).toFixed(1);
       e.target.style.setProperty('--pb-pct', pct + '%');
+    });
+
+    // Normalizer toggle
+    document.getElementById('eq-norm-toggle')?.addEventListener('click', (e) => {
+      const isOn = e.currentTarget.classList.toggle('on');
+      Player.setNormalizerEnabled?.(isOn);
+      // Apply/remove gain for the current track immediately
+      const current = Player.getCurrentTrack();
+      if (current) {
+        if (isOn) {
+          DB.getMeta(current.id).then(dbMeta => {
+            if (typeof dbMeta?.normalGain === 'number') {
+              Player.setNormalizerGain(dbMeta.normalGain);
+              _updateNormValueDisplay(dbMeta.normalGain);
+            } else {
+              // Trigger analysis now (blob may already be cached in IndexedDB)
+              DB.getCachedBlob(current.id).then(blob => {
+                if (blob) _analyzeTrackLoudness(current.id, blob).catch(() => {});
+              }).catch(() => {});
+            }
+          }).catch(() => {});
+        } else {
+          Player.setNormalizerGain(1.0);
+          // Keep value display so user can see what was applied
+        }
+      }
+      _saveSettings();
     });
 
     // EQ reset
