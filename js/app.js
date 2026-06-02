@@ -1561,7 +1561,7 @@ const App = (() => {
     // Show badge only when normalizer is active and we have a real value
     if (badge) {
       if (normEnabled) {
-        badge.textContent   = dbStr + ' ' + (UI.t('badge_norm') || 'gan.');
+        badge.textContent   = dbStr;
         badge.style.display = '';
       } else {
         badge.style.display = 'none';
@@ -1575,7 +1575,7 @@ const App = (() => {
    */
   function _updateSpeedBadge(rate) {
     const badge = document.getElementById('pexp-badge-speed');
-    if (badge) badge.textContent = rate.toFixed(2) + '× ' + (UI.t('badge_speed') || 'vel.');
+    if (badge) badge.textContent = rate.toFixed(2) + ' X';
   }
 
   async function _onBlobReady(item, blob) {
