@@ -895,14 +895,20 @@ const App = (() => {
       // Heart button
       if (stillCurrent) UI.setHeartActive(!!dbMeta?.starred);
 
-      // Normalizer — apply cached gain immediately (or reset if no data)
+      // Normalizer — apply cached gain immediately if available.
+      // If no cached gain yet, keep the previous track's gain playing (smooth
+      // transition) and only update the display to "—". The gain will be updated
+      // once _analyzeTrackLoudness completes for this track.
       if (stillCurrent) {
         const normEnabled = Player.getNormalizerEnabled?.();
         if (normEnabled && typeof dbMeta?.normalGain === 'number') {
           Player.setNormalizerGain(dbMeta.normalGain);
           _updateNormValueDisplay(dbMeta.normalGain);
+        } else if (normEnabled) {
+          // No cached gain yet — keep previous gain active, just clear the label.
+          _updateNormValueDisplay(null);
         } else {
-          // No cached gain yet: reset to 1.0 (analysis will run in _onBlobReady)
+          // Normalizer off — ensure gain is neutral.
           Player.setNormalizerGain(1.0);
           _updateNormValueDisplay(null);
         }

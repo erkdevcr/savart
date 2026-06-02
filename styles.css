@@ -5804,11 +5804,11 @@ body.queue-open #mini-player { z-index: 65; }
 .eq-norm-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 16px;
   padding: 0 16px 14px;
 }
 .eq-norm-row .eq-pb-title {
-  flex: 1;
+  flex: none;
   text-transform: uppercase;
 }
 .eq-norm-value {
