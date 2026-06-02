@@ -748,6 +748,7 @@ const Player = (() => {
   }
 
   function getNormalizerEnabled() { return _normalizerEnabled; }
+  function getNormalizerGain()    { return _normalizerGain; }
 
   /* ── Tempo (playback rate) ──────────────────────────────── */
 
@@ -1296,6 +1297,7 @@ const Player = (() => {
     setNormalizerEnabled,
     setNormalizerGain,
     getNormalizerEnabled,
+    getNormalizerGain,
     // Tempo
     setTempo,
     getTempo,

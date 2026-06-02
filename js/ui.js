@@ -992,14 +992,17 @@ const UI = (() => {
         kbps = Math.round((sizeNum * 8) / durMs);
       }
 
-      if (badgeType) badgeType.textContent = ext;
-      if (badgeKbps) badgeKbps.textContent = kbps ? `${kbps} kbps` : '— kbps';
-      if (badgeSize) badgeSize.textContent = sizeStr;
-      // Keep element in layout always so art height stays consistent between Drive and SD tracks
+      if (badgeType) { badgeType.textContent = ext;                              badgeType.style.display = ''; }
+      if (badgeKbps) { badgeKbps.textContent = kbps ? `${kbps} kbps` : '— kbps'; badgeKbps.style.display = ''; }
+      if (badgeSize) { badgeSize.textContent = sizeStr;                           badgeSize.style.display = ''; }
       badgesEl.style.visibility = 'visible';
     } else if (badgesEl) {
-      // Hidden but still occupies space — art panel height stays the same for SD tracks
-      badgesEl.style.visibility = 'hidden';
+      // SD track: hide Drive-only chips but keep badges row visible so the
+      // speed chip (which applies to SD too) remains visible.
+      if (badgeType) badgeType.style.display = 'none';
+      if (badgeKbps) badgeKbps.style.display = 'none';
+      if (badgeSize) badgeSize.style.display = 'none';
+      badgesEl.style.visibility = 'visible';
     }
 
     // Album art

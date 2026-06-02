@@ -910,8 +910,10 @@ const App = (() => {
           Player.setNormalizerGain(dbMeta.normalGain);
           _updateNormValueDisplay(dbMeta.normalGain);
         } else if (normEnabled) {
-          // No cached gain yet — keep previous gain active, just clear the label.
-          _updateNormValueDisplay(null);
+          // No cached gain for this track — keep previous gain active and show it
+          // (applies to SD tracks and Drive tracks not yet analyzed).
+          const activeGain = Player.getNormalizerGain?.() ?? 1.0;
+          _updateNormValueDisplay(activeGain);
         } else {
           // Normalizer off — ensure gain is neutral.
           Player.setNormalizerGain(1.0);
