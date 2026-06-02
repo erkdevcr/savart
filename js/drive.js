@@ -359,10 +359,11 @@ const Drive = (() => {
    * @param {number} [bytes=1048576]  — how many bytes to fetch (default 1MB)
    * @returns {Promise<Blob>}
    */
-  async function downloadFileHead(fileId, bytes = 1048576) {
+  async function downloadFileHead(fileId, bytes = 1048576, signal = null) {
     const url = `${CONFIG.API_BASE}/files/${encodeURIComponent(fileId)}?alt=media`;
     const res = await _fetch(url, {
       headers: { 'Range': `bytes=0-${bytes - 1}` },
+      ...(signal ? { signal } : {}),
     });
     return res.blob();
   }

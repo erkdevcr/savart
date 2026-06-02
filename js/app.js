@@ -1449,8 +1449,21 @@ const App = (() => {
 
     _normalizingSet.add(fileId);
     try {
-      // Decode the full audio into a Float32 buffer via OfflineAudioContext
-      const arrayBuf = await blob.arrayBuffer();
+      // Wait for audio to stabilize before heavy analysis so we don't compete
+      // with the initial buffer fill or audio graph setup.
+      await new Promise(r => setTimeout(r, 2000));
+      if (Player.getCurrentTrack()?.id !== fileId) return; // track changed — bail out
+
+      // For large files, analyze a representative 5MB sample from ~30% into the file.
+      // This avoids allocating hundreds of MB of decoded PCM for a 60MB FLAC and keeps
+      // analysis fast. RMS over 5MB covers several minutes — more than enough accuracy.
+      const MAX_ANALYSIS_BYTES = 5 * 1024 * 1024;
+      const analysisBlob = blob.size > MAX_ANALYSIS_BYTES
+        ? blob.slice(Math.floor(blob.size * 0.3), Math.floor(blob.size * 0.3) + MAX_ANALYSIS_BYTES)
+        : blob;
+
+      // Decode the sample into a Float32 buffer via a temporary AudioContext
+      const arrayBuf = await analysisBlob.arrayBuffer();
       // Temporary AudioContext just for decoding (does not produce sound)
       const tmpCtx   = new (window.AudioContext || window.webkitAudioContext)();
       let decoded;

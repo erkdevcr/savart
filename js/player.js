@@ -45,6 +45,8 @@ const Player = (() => {
   let _currentBlob      = null;  // current blob URL (to revoke on track change)
   let _preloadingId     = null;  // fileId being pre-downloaded
   let _preloadAbortCtrl = null;  // AbortController for the in-flight preload fetch
+  let _activeDownloadCtrl = null; // AbortController for the in-flight main download
+  let _fastStartActive    = false; // true while playing a partial (head) blob; full download pending
 
   // EQ band gains (dB), indexed same as CONFIG.EQ_BANDS
   let _eqGains = new Array(12).fill(0);
@@ -801,13 +803,18 @@ const Player = (() => {
   async function _playCurrentTrack() {
     if (_queueIndex < 0 || _queueIndex >= _queue.length) return;
 
-    // Cancel any in-flight preload so it doesn't compete for bandwidth with the
-    // track the user actually wants to hear right now.
+    // Cancel any in-flight preload and active download so they don't compete
+    // for bandwidth with the track the user actually wants to hear right now.
     if (_preloadAbortCtrl) {
       _preloadAbortCtrl.abort();
       _preloadAbortCtrl = null;
       _preloadingId     = null;
     }
+    if (_activeDownloadCtrl) {
+      _activeDownloadCtrl.abort();
+      _activeDownloadCtrl = null;
+    }
+    _fastStartActive = false;
 
     const item = _queue[_queueIndex];
     _onTrackChange(item, _queueIndex, _queue.length);
@@ -900,7 +907,31 @@ const Player = (() => {
       }
 
       // ── Drive track: blob path ────────────────────────────────
-      const blob = await _getBlob(item);
+      // Fast-start: for uncached files >5MB, download only the first 3MB to start
+      // playback immediately, then fetch the full file in background and swap.
+      // For cached files and small files, download the full blob as usual.
+      const FAST_START_THRESHOLD = 5  * 1024 * 1024; // 5MB
+      const FAST_START_HEAD_BYTES = 3 * 1024 * 1024; // 3MB initial chunk
+      const fileSize = item.size || 0;
+      const isCached = await DB.isCached(item.id).catch(() => false);
+      const useFastStart = !isCached && fileSize > FAST_START_THRESHOLD;
+
+      let blob;
+      if (useFastStart) {
+        const headCtrl = new AbortController();
+        _activeDownloadCtrl = headCtrl;
+        console.log('[Player] Fast-start: downloading head for:', item.name);
+        try {
+          blob = await Drive.downloadFileHead(item.id, FAST_START_HEAD_BYTES, headCtrl.signal);
+        } finally {
+          if (_activeDownloadCtrl === headCtrl) _activeDownloadCtrl = null;
+        }
+        _fastStartActive = true;
+      } else {
+        blob = await _getBlob(item);
+        _fastStartActive = false;
+      }
+
       if (!blob) {
         console.error('[Player] Could not load blob for:', item.name);
         _onError({ message: 'No se pudo cargar la canción', item });
@@ -977,10 +1008,19 @@ const Player = (() => {
       // Save playback state
       DB.setState('lastTrack', { fileId: item.id, queueIndex: _queueIndex }).catch(() => {});
 
-      // Pre-download next track
-      _preloadNext();
+      // Pre-download next track (only when not in fast-start mode — the background
+      // full-download below already saturates available bandwidth for this track)
+      if (!useFastStart) _preloadNext();
+
+      // Fast-start: kick off background full-download now that audio is playing
+      if (useFastStart) _finishFastStartDownload(item);
 
     } catch (err) {
+      if (err.name === 'AbortError') {
+        // User switched tracks mid-download — not an error, just bail out silently
+        console.log('[Player] Download aborted (track switched):', item?.name);
+        return;
+      }
       console.error('[Player] Error loading track:', err);
 
       if (err.name === 'AuthError') {
@@ -990,6 +1030,63 @@ const Player = (() => {
         // Auto-skip after a short delay
         setTimeout(() => next(), 1500);
       }
+    }
+  }
+
+  /**
+   * Background full-file download for fast-start.
+   * Called after the 3MB head is already playing. Downloads the full file,
+   * caches it, then seamlessly swaps the audio src at the current position.
+   * @param {DriveItem} item
+   */
+  async function _finishFastStartDownload(item) {
+    const ctrl = new AbortController();
+    _activeDownloadCtrl = ctrl;
+    console.log('[Player] Fast-start: fetching full file in background…', item.name);
+    try {
+      const fullBlob = await Drive.downloadFile(item.id, null, ctrl.signal);
+      if (ctrl.signal.aborted) return;
+
+      // Cache the full file for future plays
+      await DB.setCachedBlob(item.id, fullBlob, item.mimeType).catch(() => {});
+
+      // Only swap if this track is still the one playing
+      if (_queue[_queueIndex]?.id !== item.id) return;
+
+      const savedTime  = _audio.currentTime;
+      const wasPlaying = !_audio.paused;
+      const prevUrl    = _currentBlob;
+
+      // Swap audio src to full blob
+      _audio.src = '';
+      if (prevUrl) URL.revokeObjectURL(prevUrl);
+      _currentBlob     = URL.createObjectURL(fullBlob);
+      _fastStartActive = false;
+      _audio.src       = _currentBlob;
+      _audio.playbackRate = _tempo;
+
+      // Wait for the audio element to be ready at the new src
+      await new Promise(resolve => {
+        _audio.addEventListener('canplay', resolve, { once: true });
+        setTimeout(resolve, 3000); // safety timeout in case canplay doesn't fire
+      });
+
+      if (_queue[_queueIndex]?.id !== item.id) return; // user switched while waiting
+
+      _audio.currentTime = savedTime;
+      if (wasPlaying) await _audio.play().catch(_handleAudioError);
+      console.log('[Player] Fast-start: swapped to full blob at', savedTime.toFixed(1), 's');
+
+      // Now safe to preload next
+      _preloadNext();
+
+    } catch (err) {
+      if (err.name !== 'AbortError') {
+        console.warn('[Player] Fast-start background download failed:', err.message);
+        _fastStartActive = false;
+      }
+    } finally {
+      if (_activeDownloadCtrl === ctrl) _activeDownloadCtrl = null;
     }
   }
 
@@ -1006,15 +1103,24 @@ const Player = (() => {
       return cached;
     }
 
+    // Create an AbortController so _playCurrentTrack can cancel this download
+    // immediately when the user selects a different track.
+    const ctrl = new AbortController();
+    _activeDownloadCtrl = ctrl;
+
     // Download from Drive — retry once on failure (screen-off networks can hiccup)
     console.log('[Player] Downloading:', item.name);
     let blob = null;
     try {
-      blob = await Drive.downloadFile(item.id);
+      blob = await Drive.downloadFile(item.id, null, ctrl.signal);
     } catch (firstErr) {
+      if (firstErr.name === 'AbortError') throw firstErr; // propagate — user switched tracks
       console.warn('[Player] Download failed, retrying in 1s…', firstErr?.message);
       await new Promise(r => setTimeout(r, 1000));
-      blob = await Drive.downloadFile(item.id);
+      if (ctrl.signal.aborted) throw new DOMException('Aborted', 'AbortError');
+      blob = await Drive.downloadFile(item.id, null, ctrl.signal);
+    } finally {
+      if (_activeDownloadCtrl === ctrl) _activeDownloadCtrl = null;
     }
 
     // Cache it
@@ -1072,6 +1178,17 @@ const Player = (() => {
     if (_audioCtx?.state === 'suspended') {
       _audioCtx.resume().catch(() => {});
     }
+
+    // Fast-start guard: the partial (head) blob was exhausted before the full
+    // download completed. Hold playback here — _finishFastStartDownload will
+    // seek back and resume as soon as the full file is swapped in.
+    if (_fastStartActive) {
+      console.log('[Player] Fast-start: head blob exhausted, waiting for full download…');
+      _msSetPlaybackState('paused');
+      _onPlayPause?.(false);
+      return; // don't advance to next track
+    }
+
     // Tell Android MediaSession we intend to keep playing — prevents the OS
     // from treating the gap between tracks as a "pause" and killing playback.
     _msSetPlaybackState('playing');
