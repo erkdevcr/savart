@@ -1520,6 +1520,7 @@ const App = (() => {
 
       // Persist
       await DB.setMeta(fileId, { normalGain: linearGain, normalGainDb: gainDbClamped }).catch(() => {});
+      if (typeof Sync !== 'undefined') Sync.push('metadata');
 
       // Apply if this is still the current track and normalizer is enabled
       _applyNormalizerForTrack(fileId, linearGain);
@@ -8669,6 +8670,7 @@ const App = (() => {
         if (typeof Meta !== 'undefined') Meta.revoke?.(m.id);
         _updateRowThumbnail(m.id, coverUrl);
       }
+      if (typeof Sync !== 'undefined') Sync.push('metadata');
       UI.showToast(`${songs.length} ${UI.t('lbl_songs_updated') || 'canciones actualizadas'}`);
       if (btn) {
         btn.textContent = UI.t('ds_applied_cover') || '✓ Aplicado';
@@ -8928,6 +8930,7 @@ const App = (() => {
           await DB.setMeta(songId, patch);
           _liveMetaUpdate([songId], patch);
           inp.dataset.original = val;
+          if (typeof Sync !== 'undefined') Sync.push('metadata');
         } catch (_) { inp.value = original; }
       };
       inp.addEventListener('blur', saveTrack);
