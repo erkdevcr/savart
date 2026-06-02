@@ -2272,6 +2272,13 @@ img { display: block; }
   border-color: var(--text-secondary);
 }
 .album-edit-reset-id3-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.album-edit-reset-id3-btn.resetting {
+  color: #e8a020;
+  border-color: rgba(232,160,32,0.45);
+  background: rgba(232,160,32,0.08);
+  cursor: not-allowed;
+  opacity: 0.85;
+}
 /* Entity header highlight while edit panel is open */
 .lib-detail-entity.album-editing {
   background: var(--bg-hover);
@@ -7949,6 +7956,13 @@ body.queue-open #mini-player { z-index: 65; }
 .song-edit-reset-id3-btn:hover {
   color: var(--text-secondary);
   border-color: var(--text-secondary);
+}
+.song-edit-reset-id3-btn.resetting {
+  color: #e8a020;
+  border-color: rgba(232,160,32,0.45);
+  background: rgba(232,160,32,0.08);
+  cursor: not-allowed;
+  opacity: 0.85;
 }
 .song-edit-modal-body {
   padding: 12px 20px 8px;

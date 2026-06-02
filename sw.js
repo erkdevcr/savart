@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.366';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.366 — DS auto-detect no sobreescribe forceType manual (album/coleccion)
+const APP_VERSION  = '3.5.367';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.367 — botones Reset ID3 muestran Reseteando/Resetting en naranja mientras corren
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

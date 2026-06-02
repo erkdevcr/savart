@@ -367,6 +367,7 @@ const UI = (() => {
       ctx_edit_album:          'Editar álbum',
       ctx_edit_collection:     'Editar colección',
       btn_reset_id3:           'Resetear ID3',
+      btn_resetting:           'Reseteando…',
       toast_reset_id3_done:    'canciones reseteadas a ID3',
       lbl_collection:          'Colección',
       lbl_album_chip:          'Álbum',
@@ -730,6 +731,7 @@ const UI = (() => {
       ctx_edit_album:          'Edit album',
       ctx_edit_collection:     'Edit collection',
       btn_reset_id3:           'Reset ID3',
+      btn_resetting:           'Resetting…',
       toast_reset_id3_done:    'songs reset to ID3',
       lbl_collection:          'Collection',
       lbl_album_chip:          'Album',
@@ -2483,14 +2485,17 @@ const UI = (() => {
         if (!id) return;
         const btn = document.getElementById('btn-song-edit-reset-id3');
         btn.disabled = true;
-        btn.textContent = '…';
+        btn.textContent = t('btn_resetting');
+        btn.classList.add('resetting');
         try {
           await App.onSongResetId3?.(id);
+          btn.classList.remove('resetting');
           btn.textContent = '✓ ID3';
           setTimeout(() => { _close(); btn.disabled = false; btn.textContent = t('btn_reset_id3'); }, 900);
         } catch {
           btn.disabled = false;
           btn.textContent = t('btn_reset_id3');
+          btn.classList.remove('resetting');
         }
       });
 
@@ -3765,17 +3770,17 @@ const UI = (() => {
     editPanel.querySelector('.album-edit-reset-id3-btn').addEventListener('click', async () => {
       const btn  = editPanel.querySelector('.album-edit-reset-id3-btn');
       const orig = btn.textContent;
-      btn.disabled = true; btn.textContent = '…';
+      btn.disabled = true; btn.textContent = t('btn_resetting'); btn.classList.add('resetting');
       try {
         await App.onAlbumResetId3?.(folderId, songs.map(s => s.id));
-        btn.textContent = '✓ ID3';
+        btn.classList.remove('resetting'); btn.textContent = '✓ ID3';
         setTimeout(() => {
           btn.disabled = false; btn.textContent = orig;
           editPanel.classList.remove('open');
           entity.classList.remove('album-editing');
         }, 1500);
       } catch {
-        btn.disabled = false; btn.textContent = orig;
+        btn.disabled = false; btn.textContent = orig; btn.classList.remove('resetting');
       }
     });
 
@@ -4392,17 +4397,17 @@ const UI = (() => {
     editPanel.querySelector('.album-edit-reset-id3-btn').addEventListener('click', async () => {
       const btn  = editPanel.querySelector('.album-edit-reset-id3-btn');
       const orig = btn.textContent;
-      btn.disabled = true; btn.textContent = '…';
+      btn.disabled = true; btn.textContent = t('btn_resetting'); btn.classList.add('resetting');
       try {
         await App.onAlbumResetId3?.(folderId, songs.map(s => s.id));
-        btn.textContent = '✓ ID3';
+        btn.classList.remove('resetting'); btn.textContent = '✓ ID3';
         setTimeout(() => {
           btn.disabled = false; btn.textContent = orig;
           editPanel.classList.remove('open');
           entity.classList.remove('album-editing');
         }, 1500);
       } catch {
-        btn.disabled = false; btn.textContent = orig;
+        btn.disabled = false; btn.textContent = orig; btn.classList.remove('resetting');
       }
     });
 
@@ -4673,17 +4678,17 @@ const UI = (() => {
     editPanel.querySelector('.album-edit-reset-id3-btn').addEventListener('click', async () => {
       const btn  = editPanel.querySelector('.album-edit-reset-id3-btn');
       const orig = btn.textContent;
-      btn.disabled = true; btn.textContent = '…';
+      btn.disabled = true; btn.textContent = t('btn_resetting'); btn.classList.add('resetting');
       try {
         await App.onAlbumResetId3?.(folderId, songs.map(s => s.id));
-        btn.textContent = '✓ ID3';
+        btn.classList.remove('resetting'); btn.textContent = '✓ ID3';
         setTimeout(() => {
           btn.disabled = false; btn.textContent = orig;
           editPanel.classList.remove('open');
           entity.classList.remove('album-editing');
         }, 1500);
       } catch {
-        btn.disabled = false; btn.textContent = orig;
+        btn.disabled = false; btn.textContent = orig; btn.classList.remove('resetting');
       }
     });
 
@@ -4882,17 +4887,17 @@ const UI = (() => {
     editPanel.querySelector('.album-edit-reset-id3-btn').addEventListener('click', async () => {
       const btn  = editPanel.querySelector('.album-edit-reset-id3-btn');
       const orig = btn.textContent;
-      btn.disabled = true; btn.textContent = '…';
+      btn.disabled = true; btn.textContent = t('btn_resetting'); btn.classList.add('resetting');
       try {
         await App.onAlbumResetId3?.(folderId, songs.map(s => s.id));
-        btn.textContent = '✓ ID3';
+        btn.classList.remove('resetting'); btn.textContent = '✓ ID3';
         setTimeout(() => {
           btn.disabled = false; btn.textContent = orig;
           editPanel.classList.remove('open');
           entity.classList.remove('album-editing');
         }, 1500);
       } catch {
-        btn.disabled = false; btn.textContent = orig;
+        btn.disabled = false; btn.textContent = orig; btn.classList.remove('resetting');
       }
     });
 
