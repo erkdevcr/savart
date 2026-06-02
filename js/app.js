@@ -624,6 +624,7 @@ const App = (() => {
         document.querySelectorAll('.eq-preset-chip').forEach(c => {
           c.classList.toggle('active', c.dataset.preset === _currentPreset);
         });
+        _updateEQPresetLabel();
 
         if (eqEnabled !== false) {
           // EQ is on — apply gains to audio nodes immediately
@@ -12635,6 +12636,7 @@ const App = (() => {
         document.getElementById(`eq-val-${i}`).textContent = gain > 0 ? `+${gain}` : `${gain}`;
         _currentPreset = null;
         document.querySelectorAll('.eq-preset-chip').forEach(c => c.classList.remove('active'));
+        _updateEQPresetLabel();
         _drawEQCurve();
         _saveSettings();
       });
@@ -12644,6 +12646,22 @@ const App = (() => {
     const eqOn = document.getElementById('eq-toggle')?.classList.contains('on');
     container.classList.toggle('eq-off', !eqOn);
     document.getElementById('screen-eq')?.classList.toggle('eq-controls-off', !eqOn);
+  }
+
+  /**
+   * Update the preset name label in the EQ header.
+   * Shows the active preset name; clears it when no preset is active.
+   */
+  function _updateEQPresetLabel() {
+    const el = document.getElementById('eq-preset-label');
+    if (!el) return;
+    if (!_currentPreset) { el.textContent = ''; return; }
+    // Factory preset: read display name from the chip element (already translated)
+    const chip = document.querySelector(`.eq-preset-chip[data-preset="${_currentPreset}"]`);
+    if (chip) { el.textContent = chip.textContent.trim(); return; }
+    // Custom preset: look up name in the in-memory array
+    const custom = _customPresets.find(p => p.id === _currentPreset);
+    el.textContent = custom ? custom.name : '';
   }
 
   function _applyEQPreset(preset) {
@@ -12660,6 +12678,7 @@ const App = (() => {
     document.querySelectorAll('.eq-preset-chip').forEach(c => {
       c.classList.toggle('active', c.dataset.preset === preset);
     });
+    _updateEQPresetLabel();
     _drawEQCurve();
     _saveSettings();
   }
@@ -12788,6 +12807,7 @@ const App = (() => {
         document.querySelectorAll('.eq-custom-card').forEach(c => c.classList.remove('active'));
         card.classList.add('active');
         _currentPreset = preset.id;
+        _updateEQPresetLabel();
         _drawEQCurve();
         _saveSettings();
         UI.showToast(`"${preset.name}" ${UI.t('toast_preset_loaded')}`);

@@ -5565,6 +5565,18 @@ body.queue-open #mini-player { z-index: 65; }
   font-weight: 500;
 }
 
+#eq-preset-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--accent, #4a88f5);
+  opacity: 0.85;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 120px;
+}
+#eq-preset-label:empty { display: none; }
+
 .eq-reset-btn {
   padding: 5px 14px;
   border-radius: var(--radius-pill);
