@@ -2163,6 +2163,11 @@ const App = (() => {
           // In normal mode only process files that still lack a cover
           const needsCover = !_rowHasCover(file.id);
           if (!force && !needsCover) continue;
+          // Never call Discogs for songs that already have an embedded ID3 cover in DB —
+          // even if the DOM row hasn't painted it yet (not in session cache).
+          // Without this guard, Discogs writes a thumbnailUrl to DB that persists and
+          // overrides the ID3 cover in future sessions.
+          if (!force && (m?.coverBlob || m?.thumbnailUrl === 'id3')) continue;
 
           const artist = m?.artist || '';
           const title  = m?.displayName || m?.name || file.name || '';
@@ -2250,7 +2255,9 @@ const App = (() => {
             // But respect manual edits: if user set a custom cover (manualAt > 0), never overwrite.
             if (meta.coverUrl && !isManual) {
               _updateRowThumbnail(file.id, meta.coverUrl, true);
-              if (meta.coverBlob) DB.setMeta(file.id, { coverBlob: meta.coverBlob }).catch(() => {});
+              // Also stamp thumbnailUrl:'id3' so stale external URLs (Discogs/Last.fm) written
+              // in a previous session are cleared and won't reappear next time.
+              if (meta.coverBlob) DB.setMeta(file.id, { coverBlob: meta.coverBlob, thumbnailUrl: 'id3' }).catch(() => {});
             }
 
             if (Player.getCurrentTrack()?.id === file.id) _applyMeta(file, meta);
@@ -2325,6 +2332,9 @@ const App = (() => {
         const dbM    = await DB.getMeta(file.id);
         // Never overwrite a manually set cover
         if ((dbM?.manualAt || 0) > 0) return;
+        // Never call Last.fm for songs with an embedded ID3 cover in DB — even when the
+        // DOM hasn't painted it yet. Calling Last.fm here would flash the wrong cover.
+        if (!force && dbM?.coverBlob) return;
 
         // Determine artist/album from trusted sources only.
         // Prefer in-memory parse (reliable — from this session's ID3 extraction).

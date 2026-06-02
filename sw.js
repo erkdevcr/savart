@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.367';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.367 — botones Reset ID3 muestran Reseteando/Resetting en naranja mientras corren
+const APP_VERSION  = '3.5.368';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.368 — Discogs/LastFm no corren en soft scan si cancion ya tiene coverBlob ID3
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
