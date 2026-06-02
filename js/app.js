@@ -650,6 +650,7 @@ const App = (() => {
         _renderCustomPresets();
       }
 
+      _updateSpeedBadge(Player.getTempo()); // init badge even if tempo wasn't saved
       console.log('[App] Settings restored from DB');
     } catch (err) {
       console.warn('[App] Could not restore settings:', err);
@@ -859,6 +860,7 @@ const App = (() => {
     const enriched = _enrichTrack(track);
     UI.updateMiniPlayer(enriched, true);
     UI.updateExpandedPlayer(enriched, true);
+    _updateSpeedBadge(Player.getTempo()); // always show current speed immediately
     document.body.classList.add('audio-playing'); // track change = playback starting
     UI.setActiveSongRow(track?.id);
     document.title = track ? `${enriched.displayName} — Savart` : 'Savart';
