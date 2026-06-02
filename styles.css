@@ -41,8 +41,8 @@
   --radius-circle: 50%;
 
   /* Layout */
-  --sidebar-w:      200px;
-  --now-playing-w:  280px;   /* desktop right panel */
+  --sidebar-w:      180px;   /* 200 × 0.9 */
+  --now-playing-w:  322px;   /* desktop right panel (280 × 1.15) */
   --bottom-nav-h:   60px;
   --mini-player-h:  70px;    /* mobile */
   --player-bar-h:   72px;    /* desktop (kept for EQ overlay positioning) */

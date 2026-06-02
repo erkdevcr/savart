@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.356';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.356 — speed badge inicializa sync en onTrackChange y restoreSettings
+const APP_VERSION  = '3.5.359';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.359 — desktop sidebar 200→180px (-10%)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
