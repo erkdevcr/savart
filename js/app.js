@@ -2769,14 +2769,69 @@ const App = (() => {
    * @param {string}      folderId — Drive ID of the opened folder
    * @param {string|null} curType  — 'album' | 'collection' | null
    */
-  async function _renderBrowseEntityHeader(folderId, curType) {
+  async function _renderBrowseEntityHeader(folderId, curType, earlyData = {}) {
     const hdr = document.getElementById('browse-entity-header');
     if (!hdr) return;
     hdr.innerHTML = '';
     if (!curType || !folderId) return;
 
+    /* ── Phase 1: render immediately with Drive-API data ─────────────────
+       folder.name and the Drive thumbnailLinks are available right away —
+       no DB read needed. This makes the header appear in the same frame as
+       the song list, matching the library behaviour.                        */
+    const earlyFiles  = earlyData.files || [];
+    const earlyName   = earlyData.folderName || '';
+    // Best available cover from Drive CDN thumbnails (stable https URLs)
+    const earlyThumb  = earlyFiles.find(f => _isStableCoverUrl(f.thumbnailUrl))?.thumbnailUrl
+                     || earlyFiles.find(f => _isStableCoverUrl(f.thumbnailLink))?.thumbnailLink
+                     || null;
+    // Minimal song objects for the phase-1 render (song count + play callbacks)
+    const earlySongs  = earlyFiles.map(f => ({
+      id:          f.id,
+      name:        f.name,
+      displayName: f.displayName || f.name,
+      artist:      f.artist      || '',
+      album:       f.albumName   || f.album || '',
+      year:        f.year        || '',
+      track:       '',
+      thumbnailUrl: f.thumbnailUrl || f.thumbnailLink || null,
+      folderId,
+      durationSec: f.durationMs > 0 ? f.durationMs / 1000 : 0,
+    }));
+
+    if (curType === 'album') {
+      UI.renderBrowseAlbumHeader({
+        folderId,
+        name:     earlyName,
+        artist:   '',
+        year:     null,
+        format:   null,
+        coverUrl: earlyThumb,
+      }, earlySongs);
+    } else if (curType === 'collection') {
+      const earlyMosaic = earlyFiles
+        .filter(f => _isStableCoverUrl(f.thumbnailUrl))
+        .slice(0, 4)
+        .map(f => f.thumbnailUrl);
+      UI.renderBrowseCollectionHeader({
+        folderId,
+        name:           earlyName,
+        manualCoverUrl: earlyThumb,
+        mosaicUrls:     earlyMosaic,
+        artistCount:    0,
+        format:         null,
+        year:           null,
+      }, earlySongs);
+    }
+
+    /* ── Phase 2: enrich with DB data and re-render ───────────────────────
+       Run the full async pipeline and call renderBrowse*Header again with
+       accurate metadata. The header is already visible — this just refines
+       it with artist / year / format / better cover.                        */
     try {
       const all   = await DB.getAllMeta();
+      if (_browseFolderId !== folderId) return; // user navigated away
+
       const songs = all.filter(m => m.folderId === folderId);
 
       // Helper: map a meta record to an enrichable song object
@@ -2797,7 +2852,6 @@ const App = (() => {
       };
 
       if (curType === 'album') {
-        // Build freshAlbum from DB songs (same logic as onAlbumClick)
         const _topEntry = map => map.size > 0
           ? [...map.entries()].sort((a, b) => b[1] - a[1])[0][0]
           : null;
@@ -2834,7 +2888,6 @@ const App = (() => {
           freshCoverUrl = folderRec.coverUrl;
         }
 
-        // Compute format badge
         const fmtCounts = new Map();
         songs.forEach(m => {
           const fmt = _formatLabel(m.mimeType, m.name);
@@ -2846,22 +2899,23 @@ const App = (() => {
 
         const freshAlbum = {
           folderId,
-          name:        _topEntry(freshAlbumCounts)  || folderRec?.name || '',
+          name:        _topEntry(freshAlbumCounts)  || folderRec?.name || earlyName,
           artist:      _topEntry(freshArtistCounts) || '',
           year:        _topEntry(freshYearCounts)   || null,
           format:      computedFormat,
-          coverUrl:    freshCoverUrl                || null,
+          coverUrl:    freshCoverUrl                || earlyThumb || null,
           rescannedAt: folderRec?.rescannedAt       || null,
           hasManual:   songs.some(s => (s.manualAt || 0) > 0),
         };
 
-        // Guard: abort if user navigated away before this async resolved
         if (_browseFolderId !== folderId) return;
         UI.renderBrowseAlbumHeader(freshAlbum, enriched);
 
       } else if (curType === 'collection') {
         const folderRec = all.find(m => m.id === folderId);
         const savedCol  = await DB.getCollection(folderId).catch(() => null) || {};
+
+        if (_browseFolderId !== folderId) return;
 
         const seenUrls = new Set();
         const mosaicUrls = [];
@@ -2888,7 +2942,7 @@ const App = (() => {
 
         const collection = {
           folderId,
-          name:           savedCol.name     || folderRec?.name || '',
+          name:           savedCol.name     || folderRec?.name || earlyName,
           manualCoverUrl: savedCol.coverUrl || blobUrl         || null,
           mosaicUrls,
           artistCount:    artistSet.size,
@@ -2906,7 +2960,6 @@ const App = (() => {
           return url ? { ...s, thumbnailUrl: url } : s;
         }));
 
-        // Guard: abort if user navigated away
         if (_browseFolderId !== folderId) return;
         UI.renderBrowseCollectionHeader(collection, enriched);
       }
@@ -5039,8 +5092,13 @@ const App = (() => {
       _browseFolder   = { id: folder.id, name: folder.name, folderType: curType || null };
       // Update the rescan dot: show green if this folder was previously scanned
       _updateBrowseLegend(folder.id);
-      // Render (or clear) the album/collection identity header below the search bar
-      _renderBrowseEntityHeader(folder.id, curType).catch(() => {});
+      // Render (or clear) the album/collection identity header below the search bar.
+      // Pass earlyData so the header can render immediately with Drive-API data
+      // while the full DB enrichment runs in the background.
+      _renderBrowseEntityHeader(folder.id, curType, {
+        folderName: folder.name,
+        files:      result.files,
+      }).catch(() => {});
 
       // Persist folder name in meta so _loadCollections can use the Drive name
       // without an extra API call.  We never overwrite a name the user typed.
