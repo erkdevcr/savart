@@ -7705,10 +7705,19 @@ const App = (() => {
         // Auto-identify as collection if 3+ distinct artists found
         isAutoCollection = artistMap.size > 3;
         if (isAutoCollection && !_collectionFolderIdsCache?.has(id)) {
-          await DB.saveCollection(id, { forceType: 'collection', name, path }).catch(() => {});
-          _collectionFolderIdsCache?.add(id);
-          if (typeof Sync !== 'undefined') Sync.push('collections');
-          _dsLogLine(`  ↳ Colección detectada (${artistMap.size} artistas): ${name}`, 'info');
+          // Respect a manually-pinned forceType — never let auto-detection overwrite it
+          const existingCol = await DB.getCollection(id).catch(() => null);
+          if (existingCol?.forceType === 'album') {
+            // User explicitly pinned as album — override auto-detection
+            isAutoCollection = false;
+          } else if (!existingCol?.forceType) {
+            // No manual override — auto-classify as collection
+            await DB.saveCollection(id, { forceType: 'collection', name, path }).catch(() => {});
+            _collectionFolderIdsCache?.add(id);
+            if (typeof Sync !== 'undefined') Sync.push('collections');
+            _dsLogLine(`  ↳ Colección detectada (${artistMap.size} artistas): ${name}`, 'info');
+          }
+          // forceType:'collection' already set by user — cache was already populated by _refreshCollectionCache
         }
 
         const cArtist = isAutoCollection ? null : _top(artistMap);
