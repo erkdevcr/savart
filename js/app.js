@@ -824,6 +824,12 @@ const App = (() => {
     // renew the token — the user doesn't need to click "Renovar" specifically.
     Auth.rearmGestureRenewal();
     UI.showTokenBanner();
+    // Auto-attempt renewal after a short delay — works silently when the Google
+    // session is still active (common case after 1 h). Falls back to the gesture
+    // listener above if GIS requires a popup.
+    setTimeout(() => {
+      if (!Auth.isAuthenticated()) Auth.autoAttemptRenewal();
+    }, 1500);
   }
 
   /**

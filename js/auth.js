@@ -469,6 +469,45 @@ const Auth = (() => {
     console.log(`[Auth] Gesture renewal re-armado (intento ${_gestureRenewRetries}/${MAX_GESTURE_RETRIES}).`);
   }
 
+  /**
+   * Programmatic renewal attempt — triggered automatically when the expiry banner
+   * appears. Calls requestAccessToken({ prompt:'' }) without a user gesture.
+   * If the Google session is still active (common case), GIS returns a token
+   * silently without opening any popup, hiding the banner automatically.
+   * If a popup would be required, GIS calls the error_callback and the banner
+   * stays visible so the user can click manually as a fallback.
+   * Web mode only — native mode uses GoogleAuth.refresh() directly.
+   */
+  function autoAttemptRenewal() {
+    if (_isNative()) return;
+    if (_isSilentRenew) return;
+    _tryCreateClient();
+    if (!_tokenClient) return;
+
+    console.log('[Auth] Auto-renovación programática (sin gesto)…');
+    _isSilentRenew = true;
+
+    if (_renewTimeoutId) clearTimeout(_renewTimeoutId);
+    _renewTimeoutId = setTimeout(() => {
+      _renewTimeoutId = null;
+      if (_isSilentRenew) {
+        _isSilentRenew = false;
+        _onAutoLoginFail = null;
+        console.warn('[Auth] Auto-renovación timeout — banner sigue visible, gesto re-armado');
+        _renewOnGesture = true;
+      }
+    }, 12_000);
+
+    _onAutoLoginFail = (err) => {
+      _onAutoLoginFail = null;
+      _isSilentRenew = false;
+      console.log('[Auth] Auto-renovación falló (' + err + ') — banner sigue visible, gesto re-armado');
+      _renewOnGesture = true;
+    };
+
+    _tokenClient.requestAccessToken({ prompt: '' });
+  }
+
   async function logout() {
     if (_isNative()) {
       const GoogleAuth = _getGoogleAuthPlugin();
@@ -505,6 +544,7 @@ const Auth = (() => {
     requestToken,
     requestTokenWithConsent,
     rearmGestureRenewal,
+    autoAttemptRenewal,
     getValidToken,
     isAuthenticated,
     wasAuthenticated,
