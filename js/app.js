@@ -855,6 +855,16 @@ const App = (() => {
     if (emailEl) emailEl.textContent = '—';
   }
 
+  /* ── Queue helpers ───────────────────────────────────────── */
+
+  async function _enrichQueueDurations(queue) {
+    return Promise.all(queue.map(async item => {
+      if (item.durationSec > 0) return item;
+      const m = await DB.getMeta(item.id).catch(() => null);
+      return m?.durationSec > 0 ? { ...item, durationSec: m.durationSec } : item;
+    }));
+  }
+
   /* ── Player events ───────────────────────────────────────── */
 
   function _onTrackChange(track, index, total) {
@@ -876,7 +886,9 @@ const App = (() => {
     // not on natural track advancement — so we refresh it here instead.
     if (UI.isQueuePanelVisible?.()) {
       const { queue } = Player.getQueue();
-      UI.renderQueuePanel(queue, index);
+      _enrichQueueDurations(queue).then(enrichedQ => {
+        UI.renderQueuePanel(enrichedQ, index);
+      }).catch(() => { UI.renderQueuePanel(queue, index); });
       _prefetchQueueCovers(queue).catch(() => {});
     }
 
@@ -1116,7 +1128,9 @@ const App = (() => {
     // Re-render queue panel if it's currently open, preserving scroll position
     // so that removing/adding items doesn't jump the list back to the top.
     if (UI.isQueuePanelVisible()) {
-      UI.renderQueuePanel(queue, index, { preserveScroll: true });
+      _enrichQueueDurations(queue).then(enrichedQ => {
+        UI.renderQueuePanel(enrichedQ, index, { preserveScroll: true });
+      }).catch(() => { UI.renderQueuePanel(queue, index, { preserveScroll: true }); });
       _prefetchQueueCovers(queue).catch(() => {});
     }
 
@@ -5452,6 +5466,7 @@ const App = (() => {
           thumbnailUrl: coverUrl,
           isSoundrop:   _isSd  || false,
           videoId:      _vidId || null,
+          durationSec:  dbMeta?.durationSec > 0 ? dbMeta.durationSec : (item.durationSec || 0),
         };
       });
 
