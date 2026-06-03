@@ -9422,6 +9422,16 @@ const App = (() => {
       // Erase legend labels immediately for all reset folders
       allFolderIds.forEach(id => _eraseRescanLegend(id));
 
+      // If the currently playing song was in the reset scope, clear its live gain.
+      {
+        const _ct = Player.getCurrentTrack?.();
+        if (_ct && toReset.some(m => m.id === _ct.id)) {
+          _normalizingSet.delete(_ct.id);
+          Player.setNormalizerGain?.(1.0);
+          _updateNormValueDisplay(null);
+        }
+      }
+
       // Push reset data to Drive so other devices see the virgin state
       if (typeof Sync !== 'undefined') {
         Sync.push('metadata');
@@ -11591,6 +11601,8 @@ const App = (() => {
       coverBlob:      coverBlobToUse,
       thumbnailUrl:   coverBlobToUse ? 'id3' : null,
       coverUrl:       null,   // wipe stale Last.fm / AudD external cover URLs
+      normalGain:     null,   // force re-analysis on next play
+      normalGainDb:   null,
     };
 
     // Direct put so null values literally overwrite stale data in IndexedDB.
@@ -11643,6 +11655,17 @@ const App = (() => {
         };
         UI.updateMiniPlayer?.(_ep, Player.isPlaying());
         UI.updateExpandedPlayer?.(_ep, Player.isPlaying());
+      }
+    }
+
+    // If this song is currently playing, reset the live normalizer gain so it
+    // doesn't keep running with the old value until the next play.
+    {
+      const _ct = Player.getCurrentTrack?.();
+      if (_ct?.id === songId) {
+        _normalizingSet.delete(songId);
+        Player.setNormalizerGain?.(1.0);
+        _updateNormValueDisplay(null);
       }
     }
 
@@ -11765,6 +11788,16 @@ const App = (() => {
           UI.updateExpandedPlayer?.(_ep, Player.isPlaying());
         }
       }));
+    }
+
+    // If the currently playing song was among the reset batch, clear its live gain.
+    {
+      const _ct = Player.getCurrentTrack?.();
+      if (_ct && songs.some(s => s.id === _ct.id)) {
+        _normalizingSet.delete(_ct.id);
+        Player.setNormalizerGain?.(1.0);
+        _updateNormValueDisplay(null);
+      }
     }
 
     _invalidateSuggestionsCache();
