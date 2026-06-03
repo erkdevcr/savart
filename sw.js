@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.374';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.374 — reset ID3 limpia normalGain; DS reset ya lo hacía vía resetToVirgin
+const APP_VERSION  = '3.5.376';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.376 — normalizer análisis vuelve a 5 MB
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

@@ -1506,7 +1506,7 @@ const App = (() => {
       // a mid-file slice would fail decodeAudioData for those formats.
       // 20 MB covers ~5-8 minutes of typical FLAC (3-5 MB/min) or ~15 min of MP3,
       // which is more than enough for an accurate whole-track RMS average.
-      const MAX_ANALYSIS_BYTES = 20 * 1024 * 1024;
+      const MAX_ANALYSIS_BYTES = 5 * 1024 * 1024;
       const analysisBlob = blob.size > MAX_ANALYSIS_BYTES
         ? blob.slice(0, MAX_ANALYSIS_BYTES)
         : blob;
@@ -1521,23 +1521,60 @@ const App = (() => {
         tmpCtx.close().catch(() => {});
       }
 
-      // Compute RMS across all channels
-      const numChannels = decoded.numberOfChannels;
-      let   sumSq        = 0;
-      let   totalSamples = 0;
-      for (let ch = 0; ch < numChannels; ch++) {
-        const data = decoded.getChannelData(ch);
-        for (let i = 0; i < data.length; i++) {
-          sumSq += data[i] * data[i];
-        }
-        totalSamples += data.length;
-      }
-      if (totalSamples === 0) return;
+      // ── Gated RMS (simplified EBU R128 approach) ──────────────
+      // Split into 400ms blocks. Two-pass gate:
+      //   Pass 1 — absolute gate: skip blocks below -70 dBFS (near-silence, noise floor).
+      //   Pass 2 — relative gate: skip blocks more than 20 dB below the Pass-1 average.
+      //            This excludes quiet outros, ocean sounds, fade-outs, etc. while
+      //            keeping soft verses that are still part of the musical content.
+      // Falls back to unfiltered RMS if nothing survives the gate.
+      const numChannels   = decoded.numberOfChannels;
+      const blockSamples  = Math.round(decoded.sampleRate * 0.4); // 400ms block
+      const numBlocks     = Math.ceil(decoded.length / blockSamples);
+      const ABS_GATE_LIN  = Math.pow(10, -70 / 20); // -70 dBFS absolute gate
 
-      const rms = Math.sqrt(sumSq / totalSamples);
+      // Pre-compute per-block RMS (mixed across all channels)
+      const blockRms = new Float32Array(numBlocks);
+      for (let b = 0; b < numBlocks; b++) {
+        const s0 = b * blockSamples;
+        const s1 = Math.min(s0 + blockSamples, decoded.length);
+        let bSumSq = 0;
+        for (let ch = 0; ch < numChannels; ch++) {
+          const d = decoded.getChannelData(ch);
+          for (let i = s0; i < s1; i++) bSumSq += d[i] * d[i];
+        }
+        blockRms[b] = Math.sqrt(bSumSq / ((s1 - s0) * numChannels));
+      }
+
+      // Pass 1: absolute gate
+      let p1SumSq = 0, p1Count = 0;
+      for (let b = 0; b < numBlocks; b++) {
+        if (blockRms[b] >= ABS_GATE_LIN) { p1SumSq += blockRms[b] * blockRms[b]; p1Count++; }
+      }
+
+      // Pass 2: relative gate — exclude blocks > 20 dB below pass-1 average
+      let gatedSumSq = 0, gatedCount = 0;
+      if (p1Count > 0) {
+        const p1Rms     = Math.sqrt(p1SumSq / p1Count);
+        const relGateLin = p1Rms * Math.pow(10, -20 / 20); // 20 dB below pass-1
+        for (let b = 0; b < numBlocks; b++) {
+          if (blockRms[b] >= ABS_GATE_LIN && blockRms[b] >= relGateLin) {
+            gatedSumSq += blockRms[b] * blockRms[b]; gatedCount++;
+          }
+        }
+      }
+
+      // Fallback: use all blocks if gating removed everything
+      if (gatedCount === 0) {
+        for (let b = 0; b < numBlocks; b++) { gatedSumSq += blockRms[b] * blockRms[b]; }
+        gatedCount = numBlocks;
+      }
+
+      if (gatedCount === 0) return;
+      const rms = Math.sqrt(gatedSumSq / gatedCount);
       if (rms === 0) return; // silence
 
-      // dBFS of the track's RMS level
+      // dBFS of the gated RMS level
       const dbRMS     = 20 * Math.log10(rms);
       // Target: -14 dBFS RMS (Spotify / streaming standard)
       const TARGET_DB = -14;
@@ -1547,7 +1584,7 @@ const App = (() => {
       const gainDbClamped = Math.max(-12, Math.min(12, gainDb));
       const linearGain    = Math.pow(10, gainDbClamped / 20);
 
-      console.log(`[Normalizer] ${fileId}: RMS=${dbRMS.toFixed(1)} dBFS, gain=${gainDbClamped > 0 ? '+' : ''}${gainDbClamped.toFixed(1)} dB (analyzed ${(analysisBlob.size / 1024 / 1024).toFixed(1)} MB)`);
+      console.log(`[Normalizer] ${fileId}: gatedRMS=${dbRMS.toFixed(1)} dBFS, gain=${gainDbClamped > 0 ? '+' : ''}${gainDbClamped.toFixed(1)} dB (${gatedCount}/${numBlocks} blocks passed gate, ${(analysisBlob.size / 1024 / 1024).toFixed(1)} MB analyzed)`);
 
       // Persist
       await DB.setMeta(fileId, { normalGain: linearGain, normalGainDb: gainDbClamped }).catch(() => {});
