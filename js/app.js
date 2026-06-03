@@ -1500,13 +1500,10 @@ const App = (() => {
       await new Promise(r => setTimeout(r, 2000));
       if (Player.getCurrentTrack()?.id !== fileId) return; // track changed — bail out
 
-      // Analyze up to 20 MB from the START of the file.
-      // Slicing from the beginning is the only approach that works for all formats:
-      // FLAC/M4A/OGG require the stream header (always at byte 0) to decode correctly;
-      // a mid-file slice would fail decodeAudioData for those formats.
-      // 20 MB covers ~5-8 minutes of typical FLAC (3-5 MB/min) or ~15 min of MP3,
-      // which is more than enough for an accurate whole-track RMS average.
-      const MAX_ANALYSIS_BYTES = 5 * 1024 * 1024;
+      // Analyze up to 15 MB from the start (covers full file for most MP3/AAC
+      // which are typically 4–12 MB; caps at 15 MB for large FLAC files).
+      // Always from byte 0: FLAC/M4A/OGG require the stream header.
+      const MAX_ANALYSIS_BYTES = 15 * 1024 * 1024;
       const analysisBlob = blob.size > MAX_ANALYSIS_BYTES
         ? blob.slice(0, MAX_ANALYSIS_BYTES)
         : blob;
@@ -1521,94 +1518,69 @@ const App = (() => {
         tmpCtx.close().catch(() => {});
       }
 
-      // ── Gated RMS (simplified EBU R128 approach) ──────────────
-      // Split into 400ms blocks. Two-pass gate:
-      //   Pass 1 — absolute gate: skip blocks below -70 dBFS (near-silence, noise floor).
-      //   Pass 2 — relative gate: skip blocks more than 20 dB below the Pass-1 average.
-      //            This excludes quiet outros, ocean sounds, fade-outs, etc. while
-      //            keeping soft verses that are still part of the musical content.
-      // Falls back to unfiltered RMS if nothing survives the gate.
-      const numChannels   = decoded.numberOfChannels;
-      const blockSamples  = Math.round(decoded.sampleRate * 0.4); // 400ms block
-      const numBlocks     = Math.ceil(decoded.length / blockSamples);
-      const ABS_GATE_LIN  = Math.pow(10, -70 / 20); // -70 dBFS absolute gate
+      // ── Gated RMS (simplified EBU R128) ───────────────────────
+      // 400ms blocks, two-pass gate:
+      //   Pass 1 — absolute: skip blocks below −70 dBFS (silence/noise floor)
+      //   Pass 2 — relative: skip blocks > 20 dB below pass-1 average
+      //            (excludes quiet outros, ambient sounds, fade-outs)
+      const numChannels  = decoded.numberOfChannels;
+      const blockSamples = Math.round(decoded.sampleRate * 0.4);
+      const numBlocks    = Math.ceil(decoded.length / blockSamples);
+      const ABS_GATE     = Math.pow(10, -70 / 20);
 
-      // Pre-compute per-block RMS (mixed across all channels)
       const blockRms = new Float32Array(numBlocks);
       for (let b = 0; b < numBlocks; b++) {
-        const s0 = b * blockSamples;
-        const s1 = Math.min(s0 + blockSamples, decoded.length);
-        let bSumSq = 0;
+        const s0 = b * blockSamples, s1 = Math.min(s0 + blockSamples, decoded.length);
+        let sq = 0;
         for (let ch = 0; ch < numChannels; ch++) {
           const d = decoded.getChannelData(ch);
-          for (let i = s0; i < s1; i++) bSumSq += d[i] * d[i];
+          for (let i = s0; i < s1; i++) sq += d[i] * d[i];
         }
-        blockRms[b] = Math.sqrt(bSumSq / ((s1 - s0) * numChannels));
+        blockRms[b] = Math.sqrt(sq / ((s1 - s0) * numChannels));
       }
 
-      // Pass 1: absolute gate
-      let p1SumSq = 0, p1Count = 0;
-      for (let b = 0; b < numBlocks; b++) {
-        if (blockRms[b] >= ABS_GATE_LIN) { p1SumSq += blockRms[b] * blockRms[b]; p1Count++; }
+      let p1Sq = 0, p1N = 0;
+      for (let b = 0; b < numBlocks; b++)
+        if (blockRms[b] >= ABS_GATE) { p1Sq += blockRms[b] * blockRms[b]; p1N++; }
+
+      let gSq = 0, gN = 0;
+      if (p1N > 0) {
+        const rel = Math.sqrt(p1Sq / p1N) * Math.pow(10, -10 / 20);
+        for (let b = 0; b < numBlocks; b++)
+          if (blockRms[b] >= ABS_GATE && blockRms[b] >= rel) { gSq += blockRms[b] * blockRms[b]; gN++; }
       }
+      if (gN === 0) { for (let b = 0; b < numBlocks; b++) gSq += blockRms[b] * blockRms[b]; gN = numBlocks; }
+      if (gN === 0) return;
 
-      // Pass 2: relative gate — exclude blocks > 20 dB below pass-1 average
-      let gatedSumSq = 0, gatedCount = 0;
-      if (p1Count > 0) {
-        const p1Rms     = Math.sqrt(p1SumSq / p1Count);
-        const relGateLin = p1Rms * Math.pow(10, -20 / 20); // 20 dB below pass-1
-        for (let b = 0; b < numBlocks; b++) {
-          if (blockRms[b] >= ABS_GATE_LIN && blockRms[b] >= relGateLin) {
-            gatedSumSq += blockRms[b] * blockRms[b]; gatedCount++;
-          }
-        }
-      }
+      const rms = Math.sqrt(gSq / gN);
+      if (rms === 0) return;
 
-      // Fallback: use all blocks if gating removed everything
-      if (gatedCount === 0) {
-        for (let b = 0; b < numBlocks; b++) { gatedSumSq += blockRms[b] * blockRms[b]; }
-        gatedCount = numBlocks;
-      }
-
-      if (gatedCount === 0) return;
-      const rms = Math.sqrt(gatedSumSq / gatedCount);
-      if (rms === 0) return; // silence
-
-      // dBFS of the gated RMS level
-      const dbRMS     = 20 * Math.log10(rms);
-      // Target: -14 dBFS RMS (Spotify / streaming standard)
       const TARGET_DB = -14;
+      const dbRMS     = 20 * Math.log10(rms);
       const gainDb    = TARGET_DB - dbRMS;
 
-      // Clamp to ±12 dB to avoid extreme corrections on whisper-quiet or clipping tracks
+      // Clamp to ±12 dB
       let gainDbClamped = Math.max(-12, Math.min(12, gainDb));
       let linearGain    = Math.pow(10, gainDbClamped / 20);
 
-      // ── True-peak verification pass ────────────────────────────
-      // After computing the gain, scan the decoded samples to find the
-      // loudest peak. If applying the gain would push that peak above
-      // −1 dBFS (clipping), pull the gain back just enough so the
-      // loudest peak lands at exactly −1 dBFS. This prevents distortion
-      // on quiet-but-dynamic tracks that would otherwise be boosted too far.
+      // ── True-peak limiter ────────────────────────────────────
+      // If applying the gain would push the loudest peak above −1 dBFS,
+      // pull the gain back so that peak lands at exactly −1 dBFS.
       let truePeak = 0;
       for (let ch = 0; ch < numChannels; ch++) {
         const d = decoded.getChannelData(ch);
-        for (let i = 0; i < d.length; i++) {
-          const abs = d[i] < 0 ? -d[i] : d[i];
-          if (abs > truePeak) truePeak = abs;
-        }
+        for (let i = 0; i < d.length; i++) { const a = d[i] < 0 ? -d[i] : d[i]; if (a > truePeak) truePeak = a; }
       }
       if (truePeak > 0) {
-        const HEADROOM_LIN   = Math.pow(10, -1 / 20); // −1 dBFS ceiling
-        const maxSafeGain    = HEADROOM_LIN / truePeak;
+        const maxSafeGain = Math.pow(10, -1 / 20) / truePeak;
         if (linearGain > maxSafeGain) {
           linearGain    = maxSafeGain;
           gainDbClamped = 20 * Math.log10(linearGain);
-          console.log(`[Normalizer] True-peak limiter: gain reduced to ${gainDbClamped.toFixed(1)} dB (peak=${( 20*Math.log10(truePeak)).toFixed(1)} dBFS)`);
+          console.log(`[Normalizer] True-peak limiter: capped at ${gainDbClamped.toFixed(1)} dB (peak=${(20 * Math.log10(truePeak)).toFixed(1)} dBFS)`);
         }
       }
 
-      console.log(`[Normalizer] ${fileId}: gatedRMS=${dbRMS.toFixed(1)} dBFS, gain=${gainDbClamped > 0 ? '+' : ''}${gainDbClamped.toFixed(1)} dB (${gatedCount}/${numBlocks} blocks passed gate, ${(analysisBlob.size / 1024 / 1024).toFixed(1)} MB analyzed)`);
+      console.log(`[Normalizer] ${fileId}: rms=${dbRMS.toFixed(1)} dBFS → gain=${gainDbClamped > 0 ? '+' : ''}${gainDbClamped.toFixed(1)} dB (${gN}/${numBlocks} blocks, ${(analysisBlob.size / 1024 / 1024).toFixed(1)} MB)`);
 
       // Persist
       await DB.setMeta(fileId, { normalGain: linearGain, normalGainDb: gainDbClamped }).catch(() => {});
