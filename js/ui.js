@@ -1472,6 +1472,8 @@ const UI = (() => {
     const album    = inMem?.album  || item.albumName || '';
     const year     = inMem?.year   || item.year      || '';
     const coverSrc = inMem?.coverUrl || item.thumbnailUrl || '';
+    const _durSec  = item.durationSec > 0 ? item.durationSec : (item.durationMs > 0 ? item.durationMs / 1000 : 0);
+    const _dur     = _durSec > 0 ? formatTime(Math.round(_durSec)) : '';
 
     const thumbHtml = `<div style="display:flex;align-items:center;justify-content:center;color:var(--text-disabled)">${iconMusicNote(18)}</div>${coverSrc ? `<img src="${coverSrc}" alt="" loading="lazy" onerror="this.style.display='none'">` : ''}`;
 
@@ -1490,6 +1492,7 @@ const UI = (() => {
         <div class="top-list-title">${escHtml(title)}</div>
         ${metaLine ? `<div class="top-list-meta">${escHtml(metaLine)}</div>` : ''}
       </div>
+      ${_dur ? `<span class="top-list-dur">${escHtml(_dur)}</span>` : ''}
       <button class="btn-more" aria-label="Más opciones">${iconDots()}</button>
     `;
 
@@ -3054,6 +3057,8 @@ const UI = (() => {
     const title  = meta?.title  || item.displayName || item.name;
     const artist = meta?.artist || item.artist       || '';
     const cover  = meta?.coverUrl || item.thumbnailUrl || '';
+    const _qDurSec = item.durationSec > 0 ? item.durationSec : (item.durationMs > 0 ? item.durationMs / 1000 : 0);
+    const _qDur    = _qDurSec > 0 ? formatTime(Math.round(_qDurSec)) : '';
 
     const thumbHtml = cover
       ? `<img src="${cover}" alt="">`
@@ -3069,6 +3074,7 @@ const UI = (() => {
         <div class="queue-item-title">${escHtml(title)}</div>
         ${artist ? `<div class="queue-item-artist">${escHtml(artist)}</div>` : ''}
       </div>
+      ${_qDur ? `<span class="queue-item-dur">${escHtml(_qDur)}</span>` : ''}
       ${isActive ? '' : `
         <button class="queue-remove-btn" aria-label="Quitar de la cola" data-queue-index="${queueIndex}">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>

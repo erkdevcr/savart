@@ -829,6 +829,14 @@ img { display: block; }
   color: var(--text-muted);
   flex-shrink: 0;
 }
+.top-list-dur {
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  margin-right: 4px;
+}
 
 /* ── History screen ────────────────────────────────────────── */
 #screen-history .screen-header {
@@ -3723,6 +3731,14 @@ body.queue-open #mini-player { z-index: 65; }
   margin-top: 2px;
 }
 
+.queue-item-dur {
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  margin-right: 4px;
+}
 .queue-remove-btn {
   background: none;
   border: none;
