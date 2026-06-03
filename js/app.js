@@ -1179,7 +1179,10 @@ const App = (() => {
       bitrate:       meta?.bitrate      ?? track.bitrate      ?? null,
       sampleRate:    meta?.sampleRate   ?? track.sampleRate   ?? null,
       bitsPerSample: meta?.bitsPerSample ?? track.bitsPerSample ?? null,
-      size:          _blobSizeCache.get(track.id) ?? track.size ?? 0,
+      // Prefer Drive API size (always accurate); blob cache is fallback only.
+      // _blobSizeCache stores the fast-start partial blob (3 MB) initially —
+      // using it first would show 3.0 MB for large files until full download.
+      size:          track.size || _blobSizeCache.get(track.id) || 0,
     };
   }
 
