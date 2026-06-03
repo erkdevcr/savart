@@ -1581,8 +1581,32 @@ const App = (() => {
       const gainDb    = TARGET_DB - dbRMS;
 
       // Clamp to ±12 dB to avoid extreme corrections on whisper-quiet or clipping tracks
-      const gainDbClamped = Math.max(-12, Math.min(12, gainDb));
-      const linearGain    = Math.pow(10, gainDbClamped / 20);
+      let gainDbClamped = Math.max(-12, Math.min(12, gainDb));
+      let linearGain    = Math.pow(10, gainDbClamped / 20);
+
+      // ── True-peak verification pass ────────────────────────────
+      // After computing the gain, scan the decoded samples to find the
+      // loudest peak. If applying the gain would push that peak above
+      // −1 dBFS (clipping), pull the gain back just enough so the
+      // loudest peak lands at exactly −1 dBFS. This prevents distortion
+      // on quiet-but-dynamic tracks that would otherwise be boosted too far.
+      let truePeak = 0;
+      for (let ch = 0; ch < numChannels; ch++) {
+        const d = decoded.getChannelData(ch);
+        for (let i = 0; i < d.length; i++) {
+          const abs = d[i] < 0 ? -d[i] : d[i];
+          if (abs > truePeak) truePeak = abs;
+        }
+      }
+      if (truePeak > 0) {
+        const HEADROOM_LIN   = Math.pow(10, -1 / 20); // −1 dBFS ceiling
+        const maxSafeGain    = HEADROOM_LIN / truePeak;
+        if (linearGain > maxSafeGain) {
+          linearGain    = maxSafeGain;
+          gainDbClamped = 20 * Math.log10(linearGain);
+          console.log(`[Normalizer] True-peak limiter: gain reduced to ${gainDbClamped.toFixed(1)} dB (peak=${( 20*Math.log10(truePeak)).toFixed(1)} dBFS)`);
+        }
+      }
 
       console.log(`[Normalizer] ${fileId}: gatedRMS=${dbRMS.toFixed(1)} dBFS, gain=${gainDbClamped > 0 ? '+' : ''}${gainDbClamped.toFixed(1)} dB (${gatedCount}/${numBlocks} blocks passed gate, ${(analysisBlob.size / 1024 / 1024).toFixed(1)} MB analyzed)`);
 
