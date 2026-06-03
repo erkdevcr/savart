@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.372';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.372 — fix chip de tamaño muestra 3.0 MB en fast-start
+const APP_VERSION  = '3.5.374';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.374 — reset ID3 limpia normalGain; DS reset ya lo hacía vía resetToVirgin
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

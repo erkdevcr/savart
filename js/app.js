@@ -198,6 +198,7 @@ const App = (() => {
       onQueueChange:   _onQueueChange,
       onError:         _onPlayerError,
       onBlobReady:     _onBlobReady,
+      onFullBlobReady: _onFullBlobReady,    // fires when full file finishes downloading (fast-start)
       onBeforePlay:    _preScanBeforePlay,  // blocks audio until soft scan completes
       onDurationReady: _onDurationReady,    // fires on loadedmetadata with accurate duration
     });
@@ -1477,11 +1478,16 @@ const App = (() => {
    * @param {string} fileId
    * @param {Blob}   blob
    */
-  async function _analyzeTrackLoudness(fileId, blob) {
-    // Skip if already analyzed or in progress
+  /**
+   * @param {string}  fileId
+   * @param {Blob}    blob     – must be the full file (not a fast-start partial)
+   * @param {boolean} [force]  – if true, re-analyze even if normalGain already exists in DB
+   */
+  async function _analyzeTrackLoudness(fileId, blob, force = false) {
+    // Skip if already in progress
     if (_normalizingSet.has(fileId)) return;
     const existing = await DB.getMeta(fileId).catch(() => null);
-    if (typeof existing?.normalGain === 'number') {
+    if (!force && typeof existing?.normalGain === 'number') {
       // Already have a cached gain — just apply it if this is the current track
       _applyNormalizerForTrack(fileId, existing.normalGain);
       return;
@@ -1494,17 +1500,19 @@ const App = (() => {
       await new Promise(r => setTimeout(r, 2000));
       if (Player.getCurrentTrack()?.id !== fileId) return; // track changed — bail out
 
-      // For large files, analyze a representative 5MB sample from ~30% into the file.
-      // This avoids allocating hundreds of MB of decoded PCM for a 60MB FLAC and keeps
-      // analysis fast. RMS over 5MB covers several minutes — more than enough accuracy.
-      const MAX_ANALYSIS_BYTES = 5 * 1024 * 1024;
+      // Analyze up to 20 MB from the START of the file.
+      // Slicing from the beginning is the only approach that works for all formats:
+      // FLAC/M4A/OGG require the stream header (always at byte 0) to decode correctly;
+      // a mid-file slice would fail decodeAudioData for those formats.
+      // 20 MB covers ~5-8 minutes of typical FLAC (3-5 MB/min) or ~15 min of MP3,
+      // which is more than enough for an accurate whole-track RMS average.
+      const MAX_ANALYSIS_BYTES = 20 * 1024 * 1024;
       const analysisBlob = blob.size > MAX_ANALYSIS_BYTES
-        ? blob.slice(Math.floor(blob.size * 0.3), Math.floor(blob.size * 0.3) + MAX_ANALYSIS_BYTES)
+        ? blob.slice(0, MAX_ANALYSIS_BYTES)
         : blob;
 
-      // Decode the sample into a Float32 buffer via a temporary AudioContext
+      // Decode into Float32 PCM via a temporary (silent) AudioContext
       const arrayBuf = await analysisBlob.arrayBuffer();
-      // Temporary AudioContext just for decoding (does not produce sound)
       const tmpCtx   = new (window.AudioContext || window.webkitAudioContext)();
       let decoded;
       try {
@@ -1515,7 +1523,7 @@ const App = (() => {
 
       // Compute RMS across all channels
       const numChannels = decoded.numberOfChannels;
-      let   sumSq       = 0;
+      let   sumSq        = 0;
       let   totalSamples = 0;
       for (let ch = 0; ch < numChannels; ch++) {
         const data = decoded.getChannelData(ch);
@@ -1526,11 +1534,11 @@ const App = (() => {
       }
       if (totalSamples === 0) return;
 
-      const rms    = Math.sqrt(sumSq / totalSamples);
+      const rms = Math.sqrt(sumSq / totalSamples);
       if (rms === 0) return; // silence
 
       // dBFS of the track's RMS level
-      const dbRMS    = 20 * Math.log10(rms);
+      const dbRMS     = 20 * Math.log10(rms);
       // Target: -14 dBFS RMS (Spotify / streaming standard)
       const TARGET_DB = -14;
       const gainDb    = TARGET_DB - dbRMS;
@@ -1539,7 +1547,7 @@ const App = (() => {
       const gainDbClamped = Math.max(-12, Math.min(12, gainDb));
       const linearGain    = Math.pow(10, gainDbClamped / 20);
 
-      console.log(`[Normalizer] ${fileId}: RMS=${dbRMS.toFixed(1)} dBFS, gain=${gainDbClamped > 0 ? '+' : ''}${gainDbClamped.toFixed(1)} dB`);
+      console.log(`[Normalizer] ${fileId}: RMS=${dbRMS.toFixed(1)} dBFS, gain=${gainDbClamped > 0 ? '+' : ''}${gainDbClamped.toFixed(1)} dB (analyzed ${(analysisBlob.size / 1024 / 1024).toFixed(1)} MB)`);
 
       // Persist
       await DB.setMeta(fileId, { normalGain: linearGain, normalGainDb: gainDbClamped }).catch(() => {});
@@ -1863,12 +1871,30 @@ const App = (() => {
         }
       }
 
-      // Loudness normalization — run in background, never blocks playback
-      _analyzeTrackLoudness(item.id, blob).catch(() => {});
+      // Loudness normalization — skip if this is a fast-start partial blob.
+      // A partial blob (exactly 3 MB) only covers the file's beginning — the
+      // RMS from it would be inaccurate for the full track. _onFullBlobReady
+      // fires with the complete file once the background download finishes,
+      // and will trigger analysis then. For non-fast-start plays (cached or
+      // small files), blob is the full file so we analyze immediately.
+      const _itemSize = parseInt(item.size, 10) || 0;
+      const _isPartialBlob = _itemSize > 0 && blob.size < _itemSize * 0.95;
+      if (!_isPartialBlob) {
+        _analyzeTrackLoudness(item.id, blob).catch(() => {});
+      }
 
     } catch (err) {
       console.warn('[App] Meta parse error:', err);
     }
+  }
+
+  /**
+   * Called by Player once the full file finishes background download (fast-start).
+   * Triggers accurate loudness analysis now that the complete audio data is available.
+   * Forces re-analysis even if a previous (partial-blob) gain is already saved.
+   */
+  function _onFullBlobReady(item, blob) {
+    _analyzeTrackLoudness(item.id, blob, /* force= */ true).catch(() => {});
   }
 
   /**
@@ -11636,6 +11662,8 @@ const App = (() => {
           coverBlob:      coverBlobToUse,
           thumbnailUrl:   coverBlobToUse ? 'id3' : null,
           coverUrl:       null,   // wipe stale Last.fm / AudD external cover URLs
+          normalGain:     null,   // force re-analysis — ID3 reset may change actual loudness
+          normalGainDb:   null,
         };
 
         // Direct put so null values literally overwrite stale data in IndexedDB.

@@ -71,6 +71,7 @@ const Player = (() => {
   let _onQueueChange = null;  // (queue, index) => void
   let _onError       = null;  // (error) => void
   let _onBlobReady      = null;  // (driveItem, blob) => void — fires after blob is fetched & cached
+  let _onFullBlobReady  = null;  // (driveItem, blob) => void — fires after full file is downloaded (fast-start only)
   let _onBeforePlay     = null;  // async (driveItem) => void — awaited before blob fetch (e.g. soft scan)
   let _onDurationReady  = null;  // (driveItem, durationSec) => void — fires on loadedmetadata with real duration
 
@@ -87,13 +88,14 @@ const Player = (() => {
    * Call once on app startup.
    * @param {Object} callbacks
    */
-  function init({ onTrackChange, onPlayPause, onProgress, onQueueChange, onError, onBlobReady, onBeforePlay, onDurationReady } = {}) {
+  function init({ onTrackChange, onPlayPause, onProgress, onQueueChange, onError, onBlobReady, onFullBlobReady, onBeforePlay, onDurationReady } = {}) {
     _onTrackChange    = onTrackChange    || (() => {});
     _onPlayPause      = onPlayPause      || (() => {});
     _onProgress       = onProgress       || (() => {});
     _onQueueChange    = onQueueChange    || (() => {});
     _onError          = onError          || (() => {});
     _onBlobReady      = onBlobReady      || null;
+    _onFullBlobReady  = onFullBlobReady  || null;
     _onBeforePlay     = onBeforePlay     || null;
     _onDurationReady  = onDurationReady  || null;
 
@@ -1060,6 +1062,12 @@ const Player = (() => {
 
       // Cache the full file for future plays
       await DB.setCachedBlob(item.id, fullBlob, item.mimeType).catch(() => {});
+
+      // Notify that the full file is now available (e.g. for accurate loudness analysis).
+      // Only fire if this track is still the one playing.
+      if (_queue[_queueIndex]?.id === item.id && _onFullBlobReady) {
+        try { _onFullBlobReady(item, fullBlob); } catch (e) { console.warn('[Player] onFullBlobReady error:', e); }
+      }
 
       // Only swap if this track is still the one playing
       if (_queue[_queueIndex]?.id !== item.id) return;
