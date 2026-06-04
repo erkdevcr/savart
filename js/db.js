@@ -256,6 +256,27 @@ const DB = (() => {
   }
 
   /**
+   * Remove normalGain and normalGainDb from every metadata record.
+   * Used to force re-analysis after changing the normalizer algorithm/targets.
+   * Writes directly to the store (bypasses setMeta's null-stripping logic).
+   * @returns {Promise<number>} number of records cleared
+   */
+  async function clearNormGains() {
+    const store = _tx('metadata', 'readwrite');
+    const all   = await _promisify(store.getAll());
+    if (!all?.length) return 0;
+    let count = 0;
+    for (const record of all) {
+      if ('normalGain' in record || 'normalGainDb' in record) {
+        const { normalGain, normalGainDb, ...rest } = record; // eslint-disable-line no-unused-vars
+        await _promisify(store.put(rest));
+        count++;
+      }
+    }
+    return count;
+  }
+
+  /**
    * Like getAllMeta() but strips coverBlob from every record to avoid loading
    * megabytes of image binary data during library listing.
    * Records that had a coverBlob get a lightweight `hasCoverBlob: true` flag
@@ -1221,6 +1242,7 @@ const DB = (() => {
     getAllMeta,
     getAllMetaLight,
     setMeta,
+    clearNormGains,
     incrementPlayCount,
     toggleStar,
     getStarred,

@@ -14444,6 +14444,37 @@ const App = (() => {
       });
     }
 
+    // Settings: reset all normalizer gains
+    document.getElementById('btn-reset-norm-gains')?.addEventListener('click', async () => {
+      const btn  = document.getElementById('btn-reset-norm-gains');
+      const hint = document.getElementById('reset-norm-hint');
+      if (!btn) return;
+
+      // Spinner state
+      const origHTML = btn.innerHTML;
+      btn.disabled   = true;
+      btn.innerHTML  = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="9" stroke-dasharray="28 56" stroke-dashoffset="0"/></svg> <span>Reseteando…</span>';
+      if (hint) hint.style.display = '';
+
+      try {
+        const count = await DB.clearNormGains();
+        // Clear the in-memory normalizing set so running analyses don't re-save stale values
+        _normalizingSet.clear();
+        // Push metadata to Drive so other devices also lose the stale gains
+        Sync.push('metadata');
+        btn.innerHTML = origHTML;
+        btn.disabled  = false;
+        if (hint) hint.style.display = 'none';
+        UI.showToast(`Gains reseteados (${count} canciones). Se re-analizarán al reproducirse.`, 'success');
+      } catch (err) {
+        console.error('[App] resetNormGains error:', err);
+        btn.innerHTML = origHTML;
+        btn.disabled  = false;
+        if (hint) hint.style.display = 'none';
+        UI.showToast('Error al resetear gains', 'error');
+      }
+    });
+
     // Browse: back button — never navigates above MSK (CONFIG.ROOT_FOLDER_ID)
     document.getElementById('btn-browse-back')?.addEventListener('click', async () => {
       const currentFolder = _breadcrumb[_breadcrumb.length - 1];

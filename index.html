@@ -19,7 +19,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&family=Baskervville:ital@0;1&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="styles.css?v=3.5.400">
+  <link rel="stylesheet" href="styles.css?v=3.5.401">
   <!-- Version global — fallback para Android donde el SW no se registra -->
   <script>window.SAVART_VERSION = '3.5.392';</script>
 </head>
@@ -487,6 +487,19 @@
             </div>
             <p class="clear-home-hint" id="clear-home-hint" style="display:none" data-i18n="settings_clear_hint">Esto puede tomar unos cuantos segundos</p>
           </div><!-- /Limpiar home -->
+
+          <!-- ── Normalizer ──────────────────────────── -->
+          <div class="settings-section">
+            <div class="settings-section-title">Normalizer</div>
+            <p class="settings-section-desc">Borra los gains guardados de todas las canciones. Cada canción será re-analizada la próxima vez que se reproduzca.</p>
+            <div class="settings-row" style="border-bottom:none; padding-top:4px">
+              <button id="btn-reset-norm-gains" class="btn-sort-toggle btn-warning">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg>
+                <span>Resetear gains del normalizer</span>
+              </button>
+            </div>
+            <p class="clear-home-hint" id="reset-norm-hint" style="display:none">Esto puede tomar unos segundos…</p>
+          </div><!-- /Normalizer -->
 
         </div><!-- /.settings-col (col 2) -->
 
@@ -1401,22 +1414,22 @@
 </script>
 
 <!-- Savart modules -->
-<script src="js/config.js?v=3.5.400"></script>
-<script src="js/auth.js?v=3.5.400"></script>
-<script src="js/drive.js?v=3.5.400"></script>
-<script src="js/db.js?v=3.5.400"></script>
-<script src="js/sync.js?v=3.5.400"></script>
-<script src="js/player.js?v=3.5.400"></script>
-<script src="js/meta.js?v=3.5.400"></script>
-<script src="js/lastfm.js?v=3.5.400"></script>
-<script src="js/audd.js?v=3.5.400"></script>
-<script src="js/musicbrainz.js?v=3.5.400"></script>
-<script src="js/discogs.js?v=3.5.400"></script>
-<script src="js/lyrics.js?v=3.5.400"></script>
-<script src="js/soundrop.js?v=3.5.400"></script>
-<script src="js/ui.js?v=3.5.400"></script>
-<script src="js/app.js?v=3.5.400"></script>
-<script src="js/bg.js?v=3.5.400"></script>
+<script src="js/config.js?v=3.5.401"></script>
+<script src="js/auth.js?v=3.5.401"></script>
+<script src="js/drive.js?v=3.5.401"></script>
+<script src="js/db.js?v=3.5.401"></script>
+<script src="js/sync.js?v=3.5.401"></script>
+<script src="js/player.js?v=3.5.401"></script>
+<script src="js/meta.js?v=3.5.401"></script>
+<script src="js/lastfm.js?v=3.5.401"></script>
+<script src="js/audd.js?v=3.5.401"></script>
+<script src="js/musicbrainz.js?v=3.5.401"></script>
+<script src="js/discogs.js?v=3.5.401"></script>
+<script src="js/lyrics.js?v=3.5.401"></script>
+<script src="js/soundrop.js?v=3.5.401"></script>
+<script src="js/ui.js?v=3.5.401"></script>
+<script src="js/app.js?v=3.5.401"></script>
+<script src="js/bg.js?v=3.5.401"></script>
 
 <!-- Inline: additional bindings that need the DOM -->
 <script>
