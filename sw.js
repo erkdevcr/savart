@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.398';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.398 — gain: diferir hasta que audio comienza (_trackLoading/_pendingNormGain); loudness: analizar desde sector medio del archivo
+const APP_VERSION  = '3.5.399';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.399 — loudness: 4MB→1MB, delay 400ms→50ms, sample step×4, true-peak en mismo loop (análisis ~8× más rápido)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

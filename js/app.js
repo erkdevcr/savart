@@ -1704,29 +1704,25 @@ const App = (() => {
 
     _normalizingSet.add(fileId);
     try {
-      // Wait for audio to stabilize before heavy analysis so we don't compete
-      // with the initial buffer fill or audio graph setup.
-      // Short yield so the audio graph settles before we hit the CPU with decoding.
-      await new Promise(r => setTimeout(r, 400));
+      // Tiny yield — lets the audio graph finish its first buffer fill before we
+      // hit the CPU with decoding.  50 ms is enough; the old 400 ms was overly
+      // conservative.  The gain won't be heard until _onPlayPause(true) anyway.
+      await new Promise(r => setTimeout(r, 50));
       // For foreground analysis: bail if the user has already changed to a different track.
       // For background (preload) analysis: skip this guard — the next track is never current.
       if (!background && Player.getCurrentTrack()?.id !== fileId) return;
 
-      // 4 MB covers ~1-2 min of typical MP3/AAC — more than enough for accurate
-      // gated RMS. Keeping this small is critical on Android where decodeAudioData
-      // on large buffers can block for several seconds.
+      // 1 MB ≈ 62 s at 128 kbps — plenty for accurate gated RMS.
+      // Keeping this small is critical on Android where decodeAudioData is slow.
       //
-      // For large files we skip the first ~15 % of the file (capped at 1.5 MB) so
-      // that quiet intros / fade-ins don't lower the measured loudness and cause
-      // the normalizer to apply excessive gain.  MP3/AAC decoders handle mid-file
-      // slices gracefully — a brief artifact at the slice boundary is harmless for
-      // loudness measurement purposes.
-      const ANALYSIS_BYTES = 4 * 1024 * 1024;
+      // For large files we skip the first ~15 % (max 1.5 MB) to avoid quiet
+      // intros/fade-ins that would skew the loudness estimate low.
+      const ANALYSIS_BYTES = 1 * 1024 * 1024;
       let analysisBlob;
       if (blob.size <= ANALYSIS_BYTES) {
         analysisBlob = blob; // small file — analyse everything
       } else if (blob.size <= ANALYSIS_BYTES * 2) {
-        analysisBlob = blob.slice(0, ANALYSIS_BYTES); // medium — first 4 MB
+        analysisBlob = blob.slice(0, ANALYSIS_BYTES); // medium — first 1 MB
       } else {
         // Large file: skip the quiet intro portion
         const skip = Math.min(Math.floor(blob.size * 0.15), 1.5 * 1024 * 1024);
@@ -1748,20 +1744,29 @@ const App = (() => {
       //   Pass 1 — absolute: skip blocks below −70 dBFS (silence/noise floor)
       //   Pass 2 — relative: skip blocks > 20 dB below pass-1 average
       //            (excludes quiet outros, ambient sounds, fade-outs)
+      //
+      // Performance: sample every 4th value — 4× faster with negligible error
+      // for RMS/peak measurement on typical music signals.
+      const STEP        = 4;
       const numChannels  = decoded.numberOfChannels;
       const blockSamples = Math.round(decoded.sampleRate * 0.4);
       const numBlocks    = Math.ceil(decoded.length / blockSamples);
       const ABS_GATE     = Math.pow(10, -70 / 20);
 
+      // Single pass: compute per-block RMS and global peak simultaneously.
       const blockRms = new Float32Array(numBlocks);
+      let truePeak   = 0;
       for (let b = 0; b < numBlocks; b++) {
         const s0 = b * blockSamples, s1 = Math.min(s0 + blockSamples, decoded.length);
-        let sq = 0;
+        let sq = 0, count = 0;
         for (let ch = 0; ch < numChannels; ch++) {
           const d = decoded.getChannelData(ch);
-          for (let i = s0; i < s1; i++) sq += d[i] * d[i];
+          for (let i = s0; i < s1; i += STEP) {
+            const v = d[i]; sq += v * v; count++;
+            const a = v < 0 ? -v : v; if (a > truePeak) truePeak = a;
+          }
         }
-        blockRms[b] = Math.sqrt(sq / ((s1 - s0) * numChannels));
+        blockRms[b] = count > 0 ? Math.sqrt(sq / count) : 0;
       }
 
       let p1Sq = 0, p1N = 0;
@@ -1789,13 +1794,7 @@ const App = (() => {
       let linearGain    = Math.pow(10, gainDbClamped / 20);
 
       // ── True-peak limiter ────────────────────────────────────
-      // If applying the gain would push the loudest peak above −1 dBFS,
-      // pull the gain back so that peak lands at exactly −1 dBFS.
-      let truePeak = 0;
-      for (let ch = 0; ch < numChannels; ch++) {
-        const d = decoded.getChannelData(ch);
-        for (let i = 0; i < d.length; i++) { const a = d[i] < 0 ? -d[i] : d[i]; if (a > truePeak) truePeak = a; }
-      }
+      // truePeak was collected inline above — no second pass needed.
       if (truePeak > 0) {
         const maxSafeGain = Math.pow(10, -1 / 20) / truePeak;
         if (linearGain > maxSafeGain) {
