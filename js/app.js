@@ -1479,6 +1479,51 @@ const App = (() => {
     }
   }
 
+  /**
+   * Enable radio for a batch of songs and immediately trigger artist-based queue fills.
+   *
+   * - Single-artist content (album, folder):   one Drive search  → +25 songs.
+   * - Multi-artist content  (collection):      one Drive search per unique artist.
+   *
+   * Call AFTER _resetRadio() and AFTER Player.setQueue() so queue IDs are ready.
+   * The function is async but always called fire-and-forget from callers.
+   *
+   * @param {Object[]} songs  — the songs that were just queued
+   */
+  async function _activateRadioForSongs(songs) {
+    if (!songs?.length) return;
+
+    _radioModeActive = true;
+    _radioQueuedIds  = new Set(songs.map(s => s.id));
+
+    // Collect unique artists preserving first-occurrence order (case-insensitive dedup)
+    const seen    = new Set();
+    const artists = [];
+    for (const s of songs) {
+      const a   = (_guessArtistFromItem(s) || '').trim();
+      const key = a.toLowerCase();
+      if (a && !seen.has(key)) {
+        seen.add(key);
+        artists.push(a);
+      }
+    }
+
+    if (!artists.length) {
+      // No artist info yet (e.g. fresh folder with unscanned songs).
+      // _onBlobReady will trigger radio once the first track's metadata loads.
+      return;
+    }
+
+    // Set primary artist for future refill cycles
+    _radioArtist    = artists[0];
+    _radioTriggered = true; // prevent _onBlobReady from double-triggering
+
+    // Fire radio for each unique artist sequentially so _radioInFlight is respected
+    for (const artist of artists) {
+      await _triggerRadio(artist, /* triggerItemId= */ null).catch(() => {});
+    }
+  }
+
   /* ── Volume Normalizer ───────────────────────────────────── */
 
   /**
@@ -5405,16 +5450,13 @@ const App = (() => {
       }
 
     } else if (contextSongs?.length > 0) {
-      // Album detail (or any view that passes the full context list):
-      // queue = whole album in order, radio kicks in when ≤ 2 songs remain.
+      // Album / collection detail: queue = whole content in order,
+      // then radio appends +25 per unique artist.
       _resetRadio();
-      _radioModeActive = true;
-      // Pre-seed all album IDs so radio never re-adds them as new results
-      _radioQueuedIds  = new Set(contextSongs.map(s => s.id));
-      // Pre-seed artist so radio can start searching without waiting for AudD
-      _radioArtist     = _guessArtistFromItem(clickedSong) || null;
-      const startIdx   = contextSongs.findIndex(s => s.id === clickedSong.id);
+      const startIdx = contextSongs.findIndex(s => s.id === clickedSong.id);
+      contextSongs.forEach(s => _cacheItem(s));
       Player.setQueue(contextSongs, startIdx >= 0 ? startIdx : 0);
+      _activateRadioForSongs(contextSongs).catch(() => {});
 
     } else {
       // Search, History, Home, single-song Library clicks: one song → radio fills the rest
@@ -11079,7 +11121,11 @@ const App = (() => {
       const songs = all.filter(m => m.folderId === collection.folderId)
         .map(m => ({ id: m.id, name: m.name, displayName: m.displayName || m.name,
           artist: m.artist || '', thumbnailUrl: m.thumbnailUrl || null, folderId: m.folderId }));
-      if (songs.length) Player.setQueue(songs, 0);
+      if (!songs.length) return;
+      _resetRadio();
+      songs.forEach(s => _cacheItem(s));
+      Player.setQueue(songs, 0);
+      _activateRadioForSongs(songs).catch(() => {}); // +25 per artist (various artists)
     } catch (err) { console.error('[App] onCollectionPlay error:', err); }
   }
 
@@ -12223,9 +12269,10 @@ const App = (() => {
         UI.showToast(UI.t('toast_folder_no_songs'), 'error');
         return;
       }
-      _resetRadio(); // folder play = full queue, no radio
+      _resetRadio();
       playable.forEach(f => _cacheItem(f));
       Player.setQueue(playable, 0);
+      _activateRadioForSongs(playable).catch(() => {}); // +25 artist songs after folder
       UI.showToast(`▶ ${folder.name} · ${playable.length} ${UI.t('songs').toLowerCase()}`);
     } catch (err) {
       UI.showToast(UI.t('toast_folder_error'), 'error');
@@ -12274,6 +12321,7 @@ const App = (() => {
       _resetRadio();
       songs.forEach(s => _cacheItem(s));
       Player.setQueue(songs, 0);
+      _activateRadioForSongs(songs).catch(() => {}); // +25 artist songs after album
       UI.showToast(`▶ ${album.name} · ${songs.length} ${UI.t('songs').toLowerCase()}`);
     } catch (err) {
       UI.showToast(UI.t('toast_folder_error'), 'error');

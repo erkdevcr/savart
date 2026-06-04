@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.388';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.388 — Soundrop: pre-unlock sdAudio + silent auto-retry en cold-start
+const APP_VERSION  = '3.5.389';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.389 — radio siempre agrega +25 por artista en album/folder/colección
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
