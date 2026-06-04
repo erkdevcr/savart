@@ -34,12 +34,9 @@ const App = (() => {
   // and _onPlayPause calls _enrichTrack which would otherwise show "—".
   const _blobSizeCache = new Map();
 
-  /* ── Loading-spinner timer ───────────────────────────────── */
-  // Spinner shows immediately on every track change and stays visible for at
-  // least SPINNER_MIN_MS even if the track loads instantly from cache.
-  let _loadingTimer   = null;
-  let _loadingShownAt = 0;   // epoch ms when spinner was last shown; 0 = not shown
-  const SPINNER_MIN_MS = 250;
+  /* ── Loading-spinner ────────────────────────────────────── */
+  // Shows on every track change; hidden the moment audio actually starts.
+  let _loadingTimer = null;
 
   /* ── Home-data debounce ──────────────────────────────────── */
   // _loadHomeData is called from many places (sync events, track start, boot).
@@ -142,31 +139,12 @@ const App = (() => {
 
   function _startLoadingSpinner() {
     if (_loadingTimer !== null) { clearTimeout(_loadingTimer); _loadingTimer = null; }
-    _loadingShownAt = Date.now();
     UI.setPlayerLoading(true);
   }
 
   function _cancelLoadingSpinner() {
-    if (!_loadingShownAt) {
-      if (_loadingTimer !== null) { clearTimeout(_loadingTimer); _loadingTimer = null; }
-      UI.setPlayerLoading(false);
-      return;
-    }
-    const elapsed   = Date.now() - _loadingShownAt;
-    const remaining = SPINNER_MIN_MS - elapsed;
-    if (remaining <= 0) {
-      if (_loadingTimer !== null) { clearTimeout(_loadingTimer); _loadingTimer = null; }
-      _loadingShownAt = 0;
-      UI.setPlayerLoading(false);
-    } else {
-      // Still within minimum display window — schedule hide after remaining time
-      if (_loadingTimer !== null) clearTimeout(_loadingTimer);
-      _loadingTimer = setTimeout(() => {
-        _loadingTimer   = null;
-        _loadingShownAt = 0;
-        UI.setPlayerLoading(false);
-      }, remaining);
-    }
+    if (_loadingTimer !== null) { clearTimeout(_loadingTimer); _loadingTimer = null; }
+    UI.setPlayerLoading(false);
   }
 
   /* ── Boot ───────────────────────────────────────────────── */

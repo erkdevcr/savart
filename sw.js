@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.395';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.395 — isolation:isolate en pexp-art y mini-thumb: overlay siempre encima del cover
+const APP_VERSION  = '3.5.396';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.396 — spinner: ocultar exactamente cuando audio empieza (sin mínimo forzado)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
