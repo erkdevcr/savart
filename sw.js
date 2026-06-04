@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.402';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.402 — EQ/ctrl-sheet: fondo bg-elevated (#1C1C22) igual que cards de settings
+const APP_VERSION  = '3.5.403';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.403 — EQ: fondo #screen-eq bg-elevated (#1C1C22) igual que cards de settings
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

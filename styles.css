@@ -3998,7 +3998,7 @@ body.queue-open #mini-player { z-index: 65; }
   width: 100%;
   max-width: 440px;             /* constrain width on mobile */
   max-height: 100%;             /* 100% of padded container = vh − 96px */
-  background: var(--bg-surface) !important;
+  background: var(--bg-elevated) !important; /* #1C1C22 = rgb(28,28,34) */
   border-radius: var(--radius-lg) !important;
   border: none !important;
   margin: 0 !important;
