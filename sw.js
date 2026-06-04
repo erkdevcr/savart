@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.392';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.392 — radio multi-artista: +25 total mezclado, refill también
+const APP_VERSION  = '3.5.393';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.393 — APK: fix renovación token nativo (60min, _onRenewed, autoAttemptRenewal)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

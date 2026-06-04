@@ -100,7 +100,7 @@ const Auth = (() => {
         try {
           const refreshed = await GoogleAuth.refresh();
           if (refreshed?.accessToken) {
-            _saveToken(refreshed.accessToken, 55 * 60 * 1000);
+            _saveToken(refreshed.accessToken, 60 * 60 * 1000);
             console.log('[Auth] Native: refresh silencioso exitoso.');
             _onAutoLoginFail = null;
             _onReady?.();
@@ -122,7 +122,7 @@ const Auth = (() => {
       const token = user?.authentication?.accessToken;
       if (!token) throw new Error('No access token en la respuesta de sign-in');
 
-      _saveToken(token, 55 * 60 * 1000);
+      _saveToken(token, 60 * 60 * 1000);
       console.log('[Auth] Native: sign-in exitoso.');
       _onAutoLoginFail = null;
       _onReady?.();
@@ -167,8 +167,9 @@ const Auth = (() => {
       if (_renewTimeoutId) { clearTimeout(_renewTimeoutId); _renewTimeoutId = null; }
       if (refreshed?.accessToken) {
         _isSilentRenew = false;
-        _saveToken(refreshed.accessToken, 55 * 60 * 1000);
+        _saveToken(refreshed.accessToken, 60 * 60 * 1000);
         console.log('[Auth] Native: refresh en background exitoso.');
+        try { _onRenewed?.(); } catch (_) {}
       } else {
         throw new Error('No accessToken en la respuesta de refresh');
       }
@@ -479,7 +480,11 @@ const Auth = (() => {
    * Web mode only — native mode uses GoogleAuth.refresh() directly.
    */
   function autoAttemptRenewal() {
-    if (_isNative()) return;
+    // Modo nativo: reintenta refresh silencioso directo (no requiere gesto)
+    if (_isNative()) {
+      if (!_isSilentRenew) _nativeRefresh();
+      return;
+    }
     if (_isSilentRenew) return;
     _tryCreateClient();
     if (!_tokenClient) return;
