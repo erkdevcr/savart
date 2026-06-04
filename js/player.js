@@ -170,12 +170,15 @@ const Player = (() => {
 
     // Audio Focus events — handle notification sounds / calls gracefully
     let _preDuckVolume = 1.0;
+    let _duckedAudio   = null;  // element that was actually ducked — restored on gain
     let _pausedByFocus = false;
     let _fadeTimer     = null;
 
     // Smoothly animate audio volume from current to target over `ms` milliseconds
-    function _fadeVolume(target, ms) {
-      const audio = _getAudio();
+    // Pass an explicit `audioEl` to target a specific element (e.g. the one that was
+    // ducked), ignoring whatever _getAudio() would return at the time of the call.
+    function _fadeVolume(target, ms, audioEl) {
+      const audio = audioEl || _getAudio();
       if (!audio) return;
       if (_fadeTimer) { clearInterval(_fadeTimer); _fadeTimer = null; }
       const steps    = Math.max(1, Math.round(ms / 16)); // ~60fps
@@ -194,15 +197,20 @@ const Player = (() => {
     }
 
     plugin.addListener('audioFocusDuck', (e) => {
-      // Notification sound → fade down to 20% over 200ms, keep playing
+      // Notification sound → fade down to 20% over 200ms, keep playing.
+      // Save the exact element being ducked so audioFocusGain restores the
+      // right one even if the user switches Drive↔Soundrop in between.
       const audio = _getAudio();
-      if (audio) _preDuckVolume = audio.volume;
-      _fadeVolume(e.volume ?? 0.2, 200);
+      _duckedAudio   = audio;
+      _preDuckVolume = audio ? audio.volume : 1.0;
+      _fadeVolume(e.volume ?? 0.2, 200, audio);
     });
 
     plugin.addListener('audioFocusGain', () => {
-      // Restore volume with a gentle fade-in over 400ms
-      _fadeVolume(_preDuckVolume, 400);
+      // Restore the element that was ducked, not necessarily the current one.
+      const toRestore = _duckedAudio || _getAudio();
+      _duckedAudio = null;
+      _fadeVolume(_preDuckVolume, 400, toRestore);
       if (_pausedByFocus) {
         _pausedByFocus = false;
         play();
@@ -989,6 +997,11 @@ const Player = (() => {
       }
       // Ensure keepalive is running (guards automatic queue advance with screen off)
       _keepAliveStart();
+      // Defensive reset: if audioFocusDuck left _audio.volume below 1.0 and
+      // audioFocusGain never restored it (Android timing edge case), reset to
+      // full volume. If a duck is legitimately active, the OS will re-fire
+      // audioFocusDuck immediately and bring it back down.
+      if (_audio.volume < 1.0) _audio.volume = 1.0;
       // Set Media Session metadata before play so lock screen shows correct info
       _msSetMetadata(item);
       _msSetPlaybackState('playing');

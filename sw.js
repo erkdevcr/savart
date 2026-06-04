@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.403';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.403 — EQ: fondo #screen-eq bg-elevated (#1C1C22) igual que cards de settings
+const APP_VERSION  = '3.5.404';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.404 — Fix Drive volumen bajo en APK: audioFocusDuck/Gain rastrea elemento correcto, reset defensivo en play
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
