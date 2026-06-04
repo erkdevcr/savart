@@ -35,9 +35,11 @@ const App = (() => {
   const _blobSizeCache = new Map();
 
   /* ── Loading-spinner timer ───────────────────────────────── */
-  // We delay showing the spinner by 120ms to avoid a visual flash for
-  // cached (instantly loaded) tracks.
-  let _loadingTimer = null;
+  // Spinner shows immediately on every track change and stays visible for at
+  // least SPINNER_MIN_MS even if the track loads instantly from cache.
+  let _loadingTimer   = null;
+  let _loadingShownAt = 0;   // epoch ms when spinner was last shown; 0 = not shown
+  const SPINNER_MIN_MS = 250;
 
   /* ── Home-data debounce ──────────────────────────────────── */
   // _loadHomeData is called from many places (sync events, track start, boot).
@@ -139,16 +141,32 @@ const App = (() => {
   }
 
   function _startLoadingSpinner() {
-    _cancelLoadingSpinner();
-    _loadingTimer = setTimeout(() => {
-      UI.setPlayerLoading(true);
-      _loadingTimer = null;
-    }, 120);
+    if (_loadingTimer !== null) { clearTimeout(_loadingTimer); _loadingTimer = null; }
+    _loadingShownAt = Date.now();
+    UI.setPlayerLoading(true);
   }
 
   function _cancelLoadingSpinner() {
-    if (_loadingTimer !== null) { clearTimeout(_loadingTimer); _loadingTimer = null; }
-    UI.setPlayerLoading(false);
+    if (!_loadingShownAt) {
+      if (_loadingTimer !== null) { clearTimeout(_loadingTimer); _loadingTimer = null; }
+      UI.setPlayerLoading(false);
+      return;
+    }
+    const elapsed   = Date.now() - _loadingShownAt;
+    const remaining = SPINNER_MIN_MS - elapsed;
+    if (remaining <= 0) {
+      if (_loadingTimer !== null) { clearTimeout(_loadingTimer); _loadingTimer = null; }
+      _loadingShownAt = 0;
+      UI.setPlayerLoading(false);
+    } else {
+      // Still within minimum display window — schedule hide after remaining time
+      if (_loadingTimer !== null) clearTimeout(_loadingTimer);
+      _loadingTimer = setTimeout(() => {
+        _loadingTimer   = null;
+        _loadingShownAt = 0;
+        UI.setPlayerLoading(false);
+      }, remaining);
+    }
   }
 
   /* ── Boot ───────────────────────────────────────────────── */
@@ -872,16 +890,7 @@ const App = (() => {
   /* ── Player events ───────────────────────────────────────── */
 
   function _onTrackChange(track, index, total) {
-    // Reset normalizer to neutral immediately on every track change.
-    // The saved normalGain (if any) is applied a few ms later once the
-    // DB.getMeta read below completes. This guarantees no gain bleeds
-    // from one track into the next.
-    if (Player.getNormalizerEnabled?.()) {
-      Player.setNormalizerGain(1.0);
-      _updateNormValueDisplay(null);
-    }
-
-    // Show loading spinner (delayed 120ms to avoid flash for cached tracks)
+    // Show loading spinner immediately (min 250ms visible so it's always noticed)
     _startLoadingSpinner();
     // Initial sync display — uses in-memory Meta cache (may still show filename
     // if this track has never been parsed in this session). The DB read below
@@ -931,11 +940,10 @@ const App = (() => {
       // Heart button
       if (stillCurrent) UI.setHeartActive(!!dbMeta?.starred);
 
-      // Normalizer — apply cached gain immediately if available.
-      // If no cached gain yet, reset to 1.0 so this track plays at natural volume
-      // while _analyzeTrackLoudness runs in the background. Never inherit the
-      // previous track's gain — that causes all unanalyzed tracks to play too
-      // quiet (or too loud) if the prior track had a large correction applied.
+      // Normalizer — set gain as soon as DB.getMeta resolves (NOT earlier, so the
+      // previous track's audio keeps its correct gain while the new track loads).
+      // Apply the cached normalGain if available; otherwise reset to 1.0 so the
+      // new track starts at natural volume while analysis runs in the background.
       if (stillCurrent) {
         const normEnabled = Player.getNormalizerEnabled?.();
         if (normEnabled && typeof dbMeta?.normalGain === 'number') {

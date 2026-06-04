@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.393';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.393 — APK: fix renovación token nativo (60min, _onRenewed, autoAttemptRenewal)
+const APP_VERSION  = '3.5.394';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.394 — spinner siempre visible (250ms mín), gain no se resetea hasta DB.getMeta
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
