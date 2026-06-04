@@ -1313,7 +1313,33 @@ const App = (() => {
 
     _radioInFlight = true;
     try {
-      console.log(`[Radio] Searching Drive for artist: "${artist}"`);
+      console.log(`[Radio] Searching for artist: "${artist}"`);
+
+      // ── Step 0: Local DB lookup ────────────────────────────────
+      // Query IndexedDB for all songs scanned with this artist tag.
+      // This is fast, works offline, and covers the vast majority of
+      // the user's library (every Deep-Scanned song is here).
+      // Drive search (Step 1) supplements with any not-yet-scanned files.
+      const _normArtistEarly = (artist || '').normalize('NFC').toLowerCase()
+        .replace(/['''""".,/#!$%^&*;:{}=`~()[\]]/g, ' ').replace(/\s+/g, ' ').trim();
+      const dbAllMeta  = await DB.getAllMeta().catch(() => []);
+      const dbMatches  = dbAllMeta
+        .filter(m => {
+          const a = ((m.artist || '').split(';')[0].trim())
+            .normalize('NFC').toLowerCase()
+            .replace(/['''""".,/#!$%^&*;:{}=`~()[\]]/g, ' ').replace(/\s+/g, ' ').trim();
+          return a && a === _normArtistEarly && m.folderId;
+        })
+        .map(m => ({
+          id:          m.id,
+          name:        m.name         || m.id,
+          displayName: m.displayName  || m.name  || m.id,
+          artist:      m.artist       || '',
+          album:       m.album        || '',
+          thumbnailUrl:m.thumbnailUrl || null,
+          folderId:    m.folderId     || null,
+          mimeType:    m.mimeType     || 'audio/mpeg',
+        }));
 
       // ── Step 1: Drive full-text search by artist name ─────────
       const results = await Drive.searchFiles(artist);
@@ -1420,6 +1446,10 @@ const App = (() => {
         candidates.push(f);
       };
 
+      // ── Collect Step 0 DB matches first (verified artist tag) ──
+      dbMatches.forEach(f => _collect(f));
+
+      // ── Collect Step 1 Drive search results ───────────────────
       // Direct audio files: accept ONLY if the cached artist tag matches.
       // Never match by filename — a song title may mention another artist's name.
       results.files.forEach(f => {
@@ -5441,7 +5471,9 @@ const App = (() => {
         _resetRadio();
         if (allSongs.length > 0) {
           const startIdx = allSongs.findIndex(s => s.id === clickedSong.id);
+          allSongs.forEach(s => _cacheItem(s));
           Player.setQueue(allSongs, startIdx >= 0 ? startIdx : 0);
+          _activateRadioForSongs(allSongs).catch(() => {}); // +25 artist songs after folder
         } else {
           _radioModeActive = true;
           _radioQueuedIds  = new Set([clickedSong.id]);
