@@ -1680,7 +1680,7 @@ const App = (() => {
 
   /**
    * Analyze the loudness of a blob and store the normalization gain in DB.
-   * Uses RMS (Root Mean Square) over the full decoded audio. Target: -14 dBFS.
+   * Uses RMS (Root Mean Square) over the full decoded audio. Target: -16 dBFS.
    * Analysis runs in the background — never blocks playback.
    * @param {string} fileId
    * @param {Blob}   blob
@@ -1785,12 +1785,15 @@ const App = (() => {
       const rms = Math.sqrt(gSq / gN);
       if (rms === 0) return;
 
-      const TARGET_DB = -14;
+      const TARGET_DB = -16; // -16 dBFS ≈ Apple Music level (less aggressive than -14 Spotify)
       const dbRMS     = 20 * Math.log10(rms);
       const gainDb    = TARGET_DB - dbRMS;
 
-      // Clamp to ±12 dB
-      let gainDbClamped = Math.max(-12, Math.min(12, gainDb));
+      // Clamp: reduce up to −12 dB (loud tracks), boost up to +6 dB (quiet tracks).
+      // +6 dB cap prevents the normalizer from over-boosting dynamic recordings
+      // where the measured RMS is lower than the perceived loudness.
+      const MAX_BOOST_DB = 6;
+      let gainDbClamped = Math.max(-12, Math.min(MAX_BOOST_DB, gainDb));
       let linearGain    = Math.pow(10, gainDbClamped / 20);
 
       // ── True-peak limiter ────────────────────────────────────
@@ -1825,17 +1828,24 @@ const App = (() => {
    * @param {string} fileId
    * @param {number} linearGain
    */
+  // Maximum boost the normalizer will ever apply, in linear gain.
+  // Matches MAX_BOOST_DB in _analyzeTrackLoudness. Applying the cap here too
+  // ensures tracks whose normalGain was stored under the old +12 dB limit are
+  // silently capped without requiring re-analysis.
+  const _NORM_MAX_LINEAR = Math.pow(10, 6 / 20); // +6 dB
+
   function _applyNormalizerForTrack(fileId, linearGain) {
     const current = Player.getCurrentTrack();
     if (!current || current.id !== fileId) return;
+    const capped = Math.min(linearGain, _NORM_MAX_LINEAR);
     if (_trackLoading) {
       // Audio hasn't started yet — defer so the old song keeps its gain while loading.
       // _onPlayPause(true) will pick this up and apply it at the right moment.
-      _pendingNormGain = linearGain;
-      _updateNormValueDisplay(linearGain);
+      _pendingNormGain = capped;
+      _updateNormValueDisplay(capped);
     } else {
-      Player.setNormalizerGain(linearGain);
-      _updateNormValueDisplay(linearGain);
+      Player.setNormalizerGain(capped);
+      _updateNormValueDisplay(capped);
     }
   }
 
