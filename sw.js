@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.386';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.386 — pre-analiza normalGain del siguiente track durante preload
+const APP_VERSION  = '3.5.387';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.387 — context menu se cierra al hacer scroll
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

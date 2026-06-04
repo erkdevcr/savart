@@ -2408,19 +2408,20 @@ const UI = (() => {
     // Use capture phase so stopPropagation() in child handlers doesn't prevent closing.
     // rAF defers to next frame so the click that opened the menu doesn't immediately
     // re-trigger hideContextMenu.
-    // NOTE: no scroll-based dismiss — after login _loadHomeData() rewrites the DOM
-    // which can cause a browser scroll event that fires right after the rAF adds the
-    // scroll listener, immediately closing the freshly opened menu (one-time-after-login
-    // bug). The menu is position:fixed so scroll doesn't move it; the user can tap
-    // outside or select an item to dismiss.
+    // Scroll → dismiss with a 300 ms delay to skip the spurious scroll event that
+    // _loadHomeData() can trigger right after login when it rewrites the DOM.
     requestAnimationFrame(() => {
       document.addEventListener('click', hideContextMenu, { once: true, capture: true });
+      setTimeout(() => {
+        document.addEventListener('scroll', hideContextMenu, { once: true, capture: true });
+      }, 300);
     });
   }
 
   function hideContextMenu() {
     document.getElementById('context-menu')?.classList.remove('visible');
-    document.removeEventListener('click', hideContextMenu, { capture: true });
+    document.removeEventListener('click',  hideContextMenu, { capture: true });
+    document.removeEventListener('scroll', hideContextMenu, { capture: true });
   }
 
   /* ── Song edit modal ─────────────────────────────────────── */
