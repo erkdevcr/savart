@@ -14453,7 +14453,7 @@ const App = (() => {
       // Spinner state
       const origHTML = btn.innerHTML;
       btn.disabled   = true;
-      btn.innerHTML  = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="9" stroke-dasharray="28 56" stroke-dashoffset="0"/></svg> <span>Reseteando…</span>';
+      btn.innerHTML  = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="9" stroke-dasharray="28 56" stroke-dashoffset="0"/></svg> <span>${UI.t('settings_resetting_norm')}</span>`;
       if (hint) hint.style.display = '';
 
       try {
@@ -14465,13 +14465,13 @@ const App = (() => {
         btn.innerHTML = origHTML;
         btn.disabled  = false;
         if (hint) hint.style.display = 'none';
-        UI.showToast(`Gains reseteados (${count} canciones). Se re-analizarán al reproducirse.`, 'success');
+        UI.showToast(UI.t('settings_reset_norm_ok')(count), 'success');
       } catch (err) {
         console.error('[App] resetNormGains error:', err);
         btn.innerHTML = origHTML;
         btn.disabled  = false;
         if (hint) hint.style.display = 'none';
-        UI.showToast('Error al resetear gains', 'error');
+        UI.showToast(UI.t('settings_reset_norm_err'), 'error');
       }
     });
 

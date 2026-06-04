@@ -789,6 +789,20 @@ const Sync = (() => {
             merged.durationSec = item.durationSec;
           }
 
+          // normalGain / normalGainDb:
+          //   • If remote was bulk-cleared more recently (normalGainClearedAt), propagate the clear.
+          //   • Otherwise fill-only: take remote value if local doesn't have one yet.
+          const remoteClearedAt = item.normalGainClearedAt || 0;
+          const localClearedAt  = ex.normalGainClearedAt   || 0;
+          if (remoteClearedAt > localClearedAt) {
+            delete merged.normalGain;
+            delete merged.normalGainDb;
+            merged.normalGainClearedAt = remoteClearedAt;
+          } else if (!merged.normalGain && item.normalGain) {
+            merged.normalGain = item.normalGain;
+            if (item.normalGainDb !== undefined) merged.normalGainDb = item.normalGainDb;
+          }
+
           // Derive CAA URL if mbReleaseMbid present and still no cover URL.
           if (merged.mbReleaseMbid && !merged.thumbnailUrl) {
             merged.thumbnailUrl = `https://coverartarchive.org/release/${merged.mbReleaseMbid}/front-250`;
@@ -1046,6 +1060,8 @@ const Sync = (() => {
       'manualAt',                                   // LWW guard: timestamp of last manual edit
       'rescannedAt',                                // folder rescan timestamp (folder records)
       'durationSec',                                // audio duration — captured on first play
+      'normalGain', 'normalGainDb',                 // per-track loudness normalization gain
+      'normalGainClearedAt',                        // epoch ms when gains were last bulk-cleared
     ];
     // googleusercontent.com = Drive CDN thumbnailLinks — accessible in <img> without auth.
     // googleapis.com       = Drive API download endpoints — require Bearer token, skip those.
@@ -1087,6 +1103,8 @@ const Sync = (() => {
       'mbTried', 'auddTried', 'mbReleaseMbid',
       'manualAt', 'rescannedAt',
       'durationSec',
+      'normalGain', 'normalGainDb',
+      'normalGainClearedAt',
     ];
     const isExternalUrl = u => u && !u.startsWith('blob:') && u !== 'id3'
       && !u.includes('googleapis.com');
@@ -1637,6 +1655,20 @@ const Sync = (() => {
           // both devices converge to the same reading. Same rule as _applyRemote.
           if (item.durationSec > 0 && item.durationSec > (merged.durationSec || 0)) {
             merged.durationSec = item.durationSec;
+          }
+
+          // normalGain / normalGainDb:
+          //   • If remote was bulk-cleared more recently (normalGainClearedAt), propagate the clear.
+          //   • Otherwise fill-only: take remote value if local doesn't have one yet.
+          const remoteClearedAt = item.normalGainClearedAt || 0;
+          const localClearedAt  = ex.normalGainClearedAt   || 0;
+          if (remoteClearedAt > localClearedAt) {
+            delete merged.normalGain;
+            delete merged.normalGainDb;
+            merged.normalGainClearedAt = remoteClearedAt;
+          } else if (!merged.normalGain && item.normalGain) {
+            merged.normalGain = item.normalGain;
+            if (item.normalGainDb !== undefined) merged.normalGainDb = item.normalGainDb;
           }
 
           const changed = Object.keys(merged).some(k => merged[k] !== ex[k])

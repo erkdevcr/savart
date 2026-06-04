@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.405';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.405 — Normalizer target -16 → -14 dBFS
+const APP_VERSION  = '3.5.406';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.406 — Sync normalGain entre dispositivos; reset gains borra también Drive; traducción EN settings
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

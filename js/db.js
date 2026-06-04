@@ -262,6 +262,7 @@ const DB = (() => {
    * @returns {Promise<number>} number of records cleared
    */
   async function clearNormGains() {
+    const ts    = Date.now(); // timestamp so other devices know when gains were cleared
     const store = _tx('metadata', 'readwrite');
     const all   = await _promisify(store.getAll());
     if (!all?.length) return 0;
@@ -269,6 +270,7 @@ const DB = (() => {
     for (const record of all) {
       if ('normalGain' in record || 'normalGainDb' in record) {
         const { normalGain, normalGainDb, ...rest } = record; // eslint-disable-line no-unused-vars
+        rest.normalGainClearedAt = ts; // propagated via sync so other devices also clear
         await _promisify(store.put(rest));
         count++;
       }
