@@ -492,6 +492,14 @@ const Player = (() => {
     _initAudioGraph();
     _audioCtx?.resume().catch(() => {});
 
+    // Pre-unlock _sdAudio within the gesture context so play() succeeds even
+    // after the async getAudioLink() network call on Android WebView.
+    // (_sdActive guard prevents interference with an already-playing SD track.)
+    if (_sdAudio && !_sdActive) {
+      _sdAudio.play().catch(() => {});
+      _sdAudio.pause();
+    }
+
     _playCurrentTrack();
   }
 
@@ -805,7 +813,9 @@ const Player = (() => {
   /**
    * Load and play the track at _queueIndex.
    */
-  async function _playCurrentTrack() {
+  // _sdRetry=true means this is an automatic second attempt after a Soundrop cold-start
+  // failure.  Only one silent retry is allowed; if it also fails, the error toast shows.
+  async function _playCurrentTrack(_sdRetry = false) {
     if (_queueIndex < 0 || _queueIndex >= _queue.length) return;
 
     // Cancel any in-flight preload and active download so they don't compete
@@ -1040,10 +1050,19 @@ const Player = (() => {
 
       if (err.name === 'AuthError') {
         _onError({ type: 'auth', message: 'Sesión expirada. Renueva tu sesión.', item });
+      } else if (item?.isSoundrop && !_sdRetry) {
+        // Soundrop first failure — Cloudflare Worker was likely cold-starting.
+        // Silently retry the same track after 2 s (Worker is warm by then).
+        // Guard: only retry if the user hasn't switched to a different track.
+        console.log('[Player] Soundrop cold-start — silent retry in 2 s:', item.name);
+        setTimeout(() => {
+          if (_queue[_queueIndex]?.id === item.id) _playCurrentTrack(/* _sdRetry= */ true);
+        }, 2000);
       } else {
         _onError({ type: 'download', message: 'toast_download_error', item });
-        // Auto-skip after a short delay
-        setTimeout(() => next(), 1500);
+        // Drive tracks: auto-skip after a short delay.
+        // Soundrop: don't skip — the queue may contain only this one track.
+        if (!item?.isSoundrop) setTimeout(() => next(), 1500);
       }
     }
   }
