@@ -34,9 +34,14 @@ const App = (() => {
   // and _onPlayPause calls _enrichTrack which would otherwise show "—".
   const _blobSizeCache = new Map();
 
-  /* ── Loading-spinner ────────────────────────────────────── */
+  /* ── Loading-spinner & gain-deferral ────────────────────── */
   // Shows on every track change; hidden the moment audio actually starts.
-  let _loadingTimer = null;
+  // _trackLoading: true between _startLoadingSpinner() and _onPlayPause(true).
+  // _pendingNormGain: normalizer gain to apply when the new track starts playing
+  //   (deferred so the previous song keeps its correct gain while loading).
+  let _loadingTimer    = null;
+  let _trackLoading    = false;
+  let _pendingNormGain = null;
 
   /* ── Home-data debounce ──────────────────────────────────── */
   // _loadHomeData is called from many places (sync events, track start, boot).
@@ -139,6 +144,8 @@ const App = (() => {
 
   function _startLoadingSpinner() {
     if (_loadingTimer !== null) { clearTimeout(_loadingTimer); _loadingTimer = null; }
+    _trackLoading    = true;
+    _pendingNormGain = null; // discard any stale gain from a previous track change
     UI.setPlayerLoading(true);
   }
 
@@ -918,23 +925,18 @@ const App = (() => {
       // Heart button
       if (stillCurrent) UI.setHeartActive(!!dbMeta?.starred);
 
-      // Normalizer — set gain as soon as DB.getMeta resolves (NOT earlier, so the
-      // previous track's audio keeps its correct gain while the new track loads).
-      // Apply the cached normalGain if available; otherwise reset to 1.0 so the
-      // new track starts at natural volume while analysis runs in the background.
+      // Normalizer — queue the gain for the new track but do NOT apply it yet.
+      // It will be applied in _onPlayPause(true) so the previous song keeps its
+      // correct gain all the way until the new song's first sample is heard.
       if (stillCurrent) {
         const normEnabled = Player.getNormalizerEnabled?.();
         if (normEnabled && typeof dbMeta?.normalGain === 'number') {
-          Player.setNormalizerGain(dbMeta.normalGain);
+          _pendingNormGain = dbMeta.normalGain;
           _updateNormValueDisplay(dbMeta.normalGain);
-        } else if (normEnabled) {
-          // No cached gain yet — neutral until analysis completes.
-          Player.setNormalizerGain(1.0);
-          _updateNormValueDisplay(null);
         } else {
-          // Normalizer off — ensure gain is neutral.
-          Player.setNormalizerGain(1.0);
-          _updateNormValueDisplay(null);
+          // No cached gain yet (or normalizer off) — neutral when track starts.
+          _pendingNormGain = 1.0;
+          _updateNormValueDisplay(normEnabled ? null : null);
         }
       }
 
@@ -1089,7 +1091,17 @@ const App = (() => {
 
   function _onPlayPause(isPlaying) {
     // Cancel loading spinner the moment audio actually starts playing
-    if (isPlaying) _cancelLoadingSpinner();
+    if (isPlaying) {
+      _cancelLoadingSpinner();
+      // Apply the normalizer gain that was queued during loading.
+      // Done here (not in _onTrackChange) so the previous song keeps its
+      // correct gain right up until the new song's first sample is heard.
+      _trackLoading = false;
+      if (_pendingNormGain !== null) {
+        Player.setNormalizerGain(_pendingNormGain);
+        _pendingNormGain = null;
+      }
+    }
     // Body class drives EQ bar visibility across all views — setActiveSongRow reads it
     document.body.classList.toggle('audio-playing', !!isPlaying);
     const track = Player.getCurrentTrack();
@@ -1703,10 +1715,23 @@ const App = (() => {
       // 4 MB covers ~1-2 min of typical MP3/AAC — more than enough for accurate
       // gated RMS. Keeping this small is critical on Android where decodeAudioData
       // on large buffers can block for several seconds.
-      const MAX_ANALYSIS_BYTES = 4 * 1024 * 1024;
-      const analysisBlob = blob.size > MAX_ANALYSIS_BYTES
-        ? blob.slice(0, MAX_ANALYSIS_BYTES)
-        : blob;
+      //
+      // For large files we skip the first ~15 % of the file (capped at 1.5 MB) so
+      // that quiet intros / fade-ins don't lower the measured loudness and cause
+      // the normalizer to apply excessive gain.  MP3/AAC decoders handle mid-file
+      // slices gracefully — a brief artifact at the slice boundary is harmless for
+      // loudness measurement purposes.
+      const ANALYSIS_BYTES = 4 * 1024 * 1024;
+      let analysisBlob;
+      if (blob.size <= ANALYSIS_BYTES) {
+        analysisBlob = blob; // small file — analyse everything
+      } else if (blob.size <= ANALYSIS_BYTES * 2) {
+        analysisBlob = blob.slice(0, ANALYSIS_BYTES); // medium — first 4 MB
+      } else {
+        // Large file: skip the quiet intro portion
+        const skip = Math.min(Math.floor(blob.size * 0.15), 1.5 * 1024 * 1024);
+        analysisBlob = blob.slice(skip, skip + ANALYSIS_BYTES);
+      }
 
       // Decode into Float32 PCM via a temporary (silent) AudioContext
       const arrayBuf = await analysisBlob.arrayBuffer();
@@ -1804,8 +1829,15 @@ const App = (() => {
   function _applyNormalizerForTrack(fileId, linearGain) {
     const current = Player.getCurrentTrack();
     if (!current || current.id !== fileId) return;
-    Player.setNormalizerGain(linearGain);
-    _updateNormValueDisplay(linearGain);
+    if (_trackLoading) {
+      // Audio hasn't started yet — defer so the old song keeps its gain while loading.
+      // _onPlayPause(true) will pick this up and apply it at the right moment.
+      _pendingNormGain = linearGain;
+      _updateNormValueDisplay(linearGain);
+    } else {
+      Player.setNormalizerGain(linearGain);
+      _updateNormValueDisplay(linearGain);
+    }
   }
 
   /**

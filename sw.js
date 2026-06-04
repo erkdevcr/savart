@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.397';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.397 — spinner: _sdAudio play/pause solo dispara _onPlayPause cuando _sdActive es true (fix pre-unlock cancela spinner)
+const APP_VERSION  = '3.5.398';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.398 — gain: diferir hasta que audio comienza (_trackLoading/_pendingNormGain); loudness: analizar desde sector medio del archivo
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
