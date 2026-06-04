@@ -381,8 +381,8 @@ const Player = (() => {
     // The Soundrop worker URL supports CORS (fetch() works in the download flow).
     _sdAudio.crossOrigin  = 'anonymous';
 
-    _sdAudio.addEventListener('play',  () => { _onPlayPause(true);  _msSetPlaybackState('playing'); });
-    _sdAudio.addEventListener('pause', () => { _onPlayPause(false); _msSetPlaybackState('paused');  });
+    _sdAudio.addEventListener('play',  () => { if (_sdActive) { _onPlayPause(true);  _msSetPlaybackState('playing'); } });
+    _sdAudio.addEventListener('pause', () => { if (_sdActive) { _onPlayPause(false); _msSetPlaybackState('paused');  } });
     _sdAudio.addEventListener('ended',   _handleEnded);
     _sdAudio.addEventListener('error',   _handleAudioError);
     _sdAudio.addEventListener('timeupdate', () => {
