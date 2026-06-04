@@ -198,7 +198,8 @@ const App = (() => {
       onQueueChange:   _onQueueChange,
       onError:         _onPlayerError,
       onBlobReady:     _onBlobReady,
-      onFullBlobReady: _onFullBlobReady,    // fires when full file finishes downloading (fast-start)
+      onFullBlobReady:    _onFullBlobReady,    // fires when full file finishes downloading (fast-start)
+      onPreloadComplete:  _onPreloadComplete,  // fires when next-track preload is cached → pre-analyze loudness
       onBeforePlay:    _preScanBeforePlay,  // blocks audio until soft scan completes
       onDurationReady: _onDurationReady,    // fires on loadedmetadata with accurate duration
     });
@@ -869,6 +870,15 @@ const App = (() => {
   /* ── Player events ───────────────────────────────────────── */
 
   function _onTrackChange(track, index, total) {
+    // Reset normalizer to neutral immediately on every track change.
+    // The saved normalGain (if any) is applied a few ms later once the
+    // DB.getMeta read below completes. This guarantees no gain bleeds
+    // from one track into the next.
+    if (Player.getNormalizerEnabled?.()) {
+      Player.setNormalizerGain(1.0);
+      _updateNormValueDisplay(null);
+    }
+
     // Show loading spinner (delayed 120ms to avoid flash for cached tracks)
     _startLoadingSpinner();
     // Initial sync display — uses in-memory Meta cache (may still show filename
@@ -920,19 +930,19 @@ const App = (() => {
       if (stillCurrent) UI.setHeartActive(!!dbMeta?.starred);
 
       // Normalizer — apply cached gain immediately if available.
-      // If no cached gain yet, keep the previous track's gain playing (smooth
-      // transition) and only update the display to "—". The gain will be updated
-      // once _analyzeTrackLoudness completes for this track.
+      // If no cached gain yet, reset to 1.0 so this track plays at natural volume
+      // while _analyzeTrackLoudness runs in the background. Never inherit the
+      // previous track's gain — that causes all unanalyzed tracks to play too
+      // quiet (or too loud) if the prior track had a large correction applied.
       if (stillCurrent) {
         const normEnabled = Player.getNormalizerEnabled?.();
         if (normEnabled && typeof dbMeta?.normalGain === 'number') {
           Player.setNormalizerGain(dbMeta.normalGain);
           _updateNormValueDisplay(dbMeta.normalGain);
         } else if (normEnabled) {
-          // No cached gain for this track — keep previous gain active and show it
-          // (applies to SD tracks and Drive tracks not yet analyzed).
-          const activeGain = Player.getNormalizerGain?.() ?? 1.0;
-          _updateNormValueDisplay(activeGain);
+          // No cached gain yet — neutral until analysis completes.
+          Player.setNormalizerGain(1.0);
+          _updateNormValueDisplay(null);
         } else {
           // Normalizer off — ensure gain is neutral.
           Player.setNormalizerGain(1.0);
@@ -1483,13 +1493,15 @@ const App = (() => {
    * @param {Blob}    blob     – must be the full file (not a fast-start partial)
    * @param {boolean} [force]  – if true, re-analyze even if normalGain already exists in DB
    */
-  async function _analyzeTrackLoudness(fileId, blob, force = false) {
+  // background=true: skip the "is this still the current track?" guard — used
+  // when pre-analyzing the *next* track during preload (it is never the current track).
+  async function _analyzeTrackLoudness(fileId, blob, force = false, background = false) {
     // Skip if already in progress
     if (_normalizingSet.has(fileId)) return;
     const existing = await DB.getMeta(fileId).catch(() => null);
     if (!force && typeof existing?.normalGain === 'number') {
       // Already have a cached gain — just apply it if this is the current track
-      _applyNormalizerForTrack(fileId, existing.normalGain);
+      if (!background) _applyNormalizerForTrack(fileId, existing.normalGain);
       return;
     }
 
@@ -1497,13 +1509,16 @@ const App = (() => {
     try {
       // Wait for audio to stabilize before heavy analysis so we don't compete
       // with the initial buffer fill or audio graph setup.
-      await new Promise(r => setTimeout(r, 2000));
-      if (Player.getCurrentTrack()?.id !== fileId) return; // track changed — bail out
+      // Short yield so the audio graph settles before we hit the CPU with decoding.
+      await new Promise(r => setTimeout(r, 400));
+      // For foreground analysis: bail if the user has already changed to a different track.
+      // For background (preload) analysis: skip this guard — the next track is never current.
+      if (!background && Player.getCurrentTrack()?.id !== fileId) return;
 
-      // Analyze up to 15 MB from the start (covers full file for most MP3/AAC
-      // which are typically 4–12 MB; caps at 15 MB for large FLAC files).
-      // Always from byte 0: FLAC/M4A/OGG require the stream header.
-      const MAX_ANALYSIS_BYTES = 15 * 1024 * 1024;
+      // 4 MB covers ~1-2 min of typical MP3/AAC — more than enough for accurate
+      // gated RMS. Keeping this small is critical on Android where decodeAudioData
+      // on large buffers can block for several seconds.
+      const MAX_ANALYSIS_BYTES = 4 * 1024 * 1024;
       const analysisBlob = blob.size > MAX_ANALYSIS_BYTES
         ? blob.slice(0, MAX_ANALYSIS_BYTES)
         : blob;
@@ -1928,6 +1943,15 @@ const App = (() => {
    */
   function _onFullBlobReady(item, blob) {
     _analyzeTrackLoudness(item.id, blob, /* force= */ true).catch(() => {});
+  }
+
+  /**
+   * Called by Player after the next track's full blob is pre-downloaded and cached.
+   * Pre-analyzes loudness so normalGain is already in DB when the track starts —
+   * no reset-to-1.0 flash on track change.
+   */
+  function _onPreloadComplete(item, blob) {
+    _analyzeTrackLoudness(item.id, blob, /* force= */ false, /* background= */ true).catch(() => {});
   }
 
   /**

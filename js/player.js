@@ -72,6 +72,7 @@ const Player = (() => {
   let _onError       = null;  // (error) => void
   let _onBlobReady      = null;  // (driveItem, blob) => void — fires after blob is fetched & cached
   let _onFullBlobReady  = null;  // (driveItem, blob) => void — fires after full file is downloaded (fast-start only)
+  let _onPreloadComplete = null; // (driveItem, blob) => void — fires after next-track preload is cached
   let _onBeforePlay     = null;  // async (driveItem) => void — awaited before blob fetch (e.g. soft scan)
   let _onDurationReady  = null;  // (driveItem, durationSec) => void — fires on loadedmetadata with real duration
 
@@ -88,16 +89,17 @@ const Player = (() => {
    * Call once on app startup.
    * @param {Object} callbacks
    */
-  function init({ onTrackChange, onPlayPause, onProgress, onQueueChange, onError, onBlobReady, onFullBlobReady, onBeforePlay, onDurationReady } = {}) {
+  function init({ onTrackChange, onPlayPause, onProgress, onQueueChange, onError, onBlobReady, onFullBlobReady, onBeforePlay, onDurationReady, onPreloadComplete } = {}) {
     _onTrackChange    = onTrackChange    || (() => {});
     _onPlayPause      = onPlayPause      || (() => {});
     _onProgress       = onProgress       || (() => {});
     _onQueueChange    = onQueueChange    || (() => {});
     _onError          = onError          || (() => {});
     _onBlobReady      = onBlobReady      || null;
-    _onFullBlobReady  = onFullBlobReady  || null;
-    _onBeforePlay     = onBeforePlay     || null;
-    _onDurationReady  = onDurationReady  || null;
+    _onFullBlobReady   = onFullBlobReady   || null;
+    _onBeforePlay      = onBeforePlay      || null;
+    _onDurationReady   = onDurationReady   || null;
+    _onPreloadComplete = onPreloadComplete || null;
 
     _audio = new Audio();
     _audio.preload    = 'auto';
@@ -1170,6 +1172,9 @@ const Player = (() => {
       if (!ctrl.signal.aborted) {
         await DB.setCachedBlob(nextItem.id, blob, nextItem.mimeType);
         console.log('[Player] Pre-download complete:', nextItem.name);
+        if (_onPreloadComplete) {
+          try { _onPreloadComplete(nextItem, blob); } catch (e) { console.warn('[Player] onPreloadComplete error:', e); }
+        }
       }
     } catch (err) {
       if (err.name !== 'AbortError') {
