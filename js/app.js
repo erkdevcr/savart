@@ -1785,7 +1785,7 @@ const App = (() => {
       const rms = Math.sqrt(gSq / gN);
       if (rms === 0) return;
 
-      const TARGET_DB = -16; // -16 dBFS ≈ Apple Music level (less aggressive than -14 Spotify)
+      const TARGET_DB = -14; // -14 dBFS ≈ Spotify / AES recommended level
       const dbRMS     = 20 * Math.log10(rms);
       const gainDb    = TARGET_DB - dbRMS;
 
