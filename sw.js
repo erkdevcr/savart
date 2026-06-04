@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.394';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.394 — spinner siempre visible (250ms mín), gain no se resetea hasta DB.getMeta
+const APP_VERSION  = '3.5.395';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.395 — isolation:isolate en pexp-art y mini-thumb: overlay siempre encima del cover
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

@@ -300,6 +300,7 @@ img { display: block; }
   flex-shrink: 0;
   overflow: hidden;
   position: relative;
+  isolation: isolate; /* stacking context → overlay always above cover img */
 }
 
 #mini-player .mini-thumb img {
@@ -2922,6 +2923,7 @@ img { display: block; }
   background: var(--bg-elevated);
   overflow: hidden;
   position: relative;
+  isolation: isolate; /* stacking context → overlay always above cover img */
   box-shadow: 0 24px 64px rgba(0,0,0,0.5);
 }
 
