@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.391';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.391 — radio usa DB local primero para encontrar todas las canciones del artista
+const APP_VERSION  = '3.5.392';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.392 — radio multi-artista: +25 total mezclado, refill también
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

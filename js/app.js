@@ -65,7 +65,8 @@ const App = (() => {
   // Automatically finds more songs by the same artist in Drive and appends
   // them to the queue after all recognition passes complete (ID3→Last.fm→AudD).
   let _radioModeActive = false;  // true = radio is running
-  let _radioArtist     = null;   // artist name being radiated
+  let _radioArtist     = null;   // primary artist name (single-artist radio / refills)
+  let _radioArtists    = [];     // all unique artists (multi-artist / collection radio)
   let _radioInFlight   = false;  // prevents concurrent Drive searches
   let _radioQueuedIds  = new Set(); // IDs ever added via radio (cross-refill dedup)
   let _radioTriggered  = false;  // true after the initial Drive search fires once
@@ -131,6 +132,7 @@ const App = (() => {
   function _resetRadio() {
     _radioModeActive = false;
     _radioArtist     = null;
+    _radioArtists    = [];
     _radioInFlight   = false;
     _radioQueuedIds  = new Set();
     _radioTriggered  = false;
@@ -1145,11 +1147,15 @@ const App = (() => {
       _prefetchQueueCovers(queue).catch(() => {});
     }
 
-    // Radio refill: if the queue is running low, fetch another batch for the artist
-    if (_radioModeActive && _radioArtist && !_radioInFlight) {
+    // Radio refill: if the queue is running low, fetch another batch
+    if (_radioModeActive && !_radioInFlight) {
       const remaining = queue.length - index - 1;
       if (remaining <= 2) {
-        _triggerRadio(_radioArtist, null).catch(() => {});
+        if (_radioArtists.length > 1) {
+          _triggerRadioForArtists(_radioArtists, null).catch(() => {});
+        } else if (_radioArtist) {
+          _triggerRadio(_radioArtist, null).catch(() => {});
+        }
       }
     }
 
@@ -1510,13 +1516,14 @@ const App = (() => {
   }
 
   /**
-   * Enable radio for a batch of songs and immediately trigger artist-based queue fills.
+   * Enable radio for a batch of songs and immediately trigger queue fills.
    *
-   * - Single-artist content (album, folder):   one Drive search  → +25 songs.
-   * - Multi-artist content  (collection):      one Drive search per unique artist.
+   * - Single-artist (album, folder): calls _triggerRadio → +25 from that artist.
+   * - Multi-artist  (collection):    calls _triggerRadioForArtists → +25 TOTAL
+   *                                  mixed across all unique artists.
    *
    * Call AFTER _resetRadio() and AFTER Player.setQueue() so queue IDs are ready.
-   * The function is async but always called fire-and-forget from callers.
+   * Always called fire-and-forget.
    *
    * @param {Object[]} songs  — the songs that were just queued
    */
@@ -1526,31 +1533,148 @@ const App = (() => {
     _radioModeActive = true;
     _radioQueuedIds  = new Set(songs.map(s => s.id));
 
-    // Collect unique artists preserving first-occurrence order (case-insensitive dedup)
+    // Collect unique artists (case-insensitive dedup, preserve order)
     const seen    = new Set();
     const artists = [];
     for (const s of songs) {
       const a   = (_guessArtistFromItem(s) || '').trim();
       const key = a.toLowerCase();
-      if (a && !seen.has(key)) {
-        seen.add(key);
-        artists.push(a);
-      }
+      if (a && !seen.has(key)) { seen.add(key); artists.push(a); }
     }
 
     if (!artists.length) {
-      // No artist info yet (e.g. fresh folder with unscanned songs).
-      // _onBlobReady will trigger radio once the first track's metadata loads.
+      // No artist info yet — _onBlobReady triggers when first track metadata loads
       return;
     }
 
-    // Set primary artist for future refill cycles
     _radioArtist    = artists[0];
-    _radioTriggered = true; // prevent _onBlobReady from double-triggering
+    _radioArtists   = artists;
+    _radioTriggered = true; // prevent _onBlobReady double-trigger
 
-    // Fire radio for each unique artist sequentially so _radioInFlight is respected
-    for (const artist of artists) {
-      await _triggerRadio(artist, /* triggerItemId= */ null).catch(() => {});
+    if (artists.length > 1) {
+      await _triggerRadioForArtists(artists, null).catch(() => {});
+    } else {
+      await _triggerRadio(artists[0], null).catch(() => {});
+    }
+  }
+
+  /**
+   * Multi-artist radio: collect candidates from ALL artists combined, shuffle,
+   * append +25 total. Used for collections with various artists, and for refills.
+   *
+   * @param {string[]}    artists       — list of artist names
+   * @param {string|null} triggerItemId — if non-null, aborts if no longer current track
+   */
+  async function _triggerRadioForArtists(artists, triggerItemId) {
+    if (!_radioModeActive || !artists?.length || _radioInFlight) return;
+    if (triggerItemId !== null) {
+      const current = Player.getCurrentTrack();
+      if (!current || current.id !== triggerItemId) return;
+    }
+
+    _radioInFlight = true;
+    const label = artists.length <= 2
+      ? artists.join(', ')
+      : `${artists[0]} +${artists.length - 1}`;
+    console.log(`[Radio] Multi-artist search: ${artists.join(', ')}`);
+
+    try {
+      const _normStr = s => (s || '')
+        .normalize('NFC').toLowerCase()
+        .replace(/['''""".,/#!$%^&*;:{}=`~()[\]]/g, ' ')
+        .replace(/\s+/g, ' ').trim();
+
+      const normArtists    = new Set(artists.map(a => _normStr(a)));
+      const _matchesAny    = a => normArtists.has(_normStr((a || '').split(';')[0].trim()));
+
+      const { queue } = Player.getQueue();
+      const blocked = triggerItemId !== null
+        ? new Set([...queue.map(q => q.id), ..._radioQueuedIds])
+        : new Set(queue.map(q => q.id));
+
+      const _normTitle = name => (name || '')
+        .replace(/\.[^.]+$/, '')
+        .normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .toLowerCase()
+        .replace(/^\d+[\s.\-_]+/, '')
+        .replace(/\s*[\(\[]\s*(?:live|en vivo|acoustic|acustico|remaster(?:ed)?|version|versión|edition|edición|demo|instrumental|radio\s*edit|feat\.?|ft\.?|con\s+|with\s+)[^\)\]]*[\)\]]\s*/gi, '')
+        .replace(/['''""".,/#!$%^&*;:{}=`~()[\]]/g, ' ')
+        .replace(/\s+/g, ' ').trim();
+
+      const _seenTitles = new Set();
+      for (const id of blocked) {
+        const qi = queue.find(q => q.id === id) || _itemCache.get(id);
+        if (qi) { const t = _normTitle(qi.displayName || qi.name); if (t) _seenTitles.add(t); }
+      }
+
+      const candidates = [];
+      const seenIds    = new Set();
+      const _collect   = f => {
+        if (seenIds.has(f.id) || blocked.has(f.id) || !isPlayable(f.mimeType)) return;
+        const normT = _normTitle(f.displayName || f.name);
+        if (normT && _seenTitles.has(normT)) return;
+        seenIds.add(f.id);
+        if (normT) _seenTitles.add(normT);
+        candidates.push(f);
+      };
+
+      // ── Step 0: DB lookup — all scanned songs for any of the artists ──────
+      const dbAll = await DB.getAllMeta().catch(() => []);
+      dbAll
+        .filter(m => _matchesAny(m.artist) && m.folderId)
+        .forEach(m => _collect({
+          id: m.id, name: m.name || m.id, displayName: m.displayName || m.name || m.id,
+          artist: m.artist || '', album: m.album || '', thumbnailUrl: m.thumbnailUrl || null,
+          folderId: m.folderId || null, mimeType: m.mimeType || 'audio/mpeg',
+        }));
+
+      // ── Step 1: Drive search per artist (finds unscanned songs) ──────────
+      for (const artist of artists) {
+        try {
+          const _normA   = _normStr(artist);
+          const results  = await Drive.searchFiles(artist);
+          const _isCachedFor = f => {
+            const meta = (typeof Meta !== 'undefined') ? Meta.getCached(f.id) : null;
+            const a    = meta?.artist || _itemCache.get(f.id)?.artist || f.artist || null;
+            return a ? _normStr(a.split(';')[0].trim()) === _normA : false;
+          };
+          results.files.forEach(f => { if (isPlayable(f.mimeType) && _isCachedFor(f)) _collect(f); });
+
+          const artistFolders = results.folders
+            .filter(f => { const n = _normStr(f.name); return n === _normA || n.startsWith(_normA + ' ') || n.startsWith(_normA + '-') || n.includes(' ' + _normA); })
+            .slice(0, 2);
+          const level1 = await Promise.allSettled(artistFolders.map(f => Drive.listFolderAll(f.id)));
+          const albumFolders = [];
+          for (const r of level1) {
+            if (r.status !== 'fulfilled') continue;
+            r.value.files.forEach(_collect);
+            albumFolders.push(...r.value.folders);
+          }
+          const level2 = await Promise.allSettled(albumFolders.slice(0, 4).map(f => Drive.listFolderAll(f.id)));
+          for (const r of level2) { if (r.status === 'fulfilled') r.value.files.forEach(_collect); }
+        } catch (_) {}
+      }
+
+      if (!candidates.length) {
+        console.log(`[Radio] No new songs found for: ${artists.join(', ')}`);
+        return;
+      }
+
+      // Shuffle + take 25 total (mixed across all artists)
+      for (let i = candidates.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+      }
+      const toAdd = candidates.slice(0, 25);
+      toAdd.forEach(f => { _cacheItem(f); _radioQueuedIds.add(f.id); });
+      Player.appendToQueue(toAdd);
+      UI.showToast(`Radio · ${label} · +${toAdd.length}`, 'default');
+      console.log(`[Radio] ✓ ${toAdd.length} songs queued for: ${artists.join(', ')}`);
+
+    } catch (err) {
+      console.warn('[Radio] Multi-artist error:', err);
+    } finally {
+      _radioInFlight = false;
     }
   }
 
