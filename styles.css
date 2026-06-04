@@ -3803,7 +3803,7 @@ body.queue-open #mini-player { z-index: 65; }
 .ctrl-sheet-card {
   position: relative;    /* sits above backdrop */
   width: 100%;
-  background: var(--bg-surface);
+  background: var(--bg-elevated); /* #1C1C22 — matches settings cards */
   border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   padding: 20px 24px 44px;
   display: flex;
