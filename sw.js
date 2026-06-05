@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.406';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.406 — Sync normalGain entre dispositivos; reset gains borra también Drive; traducción EN settings
+const APP_VERSION  = '3.5.407';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.407 — Fix: librería se refresca al navegar a ella si sync completó fuera de tab
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

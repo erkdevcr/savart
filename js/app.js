@@ -484,7 +484,8 @@ const App = (() => {
           _restoreSettings();
           _loadHomeData();
           const view = UI.getCurrentView();
-          if (view === 'library') _setLibTab(_currentLibTab || 'albums');
+          if (view === 'library') { _setLibTab(_currentLibTab || 'albums'); _libStale = false; } // [STALE-FIX]
+          else { _libStale = true; } // [STALE-FIX] user not on Library — refresh on next visit
           // Start live 3-second polling (Last-Write-Wins)
           Sync.startLiveSync(_onSyncDataChanged);
         }).catch(() => {}).finally(() => {
@@ -530,6 +531,9 @@ const App = (() => {
       if (view === 'library' && !_libInDetail) {
         if (_currentLibTab === 'albums')  _loadAlbums();
         if (_currentLibTab === 'artists') _loadArtists();
+        _libStale = false; // [STALE-FIX]
+      } else {
+        _libStale = true; // [STALE-FIX] user not on Library — refresh on next visit
       }
       // Also refresh home cards (top-played, recents may show stale covers)
       _loadHomeData({ debounce: true });
@@ -6147,6 +6151,10 @@ const App = (() => {
   let _libInDetail    = false;       // true while showing an artist/album drill-down
   let _libDetailRestoreFn = null;    // restores detail view when user nav Home → Library
   let _libScrollBeforeDetail = 0;    // .lib-detail scrollTop saved before drill-down
+  // [STALE-FIX] true = library render is behind IDB (sync completed while user wasn't on Library).
+  // Set true on boot and whenever metadata sync finishes off-tab. Cleared on next Library visit.
+  // To revert: remove this line + the 3 _libStale references below.
+  let _libStale = true;
   const _libDetailPane = () => document.querySelector('#screen-library .lib-detail');
 
   /**
@@ -12545,6 +12553,12 @@ const App = (() => {
     }
     UI.showView('library');
     UI.updateSearchChipCounts(null);
+    // [STALE-FIX] If sync completed while user was on another tab, re-render now.
+    // To revert: remove this block (4 lines).
+    if (_libStale && !_libInDetail) {
+      _libStale = false;
+      _setLibTab(_currentLibTab || 'albums');
+    }
   }
 
   async function onGoToAlbum(song) {
