@@ -606,6 +606,22 @@ const Drive = (() => {
     return await res.json();
   }
 
+  /* ── trashFile ──────────────────────────────────────────── */
+
+  /**
+   * Move a file or folder to Drive trash.
+   * Safer than permanent delete — user can recover from Drive trash.
+   * @param {string} fileId
+   */
+  async function trashFile(fileId) {
+    const url = `${CONFIG.API_BASE}/files/${encodeURIComponent(fileId)}?fields=id`;
+    await _fetch(url, {
+      method:  'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ trashed: true }),
+    });
+  }
+
   /* ── Expose ─────────────────────────────────────────────── */
   return {
     listFolder,
@@ -622,6 +638,7 @@ const Drive = (() => {
     findOrCreateFolder,
     uploadFile,
     updateFileMeta,
+    trashFile,
     AuthError,
     DriveError,
   };

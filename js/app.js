@@ -12204,8 +12204,45 @@ const App = (() => {
     if (nameChanged)   dbUpdate.name     = newName;
     await DB.setMeta(songId, dbUpdate);
 
+    // Clean up empty folders left behind after the move (cascade up, never touch Soundrop root)
+    if (folderChanged && oldFolderId) {
+      _cleanEmptySoundropFolders(oldFolderId, soundropRootId).catch(() => {});
+    }
+
     console.log(`[App] Soundrop reorganized: "${newName}" → ${artist || '(root)'}/${album || ''}`);
     UI.showToast(`📁 ${newName}`, 'success');
+  }
+
+  /**
+   * Trash any empty folders left behind after a Soundrop reorganization.
+   * Walks up the folder chain (album → artist), stopping before soundropRootId.
+   * Non-fatal — errors are silently ignored.
+   * @param {string} folderId      — folder to check first
+   * @param {string} soundropRootId — stop here, never trash this
+   */
+  async function _cleanEmptySoundropFolders(folderId, soundropRootId) {
+    for (let depth = 0; depth < 2; depth++) {  // max 2 levels: album + artist
+      if (!folderId || folderId === soundropRootId) return;
+
+      // Get parent BEFORE potentially trashing (need it for the next iteration)
+      const info = await Drive.getFileInfo(folderId).catch(() => null);
+      const parentId = info?.parents?.[0] || null;
+
+      // Check if folder is empty
+      const page = await Drive.listFolder(folderId).catch(() => null);
+      const isEmpty = page && page.folders.length === 0 && page.files.length === 0;
+
+      if (!isEmpty) return; // stop — folder has content, nothing to clean
+
+      // Trash the empty folder and remove from local DB
+      await Drive.trashFile(folderId);
+      DB.setMeta(folderId, { id: folderId, deletedAt: Date.now() }).catch(() => {});
+      console.log('[App] Soundrop cleanup: trashed empty folder', folderId, info?.name);
+
+      // Move up to parent for next iteration
+      if (!parentId || parentId === soundropRootId) return;
+      folderId = parentId;
+    }
   }
 
   /**
