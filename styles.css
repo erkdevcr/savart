@@ -5842,6 +5842,13 @@ body.queue-open #mini-player { z-index: 65; }
   min-width: 48px;
   text-align: right;
 }
+.eq-norm-sep {
+  color: var(--text-muted);
+  opacity: 0.3;
+  font-size: 14px;
+  margin: 0 4px;
+  flex: none;
+}
 
 /* Custom presets section wrapper */
 .eq-custom-section {
