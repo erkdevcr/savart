@@ -5528,6 +5528,17 @@ const App = (() => {
       // Runs in background — no UI blocking, no MusicBrainz/Last.fm/AudD calls.
       _softScanFolder(folder.id, result.files).catch(() => {});
 
+      // If this is the Soundrop root, deep-clean empty subfolders in the background.
+      // Runs with a short delay so any in-flight Drive moves have time to propagate.
+      if (folder.name?.trim().toLowerCase() === 'soundrop') {
+        setTimeout(() => {
+          _deepCleanSoundropFolders(folder.id).then(() => {
+            // Refresh the folder view if we're still on it, so trashed folders vanish
+            if (_browseFolderId === folder.id) _openFolder(folder, false);
+          }).catch(() => {});
+        }, 2000);
+      }
+
       // Add to recents
       DB.addRecent({
         id:   folder.id,
