@@ -12100,9 +12100,7 @@ const App = (() => {
     // Soundrop folder tree, regardless of any saved flag. This covers songs saved
     // before soundropSaved was introduced and songs synced from other devices.
     if (patch.artist || patch.album || patch.displayName) {
-      console.log('[App] onSongEdit — checking Soundrop. folderId:', existingMeta?.folderId, 'soundropSaved:', existingMeta?.soundropSaved);
       _isInSoundropFolder(existingMeta?.folderId).then(inSoundrop => {
-        console.log('[App] _isInSoundropFolder result:', inSoundrop);
         if (inSoundrop) {
           _reorganizeSoundropFile(songId, existingMeta, patch).catch(err => {
             console.warn('[App] Soundrop reorganize failed:', err?.message);
@@ -12121,7 +12119,7 @@ const App = (() => {
    * @returns {Promise<boolean>}
    */
   async function _isInSoundropFolder(folderId) {
-    if (!folderId) { console.log('[App] _isInSoundropFolder: folderId is null/undefined'); return false; }
+    if (!folderId) return false;
     const canDrive = typeof Drive !== 'undefined' && typeof Auth !== 'undefined' && Auth.getValidToken?.();
     for (let depth = 0; depth < 3; depth++) {
       // 1. Try local DB first
@@ -12135,16 +12133,12 @@ const App = (() => {
       //       (parentId missing = folder was stored without its parent, e.g. from an old scan)
       const needsDrive = canDrive && (!name || (!parentId && (name || '').trim().toLowerCase() !== 'soundrop'));
       if (needsDrive) {
-        console.log('[App] _isInSoundropFolder depth', depth, '— Drive.getFileInfo for', folderId, '(name:', name, 'parentId:', parentId, ')');
         const info = await Drive.getFileInfo(folderId).catch(() => null);
-        console.log('[App] _isInSoundropFolder Drive result:', info);
         if (!info) return false;
         name     = info.name         || name || null;
         parentId = info.parents?.[0] || null;
         // Update DB with the real parentId so future calls are local
         DB.setMeta(folderId, { id: folderId, name, folderId: parentId || undefined }).catch(() => {});
-      } else {
-        console.log('[App] _isInSoundropFolder depth', depth, '— DB:', { folderId, name, parentId });
       }
 
       if (!name) return false;
@@ -12204,44 +12198,52 @@ const App = (() => {
     if (nameChanged)   dbUpdate.name     = newName;
     await DB.setMeta(songId, dbUpdate);
 
-    // Clean up empty folders left behind after the move (cascade up, never touch Soundrop root)
-    if (folderChanged && oldFolderId) {
-      _cleanEmptySoundropFolders(oldFolderId, soundropRootId).catch(() => {});
-    }
-
     console.log(`[App] Soundrop reorganized: "${newName}" → ${artist || '(root)'}/${album || ''}`);
     UI.showToast(`📁 ${newName}`, 'success');
+
+    // Deep-clean after a short delay so Drive has time to propagate the move.
+    // Scans the whole Soundrop tree — catches both the folder just vacated AND
+    // any pre-existing empty folders from earlier reorganizations.
+    setTimeout(() => {
+      _deepCleanSoundropFolders(soundropRootId).catch(() => {});
+    }, 3000);
   }
 
   /**
-   * Trash any empty folders left behind after a Soundrop reorganization.
-   * Walks up the folder chain (album → artist), stopping before soundropRootId.
-   * Non-fatal — errors are silently ignored.
-   * @param {string} folderId      — folder to check first
-   * @param {string} soundropRootId — stop here, never trash this
+   * Scan the entire Soundrop folder tree and trash any empty subfolders.
+   * Walks two levels deep (artist → album). Safe: never touches soundropRootId itself.
+   * Called after reorganization (with a delay) so Drive API propagation is complete.
+   * Non-fatal — all errors silently ignored.
+   * @param {string} soundropRootId
    */
-  async function _cleanEmptySoundropFolders(folderId, soundropRootId) {
-    for (let depth = 0; depth < 2; depth++) {  // max 2 levels: album + artist
-      if (!folderId || folderId === soundropRootId) return;
+  async function _deepCleanSoundropFolders(soundropRootId) {
+    if (!soundropRootId) return;
 
-      // Get parent BEFORE potentially trashing (need it for the next iteration)
-      const info = await Drive.getFileInfo(folderId).catch(() => null);
-      const parentId = info?.parents?.[0] || null;
+    // List artist-level folders
+    const rootPage = await Drive.listFolder(soundropRootId).catch(() => null);
+    if (!rootPage) return;
 
-      // Check if folder is empty
-      const page = await Drive.listFolder(folderId).catch(() => null);
-      const isEmpty = page && page.folders.length === 0 && page.files.length === 0;
+    for (const artistFolder of rootPage.folders) {
+      // List album-level folders inside this artist
+      const artistPage = await Drive.listFolder(artistFolder.id).catch(() => null);
+      if (!artistPage) continue;
 
-      if (!isEmpty) return; // stop — folder has content, nothing to clean
+      // Trash empty album-level folders
+      for (const albumFolder of artistPage.folders) {
+        const albumPage = await Drive.listFolder(albumFolder.id).catch(() => null);
+        if (!albumPage) continue;
+        if (albumPage.folders.length === 0 && albumPage.files.length === 0) {
+          await Drive.trashFile(albumFolder.id).catch(() => {});
+          DB.setMeta(albumFolder.id, { id: albumFolder.id, deletedAt: Date.now() }).catch(() => {});
+        }
+      }
 
-      // Trash the empty folder and remove from local DB
-      await Drive.trashFile(folderId);
-      DB.setMeta(folderId, { id: folderId, deletedAt: Date.now() }).catch(() => {});
-      console.log('[App] Soundrop cleanup: trashed empty folder', folderId, info?.name);
-
-      // Move up to parent for next iteration
-      if (!parentId || parentId === soundropRootId) return;
-      folderId = parentId;
+      // Re-check artist folder after potential album deletions
+      const artistPage2 = await Drive.listFolder(artistFolder.id).catch(() => null);
+      if (artistPage2 && artistPage2.folders.length === 0 && artistPage2.files.length === 0) {
+        await Drive.trashFile(artistFolder.id).catch(() => {});
+        DB.setMeta(artistFolder.id, { id: artistFolder.id, deletedAt: Date.now() }).catch(() => {});
+      }
     }
   }
 
