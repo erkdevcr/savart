@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.418';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.418 — Debug: logs en onSongEdit + _isInSoundropFolder para diagnosticar reorganize
+const APP_VERSION  = '3.5.419';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.419 — Fix: _isInSoundropFolder usa Drive API cuando parentId es null en DB
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

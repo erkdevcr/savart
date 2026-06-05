@@ -12129,15 +12129,19 @@ const App = (() => {
       let name     = meta?.name     || null;
       let parentId = meta?.folderId || null;
 
-      // 2. Fall back to Drive API if not in DB
-      if (!name && canDrive) {
-        console.log('[App] _isInSoundropFolder depth', depth, '— not in DB, calling Drive.getFileInfo for', folderId);
+      // 2. Fall back to Drive API if:
+      //    a) folder not in DB at all (name is null), OR
+      //    b) folder is in DB but parentId is null and it's not the Soundrop root itself
+      //       (parentId missing = folder was stored without its parent, e.g. from an old scan)
+      const needsDrive = canDrive && (!name || (!parentId && (name || '').trim().toLowerCase() !== 'soundrop'));
+      if (needsDrive) {
+        console.log('[App] _isInSoundropFolder depth', depth, '— Drive.getFileInfo for', folderId, '(name:', name, 'parentId:', parentId, ')');
         const info = await Drive.getFileInfo(folderId).catch(() => null);
-        console.log('[App] _isInSoundropFolder Drive.getFileInfo result:', info);
+        console.log('[App] _isInSoundropFolder Drive result:', info);
         if (!info) return false;
-        name     = info.name         || null;
+        name     = info.name         || name || null;
         parentId = info.parents?.[0] || null;
-        // Cache so next call is local
+        // Update DB with the real parentId so future calls are local
         DB.setMeta(folderId, { id: folderId, name, folderId: parentId || undefined }).catch(() => {});
       } else {
         console.log('[App] _isInSoundropFolder depth', depth, '— DB:', { folderId, name, parentId });
