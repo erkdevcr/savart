@@ -177,6 +177,7 @@ const UI = (() => {
       eq_preset_flat:  'Plano',
       eq_preset_classical: 'Clásica',
       normalizer:      'Normalizador',
+      live_gain:       'Live Gain',
       // ── Player badges ─────────────────────────────────────
       badge_speed:     'vel.',
       badge_norm:      'gan.',
@@ -546,6 +547,7 @@ const UI = (() => {
       eq_preset_flat:  'Flat',
       eq_preset_classical: 'Classical',
       normalizer:      'Normalizer',
+      live_gain:       'Live Gain',
       // ── Player badges ─────────────────────────────────────
       badge_speed:     'speed',
       badge_norm:      'gain',

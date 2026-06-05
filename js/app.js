@@ -595,6 +595,7 @@ const App = (() => {
       const eqPreset         = loc.eqPreset  ?? shared.eqPreset;
       const tempo            = loc.tempo     ?? shared.tempo;
       const normalizerEnabled = loc.normalizerEnabled ?? false;
+      const liveGainEnabled   = loc.liveGainEnabled   ?? false;
 
       // ── Restore tempo ──────────────────────────────────────
       if (typeof tempo === 'number') {
@@ -622,6 +623,13 @@ const App = (() => {
         const normToggle = document.getElementById('eq-norm-toggle');
         if (normToggle) normToggle.classList.toggle('on', !!normalizerEnabled);
         Player.setNormalizerEnabled?.(!!normalizerEnabled);
+      }
+
+      // ── Restore live gain state ────────────────────────────
+      {
+        const lgToggle = document.getElementById('eq-live-gain-toggle');
+        if (lgToggle) lgToggle.classList.toggle('on', !!liveGainEnabled);
+        Player.setLiveGainEnabled?.(!!liveGainEnabled);
       }
 
       // ── Restore EQ gains ───────────────────────────────────
@@ -702,6 +710,7 @@ const App = (() => {
       eqPreset:         _currentPreset || null,
       tempo,
       normalizerEnabled: Player.getNormalizerEnabled?.() ?? false,
+      liveGainEnabled:   Player.getLiveGainEnabled?.()   ?? false,
     }).catch(() => {});
 
     // Shared custom presets — synced across devices
@@ -14313,6 +14322,13 @@ const App = (() => {
           if (normBadge) normBadge.style.display = 'none';
         }
       }
+      _saveSettings();
+    });
+
+    // Live Gain toggle
+    document.getElementById('eq-live-gain-toggle')?.addEventListener('click', (e) => {
+      const isOn = e.currentTarget.classList.toggle('on');
+      Player.setLiveGainEnabled?.(isOn);
       _saveSettings();
     });
 

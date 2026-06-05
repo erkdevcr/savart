@@ -36,6 +36,8 @@ const Player = (() => {
   let _normalNode   = null;      // GainNode — per-track loudness normalization
   let _normalizerEnabled = false;// whether normalizer is active
   let _normalizerGain    = 1.0;  // current track's linear gain (1.0 = no change)
+  let _compressorNode  = null;   // DynamicsCompressorNode — live gain limiter (post-EQ)
+  let _liveGainEnabled = false;  // whether live gain limiter is active
 
   let _queue        = [];        // DriveItem[]
   let _queueIndex   = -1;        // current track index
@@ -447,7 +449,25 @@ const Player = (() => {
       return f;
     });
 
-    // Graph: sources → preAmp → normalizer → EQ[12] → volume → panner → destination
+    // Live gain — DynamicsCompressor used as soft limiter after EQ.
+    // Catches loud peaks that the static normalizer missed (e.g. louder passages mid-song).
+    // Transparent when disabled (ratio 1:1, threshold 0 dB).
+    _compressorNode = _audioCtx.createDynamicsCompressor();
+    _compressorNode.attack.value   = 0.003; // 3 ms — fast enough to catch transients
+    _compressorNode.release.value  = 0.2;   // 200 ms — natural recovery
+    if (_liveGainEnabled) {
+      // Active: threshold −6 dB, ratio 12:1 → limiter-like behavior
+      _compressorNode.threshold.value = -6;
+      _compressorNode.knee.value      = 3;
+      _compressorNode.ratio.value     = 12;
+    } else {
+      // Transparent bypass
+      _compressorNode.threshold.value = 0;
+      _compressorNode.knee.value      = 0;
+      _compressorNode.ratio.value     = 1;
+    }
+
+    // Graph: sources → preAmp → normalizer → EQ[12] → compressor → volume → panner → destination
     // _sourceNode: Drive tracks  |  _sdSourceNode: Soundrop tracks (crossOrigin).
     // When one is paused it produces silence, so only the active one is heard.
     _sourceNode.connect(_preAmpNode);
@@ -458,7 +478,8 @@ const Player = (() => {
     for (let i = 0; i < _eqNodes.length - 1; i++) {
       _eqNodes[i].connect(_eqNodes[i + 1]);
     }
-    _eqNodes[_eqNodes.length - 1].connect(_gainNode);
+    _eqNodes[_eqNodes.length - 1].connect(_compressorNode);
+    _compressorNode.connect(_gainNode);
     if (_pannerNode) {
       _gainNode.connect(_pannerNode);
       _pannerNode.connect(_audioCtx.destination);
@@ -778,6 +799,32 @@ const Player = (() => {
 
   function getNormalizerEnabled() { return _normalizerEnabled; }
   function getNormalizerGain()    { return _normalizerGain; }
+
+  /* ── Live Gain (dynamic limiter) ───────────────────────── */
+
+  /**
+   * Enable or disable the live gain limiter.
+   * When on: threshold −6 dB, ratio 12:1 — catches loud peaks post-normalizer.
+   * When off: ratio 1:1, threshold 0 dB — fully transparent.
+   * @param {boolean} enabled
+   */
+  function setLiveGainEnabled(enabled) {
+    _liveGainEnabled = !!enabled;
+    if (_compressorNode && _audioCtx) {
+      const t = _audioCtx.currentTime;
+      if (_liveGainEnabled) {
+        _compressorNode.threshold.setTargetAtTime(-6, t, 0.05);
+        _compressorNode.knee.setTargetAtTime(3,    t, 0.05);
+        _compressorNode.ratio.setTargetAtTime(12,  t, 0.05);
+      } else {
+        _compressorNode.threshold.setTargetAtTime(0, t, 0.05);
+        _compressorNode.knee.setTargetAtTime(0,     t, 0.05);
+        _compressorNode.ratio.setTargetAtTime(1,    t, 0.05);
+      }
+    }
+  }
+
+  function getLiveGainEnabled() { return _liveGainEnabled; }
 
   /* ── Tempo (playback rate) ──────────────────────────────── */
 
@@ -1352,6 +1399,9 @@ const Player = (() => {
     setNormalizerGain,
     getNormalizerEnabled,
     getNormalizerGain,
+    // Live Gain
+    setLiveGainEnabled,
+    getLiveGainEnabled,
     // Tempo
     setTempo,
     getTempo,
