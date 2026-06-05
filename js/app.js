@@ -12100,13 +12100,15 @@ const App = (() => {
     // Soundrop folder tree, regardless of any saved flag. This covers songs saved
     // before soundropSaved was introduced and songs synced from other devices.
     if (patch.artist || patch.album || patch.displayName) {
+      console.log('[App] onSongEdit — checking Soundrop. folderId:', existingMeta?.folderId, 'soundropSaved:', existingMeta?.soundropSaved);
       _isInSoundropFolder(existingMeta?.folderId).then(inSoundrop => {
+        console.log('[App] _isInSoundropFolder result:', inSoundrop);
         if (inSoundrop) {
           _reorganizeSoundropFile(songId, existingMeta, patch).catch(err => {
             console.warn('[App] Soundrop reorganize failed:', err?.message);
           });
         }
-      }).catch(() => {});
+      }).catch(err => console.warn('[App] _isInSoundropFolder error:', err));
     }
   }
 
@@ -12119,7 +12121,7 @@ const App = (() => {
    * @returns {Promise<boolean>}
    */
   async function _isInSoundropFolder(folderId) {
-    if (!folderId) return false;
+    if (!folderId) { console.log('[App] _isInSoundropFolder: folderId is null/undefined'); return false; }
     const canDrive = typeof Drive !== 'undefined' && typeof Auth !== 'undefined' && Auth.getValidToken?.();
     for (let depth = 0; depth < 3; depth++) {
       // 1. Try local DB first
@@ -12129,12 +12131,16 @@ const App = (() => {
 
       // 2. Fall back to Drive API if not in DB
       if (!name && canDrive) {
+        console.log('[App] _isInSoundropFolder depth', depth, '— not in DB, calling Drive.getFileInfo for', folderId);
         const info = await Drive.getFileInfo(folderId).catch(() => null);
+        console.log('[App] _isInSoundropFolder Drive.getFileInfo result:', info);
         if (!info) return false;
         name     = info.name         || null;
         parentId = info.parents?.[0] || null;
         // Cache so next call is local
         DB.setMeta(folderId, { id: folderId, name, folderId: parentId || undefined }).catch(() => {});
+      } else {
+        console.log('[App] _isInSoundropFolder depth', depth, '— DB:', { folderId, name, parentId });
       }
 
       if (!name) return false;
