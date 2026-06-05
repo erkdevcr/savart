@@ -5176,12 +5176,15 @@ const App = (() => {
         const r      = recentMap.get(item.id);
         const dbMeta = metaMap.get(item.id);
         const inMem  = (typeof Meta !== 'undefined') ? Meta.getCached(item.id) : null;
+        // Reconstruct Soundrop identity the same way as recents + history:
+        // fall back to id prefix so items not in recentMap (played often but
+        // outside the recents window) still get isSoundrop=true and show the chip.
+        const _isSd  = item.isSoundrop || r?.isSoundrop || (item.id || '').startsWith('sd_');
+        const _vidId = item.videoId    || r?.videoId    || (_isSd ? (item.id || '').slice(3) : null);
         return {
           ...item,
-          // Recover isSoundrop/videoId from recents if the metadata record lost them
-          // (can happen due to an incrementPlayCount race on first SD play).
-          isSoundrop:   item.isSoundrop   || r?.isSoundrop   || undefined,
-          videoId:      item.videoId      || r?.videoId      || undefined,
+          isSoundrop:   _isSd  || false,
+          videoId:      _vidId || null,
           displayName:  _pick(dbMeta?.displayName,  dbMeta?.name,     inMem?.title,    item.displayName,  r?.displayName, r?.name, item.name),
           name:         _pick(dbMeta?.name,          item.name,        r?.name),
           thumbnailUrl: _resolveCoverUrl(item.id, dbMeta, inMem, _safeUrl(dbMeta?.thumbnailUrl), _safeUrl(dbMeta?.coverUrl), inMem?.coverUrl, _safeUrl(item.thumbnailUrl), _safeUrl(item.coverUrl), _safeUrl(r?.thumbnailUrl), _safeUrl(r?.thumbnailLink)),
