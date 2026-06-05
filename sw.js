@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.407';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.407 — Fix: librería se refresca al navegar a ella si sync completó fuera de tab
+const APP_VERSION  = '3.5.408';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.408 — Fix: EQ gains aplicados después de connect+resume para evitar filtros incorrectos en Android WebView
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

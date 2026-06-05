@@ -433,12 +433,16 @@ const Player = (() => {
     _normalNode.gain.value = (_normalizerEnabled && _normalizerGain !== 1.0)
       ? _normalizerGain : 1.0;
 
-    // 12-band EQ
+    // 12-band EQ — create nodes with neutral gain (0 dB).
+    // Real gains are applied AFTER connect + resume below.
+    // Android WebView computes BiquadFilter coefficients on first audio flow, not at
+    // creation time. Setting gains before connect/resume causes incorrect coefficients
+    // on the first play, making Drive tracks sound low when EQ is active at login.
     _eqNodes = CONFIG.EQ_BANDS.map((freq, i) => {
       const f = _audioCtx.createBiquadFilter();
       f.type            = (i === 0) ? 'lowshelf' : (i === 11) ? 'highshelf' : 'peaking';
       f.frequency.value = freq;
-      f.gain.value      = _eqGains[i];
+      f.gain.value      = 0; // neutral — real gains applied after connect + resume below
       if (f.type === 'peaking') f.Q.value = 1.41;
       return f;
     });
@@ -463,6 +467,11 @@ const Player = (() => {
     }
 
     _audioCtx.resume();
+
+    // Apply real EQ gains NOW — after graph is connected and context resumed.
+    // This guarantees Android WebView computes correct filter coefficients on first play.
+    _eqNodes.forEach((node, i) => { node.gain.value = _eqGains[i]; });
+
     console.log('[Player] Web Audio graph built (Drive + Soundrop sources).');
   }
 
