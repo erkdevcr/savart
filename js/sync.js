@@ -1062,6 +1062,7 @@ const Sync = (() => {
       'durationSec',                                // audio duration — captured on first play
       'normalGain', 'normalGainDb',                 // per-track loudness normalization gain
       'normalGainClearedAt',                        // epoch ms when gains were last bulk-cleared
+      'soundropSaved',                              // true = saved from Soundrop to Drive; eligible for auto-reorganize
     ];
     // googleusercontent.com = Drive CDN thumbnailLinks — accessible in <img> without auth.
     // googleapis.com       = Drive API download endpoints — require Bearer token, skip those.
@@ -1105,6 +1106,7 @@ const Sync = (() => {
       'durationSec',
       'normalGain', 'normalGainDb',
       'normalGainClearedAt',
+      'soundropSaved',
     ];
     const isExternalUrl = u => u && !u.startsWith('blob:') && u !== 'id3'
       && !u.includes('googleapis.com');

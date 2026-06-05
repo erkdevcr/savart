@@ -12098,11 +12098,40 @@ const App = (() => {
 
     // Soundrop file reorganization — only for files saved from Soundrop to Drive.
     // Runs in background (non-blocking) — a toast notifies on success.
-    if (existingMeta?.soundropSaved && (patch.artist || patch.album || patch.displayName)) {
-      _reorganizeSoundropFile(songId, existingMeta, patch).catch(err => {
-        console.warn('[App] Soundrop reorganize failed:', err?.message);
-      });
+    // Primary check: soundropSaved flag. Fallback: walk folder hierarchy in local DB
+    // to catch songs saved before the flag was introduced (or synced without it).
+    if (patch.artist || patch.album || patch.displayName) {
+      const _isSoundropSaved = existingMeta?.soundropSaved
+        || await _isInSoundropFolder(existingMeta?.folderId).catch(() => false);
+      if (_isSoundropSaved) {
+        // Backfill the flag if discovered via folder walk — ensures future edits work
+        if (!existingMeta?.soundropSaved) {
+          DB.setMeta(songId, { soundropSaved: true }).catch(() => {});
+        }
+        _reorganizeSoundropFile(songId, existingMeta, patch).catch(err => {
+          console.warn('[App] Soundrop reorganize failed:', err?.message);
+        });
+      }
     }
+  }
+
+  /**
+   * Check if a folderId is anywhere in the Soundrop folder tree by walking
+   * up the hierarchy in local DB (max 3 levels: album → artist → Soundrop root).
+   * All lookups are local — no Drive API calls.
+   * @param {string} folderId
+   * @returns {Promise<boolean>}
+   */
+  async function _isInSoundropFolder(folderId) {
+    if (!folderId) return false;
+    for (let depth = 0; depth < 3; depth++) {
+      const meta = await DB.getMeta(folderId).catch(() => null);
+      if (!meta) return false;
+      if ((meta.name || '').trim().toLowerCase() === 'soundrop') return true;
+      if (!meta.folderId) return false;
+      folderId = meta.folderId;
+    }
+    return false;
   }
 
   /**

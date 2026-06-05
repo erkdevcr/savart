@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.414';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.414 — Fix: chip SD en topPlayed usa fallback id.startsWith('sd_')
+const APP_VERSION  = '3.5.415';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.415 — Fix: Soundrop reorganize detecta carpeta via DB walk; soundropSaved en SYNC_FIELDS
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
