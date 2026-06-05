@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.416';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.416 — Refactor: Soundrop reorganize usa ubicación en carpeta, no flag soundropSaved
+const APP_VERSION  = '3.5.417';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.417 — Fix: _isInSoundropFolder con Drive API fallback; saveToDrive escribe carpetas en DB
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

@@ -154,25 +154,40 @@ const Soundrop = (() => {
     //   Soundrop/                        (always)
     //   Soundrop/{Artist}/               (if artist set)
     //   Soundrop/{Artist}/{Album}/       (if artist + album set)
-    let folderId = await Drive.findOrCreateFolder('Soundrop', CONFIG.ROOT_FOLDER_ID);
+    const soundropRootId = await Drive.findOrCreateFolder('Soundrop', CONFIG.ROOT_FOLDER_ID);
+    let folderId = soundropRootId;
 
     const artist = (meta.artist || '').trim();
     const album  = (meta.album  || '').trim();
 
+    let artistFolderId = null;
+    let albumFolderId  = null;
+
     if (artist) {
-      folderId = await Drive.findOrCreateFolder(artist, folderId);
+      artistFolderId = await Drive.findOrCreateFolder(artist, soundropRootId);
+      folderId = artistFolderId;
       if (album) {
-        folderId = await Drive.findOrCreateFolder(album, folderId);
+        albumFolderId = await Drive.findOrCreateFolder(album, artistFolderId);
+        folderId = albumFolderId;
       }
     }
 
     // Filename: "Artist - Title.mp3" (or just "Title.mp3" when no artist)
-    const titlePart  = (meta.title || 'Soundrop track').trim();
-    const filename   = artist ? `${artist} - ${titlePart}.mp3` : `${titlePart}.mp3`;
+    const titlePart = (meta.title || 'Soundrop track').trim();
+    const filename  = artist ? `${artist} - ${titlePart}.mp3` : `${titlePart}.mp3`;
 
     // Upload via multipart
     const fileId = await Drive.uploadFile(blob, filename, 'audio/mpeg', folderId);
-    return { fileId, folderId, filename };
+
+    // Return full folder hierarchy so the caller can write it to local DB.
+    // This enables _isInSoundropFolder to walk the tree without Drive API calls.
+    const folderHierarchy = [
+      { id: soundropRootId, name: 'Soundrop',  parentId: CONFIG.ROOT_FOLDER_ID },
+      ...(artistFolderId ? [{ id: artistFolderId, name: artist, parentId: soundropRootId }] : []),
+      ...(albumFolderId  ? [{ id: albumFolderId,  name: album,  parentId: artistFolderId  }] : []),
+    ];
+
+    return { fileId, folderId, filename, folderHierarchy };
   }
 
   // ── Helpers ───────────────────────────────────────────────

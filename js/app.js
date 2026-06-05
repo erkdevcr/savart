@@ -12112,19 +12112,35 @@ const App = (() => {
 
   /**
    * Check if a folderId is anywhere in the Soundrop folder tree by walking
-   * up the hierarchy in local DB (max 3 levels: album → artist → Soundrop root).
-   * All lookups are local — no Drive API calls.
+   * up the hierarchy (max 3 levels: album → artist → Soundrop root).
+   * Strategy: local DB first (fast), Drive API fallback for folders not yet in DB
+   * (e.g. songs saved before folderHierarchy was written). Caches Drive results.
    * @param {string} folderId
    * @returns {Promise<boolean>}
    */
   async function _isInSoundropFolder(folderId) {
     if (!folderId) return false;
+    const canDrive = typeof Drive !== 'undefined' && typeof Auth !== 'undefined' && Auth.getValidToken?.();
     for (let depth = 0; depth < 3; depth++) {
+      // 1. Try local DB first
       const meta = await DB.getMeta(folderId).catch(() => null);
-      if (!meta) return false;
-      if ((meta.name || '').trim().toLowerCase() === 'soundrop') return true;
-      if (!meta.folderId) return false;
-      folderId = meta.folderId;
+      let name     = meta?.name     || null;
+      let parentId = meta?.folderId || null;
+
+      // 2. Fall back to Drive API if not in DB
+      if (!name && canDrive) {
+        const info = await Drive.getFileInfo(folderId).catch(() => null);
+        if (!info) return false;
+        name     = info.name         || null;
+        parentId = info.parents?.[0] || null;
+        // Cache so next call is local
+        DB.setMeta(folderId, { id: folderId, name, folderId: parentId || undefined }).catch(() => {});
+      }
+
+      if (!name) return false;
+      if (name.trim().toLowerCase() === 'soundrop') return true;
+      if (!parentId) return false;
+      folderId = parentId;
     }
     return false;
   }
@@ -13711,7 +13727,7 @@ const App = (() => {
         // 2. Download blob
         const blob = await Soundrop.fetchBlob(audioUrl);
         // 3. Upload to Drive "Soundrop" folder
-        const { fileId: driveId, folderId: driveFolderId, filename } = await Soundrop.saveToDrive(blob, meta);
+        const { fileId: driveId, folderId: driveFolderId, filename, folderHierarchy } = await Soundrop.saveToDrive(blob, meta);
 
         // 4. Write Drive metadata to DB.
         // manualAt is always stamped (user manually entered all fields).
@@ -13730,6 +13746,15 @@ const App = (() => {
           manualAt:     Date.now(),
           soundropSaved: true,  // marks this as a Soundrop-saved file eligible for auto-reorganize
         });
+
+        // Write folder hierarchy to DB so _isInSoundropFolder can walk it locally
+        // without Drive API calls on future edits.
+        if (Array.isArray(folderHierarchy)) {
+          folderHierarchy.forEach(f => {
+            DB.setMeta(f.id, { id: f.id, name: f.name, folderId: f.parentId || undefined }).catch(() => {});
+          });
+        }
+
         // Push full metadata sync (debounced 2 s)
         Sync.push('metadata');
         // Push hot delta immediately so other devices see this track in ~3 s
