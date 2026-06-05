@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.411';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.411 — i18n: live_gain → 'Ganancia dinámica' en español
+const APP_VERSION  = '3.5.413';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.413 — Fix: Normalizer+Live Gain en una fila, gap reducido
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
