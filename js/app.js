@@ -12096,22 +12096,17 @@ const App = (() => {
     // Refresh home if visible so recents/top-played cards show updated info
     if (UI.getCurrentView() === 'home') _loadHomeData().catch(() => {});
 
-    // Soundrop file reorganization — only for files saved from Soundrop to Drive.
-    // Runs in background (non-blocking) — a toast notifies on success.
-    // Primary check: soundropSaved flag. Fallback: walk folder hierarchy in local DB
-    // to catch songs saved before the flag was introduced (or synced without it).
+    // Soundrop file reorganization — trigger whenever the file lives inside the
+    // Soundrop folder tree, regardless of any saved flag. This covers songs saved
+    // before soundropSaved was introduced and songs synced from other devices.
     if (patch.artist || patch.album || patch.displayName) {
-      const _isSoundropSaved = existingMeta?.soundropSaved
-        || await _isInSoundropFolder(existingMeta?.folderId).catch(() => false);
-      if (_isSoundropSaved) {
-        // Backfill the flag if discovered via folder walk — ensures future edits work
-        if (!existingMeta?.soundropSaved) {
-          DB.setMeta(songId, { soundropSaved: true }).catch(() => {});
+      _isInSoundropFolder(existingMeta?.folderId).then(inSoundrop => {
+        if (inSoundrop) {
+          _reorganizeSoundropFile(songId, existingMeta, patch).catch(err => {
+            console.warn('[App] Soundrop reorganize failed:', err?.message);
+          });
         }
-        _reorganizeSoundropFile(songId, existingMeta, patch).catch(err => {
-          console.warn('[App] Soundrop reorganize failed:', err?.message);
-        });
-      }
+      }).catch(() => {});
     }
   }
 
