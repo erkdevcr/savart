@@ -25,6 +25,10 @@ const App = (() => {
   const _browseScrollMap = new Map(); // folderId → scrollTop, restored on Back
   let _soundropCleanPending = false; // guard: prevents the Soundrop cleanup from looping
 
+  /* ── Offline mode ────────────────────────────────────────── */
+  let _isOffline       = false;  // true = app is in offline mode (auto or manual)
+  let _offlineManual   = false;  // true = user explicitly toggled offline on
+
   /* ── Folder cover art cache ──────────────────────────────── */
   // folderId → object URL string | null (null = no image found)
   const _folderCoverCache = new Map();
@@ -874,6 +878,9 @@ const App = (() => {
   }
 
   function _onTokenExpiring() {
+    // When offline, suppress the token banner — nothing requires a live token.
+    // When connectivity returns the 'online' event will attempt silent renewal.
+    if (_isOffline) return;
     // Re-arm gesture renewal: the next user click anywhere on the page will silently
     // renew the token — the user doesn't need to click "Renovar" specifically.
     Auth.rearmGestureRenewal();
@@ -907,6 +914,29 @@ const App = (() => {
     } catch (_) {}
     const emailEl = document.getElementById('account-email');
     if (emailEl) emailEl.textContent = '—';
+  }
+
+  /* ── Offline mode ────────────────────────────────────────── */
+
+  /**
+   * Activate or deactivate offline mode.
+   * @param {boolean} val      — true = go offline, false = go online
+   * @param {boolean} manual   — true = user toggled manually (persisted to localStorage)
+   */
+  function _setOfflineMode(val, manual = false) {
+    _isOffline = val;
+    if (manual) {
+      _offlineManual = val;
+      try { localStorage.setItem('savart_offline_manual', val ? '1' : '0'); } catch (_) {}
+    }
+    // UI: toggle button amber when offline
+    const btn = document.getElementById('btn-offline-toggle');
+    if (btn) btn.classList.toggle('offline-active', val);
+    // UI: body class for ambient CSS
+    document.body.classList.toggle('offline-mode', val);
+    if (val) {
+      UI.hideTokenBanner();
+    }
   }
 
   /* ── Queue helpers ───────────────────────────────────────── */
@@ -5423,8 +5453,22 @@ const App = (() => {
       }).catch(() => {});
     }
 
+    // When offline, skip Drive API and go straight to the cache
+    if (_isOffline) {
+      const cached = await DB.getFolderCache(folder.id).catch(() => null);
+      if (cached) {
+        _serveCachedFolder(folder, cached);
+      } else {
+        UI.hideLoading('screen-browse');
+        UI.showToast(UI.t('toast_folder_offline'), 'warning');
+      }
+      return;
+    }
+
     try {
       const result = await Drive.listFolderAll(folder.id);
+      // Persist folder contents for offline use (fire-and-forget)
+      DB.saveFolderCache(folder.id, result.folders, result.files).catch(() => {});
       _sortItems(result.folders, result.files);
 
       // Tag each sub-folder as 'album' or 'collection' for the browse chip.
@@ -5601,9 +5645,61 @@ const App = (() => {
         UI.showToast(UI.t('toast_session_expired'), 'error');
         UI.showTokenBanner();
       } else {
-        UI.showToast(UI.t('toast_folder_error'), 'error');
-        console.error('[App] Folder load error:', err);
+        // Network failure — try to serve from IDB folder cache
+        const cached = await DB.getFolderCache(folder.id).catch(() => null);
+        if (cached) {
+          console.warn('[App] Folder load failed — serving stale cache for', folder.id);
+          _serveCachedFolder(folder, cached, /* stale= */ true);
+        } else {
+          UI.showToast(UI.t('toast_folder_error'), 'error');
+          console.error('[App] Folder load error:', err);
+        }
       }
+    }
+  }
+
+  /**
+   * Render folder contents from the IDB cache (offline / network-error fallback).
+   * @param {{ id: string, name: string }} folder
+   * @param {{ folders: Object[], files: Object[], cachedAt: number }} cached
+   * @param {boolean} [stale=false]  — true = show stale-cache banner
+   */
+  function _serveCachedFolder(folder, cached, stale = false) {
+    const { folders = [], files = [] } = cached;
+    _sortItems(folders, files);
+
+    const activeSong = Player.getCurrentTrack();
+    UI.renderFolderContents(folders, files, activeSong?.id);
+    UI.setActiveSongRow(activeSong?.id ?? null);
+
+    _browseFolderId = folder.id;
+    _browseFiles    = files;
+    _browseFolder   = { id: folder.id, name: folder.name, folderType: null };
+    _updateBrowseLegend(folder.id);
+
+    // Cache items for queue resolution
+    files.forEach(f => _cacheItem(f));
+
+    // Restore scroll on back-navigation
+    const savedScroll = _browseScrollMap.get(folder.id);
+    if (savedScroll != null) {
+      const browseScreen = document.getElementById('screen-browse');
+      if (browseScreen) requestAnimationFrame(() => { browseScreen.scrollTop = savedScroll; });
+    }
+
+    // Show stale-cache banner if needed
+    const browseScreen = document.getElementById('screen-browse');
+    if (stale && browseScreen) {
+      // Remove any existing banner first
+      browseScreen.querySelector('.offline-banner')?.remove();
+      const banner = document.createElement('div');
+      banner.className = 'offline-banner';
+      banner.innerHTML =
+        `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/><path d="M10.71 5.05A16 16 0 0 1 22.56 9"/><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+        <span>${UI.t('offline_stale_cache')}</span>`;
+      const itemList = browseScreen.querySelector('.item-list');
+      if (itemList) browseScreen.insertBefore(banner, itemList);
+      else browseScreen.prepend(banner);
     }
   }
 
@@ -6160,6 +6256,50 @@ const App = (() => {
       } catch (err) {
         console.error('[App] Soundrop search error:', err);
         container.innerHTML = `<div class="empty-state"><p>${UI.t('search_error')}</p></div>`;
+      }
+      return;
+    }
+
+    // ── Offline search branch (IDB metadata) ─────────────────
+    if (_isOffline) {
+      try {
+        const normTerm = norm(term);
+        const all      = await DB.getAllMetaLight().catch(() => []);
+        const matched  = all.filter(m => {
+          const haystack = [m.name, m.displayName, m.artist, m.album].filter(Boolean).map(norm).join(' ');
+          return haystack.includes(normTerm);
+        });
+        const files = matched.map(m => ({
+          id:          m.id,
+          name:        m.name        || m.displayName || '',
+          displayName: m.displayName || m.name        || '',
+          artist:      m.artist      || '',
+          album:       m.album       || '',
+          mimeType:    m.mimeType    || 'audio/mpeg',
+          durationSec: m.durationSec || 0,
+          thumbnailUrl: m.thumbnailUrl || null,
+        }));
+        const result = { folders: [], files };
+        files.forEach(f => _cacheItem(f));
+        _lastSearchFiles     = files;
+        _cachedSearchResults = result;
+        _cachedSearchTerm    = term;
+        UI.renderSearchResults(result, filter);
+        UI.setActiveSongRow(Player.getCurrentTrack()?.id ?? null);
+        // Show stale-data note at top of search results
+        const container = document.getElementById('search-results');
+        if (container) {
+          const banner = document.createElement('div');
+          banner.className = 'offline-banner';
+          banner.innerHTML =
+            `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/><path d="M10.71 5.05A16 16 0 0 1 22.56 9"/><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+            <span>${UI.t('offline_stale_cache')}</span>`;
+          container.prepend(banner);
+        }
+      } catch (err) {
+        console.error('[App] Offline search error:', err);
+        const container = document.getElementById('search-results');
+        if (container) container.innerHTML = `<div class="empty-state"><p>${UI.t('search_error')}</p></div>`;
       }
       return;
     }
@@ -14305,6 +14445,31 @@ const App = (() => {
     document.querySelector('#overlay-db-stats .db-stats-backdrop')?.addEventListener('click', _closeDbStats);
 
     // ── About popup ───────────────────────────────────────────
+    // ── Offline toggle button ─────────────────────────────────
+    document.getElementById('btn-offline-toggle')?.addEventListener('click', () => {
+      _setOfflineMode(!_isOffline, true);
+      UI.showToast(_isOffline ? UI.t('toast_offline_on') : UI.t('toast_offline_off'));
+    });
+
+    // ── Network online/offline events ─────────────────────────
+    window.addEventListener('offline', () => {
+      if (!_offlineManual) _setOfflineMode(true, false);
+    });
+    window.addEventListener('online', () => {
+      if (!_offlineManual) {
+        _setOfflineMode(false, false);
+        // Try to silently renew token if it expired while we were offline
+        if (!Auth.isAuthenticated()) Auth.autoAttemptRenewal();
+      }
+    });
+
+    // Restore manual offline preference from previous session
+    try {
+      if (localStorage.getItem('savart_offline_manual') === '1') {
+        _setOfflineMode(true, true);
+      }
+    } catch (_) {}
+
     const _aboutOverlay  = document.getElementById('overlay-about');
     const _closeAbout    = () => { if (_aboutOverlay) _aboutOverlay.style.display = 'none'; };
 

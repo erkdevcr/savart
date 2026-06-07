@@ -88,6 +88,12 @@ const DB = (() => {
           db.createObjectStore('collections', { keyPath: 'id' });
         }
 
+        // folders_cache store (v6+) — offline folder snapshot
+        // { id (=folderId), folders: [...], files: [...], cachedAt: timestamp }
+        if (oldVersion < 6 && !db.objectStoreNames.contains('folders_cache')) {
+          db.createObjectStore('folders_cache', { keyPath: 'id' });
+        }
+
         console.log(`[DB] Upgraded from v${oldVersion} to v${CONFIG.DB_VERSION}`);
       };
 
@@ -1229,6 +1235,30 @@ const DB = (() => {
     return _promisify(store.delete(folderId));
   }
 
+  /* ── Folder cache (offline browse) ─────────────────────── */
+
+  /**
+   * Persist a folder's contents for offline use.
+   * @param {string}   folderId
+   * @param {object[]} folders
+   * @param {object[]} files
+   */
+  async function saveFolderCache(folderId, folders, files) {
+    const store = _tx('folders_cache', 'readwrite');
+    return _promisify(store.put({ id: folderId, folders, files, cachedAt: Date.now() }));
+  }
+
+  /**
+   * Retrieve a cached folder snapshot.
+   * Returns { id, folders, files, cachedAt } or null.
+   * @param {string} folderId
+   */
+  async function getFolderCache(folderId) {
+    const store = _tx('folders_cache');
+    const entry = await _promisify(store.get(folderId));
+    return entry || null;
+  }
+
   /* ── Expose ─────────────────────────────────────────────── */
   return {
     open,
@@ -1300,6 +1330,9 @@ const DB = (() => {
     saveCollection,
     getAllCollections,
     deleteCollection,
+    // Folder cache (offline browse)
+    saveFolderCache,
+    getFolderCache,
     // Background collection scan log
     getBgScannedFolders,
     addBgScannedFolders,

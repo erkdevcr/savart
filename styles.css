@@ -8020,3 +8020,52 @@ body.queue-open #mini-player { z-index: 65; }
   border-radius: var(--radius-md);
   overflow: hidden;
 }
+
+/* ── Offline mode ─────────────────────────────────────────── */
+
+/* Toggle button — active (offline) state */
+#btn-offline-toggle.offline-active {
+  color: #e8a020;
+}
+#btn-offline-toggle.offline-active:hover {
+  color: #f0b840;
+  background: rgba(232,160,32,0.12);
+}
+
+/* Subtle amber tint on the home header when offline */
+body.offline-mode #view-home .home-header {
+  border-bottom: 1px solid rgba(232,160,32,0.25);
+}
+
+/* Offline banner — shown at top of browse/search when serving stale cache */
+.offline-banner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #c8841a;
+  background: rgba(232,160,32,0.10);
+  border: 1px solid rgba(232,160,32,0.22);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  margin: 8px 16px 4px;
+}
+.offline-banner svg {
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+/* Stale badge next to folder/file name in browse rows */
+.stale-badge {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #c8841a;
+  background: rgba(232,160,32,0.15);
+  border: 1px solid rgba(232,160,32,0.30);
+  border-radius: 3px;
+  padding: 1px 4px;
+  vertical-align: middle;
+  margin-left: 5px;
+}

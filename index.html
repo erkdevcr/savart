@@ -19,9 +19,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&family=Baskervville:ital@0;1&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="styles.css?v=3.5.436">
+  <link rel="stylesheet" href="styles.css?v=3.5.437">
   <!-- Version global — fallback para Android donde el SW no se registra -->
-  <script>window.SAVART_VERSION = '3.5.436';</script>
+  <script>window.SAVART_VERSION = '3.5.437';</script>
 </head>
 <body>
 
@@ -130,9 +130,23 @@
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
           </button>
         </div>
-        <button class="home-action-btn" id="btn-home-info" aria-label="Info">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
-        </button>
+        <div style="display:flex;align-items:center;gap:2px">
+          <!-- Offline mode toggle -->
+          <button class="home-action-btn" id="btn-offline-toggle" aria-label="Modo offline" title="Activar/desactivar modo offline">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="1" y1="1" x2="23" y2="23"/>
+              <path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/>
+              <path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/>
+              <path d="M10.71 5.05A16 16 0 0 1 22.56 9"/>
+              <path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/>
+              <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/>
+              <line x1="12" y1="20" x2="12.01" y2="20"/>
+            </svg>
+          </button>
+          <button class="home-action-btn" id="btn-home-info" aria-label="Info">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+          </button>
+        </div>
       </div>
       <div class="home-content">
         <!-- Sections rendered dynamically by UI.renderHome() -->
@@ -1417,22 +1431,22 @@
 </script>
 
 <!-- Savart modules -->
-<script src="js/config.js?v=3.5.436"></script>
-<script src="js/auth.js?v=3.5.436"></script>
-<script src="js/drive.js?v=3.5.436"></script>
-<script src="js/db.js?v=3.5.436"></script>
-<script src="js/sync.js?v=3.5.436"></script>
-<script src="js/player.js?v=3.5.436"></script>
-<script src="js/meta.js?v=3.5.436"></script>
-<script src="js/lastfm.js?v=3.5.436"></script>
-<script src="js/audd.js?v=3.5.436"></script>
-<script src="js/musicbrainz.js?v=3.5.436"></script>
-<script src="js/discogs.js?v=3.5.436"></script>
-<script src="js/lyrics.js?v=3.5.436"></script>
-<script src="js/soundrop.js?v=3.5.436"></script>
-<script src="js/ui.js?v=3.5.436"></script>
-<script src="js/app.js?v=3.5.436"></script>
-<script src="js/bg.js?v=3.5.436"></script>
+<script src="js/config.js?v=3.5.437"></script>
+<script src="js/auth.js?v=3.5.437"></script>
+<script src="js/drive.js?v=3.5.437"></script>
+<script src="js/db.js?v=3.5.437"></script>
+<script src="js/sync.js?v=3.5.437"></script>
+<script src="js/player.js?v=3.5.437"></script>
+<script src="js/meta.js?v=3.5.437"></script>
+<script src="js/lastfm.js?v=3.5.437"></script>
+<script src="js/audd.js?v=3.5.437"></script>
+<script src="js/musicbrainz.js?v=3.5.437"></script>
+<script src="js/discogs.js?v=3.5.437"></script>
+<script src="js/lyrics.js?v=3.5.437"></script>
+<script src="js/soundrop.js?v=3.5.437"></script>
+<script src="js/ui.js?v=3.5.437"></script>
+<script src="js/app.js?v=3.5.437"></script>
+<script src="js/bg.js?v=3.5.437"></script>
 
 <!-- Inline: additional bindings that need the DOM -->
 <script>
