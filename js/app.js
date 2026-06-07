@@ -449,9 +449,35 @@ const App = (() => {
     UI.showView('home');
     _restoreHomeCacheSync(); // Paint localStorage snapshot instantly (zero DB round-trips)
     _loadHomeData();         // Then overwrite with fresh DB data (stale-while-revalidate)
-    // Fetch real user info and update Settings panel
+    // Fetch real user info and update Settings panel.
+    // Also detects account switches: if a different user logs in, wipe all
+    // user-specific local state so the previous user's data doesn't bleed through.
     Auth.fetchUserInfo().then(info => {
       if (!info) return;
+
+      const prevEmail = (localStorage.getItem('savart_user_email') || '').toLowerCase();
+      const newEmail  = (info.email || '').toLowerCase();
+      const isDifferentUser = prevEmail && newEmail && prevEmail !== newEmail;
+
+      if (isDifferentUser) {
+        // ── Account switch detected — clear all user-specific state ──────────
+        try {
+          localStorage.removeItem('savart_home_v1');          // home snapshot
+          localStorage.removeItem('savart_root_folder_id');   // root folder override
+          localStorage.removeItem('savart_root_folder_name');
+        } catch (_) {}
+        // Reset root folder to app default for the new user
+        _rootFolderId   = CONFIG.ROOT_FOLDER_ID;
+        _rootFolderName = CONFIG.ROOT_FOLDER_NAME;
+        const rootLbl = document.getElementById('root-folder-name');
+        if (rootLbl) rootLbl.textContent = _rootFolderName;
+        // Clear user-specific DB sections, then re-render home with fresh (empty) state
+        Promise.all([
+          DB.clearRecents(), DB.clearHistory(), DB.clearPinned(),
+          DB.clearPlaylists(), DB.clearPlaycounts(),
+        ]).catch(() => {}).finally(() => { _loadHomeData(); });
+      }
+
       const emailEl = document.getElementById('account-email');
       if (emailEl) emailEl.textContent = info.email || info.name || '—';
       try { localStorage.setItem('savart_user_email', info.email || '');
