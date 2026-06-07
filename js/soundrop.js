@@ -121,35 +121,36 @@ const Soundrop = (() => {
    * Download the audio for a Soundrop track as a Blob.
    * Used only during the "save to Drive" flow.
    *
+   * The CDN URL returned by the Worker is IP-locked to the requesting client IP.
+   * Therefore we ALWAYS download it client-side (from the user's IP), never via
+   * a server-side proxy (which would use Cloudflare's IP and get a 404).
+   *
    * Strategy:
-   *   Android native (Capacitor): use CapacitorHttp.request() — bypasses WebView CORS
-   *     completely, allowing direct download of the CDN URL (which is IP-locked and
-   *     unreachable from Cloudflare datacenter IPs).
-   *   Web / PWA: use Worker proxy (?download=1) — Cloudflare adds CORS headers.
-   *     Note: this path may fail (cdn 404) if the CDN URL is IP-locked.
+   *   Android native (Capacitor): CapacitorHttp.request() — native HTTP, bypasses
+   *     WebView CORS entirely.
+   *   Web / PWA: direct fetch() — CDN URL supports CORS from browser origins.
    *
    * @param {string} videoId  — bare YouTube video ID (no "sd_" prefix)
    * @returns {Promise<Blob>}
    */
   async function fetchBlob(videoId) {
+    // Step 1: get CDN audio URL (via Worker JSON mode — no proxy download)
+    const audioUrl = await getAudioLink(videoId);
+
     // ── Android native path: CapacitorHttp bypasses WebView CORS ──────────────
     const capHttp = typeof Capacitor !== 'undefined' && Capacitor.isNativePlatform?.()
       ? (Capacitor.Plugins?.CapacitorHttp || Capacitor.Plugins?.Http)
       : null;
 
     if (capHttp) {
-      // 1. Get CDN URL from Worker (normal JSON mode — no ?download=1)
-      const audioUrl = await getAudioLink(videoId);
-
-      // 2. Download via native HTTP (no CORS restriction)
       let nativeRes;
       try {
         nativeRes = await capHttp.request({
-          method:       'GET',
-          url:          audioUrl,
-          responseType: 'blob',        // returns base64-encoded binary
+          method:         'GET',
+          url:            audioUrl,
+          responseType:   'blob',   // returns base64-encoded binary
           connectTimeout: 30000,
-          readTimeout:  120000,
+          readTimeout:    120000,
         });
       } catch (err) {
         throw new Error(`[Soundrop] Descarga nativa falló: ${err.message}`);
@@ -157,39 +158,26 @@ const Soundrop = (() => {
       if (nativeRes.status < 200 || nativeRes.status >= 300) {
         throw new Error(`[Soundrop] Descarga nativa HTTP ${nativeRes.status}`);
       }
-
       // Convert base64 → Blob
       let base64 = nativeRes.data || '';
-      // Strip data-URL prefix if present (e.g. "data:audio/mpeg;base64,...")
-      const comma = base64.indexOf(',');
+      const comma = base64.indexOf(',');  // strip "data:...;base64," prefix if present
       if (comma !== -1) base64 = base64.slice(comma + 1);
-      const byteChars  = atob(base64);
-      const byteArray  = new Uint8Array(byteChars.length);
+      const byteChars = atob(base64);
+      const byteArray = new Uint8Array(byteChars.length);
       for (let i = 0; i < byteChars.length; i++) byteArray[i] = byteChars.charCodeAt(i);
-      const ct = (nativeRes.headers?.['content-type'] || '').split(';')[0].trim() || 'audio/mpeg';
-      return new Blob([byteArray], { type: ct });
+      const mimeNative = (nativeRes.headers?.['content-type'] || nativeRes.headers?.['Content-Type'] || '')
+        .split(';')[0].trim() || 'audio/mpeg';
+      return new Blob([byteArray], { type: mimeNative });
     }
 
-    // ── Web / PWA path: Worker proxy with CORS headers ─────────────────────────
-    const proxyUrl = `${WORKER_URL}?id=${encodeURIComponent(videoId)}&download=1`;
+    // ── Web / PWA path: direct fetch from browser (CDN URL is CORS-friendly) ───
     let res;
     try {
-      res = await fetch(proxyUrl, { signal: AbortSignal.timeout(120000) });
+      res = await fetch(audioUrl, { signal: AbortSignal.timeout(120000) });
     } catch (err) {
       throw new Error(`[Soundrop] Descarga falló: ${err.message}`);
     }
-    if (!res.ok) {
-      // Read Worker error body for diagnostics (shown in UI toast)
-      let detail = '';
-      try {
-        const errBody = await res.clone().json();
-        if (errBody.error)       detail = `: ${errBody.error}`;
-        if (errBody.rapidStatus) detail += ` (rapidAPI: ${errBody.rapidStatus})`;
-        if (errBody.cdnStatus)   detail += ` (cdn: ${errBody.cdnStatus})`;
-        if (errBody.msg)         detail += ` — ${errBody.msg}`;
-      } catch {}
-      throw new Error(`[Soundrop] Descarga HTTP ${res.status}${detail}`);
-    }
+    if (!res.ok) throw new Error(`[Soundrop] Descarga HTTP ${res.status}`);
 
     // Validate content-type — CDN sometimes returns HTML error pages with status 200
     const ct = (res.headers.get('Content-Type') || '').toLowerCase();
