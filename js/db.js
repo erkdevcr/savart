@@ -1235,6 +1235,15 @@ const DB = (() => {
     return _promisify(store.delete(folderId));
   }
 
+  /**
+   * Remove a single metadata record by file ID.
+   * @param {string} fileId
+   */
+  async function deleteMeta(fileId) {
+    const store = _tx('metadata', 'readwrite');
+    return _promisify(store.delete(fileId));
+  }
+
   /* ── Folder cache (offline browse) ─────────────────────── */
 
   /**
@@ -1330,6 +1339,7 @@ const DB = (() => {
     saveCollection,
     getAllCollections,
     deleteCollection,
+    deleteMeta,
     // Folder cache (offline browse)
     saveFolderCache,
     getFolderCache,

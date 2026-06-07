@@ -5471,6 +5471,16 @@ const App = (() => {
       DB.saveFolderCache(folder.id, result.folders, result.files).catch(() => {});
       _sortItems(result.folders, result.files);
 
+      // Detect Soundrop context: current folder IS Soundrop root, OR breadcrumb
+      // already contains a "Soundrop" entry (we're inside one of its subfolders).
+      const _isSoundropCtx =
+        (folder.name || '').trim().toLowerCase() === 'soundrop' ||
+        _breadcrumb.some(b => (b.name || '').trim().toLowerCase() === 'soundrop');
+      if (_isSoundropCtx) {
+        result.folders.forEach(f => { f._soundropCtx = true; });
+        result.files.forEach(f => { f._soundropCtx = true; });
+      }
+
       // Tag each sub-folder as 'album' or 'collection' for the browse chip.
       // Always refresh from DB so chips reflect the current state (e.g. after
       // the user moves files in Drive and rescans — or between sessions).
@@ -13947,6 +13957,29 @@ const App = (() => {
     }
     // Expose for context menu
     App.onSdDownload = (item) => _openSdSaveModal(item);
+
+    // ── Soundrop delete (trash file/folder in Drive) ───────────
+    App.onSoundropDelete = async (item) => {
+      const isFolder = item.isFolder || item.mimeType === 'application/vnd.google-apps.folder';
+      const label    = item.displayName || item.name || (isFolder ? 'carpeta' : 'canción');
+      if (!confirm(`${UI.t('ctx_soundrop_delete_confirm')} "${label}"?`)) return;
+
+      try {
+        await Drive.trashFile(item.id);
+        // Remove from local DB so it doesn't appear in Library / search
+        await DB.deleteMeta(item.id).catch(() => {});
+        await DB.removeCachedBlob(item.id).catch(() => {});
+        UI.showToast(UI.t('ctx_soundrop_deleted'));
+        // Refresh browse to reflect the deletion
+        if (_browseFolderId) {
+          const cur = _browseFolder || { id: _browseFolderId, name: '' };
+          _openFolder(cur, false).catch(() => {});
+        }
+      } catch (err) {
+        console.error('[App] Soundrop delete error:', err);
+        UI.showToast(UI.t('ctx_soundrop_delete_error'), 'error');
+      }
+    };
 
     document.getElementById('btn-pexp-sd-download')?.addEventListener('click', (e) => {
       e.stopPropagation();

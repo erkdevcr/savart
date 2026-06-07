@@ -396,6 +396,10 @@ const UI = (() => {
       toast_moved_to_collections: 'Movido a Colecciones',
       toast_cleared:              'Limpiado ✓',
       ctx_sd_download:            'Guardar en Drive',
+      ctx_soundrop_delete:        'Eliminar',
+      ctx_soundrop_delete_confirm:'¿Eliminar',
+      ctx_soundrop_deleted:       'Eliminado de Soundrop',
+      ctx_soundrop_delete_error:  'Error al eliminar',
     },
     en: {
       // ── Navigation ─────────────────────────────────────────
@@ -770,6 +774,10 @@ const UI = (() => {
       toast_moved_to_collections: 'Moved to Collections',
       toast_cleared:              'Cleared ✓',
       ctx_sd_download:            'Save to Drive',
+      ctx_soundrop_delete:        'Delete',
+      ctx_soundrop_delete_confirm:'Delete',
+      ctx_soundrop_deleted:       'Deleted from Soundrop',
+      ctx_soundrop_delete_error:  'Error deleting item',
     },
   };
 
@@ -2129,6 +2137,11 @@ const UI = (() => {
         _addCtxDivider(menu);
         _addCtxItem(menu, iconTrash(14), t('ctx_remove_from_pl'), () => { App.onRemoveFromPlaylist?.(item.id, item._playlistId); hideContextMenu(); });
       }
+      // Delete option — only for items inside the Soundrop folder tree
+      if (item._soundropCtx || item.isSoundrop) {
+        _addCtxDivider(menu);
+        _addCtxItem(menu, iconTrash(14), t('ctx_soundrop_delete'), () => { App.onSoundropDelete?.(item); hideContextMenu(); }, 'destructive');
+      }
     }
 
     if (type === 'folder') {
@@ -2156,6 +2169,11 @@ const UI = (() => {
       } else if (item.folderType === 'album') {
         _addCtxDivider(menu);
         _addCtxItem(menu, _iconCollection, t('ctx_move_to_collections'), () => { App.onMoveToCollections?.(item); hideContextMenu(); });
+      }
+      // Delete option — only for folders inside the Soundrop tree
+      if (item._soundropCtx) {
+        _addCtxDivider(menu);
+        _addCtxItem(menu, iconTrash(14), t('ctx_soundrop_delete'), () => { App.onSoundropDelete?.(item); hideContextMenu(); }, 'destructive');
       }
     }
 
@@ -2734,9 +2752,9 @@ const UI = (() => {
     document.removeEventListener('click', _onPickerOutsideClick);
   }
 
-  function _addCtxItem(menu, icon, label, onClick) {
+  function _addCtxItem(menu, icon, label, onClick, extraClass = '') {
     const item = document.createElement('div');
-    item.className = 'ctx-item';
+    item.className = extraClass ? `ctx-item ${extraClass}` : 'ctx-item';
     item.innerHTML = `${icon}<span>${label}</span>`;
     item.addEventListener('click', onClick);
     menu.appendChild(item);
