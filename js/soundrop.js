@@ -121,56 +121,22 @@ const Soundrop = (() => {
    * Download the audio for a Soundrop track as a Blob.
    * Used only during the "save to Drive" flow.
    *
-   * The CDN URL returned by the Worker is IP-locked to the requesting client IP.
-   * Therefore we ALWAYS download it client-side (from the user's IP), never via
-   * a server-side proxy (which would use Cloudflare's IP and get a 404).
+   * The CDN URL is IP-locked to the requesting client — never proxied through
+   * a server (Cloudflare gets 404). Always fetched client-side.
    *
-   * Strategy:
-   *   Android native (Capacitor): CapacitorHttp.request() — native HTTP, bypasses
-   *     WebView CORS entirely.
-   *   Web / PWA: direct fetch() — CDN URL supports CORS from browser origins.
+   * On web:  fetch() uses the browser's native HTTP. The CDN URL supports CORS
+   *          from browser origins.
+   * On APK:  capacitor.config.json has CapacitorHttp.enabled=true, which patches
+   *          window.fetch() to use Android native HTTP — no CORS restrictions,
+   *          no base64 bridge overhead.
    *
    * @param {string} videoId  — bare YouTube video ID (no "sd_" prefix)
    * @returns {Promise<Blob>}
    */
   async function fetchBlob(videoId) {
-    // Step 1: get CDN audio URL (via Worker JSON mode — no proxy download)
+    // Get CDN audio URL from Worker (JSON mode only — no server-side proxy)
     const audioUrl = await getAudioLink(videoId);
 
-    // ── Android native path: CapacitorHttp bypasses WebView CORS ──────────────
-    const capHttp = typeof Capacitor !== 'undefined' && Capacitor.isNativePlatform?.()
-      ? (Capacitor.Plugins?.CapacitorHttp || Capacitor.Plugins?.Http)
-      : null;
-
-    if (capHttp) {
-      let nativeRes;
-      try {
-        nativeRes = await capHttp.request({
-          method:         'GET',
-          url:            audioUrl,
-          responseType:   'blob',   // returns base64-encoded binary
-          connectTimeout: 30000,
-          readTimeout:    120000,
-        });
-      } catch (err) {
-        throw new Error(`[Soundrop] Descarga nativa falló: ${err.message}`);
-      }
-      if (nativeRes.status < 200 || nativeRes.status >= 300) {
-        throw new Error(`[Soundrop] Descarga nativa HTTP ${nativeRes.status}`);
-      }
-      // Convert base64 → Blob
-      let base64 = nativeRes.data || '';
-      const comma = base64.indexOf(',');  // strip "data:...;base64," prefix if present
-      if (comma !== -1) base64 = base64.slice(comma + 1);
-      const byteChars = atob(base64);
-      const byteArray = new Uint8Array(byteChars.length);
-      for (let i = 0; i < byteChars.length; i++) byteArray[i] = byteChars.charCodeAt(i);
-      const mimeNative = (nativeRes.headers?.['content-type'] || nativeRes.headers?.['Content-Type'] || '')
-        .split(';')[0].trim() || 'audio/mpeg';
-      return new Blob([byteArray], { type: mimeNative });
-    }
-
-    // ── Web / PWA path: direct fetch from browser (CDN URL is CORS-friendly) ───
     let res;
     try {
       res = await fetch(audioUrl, { signal: AbortSignal.timeout(120000) });

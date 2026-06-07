@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.429';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.429 — Fix: fetchBlob descarga directo desde cliente (web=fetch, APK=CapacitorHttp)
+const APP_VERSION  = '3.5.432';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.432 — Fix: Soundrop root sin entity header al navegar en browse
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

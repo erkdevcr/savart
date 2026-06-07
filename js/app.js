@@ -5369,6 +5369,10 @@ const App = (() => {
     }
 
     UI.renderBreadcrumb(_breadcrumb);
+    // Clear entity header immediately so the old folder's header doesn't linger
+    // while the new folder's content loads from Drive.
+    const _entityHeaderEl = document.getElementById('browse-entity-header');
+    if (_entityHeaderEl) _entityHeaderEl.innerHTML = '';
     UI.showLoading('screen-browse');
 
     // If fresh navigation (from Recents/Home), resolve full path in parallel
@@ -5505,7 +5509,9 @@ const App = (() => {
       // Render (or clear) the album/collection identity header below the search bar.
       // Pass earlyData so the header can render immediately with Drive-API data
       // while the full DB enrichment runs in the background.
-      _renderBrowseEntityHeader(folder.id, curType, {
+      // The Soundrop root folder never gets a header — only its subfolders do.
+      const _isSoundropRoot = (folder.name || '').trim().toLowerCase() === 'soundrop';
+      _renderBrowseEntityHeader(folder.id, _isSoundropRoot ? null : curType, {
         folderName: folder.name,
         files:      result.files,
       }).catch(() => {});
