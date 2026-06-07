@@ -182,12 +182,14 @@ const Soundrop = (() => {
    * @param {object} meta      — { title, artist, album, year }
    * @returns {Promise<string>}  — Drive file ID of the uploaded file
    */
-  async function saveToDrive(blob, meta) {
-    // Build nested folder path inside MSK:
+  async function saveToDrive(blob, meta, rootFolderId) {
+    // Build nested folder path inside the user's root folder:
     //   Soundrop/                        (always)
     //   Soundrop/{Artist}/               (if artist set)
     //   Soundrop/{Artist}/{Album}/       (if artist + album set)
-    const soundropRootId = await Drive.findOrCreateFolder('Soundrop', CONFIG.ROOT_FOLDER_ID);
+    // rootFolderId is passed from App._rootFolderId so it works for any account.
+    const _rootId = rootFolderId || CONFIG.ROOT_FOLDER_ID;
+    const soundropRootId = await Drive.findOrCreateFolder('Soundrop', _rootId);
     let folderId = soundropRootId;
 
     const artist = (meta.artist || '').trim();
@@ -235,7 +237,7 @@ const Soundrop = (() => {
     // Return full folder hierarchy so the caller can write it to local DB.
     // This enables _isInSoundropFolder to walk the tree without Drive API calls.
     const folderHierarchy = [
-      { id: soundropRootId, name: 'Soundrop',  parentId: CONFIG.ROOT_FOLDER_ID },
+      { id: soundropRootId, name: 'Soundrop',  parentId: _rootId },
       ...(artistFolderId ? [{ id: artistFolderId, name: artist, parentId: soundropRootId }] : []),
       ...(albumFolderId  ? [{ id: albumFolderId,  name: album,  parentId: artistFolderId  }] : []),
     ];

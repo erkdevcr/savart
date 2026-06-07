@@ -193,9 +193,12 @@ const App = (() => {
     const savedZoom = localStorage.getItem('savart_uizoom') || 'm';
     _applyUiZoom(savedZoom);
 
-    // 3. Root folder — default to CONFIG, but user can override via Settings picker
-    _rootFolderId  = localStorage.getItem('savart_root_folder_id')   || CONFIG.ROOT_FOLDER_ID;
-    _rootFolderName = localStorage.getItem('savart_root_folder_name') || CONFIG.ROOT_FOLDER_NAME;
+    // 3. Root folder — use saved value from localStorage (set via Settings picker).
+    // Default to Drive root ('root') so the app works for ANY Google account.
+    // CONFIG.ROOT_FOLDER_ID is Erick's personal MSK folder and must not be used
+    // as a fallback for other users (their Drive doesn't have that folder → 404).
+    _rootFolderId  = localStorage.getItem('savart_root_folder_id')   || 'root';
+    _rootFolderName = localStorage.getItem('savart_root_folder_name') || 'Drive';
     const _rootLabelEl = document.getElementById('root-folder-name');
     if (_rootLabelEl) _rootLabelEl.textContent = _rootFolderName;
 
@@ -466,9 +469,9 @@ const App = (() => {
           localStorage.removeItem('savart_root_folder_id');   // root folder override
           localStorage.removeItem('savart_root_folder_name');
         } catch (_) {}
-        // Reset root folder to app default for the new user
-        _rootFolderId   = CONFIG.ROOT_FOLDER_ID;
-        _rootFolderName = CONFIG.ROOT_FOLDER_NAME;
+        // Reset root folder to Drive root for the new user (no folder assumed)
+        _rootFolderId   = 'root';
+        _rootFolderName = 'Drive';
         const rootLbl = document.getElementById('root-folder-name');
         if (rootLbl) rootLbl.textContent = _rootFolderName;
         // Clear user-specific DB sections, then re-render home with fresh (empty) state
@@ -12219,7 +12222,7 @@ const App = (() => {
     const title  = (patch.displayName ?? oldMeta.displayName ?? oldMeta.name ?? '').trim();
 
     // Build new target folder path inside Soundrop root
-    const soundropRootId = await Drive.findOrCreateFolder('Soundrop', CONFIG.ROOT_FOLDER_ID);
+    const soundropRootId = await Drive.findOrCreateFolder('Soundrop', _rootFolderId);
     let newFolderId = soundropRootId;
     if (artist) {
       newFolderId = await Drive.findOrCreateFolder(artist, soundropRootId);
@@ -13825,7 +13828,7 @@ const App = (() => {
         // 1. Download blob via Worker proxy (handles CORS for Android WebView)
         const blob = await Soundrop.fetchBlob(track.videoId);
         // 3. Upload to Drive "Soundrop" folder
-        const { fileId: driveId, folderId: driveFolderId, filename, folderHierarchy } = await Soundrop.saveToDrive(blob, meta);
+        const { fileId: driveId, folderId: driveFolderId, filename, folderHierarchy } = await Soundrop.saveToDrive(blob, meta, _rootFolderId);
 
         // 4. Write Drive metadata to DB.
         // manualAt is always stamped (user manually entered all fields).
