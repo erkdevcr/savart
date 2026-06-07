@@ -23,6 +23,7 @@ const App = (() => {
   let _browseFolder    = null;  // current open folder object { id, name, folderType } — for browse title 3-dot menu
   let _browseFiles     = [];    // current open folder audio files (for rescan)
   const _browseScrollMap = new Map(); // folderId → scrollTop, restored on Back
+  let _soundropCleanPending = false; // guard: prevents the Soundrop cleanup from looping
 
   /* ── Folder cover art cache ──────────────────────────────── */
   // folderId → object URL string | null (null = no image found)
@@ -5569,12 +5570,21 @@ const App = (() => {
 
       // If this is the Soundrop root, deep-clean empty subfolders in the background.
       // Runs with a short delay so any in-flight Drive moves have time to propagate.
-      if (folder.name?.trim().toLowerCase() === 'soundrop') {
+      // Guard _soundropCleanPending prevents the cleanup from re-triggering itself:
+      // if the clean deletes folders and refreshes the view, the refresh must not
+      // schedule another clean (which would loop every ~3 s indefinitely).
+      if (folder.name?.trim().toLowerCase() === 'soundrop' && !_soundropCleanPending) {
+        _soundropCleanPending = true;
         setTimeout(() => {
-          _deepCleanSoundropFolders(folder.id).then(() => {
-            // Refresh the folder view if we're still on it, so trashed folders vanish
-            if (_browseFolderId === folder.id) _openFolder(folder, false);
-          }).catch(() => {});
+          _deepCleanSoundropFolders(folder.id).then(anyDeleted => {
+            _soundropCleanPending = false;
+            // Only refresh if folders were actually deleted AND user is still here.
+            // The check is intentionally strict: do NOT refresh if the user navigated
+            // away — that would forcibly bring them back to the Soundrop root.
+            if (anyDeleted && _browseFolderId === folder.id) {
+              _openFolder(folder, false);
+            }
+          }).catch(() => { _soundropCleanPending = false; });
         }, 2000);
       }
 
@@ -12270,12 +12280,15 @@ const App = (() => {
    * Non-fatal — all errors silently ignored.
    * @param {string} soundropRootId
    */
+  // Returns true if any folders were deleted (so the caller can decide to refresh).
   async function _deepCleanSoundropFolders(soundropRootId) {
-    if (!soundropRootId) return;
+    if (!soundropRootId) return false;
+
+    let anyDeleted = false;
 
     // List artist-level folders
     const rootPage = await Drive.listFolder(soundropRootId).catch(() => null);
-    if (!rootPage) return;
+    if (!rootPage) return false;
 
     for (const artistFolder of rootPage.folders) {
       // List album-level folders inside this artist
@@ -12289,6 +12302,7 @@ const App = (() => {
         if (albumPage.folders.length === 0 && albumPage.files.length === 0) {
           await Drive.trashFile(albumFolder.id).catch(() => {});
           DB.setMeta(albumFolder.id, { id: albumFolder.id, deletedAt: Date.now() }).catch(() => {});
+          anyDeleted = true;
         }
       }
 
@@ -12297,8 +12311,10 @@ const App = (() => {
       if (artistPage2 && artistPage2.folders.length === 0 && artistPage2.files.length === 0) {
         await Drive.trashFile(artistFolder.id).catch(() => {});
         DB.setMeta(artistFolder.id, { id: artistFolder.id, deletedAt: Date.now() }).catch(() => {});
+        anyDeleted = true;
       }
     }
+    return anyDeleted;
   }
 
   /**

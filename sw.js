@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.435';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.435 — Fix: Soundrop root usa carpeta raíz del usuario, no hardcode MSK
+const APP_VERSION  = '3.5.436';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.436 — Fix: Soundrop clean loop eliminado; no refresca ni regresa al usuario
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
