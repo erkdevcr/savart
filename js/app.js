@@ -18,6 +18,7 @@ const App = (() => {
   /* ── Browse state ────────────────────────────────────────── */
   let _breadcrumb      = [];    // [{ id, name }] from root to current
   let _rootFolderId    = 'root';
+  let _rootFolderName  = CONFIG.ROOT_FOLDER_NAME; // overridden by localStorage if user changed it
   let _browseFolderId  = null;  // current open folder id (for rescan)
   let _browseFolder    = null;  // current open folder object { id, name, folderType } — for browse title 3-dot menu
   let _browseFiles     = [];    // current open folder audio files (for rescan)
@@ -192,8 +193,11 @@ const App = (() => {
     const savedZoom = localStorage.getItem('savart_uizoom') || 'm';
     _applyUiZoom(savedZoom);
 
-    // 3. Root folder is fixed to MSK — never changes
-    _rootFolderId = CONFIG.ROOT_FOLDER_ID;
+    // 3. Root folder — default to CONFIG, but user can override via Settings picker
+    _rootFolderId  = localStorage.getItem('savart_root_folder_id')   || CONFIG.ROOT_FOLDER_ID;
+    _rootFolderName = localStorage.getItem('savart_root_folder_name') || CONFIG.ROOT_FOLDER_NAME;
+    const _rootLabelEl = document.getElementById('root-folder-name');
+    if (_rootLabelEl) _rootLabelEl.textContent = _rootFolderName;
 
     // 4. Init player
     Player.init({
@@ -5321,7 +5325,7 @@ const App = (() => {
 
     // Always prepend root (MSK) so breadcrumb starts from the top
     if (chain.length > 0) {
-      chain.unshift({ id: _rootFolderId, name: CONFIG.ROOT_FOLDER_NAME });
+      chain.unshift({ id: _rootFolderId, name: _rootFolderName });
     }
 
     return chain;
@@ -6957,7 +6961,7 @@ const App = (() => {
       UI.showToast('Escaneando Drive…');
 
       const liveIds     = new Set();
-      const queue       = [{ id: CONFIG.ROOT_FOLDER_ID, name: CONFIG.ROOT_FOLDER_NAME, parentName: '' }];
+      const queue       = [{ id: _rootFolderId, name: _rootFolderName, parentName: '' }];
       const visited     = new Set();
       let   foldersScanned = 0;
 
@@ -7550,16 +7554,20 @@ const App = (() => {
    * Open the folder browser modal.
    * @param {function({id, name, fullPath}): void} [callback]
    *   If provided, called on confirm instead of the default EP handler.
+   * @param {{ id: string, name: string }} [startFolder]
+   *   Starting folder for the picker. Defaults to the current root folder.
+   *   Pass { id: 'root', name: 'Drive' } to start at the Drive top level.
    */
-  async function _dsOpenFolderBrowser(callback) {
+  async function _dsOpenFolderBrowser(callback, startFolder) {
     const modal = document.getElementById('ds-folder-modal');
     if (!modal) return;
     _dsFolderCallback = (typeof callback === 'function') ? callback : null;
     modal.style.display = 'flex';
-    _dsModalPath = [{ id: CONFIG.ROOT_FOLDER_ID, name: CONFIG.ROOT_FOLDER_NAME }];
+    const sf = startFolder || { id: _rootFolderId, name: _rootFolderName };
+    _dsModalPath = [{ id: sf.id, name: sf.name }];
     _dsModalSel  = null;
     _dsUpdateModalSelectBtn();
-    await _dsLoadModalFolder(CONFIG.ROOT_FOLDER_ID);
+    await _dsLoadModalFolder(sf.id);
   }
 
   function _dsCloseModal(modalId) {
@@ -13065,8 +13073,8 @@ const App = (() => {
         UI.updateSearchChipCounts(null);
         _renderCachedSearch(activeFilter);
       } else if (_breadcrumb.length === 0) {
-        _breadcrumb = [{ id: _rootFolderId, name: CONFIG.ROOT_FOLDER_NAME }];
-        _openFolder({ id: _rootFolderId, name: CONFIG.ROOT_FOLDER_NAME }, false);
+        _breadcrumb = [{ id: _rootFolderId, name: _rootFolderName }];
+        _openFolder({ id: _rootFolderId, name: _rootFolderName }, false);
       }
     }
     if (viewId === 'deep-scan') _openDeepScan();
@@ -13085,7 +13093,7 @@ const App = (() => {
     try {
       const folder = await Drive.getFileInfo(folderId);
       _breadcrumb = [
-        { id: _rootFolderId, name: CONFIG.ROOT_FOLDER_NAME },
+        { id: _rootFolderId, name: _rootFolderName },
         { id: folder.id, name: folder.name },
       ];
       await _openFolder(folder, false);
@@ -13955,6 +13963,22 @@ const App = (() => {
       if (track) onToggleStar(track);
     });
 
+    // Settings: root folder picker — opens the Drive folder browser starting at Drive root
+    document.getElementById('settings-root-folder-row')?.addEventListener('click', () => {
+      _dsOpenFolderBrowser(({ id, name }) => {
+        _rootFolderId   = id;
+        _rootFolderName = name;
+        localStorage.setItem('savart_root_folder_id',   id);
+        localStorage.setItem('savart_root_folder_name', name);
+        const lbl = document.getElementById('root-folder-name');
+        if (lbl) lbl.textContent = name;
+        // Navigate browse to the new root
+        _breadcrumb = [];
+        _openFolder({ id, name }, false).catch(() => {});
+        UI.showToast(`Carpeta raíz: ${name}`, 'success', 3000);
+      }, { id: 'root', name: 'Drive' });
+    });
+
     // Settings: full library refresh (scan all Drive, purge orphans)
     document.getElementById('btn-library-refresh')?.addEventListener('click', _fullLibraryRefresh);
 
@@ -14647,8 +14671,8 @@ const App = (() => {
 
         // If parent is MSK, above MSK, or unknown → land at MSK
         if (!parentId || parentId === _rootFolderId || parentId === 'root') {
-          _breadcrumb = [{ id: _rootFolderId, name: CONFIG.ROOT_FOLDER_NAME }];
-          _openFolder({ id: _rootFolderId, name: CONFIG.ROOT_FOLDER_NAME }, false);
+          _breadcrumb = [{ id: _rootFolderId, name: _rootFolderName }];
+          _openFolder({ id: _rootFolderId, name: _rootFolderName }, false);
         } else {
           // Navigate to parent only if it's within the MSK subtree
           // (we can't easily verify ancestry, so we trust Drive hierarchy)

@@ -210,11 +210,14 @@ const Drive = (() => {
    *              Guarantees folder results even when 100+ songs crowd them out.
    * Returns { folders, files }.
    */
-  async function _driveSearchQuery(safeTerm, mode = 'mixed') {
+  async function _driveSearchQuery(safeTerm, mode = 'mixed', rootId = null) {
     const mimeFilter = mode === 'folders'
       ? `mimeType = 'application/vnd.google-apps.folder'`
       : `(mimeType contains 'audio/' or mimeType = 'application/vnd.google-apps.folder')`;
-    const q = `${mimeFilter} and name contains '${safeTerm}' and trashed = false`;
+    // If a root folder is specified, restrict results to its subtree using the
+    // Drive API 'ancestors' filter (recursive — works for all descendant levels).
+    const ancestorFilter = rootId && rootId !== 'root' ? ` and '${rootId}' in ancestors` : '';
+    const q = `${mimeFilter} and name contains '${safeTerm}' and trashed = false${ancestorFilter}`;
     const params = new URLSearchParams({
       q,
       pageSize: mode === 'folders' ? '50' : '100',
@@ -257,8 +260,8 @@ const Drive = (() => {
 
     // Fire mixed queries + dedicated folder queries in parallel
     const allQueries = [
-      ...terms.map(q => _driveSearchQuery(q, 'mixed')),
-      ...terms.map(q => _driveSearchQuery(q, 'folders')),
+      ...terms.map(q => _driveSearchQuery(q, 'mixed', rootId)),
+      ...terms.map(q => _driveSearchQuery(q, 'folders', rootId)),
     ];
     const settled = await Promise.allSettled(allQueries);
 
