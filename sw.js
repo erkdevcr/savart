@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.426';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.426 — Fix: fetchBlob via Worker proxy para CORS en Android WebView
+const APP_VERSION  = '3.5.428';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.428 — Fix: fetchBlob usa CapacitorHttp en Android nativo (bypass CORS)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

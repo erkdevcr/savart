@@ -118,16 +118,59 @@ const Soundrop = (() => {
   }
 
   /**
-   * Download the audio for a Soundrop track as a Blob via the Cloudflare Worker proxy.
+   * Download the audio for a Soundrop track as a Blob.
    * Used only during the "save to Drive" flow.
-   * Routing through the Worker (with ?download=1) ensures Android WebView CORS compliance —
-   * the Worker adds Access-Control-Allow-Origin:* so fetch() succeeds in the WebView.
-   * Validates that the response is actually audio (not an HTML error page).
+   *
+   * Strategy:
+   *   Android native (Capacitor): use CapacitorHttp.request() — bypasses WebView CORS
+   *     completely, allowing direct download of the CDN URL (which is IP-locked and
+   *     unreachable from Cloudflare datacenter IPs).
+   *   Web / PWA: use Worker proxy (?download=1) — Cloudflare adds CORS headers.
+   *     Note: this path may fail (cdn 404) if the CDN URL is IP-locked.
    *
    * @param {string} videoId  — bare YouTube video ID (no "sd_" prefix)
    * @returns {Promise<Blob>}
    */
   async function fetchBlob(videoId) {
+    // ── Android native path: CapacitorHttp bypasses WebView CORS ──────────────
+    const capHttp = typeof Capacitor !== 'undefined' && Capacitor.isNativePlatform?.()
+      ? (Capacitor.Plugins?.CapacitorHttp || Capacitor.Plugins?.Http)
+      : null;
+
+    if (capHttp) {
+      // 1. Get CDN URL from Worker (normal JSON mode — no ?download=1)
+      const audioUrl = await getAudioLink(videoId);
+
+      // 2. Download via native HTTP (no CORS restriction)
+      let nativeRes;
+      try {
+        nativeRes = await capHttp.request({
+          method:       'GET',
+          url:          audioUrl,
+          responseType: 'blob',        // returns base64-encoded binary
+          connectTimeout: 30000,
+          readTimeout:  120000,
+        });
+      } catch (err) {
+        throw new Error(`[Soundrop] Descarga nativa falló: ${err.message}`);
+      }
+      if (nativeRes.status < 200 || nativeRes.status >= 300) {
+        throw new Error(`[Soundrop] Descarga nativa HTTP ${nativeRes.status}`);
+      }
+
+      // Convert base64 → Blob
+      let base64 = nativeRes.data || '';
+      // Strip data-URL prefix if present (e.g. "data:audio/mpeg;base64,...")
+      const comma = base64.indexOf(',');
+      if (comma !== -1) base64 = base64.slice(comma + 1);
+      const byteChars  = atob(base64);
+      const byteArray  = new Uint8Array(byteChars.length);
+      for (let i = 0; i < byteChars.length; i++) byteArray[i] = byteChars.charCodeAt(i);
+      const ct = (nativeRes.headers?.['content-type'] || '').split(';')[0].trim() || 'audio/mpeg';
+      return new Blob([byteArray], { type: ct });
+    }
+
+    // ── Web / PWA path: Worker proxy with CORS headers ─────────────────────────
     const proxyUrl = `${WORKER_URL}?id=${encodeURIComponent(videoId)}&download=1`;
     let res;
     try {
@@ -135,10 +178,20 @@ const Soundrop = (() => {
     } catch (err) {
       throw new Error(`[Soundrop] Descarga falló: ${err.message}`);
     }
-    if (!res.ok) throw new Error(`[Soundrop] Descarga HTTP ${res.status}`);
+    if (!res.ok) {
+      // Read Worker error body for diagnostics (shown in UI toast)
+      let detail = '';
+      try {
+        const errBody = await res.clone().json();
+        if (errBody.error)       detail = `: ${errBody.error}`;
+        if (errBody.rapidStatus) detail += ` (rapidAPI: ${errBody.rapidStatus})`;
+        if (errBody.cdnStatus)   detail += ` (cdn: ${errBody.cdnStatus})`;
+        if (errBody.msg)         detail += ` — ${errBody.msg}`;
+      } catch {}
+      throw new Error(`[Soundrop] Descarga HTTP ${res.status}${detail}`);
+    }
 
-    // Validate content-type — YouTube CDN sometimes returns an HTML error page
-    // with status 200 when a streaming token has expired or the request is blocked.
+    // Validate content-type — CDN sometimes returns HTML error pages with status 200
     const ct = (res.headers.get('Content-Type') || '').toLowerCase();
     if (ct.startsWith('text/') || ct.includes('html')) {
       throw new Error(`[Soundrop] Link de audio expirado o inválido (tipo: ${ct})`);
@@ -151,15 +204,13 @@ const Soundrop = (() => {
       throw new Error(`[Soundrop] Error leyendo blob: ${err.message}`);
     }
 
-    // Additional guard: check magic bytes for known audio/video containers.
-    // MP3: FF Fx or ID3 — WebM: 1A 45 DF A3 — MP4/M4A: ftyp at offset 4
+    // Magic-byte validation — guard against non-audio responses
     const head = new Uint8Array(await blob.slice(0, 12).arrayBuffer());
     const isMP3  = (head[0] === 0xFF && (head[1] & 0xE0) === 0xE0) ||
                    (head[0] === 0x49 && head[1] === 0x44 && head[2] === 0x33);
     const isWebM = head[0] === 0x1A && head[1] === 0x45 && head[2] === 0xDF && head[3] === 0xA3;
     const isMP4  = head[4] === 0x66 && head[5] === 0x74 && head[6] === 0x79 && head[7] === 0x70;
     const isOGG  = head[0] === 0x4F && head[1] === 0x67 && head[2] === 0x67 && head[3] === 0x53;
-
     if (!isMP3 && !isWebM && !isMP4 && !isOGG) {
       throw new Error('[Soundrop] El archivo descargado no es audio válido (link expirado o bloqueado)');
     }
