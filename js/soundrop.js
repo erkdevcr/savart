@@ -118,25 +118,53 @@ const Soundrop = (() => {
   }
 
   /**
-   * Download the audio for a Soundrop track as a Blob.
+   * Download the audio for a Soundrop track as a Blob via the Cloudflare Worker proxy.
    * Used only during the "save to Drive" flow.
+   * Routing through the Worker (with ?download=1) ensures Android WebView CORS compliance —
+   * the Worker adds Access-Control-Allow-Origin:* so fetch() succeeds in the WebView.
+   * Validates that the response is actually audio (not an HTML error page).
    *
-   * @param {string} audioUrl  — URL returned by getAudioLink()
+   * @param {string} videoId  — bare YouTube video ID (no "sd_" prefix)
    * @returns {Promise<Blob>}
    */
-  async function fetchBlob(audioUrl) {
+  async function fetchBlob(videoId) {
+    const proxyUrl = `${WORKER_URL}?id=${encodeURIComponent(videoId)}&download=1`;
     let res;
     try {
-      res = await fetch(audioUrl, { signal: AbortSignal.timeout(120000) });
+      res = await fetch(proxyUrl, { signal: AbortSignal.timeout(120000) });
     } catch (err) {
       throw new Error(`[Soundrop] Descarga falló: ${err.message}`);
     }
     if (!res.ok) throw new Error(`[Soundrop] Descarga HTTP ${res.status}`);
+
+    // Validate content-type — YouTube CDN sometimes returns an HTML error page
+    // with status 200 when a streaming token has expired or the request is blocked.
+    const ct = (res.headers.get('Content-Type') || '').toLowerCase();
+    if (ct.startsWith('text/') || ct.includes('html')) {
+      throw new Error(`[Soundrop] Link de audio expirado o inválido (tipo: ${ct})`);
+    }
+
+    let blob;
     try {
-      return await res.blob();
+      blob = await res.blob();
     } catch (err) {
       throw new Error(`[Soundrop] Error leyendo blob: ${err.message}`);
     }
+
+    // Additional guard: check magic bytes for known audio/video containers.
+    // MP3: FF Fx or ID3 — WebM: 1A 45 DF A3 — MP4/M4A: ftyp at offset 4
+    const head = new Uint8Array(await blob.slice(0, 12).arrayBuffer());
+    const isMP3  = (head[0] === 0xFF && (head[1] & 0xE0) === 0xE0) ||
+                   (head[0] === 0x49 && head[1] === 0x44 && head[2] === 0x33);
+    const isWebM = head[0] === 0x1A && head[1] === 0x45 && head[2] === 0xDF && head[3] === 0xA3;
+    const isMP4  = head[4] === 0x66 && head[5] === 0x74 && head[6] === 0x79 && head[7] === 0x70;
+    const isOGG  = head[0] === 0x4F && head[1] === 0x67 && head[2] === 0x67 && head[3] === 0x53;
+
+    if (!isMP3 && !isWebM && !isMP4 && !isOGG) {
+      throw new Error('[Soundrop] El archivo descargado no es audio válido (link expirado o bloqueado)');
+    }
+
+    return blob;
   }
 
   // ── Upload to Drive ───────────────────────────────────────
@@ -172,12 +200,32 @@ const Soundrop = (() => {
       }
     }
 
-    // Filename: "Artist - Title.mp3" (or just "Title.mp3" when no artist)
+    // Derive MIME type and extension from the actual blob content.
+    // YouTube/Worker can return audio/webm (Opus), audio/mp4 (AAC), audio/mpeg, etc.
+    // Using the wrong MIME type causes Drive to show the file as unplayable.
+    const mimeType = blob.type && blob.type !== 'application/octet-stream'
+      ? blob.type.split(';')[0].trim()   // strip parameters (e.g. "audio/mpeg; codecs=...")
+      : 'audio/mpeg';
+
+    const EXT_MAP = {
+      'audio/mpeg':  'mp3',
+      'audio/mp3':   'mp3',
+      'audio/webm':  'webm',
+      'audio/ogg':   'ogg',
+      'audio/mp4':   'm4a',
+      'audio/aac':   'aac',
+      'audio/x-m4a': 'm4a',
+      'video/mp4':   'mp4',
+      'video/webm':  'webm',
+    };
+    const ext = EXT_MAP[mimeType] || 'mp3';
+
+    // Filename: "Artist - Title.ext" (or just "Title.ext" when no artist)
     const titlePart = (meta.title || 'Soundrop track').trim();
-    const filename  = artist ? `${artist} - ${titlePart}.mp3` : `${titlePart}.mp3`;
+    const filename  = artist ? `${artist} - ${titlePart}.${ext}` : `${titlePart}.${ext}`;
 
     // Upload via multipart
-    const fileId = await Drive.uploadFile(blob, filename, 'audio/mpeg', folderId);
+    const fileId = await Drive.uploadFile(blob, filename, mimeType, folderId);
 
     // Return full folder hierarchy so the caller can write it to local DB.
     // This enables _isInSoundropFolder to walk the tree without Drive API calls.

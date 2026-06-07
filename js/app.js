@@ -13782,10 +13782,8 @@ const App = (() => {
       saveLabel.textContent = 'Guardando…';
 
       try {
-        // 1. Get fresh audio URL from worker
-        const audioUrl = await Soundrop.getAudioLink(track.videoId);
-        // 2. Download blob
-        const blob = await Soundrop.fetchBlob(audioUrl);
+        // 1. Download blob via Worker proxy (handles CORS for Android WebView)
+        const blob = await Soundrop.fetchBlob(track.videoId);
         // 3. Upload to Drive "Soundrop" folder
         const { fileId: driveId, folderId: driveFolderId, filename, folderHierarchy } = await Soundrop.saveToDrive(blob, meta);
 

@@ -918,7 +918,10 @@ const Player = (() => {
       // ── Soundrop track ────────────────────────────────────────
       // _sdAudio has crossOrigin='anonymous', so the Web Audio graph can
       // process it through the full EQ/gain chain without CORS silence.
-      if (item.isSoundrop) {
+      // Only use the Soundrop/Worker path for tracks that have NOT been saved
+      // to Drive yet (id starts with "sd_"). Saved tracks have a real Drive
+      // file ID and must be played through the normal Drive download path.
+      if (item.isSoundrop && (item.id || '').startsWith('sd_')) {
         _initAudioGraph(); // builds graph + _sdSourceNode if not yet done
         _sdActive = true;
 
@@ -1119,8 +1122,8 @@ const Player = (() => {
 
       if (err.name === 'AuthError') {
         _onError({ type: 'auth', message: 'Sesión expirada. Renueva tu sesión.', item });
-      } else if (item?.isSoundrop && !_sdRetry) {
-        // Soundrop first failure — Cloudflare Worker was likely cold-starting.
+      } else if (item?.isSoundrop && (item.id || '').startsWith('sd_') && !_sdRetry) {
+        // Soundrop (not-yet-saved) first failure — Cloudflare Worker was likely cold-starting.
         // Silently retry the same track after 2 s (Worker is warm by then).
         // Guard: only retry if the user hasn't switched to a different track.
         console.log('[Player] Soundrop cold-start — silent retry in 2 s:', item.name);
@@ -1129,9 +1132,10 @@ const Player = (() => {
         }, 2000);
       } else {
         _onError({ type: 'download', message: 'toast_download_error', item });
-        // Drive tracks: auto-skip after a short delay.
-        // Soundrop: don't skip — the queue may contain only this one track.
-        if (!item?.isSoundrop) setTimeout(() => next(), 1500);
+        // Drive tracks (including Soundrop-saved): auto-skip after a short delay.
+        // Unsaved Soundrop streams: don't skip — the queue may contain only this one track.
+        const isLiveStream = item?.isSoundrop && (item.id || '').startsWith('sd_');
+        if (!isLiveStream) setTimeout(() => next(), 1500);
       }
     }
   }

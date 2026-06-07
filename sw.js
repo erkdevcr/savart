@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.423';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.423 — Feature: limpiar folders vacíos al abrir carpeta Soundrop en browse
+const APP_VERSION  = '3.5.426';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.426 — Fix: fetchBlob via Worker proxy para CORS en Android WebView
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
