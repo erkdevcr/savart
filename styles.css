@@ -1772,6 +1772,10 @@ img { display: block; }
 #sd-save-modal .ds-modal-card {
   background: var(--bg-elevated);   /* #1C1C22 = rgb(28,28,34) */
 }
+/* Inputs need a different bg so they're visible against the elevated card */
+#sd-save-modal .ds-artist-url-modal-input {
+  background: var(--bg-surface);    /* #141418 — darker than card, creates contrast */
+}
 
 /* ── Mobile: SD modal tracks visual viewport so it rises with keyboard ── */
 @media (max-width: 767px) {

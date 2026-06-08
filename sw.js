@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.442';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.442 — Sync carpeta raíz entre dispositivos vía savart_settings.json (LWW)
+const APP_VERSION  = '3.5.444';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.444 — Fix: inputs visibles en SD save modal (bg contrast)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

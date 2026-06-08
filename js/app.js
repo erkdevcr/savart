@@ -331,6 +331,31 @@ const App = (() => {
    * stack in order of visual "depth" (most-modal first).
    */
   function _handleBack() {
+    // 0a. SD save modal open? (has its own X button and backdrop)
+    const _sdModalEl = document.getElementById('sd-save-modal');
+    if (_sdModalEl && _sdModalEl.style.display !== 'none') {
+      _sdModalEl.style.display = 'none';
+      _sdModalEl.style.top    = '';
+      _sdModalEl.style.height = '';
+      return;
+    }
+
+    // 0b. Any DS modal open? (folder picker, artist URL, rescan, send-scan dialogs)
+    for (const _mid of ['ds-folder-modal', 'ds-artist-url-modal', 'ds-rescan-dialog', 'ds-send-scan-dialog']) {
+      const _m = document.getElementById(_mid);
+      if (_m && _m.style.display !== 'none') {
+        _dsCloseModal(_mid);
+        return;
+      }
+    }
+
+    // 0c. Playlist picker open?
+    const _plPicker = document.getElementById('playlist-picker');
+    if (_plPicker?.classList.contains('visible')) {
+      if (typeof UI !== 'undefined') UI.hidePlaylistPicker?.();
+      return;
+    }
+
     // 1. Context menu open?
     const ctxMenu = document.getElementById('context-menu');
     if (ctxMenu?.classList.contains('visible')) {
@@ -5639,6 +5664,8 @@ const App = (() => {
       // Keep a full folder object so the browse title 3-dot menu can pass the right
       // folderType (album / collection / null) to showContextMenu — same data as a subfolder row.
       _browseFolder   = { id: folder.id, name: folder.name, folderType: curType || null };
+      // Hide back button when at root; show it when inside a subfolder
+      { const _bb = document.getElementById('btn-browse-back'); if (_bb) _bb.style.display = folder.id === _rootFolderId ? 'none' : ''; }
       // Update the rescan dot: show green if this folder was previously scanned
       _updateBrowseLegend(folder.id);
       // Render (or clear) the album/collection identity header below the search bar.
@@ -5732,6 +5759,8 @@ const App = (() => {
     _browseFolderId = folder.id;
     _browseFiles    = files;
     _browseFolder   = { id: folder.id, name: folder.name, folderType: null };
+    // Hide back button when at root; show it when inside a subfolder
+    { const _bb = document.getElementById('btn-browse-back'); if (_bb) _bb.style.display = folder.id === _rootFolderId ? 'none' : ''; }
     _updateBrowseLegend(folder.id);
 
     // Cache items for queue resolution
