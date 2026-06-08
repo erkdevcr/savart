@@ -2694,6 +2694,25 @@ const UI = (() => {
    * @param {DriveItem} item — the song/folder to add
    * @param {Object[]}  playlists — from DB.getPlaylists()
    */
+  // ── Playlist picker: visualViewport listener (mobile keyboard tracking) ──
+  let _plPickerVvListener = null;
+
+  /**
+   * Position the picker vertically at the center of the current visual viewport.
+   * Called on open and on every visualViewport resize (keyboard open/close).
+   */
+  function _plPickerCenterMobile() {
+    const picker = document.getElementById('playlist-picker');
+    if (!picker) return;
+    const vv     = window.visualViewport;
+    const vvTop  = vv ? vv.offsetTop  : 0;
+    const vvH    = vv ? vv.height     : window.innerHeight;
+    const ph     = picker.offsetHeight || Math.min(400, window.innerHeight * 0.56);
+    // Place center of picker at center of visual viewport; clamp so it doesn't go off-screen
+    const top    = vvTop + Math.max(16, (vvH - ph) / 2);
+    picker.style.top = `${top}px`;
+  }
+
   function showPlaylistPicker(e, item, playlists) {
     _initPlaylistPicker();
 
@@ -2717,20 +2736,36 @@ const UI = (() => {
 
     _renderPickerList(playlists);
 
-    // Position near click — keep inside viewport
-    const margin = 10;
-    const pw = 280;
-    const ph = Math.min(460, 110 + playlists.length * 42);
-    let x = e.clientX || 0;
-    let y = e.clientY || 0;
-    if (x + pw + margin > window.innerWidth)  x = window.innerWidth  - pw - margin;
-    if (y + ph + margin > window.innerHeight) y = window.innerHeight - ph - margin;
-    x = Math.max(margin, x);
-    y = Math.max(margin, y);
+    const isMobile = window.innerWidth <= 767;
 
-    picker.style.left = `${x}px`;
-    picker.style.top  = `${y}px`;
-    picker.classList.add('visible');
+    if (isMobile) {
+      // ── Mobile: center horizontally (CSS handles left:50%+translateX),
+      //    center vertically via visualViewport so it rises with the keyboard.
+      picker.classList.add('visible');
+      // Wait one frame so offsetHeight is valid after display:flex
+      requestAnimationFrame(() => {
+        _plPickerCenterMobile();
+        // Track keyboard open/close
+        if (window.visualViewport && !_plPickerVvListener) {
+          _plPickerVvListener = () => _plPickerCenterMobile();
+          window.visualViewport.addEventListener('resize', _plPickerVvListener);
+        }
+      });
+    } else {
+      // ── Desktop: position near the click point, keep inside viewport
+      const margin = 10;
+      const pw = 280;
+      const ph = Math.min(460, 110 + playlists.length * 42);
+      let x = e.clientX || 0;
+      let y = e.clientY || 0;
+      if (x + pw + margin > window.innerWidth)  x = window.innerWidth  - pw - margin;
+      if (y + ph + margin > window.innerHeight) y = window.innerHeight - ph - margin;
+      x = Math.max(margin, x);
+      y = Math.max(margin, y);
+      picker.style.left = `${x}px`;
+      picker.style.top  = `${y}px`;
+      picker.classList.add('visible');
+    }
 
     requestAnimationFrame(() => searchInput?.focus());
 
@@ -2750,6 +2785,11 @@ const UI = (() => {
   function hidePlaylistPicker() {
     document.getElementById('playlist-picker')?.classList.remove('visible');
     document.removeEventListener('click', _onPickerOutsideClick);
+    // Clean up visualViewport listener
+    if (_plPickerVvListener && window.visualViewport) {
+      window.visualViewport.removeEventListener('resize', _plPickerVvListener);
+      _plPickerVvListener = null;
+    }
   }
 
   function _addCtxItem(menu, icon, label, onClick, extraClass = '') {

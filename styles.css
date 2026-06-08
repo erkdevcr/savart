@@ -4129,7 +4129,7 @@ body.queue-open #mini-player { z-index: 65; }
 /* ── Playlist picker ─────────────────────────────────────── */
 #playlist-picker {
   position: fixed;
-  background: #111115;
+  background: var(--bg-elevated);   /* #1C1C22 = rgb(28,28,34) — same as EQ card */
   border: 1px solid var(--bg-hover);
   border-radius: 12px;
   width: 280px;
@@ -4140,6 +4140,18 @@ body.queue-open #mini-player { z-index: 65; }
 }
 
 #playlist-picker.visible { display: flex; flex-direction: column; }
+
+/* ── Mobile: centered + pushed up by keyboard ─────────────── */
+@media (max-width: 767px) {
+  #playlist-picker {
+    /* JS sets top via visualViewport; CSS only handles horizontal centering */
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    width: min(calc(100vw - 32px), 340px);
+    max-height: 56vh;
+    transition: top 0.18s ease;
+  }
+}
 
 /* Search row */
 .pl-picker-search-wrap {

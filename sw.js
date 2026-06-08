@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.438';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.438 — Delete en context menu de ítems Soundrop; DB.deleteMeta
+const APP_VERSION  = '3.5.439';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.439 — Playlist picker móvil: centrado + teclado via visualViewport + color EQ
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
