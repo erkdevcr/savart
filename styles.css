@@ -1754,10 +1754,33 @@ img { display: block; }
   color: var(--text-muted);
   font-weight: 500;
 }
+/* Álbum + Año side-by-side row */
+.sd-save-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+}
+.sd-save-label--album { flex: 1; }   /* takes all remaining space */
+.sd-save-label--year  { flex: 0 0 72px; }  /* fixed narrow column */
 .sd-save-hint {
   font-size: 11px;
   color: var(--text-disabled);
   margin-top: 4px;
+}
+
+/* ── SD save modal: same color as EQ card ─────────────────── */
+#sd-save-modal .ds-modal-card {
+  background: var(--bg-elevated);   /* #1C1C22 = rgb(28,28,34) */
+}
+
+/* ── Mobile: SD modal tracks visual viewport so it rises with keyboard ── */
+@media (max-width: 767px) {
+  #sd-save-modal {
+    /* JS sets height + top via visualViewport; transition for smooth keyboard animation */
+    transition: height 0.18s ease, top 0.18s ease;
+    align-items: center;
+    justify-content: center;
+  }
 }
 
 /* Count summary line — shown on mobile below the chips */

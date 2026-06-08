@@ -1480,13 +1480,13 @@ const UI = (() => {
     }
 
     items.forEach((item, i) => {
-      const el = _buildHistoryItem(item, i + 1);
+      const el = _buildHistoryItem(item, i + 1, items);
       container.appendChild(el);
     });
   }
 
   /** Build a single history list item (same appearance as top-played). */
-  function _buildHistoryItem(item, rank) {
+  function _buildHistoryItem(item, rank, allItems = []) {
     const el = document.createElement('div');
     el.className = 'top-list-item';
     el.dataset.id = item.id;
@@ -1526,7 +1526,14 @@ const UI = (() => {
 
     el.addEventListener('click', (e) => {
       if (e.target.closest('.btn-more')) return;
-      if (typeof App !== 'undefined') App.onHomeCardClick(item);
+      if (typeof App !== 'undefined') {
+        // Load the full history list as the queue, starting at the clicked song
+        if (allItems.length > 1 && typeof App.onHistorySongClick === 'function') {
+          App.onHistorySongClick(item, allItems);
+        } else {
+          App.onHomeCardClick(item);
+        }
+      }
     });
 
     el.querySelector('.btn-more')?.addEventListener('click', (e) => {

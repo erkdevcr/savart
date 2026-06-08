@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.439';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.439 — Playlist picker móvil: centrado + teclado via visualViewport + color EQ
+const APP_VERSION  = '3.5.442';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.442 — Sync carpeta raíz entre dispositivos vía savart_settings.json (LWW)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

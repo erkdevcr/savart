@@ -488,13 +488,19 @@ const Sync = (() => {
       }
 
       case 'settings': {
-        // Only apply the shared portion (custom presets). Never touch 'settings_local'
+        // Only apply the shared portion. Never touch 'settings_local'
         // which holds device-specific EQ state (gains, enabled, preset, tempo).
         if (data && typeof data === 'object') {
-          const current = (await DB.getState('settings')) || {};
+          const current    = (await DB.getState('settings')) || {};
+          const remoteTs   = data.savedAt    || 0;
+          const localTs    = current.savedAt || 0;
+          // LWW: only overwrite root folder if remote is newer
+          const useRemoteRoot = remoteTs > localTs && data.rootFolderId;
           await DB.setState('settings', {
             ...current,
             eqCustomPresets: data.eqCustomPresets || current.eqCustomPresets || [],
+            rootFolderId:    useRemoteRoot ? data.rootFolderId  : (current.rootFolderId  || null),
+            rootFolderName:  useRemoteRoot ? data.rootFolderName : (current.rootFolderName || null),
             savedAt:         data.savedAt || current.savedAt,
           });
         }
@@ -998,16 +1004,19 @@ const Sync = (() => {
   }
 
   async function _pushSettings() {
-    // Only push the shared portion of settings (custom EQ presets).
+    // Shared settings: custom EQ presets + root folder selection.
     // EQ state (gains, enabled, preset, tempo) lives in 'settings_local' and
     // is intentionally device-specific — it is never written to Drive.
     const s = (await DB.getState('settings')) || {};
     const payload = {
       eqCustomPresets: s.eqCustomPresets || [],
+      // Root folder — shared across devices (LWW by savedAt)
+      rootFolderId:    s.rootFolderId   || null,
+      rootFolderName:  s.rootFolderName || null,
       savedAt:         s.savedAt || Date.now(),
     };
     await _writeFile(FILENAMES.settings, payload);
-    console.log('[Sync] Pushed settings (custom presets only)');
+    console.log('[Sync] Pushed settings (custom presets + root folder)');
   }
 
   async function _pushHistory() {

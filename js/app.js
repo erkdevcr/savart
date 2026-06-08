@@ -198,12 +198,30 @@ const App = (() => {
     const savedZoom = localStorage.getItem('savart_uizoom') || 'm';
     _applyUiZoom(savedZoom);
 
-    // 3. Root folder — use saved value from localStorage (set via Settings picker).
-    // Default to Drive root ('root') so the app works for ANY Google account.
-    // CONFIG.ROOT_FOLDER_ID is Erick's personal MSK folder and must not be used
-    // as a fallback for other users (their Drive doesn't have that folder → 404).
-    _rootFolderId  = localStorage.getItem('savart_root_folder_id')   || 'root';
-    _rootFolderName = localStorage.getItem('savart_root_folder_name') || 'Drive';
+    // 3. Root folder — resolve from DB (synced) first, fall back to localStorage,
+    // then default to Drive root so the app works for ANY Google account.
+    // DB.getState('settings').rootFolderId is written by sync after pulling from Drive.
+    // localStorage is written immediately on user change (faster on the originating device).
+    {
+      const _sharedSettings  = (await DB.getState('settings').catch(() => null)) || {};
+      const _lsId   = localStorage.getItem('savart_root_folder_id');
+      const _lsName = localStorage.getItem('savart_root_folder_name');
+      // Use whichever has the most-recently-saved value (savedAt is the LWW guard).
+      // If only one source has a value, use it.
+      const _dbId   = _sharedSettings.rootFolderId;
+      const _dbName = _sharedSettings.rootFolderName;
+      if (_dbId && _lsId && _dbId !== _lsId) {
+        // Both exist but differ — use DB (synced from newest device)
+        _rootFolderId   = _dbId;
+        _rootFolderName = _dbName || 'Drive';
+        // Keep localStorage in sync
+        try { localStorage.setItem('savart_root_folder_id',   _rootFolderId);   } catch (_) {}
+        try { localStorage.setItem('savart_root_folder_name', _rootFolderName); } catch (_) {}
+      } else {
+        _rootFolderId   = _dbId || _lsId   || 'root';
+        _rootFolderName = (_dbId ? _dbName : _lsName) || 'Drive';
+      }
+    }
     const _rootLabelEl = document.getElementById('root-folder-name');
     if (_rootLabelEl) _rootLabelEl.textContent = _rootFolderName;
 
@@ -708,6 +726,22 @@ const App = (() => {
       }
 
       _updateSpeedBadge(Player.getTempo()); // init badge even if tempo wasn't saved
+
+      // ── Restore root folder (synced setting) ──────────────
+      // Apply only if the shared DB has a value AND it differs from what's active.
+      // On boot this is already handled above; this branch runs on live sync updates.
+      if (shared.rootFolderId && shared.rootFolderId !== _rootFolderId) {
+        const newId   = shared.rootFolderId;
+        const newName = shared.rootFolderName || 'Drive';
+        _rootFolderId   = newId;
+        _rootFolderName = newName;
+        try { localStorage.setItem('savart_root_folder_id',   newId);   } catch (_) {}
+        try { localStorage.setItem('savart_root_folder_name', newName); } catch (_) {}
+        const lbl = document.getElementById('root-folder-name');
+        if (lbl) lbl.textContent = newName;
+        console.log('[App] Root folder updated via sync:', newName, newId);
+      }
+
       console.log('[App] Settings restored from DB');
     } catch (err) {
       console.warn('[App] Could not restore settings:', err);
@@ -5335,6 +5369,19 @@ const App = (() => {
       }
       Player.setQueue([item], 0);
     }
+  }
+
+  /**
+   * Play a song from the History view, loading the full history list as the queue.
+   * @param {DriveItem} item      — the tapped song
+   * @param {DriveItem[]} allItems — the full history list (already sorted newest-first)
+   */
+  function onHistorySongClick(item, allItems) {
+    _resetRadio();
+    // Only queue songs (skip folder entries that may appear in history)
+    const songs = allItems.filter(it => !it.isFolder && it.type !== 'folder');
+    const idx   = songs.findIndex(it => it.id === item.id);
+    Player.setQueue(songs, idx >= 0 ? idx : 0);
   }
 
   /** Play all songs in a playlist immediately (called from playlist detail header button). */
@@ -13943,6 +13990,18 @@ const App = (() => {
     // ── Soundrop download buttons (expanded + mini) ───────────
     // item is optional — falls back to current track (button press).
     // Stores the target on the modal so the save handler uses it.
+    // ── SD save modal: visualViewport listener (mobile keyboard tracking) ──
+    let _sdModalVvListener = null;
+
+    function _sdModalAdjustViewport() {
+      const modal = document.getElementById('sd-save-modal');
+      if (!modal || modal.style.display === 'none') return;
+      const vv = window.visualViewport;
+      if (!vv) return;
+      modal.style.top    = `${vv.offsetTop}px`;
+      modal.style.height = `${vv.height}px`;
+    }
+
     function _openSdSaveModal(item) {
       const track = item || Player.getCurrentTrack();
       if (!track?.isSoundrop) return;
@@ -13953,7 +14012,31 @@ const App = (() => {
       document.getElementById('sd-save-year').value   = track.year   || '';
       document.getElementById('sd-modal-save-label').textContent = UI.t('ctx_sd_download') || 'Guardar';
       document.getElementById('btn-sd-modal-save').disabled = false;
-      document.getElementById('sd-save-modal').style.display = '';
+      const modal = document.getElementById('sd-save-modal');
+      modal.style.display = '';
+
+      // Mobile: track visual viewport so card rises with keyboard
+      if (window.innerWidth <= 767 && window.visualViewport) {
+        // Reset inline styles from previous open
+        modal.style.top    = '';
+        modal.style.height = '';
+        requestAnimationFrame(() => {
+          _sdModalAdjustViewport();
+          if (!_sdModalVvListener) {
+            _sdModalVvListener = () => _sdModalAdjustViewport();
+            window.visualViewport.addEventListener('resize', _sdModalVvListener);
+          }
+        });
+      }
+    }
+
+    function _closeSdSaveModal() {
+      const modal = document.getElementById('sd-save-modal');
+      if (modal) { modal.style.display = 'none'; modal.style.top = ''; modal.style.height = ''; }
+      if (_sdModalVvListener && window.visualViewport) {
+        window.visualViewport.removeEventListener('resize', _sdModalVvListener);
+        _sdModalVvListener = null;
+      }
     }
     // Expose for context menu
     App.onSdDownload = (item) => _openSdSaveModal(item);
@@ -13991,9 +14074,9 @@ const App = (() => {
     });
 
     // SD save modal: close / cancel
-    document.getElementById('btn-sd-modal-close')?.addEventListener('click',  () => { document.getElementById('sd-save-modal').style.display = 'none'; });
-    document.getElementById('btn-sd-modal-cancel')?.addEventListener('click', () => { document.getElementById('sd-save-modal').style.display = 'none'; });
-    document.getElementById('sd-save-modal-backdrop')?.addEventListener('click', () => { document.getElementById('sd-save-modal').style.display = 'none'; });
+    document.getElementById('btn-sd-modal-close')?.addEventListener('click',  () => _closeSdSaveModal());
+    document.getElementById('btn-sd-modal-cancel')?.addEventListener('click', () => _closeSdSaveModal());
+    document.getElementById('sd-save-modal-backdrop')?.addEventListener('click', () => _closeSdSaveModal());
 
     // SD save modal: confirm → fetch blob, upload to Drive, write DB meta
     document.getElementById('btn-sd-modal-save')?.addEventListener('click', async () => {
@@ -14078,7 +14161,7 @@ const App = (() => {
         await DB.addToHistory(_savedDriveItem).catch(() => {});
         Sync.push('history');
 
-        modal.style.display = 'none';
+        _closeSdSaveModal();
         modal._sdItem = null;
 
         // Update the player queue so the saved track reflects the Drive file.
@@ -14186,14 +14269,19 @@ const App = (() => {
       _dsOpenFolderBrowser(({ id, name }) => {
         _rootFolderId   = id;
         _rootFolderName = name;
-        localStorage.setItem('savart_root_folder_id',   id);
-        localStorage.setItem('savart_root_folder_name', name);
+        // Persist locally (instant) and to shared DB (synced to other devices)
+        try { localStorage.setItem('savart_root_folder_id',   id);   } catch (_) {}
+        try { localStorage.setItem('savart_root_folder_name', name); } catch (_) {}
+        const savedAt = Date.now();
+        DB.getState('settings').then(s => {
+          return DB.setState('settings', { ...(s || {}), rootFolderId: id, rootFolderName: name, savedAt });
+        }).then(() => Sync.push('settings')).catch(() => {});
         const lbl = document.getElementById('root-folder-name');
         if (lbl) lbl.textContent = name;
         // Navigate browse to the new root
         _breadcrumb = [];
         _openFolder({ id, name }, false).catch(() => {});
-        UI.showToast(`Carpeta raíz: ${name}`, 'success', 3000);
+        UI.showToast(`Carpeta raíz: ${name}`);
       }, { id: 'root', name: 'Drive' });
     });
 
@@ -15003,6 +15091,7 @@ const App = (() => {
     boot,
     // Called by UI event handlers
     onHomeCardClick,
+    onHistorySongClick,
     onPlaylistHomeCardClick,
     onPlaylistDetailPlay,
     onFolderClick,

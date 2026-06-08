@@ -19,9 +19,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&family=Baskervville:ital@0;1&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="styles.css?v=3.5.439">
+  <link rel="stylesheet" href="styles.css?v=3.5.442">
   <!-- Version global — fallback para Android donde el SW no se registra -->
-  <script>window.SAVART_VERSION = '3.5.439';</script>
+  <script>window.SAVART_VERSION = '3.5.442';</script>
 </head>
 <body>
 
@@ -741,12 +741,14 @@
         <label class="sd-save-label">Artista
           <input id="sd-save-artist" class="ds-artist-url-modal-input" type="text" autocomplete="off">
         </label>
-        <label class="sd-save-label">Álbum
-          <input id="sd-save-album"  class="ds-artist-url-modal-input" type="text" autocomplete="off">
-        </label>
-        <label class="sd-save-label">Año
-          <input id="sd-save-year"   class="ds-artist-url-modal-input" type="text" autocomplete="off" maxlength="4">
-        </label>
+        <div class="sd-save-row">
+          <label class="sd-save-label sd-save-label--album">Álbum
+            <input id="sd-save-album"  class="ds-artist-url-modal-input" type="text" autocomplete="off">
+          </label>
+          <label class="sd-save-label sd-save-label--year">Año
+            <input id="sd-save-year"   class="ds-artist-url-modal-input" type="text" autocomplete="off" maxlength="4" inputmode="numeric">
+          </label>
+        </div>
         <p class="sd-save-hint">Se guardará en la carpeta <strong>Soundrop</strong> en tu Drive.</p>
       </div>
       <div class="ds-modal-footer">
@@ -1431,22 +1433,22 @@
 </script>
 
 <!-- Savart modules -->
-<script src="js/config.js?v=3.5.439"></script>
-<script src="js/auth.js?v=3.5.439"></script>
-<script src="js/drive.js?v=3.5.439"></script>
-<script src="js/db.js?v=3.5.439"></script>
-<script src="js/sync.js?v=3.5.439"></script>
-<script src="js/player.js?v=3.5.439"></script>
-<script src="js/meta.js?v=3.5.439"></script>
-<script src="js/lastfm.js?v=3.5.439"></script>
-<script src="js/audd.js?v=3.5.439"></script>
-<script src="js/musicbrainz.js?v=3.5.439"></script>
-<script src="js/discogs.js?v=3.5.439"></script>
-<script src="js/lyrics.js?v=3.5.439"></script>
-<script src="js/soundrop.js?v=3.5.439"></script>
-<script src="js/ui.js?v=3.5.439"></script>
-<script src="js/app.js?v=3.5.439"></script>
-<script src="js/bg.js?v=3.5.439"></script>
+<script src="js/config.js?v=3.5.442"></script>
+<script src="js/auth.js?v=3.5.442"></script>
+<script src="js/drive.js?v=3.5.442"></script>
+<script src="js/db.js?v=3.5.442"></script>
+<script src="js/sync.js?v=3.5.442"></script>
+<script src="js/player.js?v=3.5.442"></script>
+<script src="js/meta.js?v=3.5.442"></script>
+<script src="js/lastfm.js?v=3.5.442"></script>
+<script src="js/audd.js?v=3.5.442"></script>
+<script src="js/musicbrainz.js?v=3.5.442"></script>
+<script src="js/discogs.js?v=3.5.442"></script>
+<script src="js/lyrics.js?v=3.5.442"></script>
+<script src="js/soundrop.js?v=3.5.442"></script>
+<script src="js/ui.js?v=3.5.442"></script>
+<script src="js/app.js?v=3.5.442"></script>
+<script src="js/bg.js?v=3.5.442"></script>
 
 <!-- Inline: additional bindings that need the DOM -->
 <script>
