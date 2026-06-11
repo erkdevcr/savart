@@ -296,34 +296,61 @@ const Soundrop = (() => {
    * Download the audio for a Soundrop track as a Blob.
    * Used only during the "save to Drive" flow.
    *
-   * The CDN URL is IP-locked to the requesting client — never proxied through
-   * a server (Cloudflare gets 404). Always fetched client-side.
-   *
-   * On web:  fetch() uses the browser's native HTTP. The CDN URL supports CORS
-   *          from browser origins.
-   * On APK:  capacitor.config.json has CapacitorHttp.enabled=true, which patches
-   *          window.fetch() to use Android native HTTP — no CORS restrictions,
-   *          no base64 bridge overhead.
+   * Usa el modo proxy del Worker (&proxy=1):
+   *   1. Worker obtiene el link CDN de InnerTube (WEB client + PO token).
+   *   2. Worker descarga el audio del CDN en el server-side (misma IP → sin IP-lock).
+   *   3. Worker hace streaming del audio al browser con headers CORS.
+   * Esto resuelve dos problemas del approach anterior:
+   *   - CORS: googlevideo.com no envía ACAO header para orígenes externos.
+   *   - IP-lock: el CDN URL está ligado a la IP del Worker; el browser no puede usarlo.
    *
    * @param {string} videoId  — bare YouTube video ID (no "sd_" prefix)
    * @returns {Promise<Blob>}
    */
   async function fetchBlob(videoId) {
-    // Get CDN audio URL from Worker (JSON mode only — no server-side proxy)
-    const audioUrl = await getAudioLink(videoId);
+    // ── Generar PO token ────────────────────────────────────────────────────
+    let pot = null;
+    let vd  = null;
+    try {
+      [vd, pot] = await Promise.all([
+        _bg.getVisitorData(),
+        _bg.generateToken(videoId),
+      ]);
+    } catch (bgErr) {
+      console.warn('[Soundrop] PO token generation failed:', bgErr.message);
+    }
+
+    // ── Llamar al Worker en modo proxy ──────────────────────────────────────
+    // El Worker maneja InnerTube + CDN fetch en un solo paso server-side.
+    let url = `${WORKER_URL}?id=${encodeURIComponent(videoId)}&proxy=1`;
+    if (pot && vd) {
+      url += `&pot=${encodeURIComponent(pot)}&vd=${encodeURIComponent(vd)}`;
+    }
 
     let res;
     try {
-      res = await fetch(audioUrl, { signal: AbortSignal.timeout(120000) });
+      res = await fetch(url, { signal: AbortSignal.timeout(180000) });
     } catch (err) {
-      throw new Error(`[Soundrop] Descarga falló: ${err.message}`);
+      throw new Error(`[Soundrop] Worker no responde: ${err.message}`);
     }
-    if (!res.ok) throw new Error(`[Soundrop] Descarga HTTP ${res.status}`);
 
-    // Validate content-type — CDN sometimes returns HTML error pages with status 200
+    if (!res.ok) {
+      // Worker puede devolver JSON de error con status 500
+      let msg = `Worker HTTP ${res.status}`;
+      try {
+        const ct = (res.headers.get('Content-Type') || '');
+        if (ct.includes('json')) {
+          const d = await res.json();
+          msg = d.msg || msg;
+        }
+      } catch { /* ignore */ }
+      throw new Error(`[Soundrop] ${msg}`);
+    }
+
+    // Validate content-type — debe ser audio, no HTML/JSON de error
     const ct = (res.headers.get('Content-Type') || '').toLowerCase();
-    if (ct.startsWith('text/') || ct.includes('html')) {
-      throw new Error(`[Soundrop] Link de audio expirado o inválido (tipo: ${ct})`);
+    if (ct.startsWith('text/') || ct.includes('html') || ct.includes('json')) {
+      throw new Error(`[Soundrop] Respuesta inesperada del Worker (tipo: ${ct})`);
     }
 
     let blob;
