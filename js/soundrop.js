@@ -308,70 +308,81 @@ const Soundrop = (() => {
    * @returns {Promise<Blob>}
    */
   async function fetchBlob(videoId) {
-    // ── Generar PO token ────────────────────────────────────────────────────
-    let pot = null;
-    let vd  = null;
-    try {
-      [vd, pot] = await Promise.all([
-        _bg.getVisitorData(),
-        _bg.generateToken(videoId),
-      ]);
-    } catch (bgErr) {
-      console.warn('[Soundrop] PO token generation failed:', bgErr.message);
-    }
+    const MAX_ATTEMPTS = 3;
+    let lastErr = null;
 
-    // ── Llamar al Worker en modo proxy ──────────────────────────────────────
-    // El Worker maneja InnerTube + CDN fetch en un solo paso server-side.
-    let url = `${WORKER_URL}?id=${encodeURIComponent(videoId)}&proxy=1`;
-    if (pot && vd) {
-      url += `&pot=${encodeURIComponent(pot)}&vd=${encodeURIComponent(vd)}`;
-    }
-
-    let res;
-    try {
-      res = await fetch(url, { signal: AbortSignal.timeout(180000) });
-    } catch (err) {
-      throw new Error(`[Soundrop] Worker no responde: ${err.message}`);
-    }
-
-    if (!res.ok) {
-      // Worker puede devolver JSON de error con status 500
-      let msg = `Worker HTTP ${res.status}`;
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      // ── Generar PO token (nuevo token en cada intento) ──────────────────
+      let pot = null;
+      let vd  = null;
       try {
-        const ct = (res.headers.get('Content-Type') || '');
-        if (ct.includes('json')) {
-          const d = await res.json();
-          msg = d.msg || msg;
-        }
-      } catch { /* ignore */ }
-      throw new Error(`[Soundrop] ${msg}`);
+        [vd, pot] = await Promise.all([
+          _bg.getVisitorData(),
+          _bg.generateToken(videoId),
+        ]);
+      } catch (bgErr) {
+        console.warn('[Soundrop] PO token generation failed:', bgErr.message);
+      }
+
+      // ── Llamar al Worker en modo proxy (timeout 45s por intento) ────────
+      let url = `${WORKER_URL}?id=${encodeURIComponent(videoId)}&proxy=1`;
+      if (pot && vd) url += `&pot=${encodeURIComponent(pot)}&vd=${encodeURIComponent(vd)}`;
+
+      let res;
+      try {
+        res = await fetch(url, { signal: AbortSignal.timeout(45000) });
+      } catch (err) {
+        lastErr = new Error(`[Soundrop] Worker no responde (intento ${attempt}): ${err.message}`);
+        console.warn(lastErr.message);
+        continue;
+      }
+
+      if (!res.ok) {
+        let msg = `Worker HTTP ${res.status}`;
+        try {
+          const ct = (res.headers.get('Content-Type') || '');
+          if (ct.includes('json')) { const d = await res.json(); msg = d.msg || msg; }
+        } catch { /* ignore */ }
+        lastErr = new Error(`[Soundrop] ${msg} (intento ${attempt})`);
+        console.warn(lastErr.message);
+        continue;
+      }
+
+      // Validate content-type — debe ser audio, no HTML/JSON de error
+      const ct = (res.headers.get('Content-Type') || '').toLowerCase();
+      if (ct.startsWith('text/') || ct.includes('html') || ct.includes('json')) {
+        lastErr = new Error(`[Soundrop] Respuesta inesperada del Worker (tipo: ${ct})`);
+        console.warn(lastErr.message);
+        continue;
+      }
+
+      let blob;
+      try {
+        blob = await res.blob();
+      } catch (err) {
+        lastErr = new Error(`[Soundrop] Error leyendo blob (intento ${attempt}): ${err.message}`);
+        console.warn(lastErr.message);
+        continue;
+      }
+
+      // Magic-byte validation — guard against non-audio responses
+      const head = new Uint8Array(await blob.slice(0, 12).arrayBuffer());
+      const isMP3  = (head[0] === 0xFF && (head[1] & 0xE0) === 0xE0) ||
+                     (head[0] === 0x49 && head[1] === 0x44 && head[2] === 0x33);
+      const isWebM = head[0] === 0x1A && head[1] === 0x45 && head[2] === 0xDF && head[3] === 0xA3;
+      const isMP4  = head[4] === 0x66 && head[5] === 0x74 && head[6] === 0x79 && head[7] === 0x70;
+      const isOGG  = head[0] === 0x4F && head[1] === 0x67 && head[2] === 0x67 && head[3] === 0x53;
+      if (!isMP3 && !isWebM && !isMP4 && !isOGG) {
+        lastErr = new Error('[Soundrop] El archivo descargado no es audio válido (link expirado o bloqueado)');
+        console.warn(lastErr.message);
+        continue;
+      }
+
+      return blob;  // ✓ éxito
     }
 
-    // Validate content-type — debe ser audio, no HTML/JSON de error
-    const ct = (res.headers.get('Content-Type') || '').toLowerCase();
-    if (ct.startsWith('text/') || ct.includes('html') || ct.includes('json')) {
-      throw new Error(`[Soundrop] Respuesta inesperada del Worker (tipo: ${ct})`);
-    }
-
-    let blob;
-    try {
-      blob = await res.blob();
-    } catch (err) {
-      throw new Error(`[Soundrop] Error leyendo blob: ${err.message}`);
-    }
-
-    // Magic-byte validation — guard against non-audio responses
-    const head = new Uint8Array(await blob.slice(0, 12).arrayBuffer());
-    const isMP3  = (head[0] === 0xFF && (head[1] & 0xE0) === 0xE0) ||
-                   (head[0] === 0x49 && head[1] === 0x44 && head[2] === 0x33);
-    const isWebM = head[0] === 0x1A && head[1] === 0x45 && head[2] === 0xDF && head[3] === 0xA3;
-    const isMP4  = head[4] === 0x66 && head[5] === 0x74 && head[6] === 0x79 && head[7] === 0x70;
-    const isOGG  = head[0] === 0x4F && head[1] === 0x67 && head[2] === 0x67 && head[3] === 0x53;
-    if (!isMP3 && !isWebM && !isMP4 && !isOGG) {
-      throw new Error('[Soundrop] El archivo descargado no es audio válido (link expirado o bloqueado)');
-    }
-
-    return blob;
+    // Todos los intentos fallaron
+    throw lastErr || new Error('[Soundrop] Descarga fallida después de 3 intentos');
   }
 
   // ── Upload to Drive ───────────────────────────────────────
