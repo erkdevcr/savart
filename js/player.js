@@ -931,22 +931,16 @@ const Player = (() => {
         // Pause Drive element so only one source is heard
         _audio.pause();
 
-        // Auto-retry getAudioLink — Cloudflare Worker cold starts can fail
-        // the first request; up to 3 attempts with 1 s / 2 s back-off.
-        let audioUrl, lastErr;
-        for (let attempt = 0; attempt < 3; attempt++) {
-          try { audioUrl = await Soundrop.getAudioLink(item.videoId); break; }
-          catch (err) {
-            lastErr = err;
-            if (attempt < 2) await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
-          }
-        }
-        // If the user clicked something else while we were retrying, bail out
+        // Soundrop plays via Worker streaming proxy (?stream=1).
+        // The Worker fetches the InnerTube URL and proxies the audio adding
+        // CORS headers — required because _sdAudio has crossOrigin='anonymous'
+        // for the WebAudio graph. URL is deterministic; no pre-flight API call.
+        // If the stream fails the error event fires → _handleAudioError → silent
+        // retry via _sdRetry (cold-start guard already in the catch block below).
         if (mySession !== _sdPlaySession) return;
-        if (!audioUrl) throw lastErr;
 
         _sdSrcSession         = mySession;   // mark this src as belonging to current session
-        _sdAudio.src          = audioUrl;
+        _sdAudio.src          = Soundrop.getStreamUrl(item.videoId);
         _sdAudio.playbackRate = _tempo;
 
         if (_audioCtx?.state === 'suspended') {
