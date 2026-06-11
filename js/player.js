@@ -21,12 +21,28 @@ const Player = (() => {
 
   /* ── State ──────────────────────────────────────────────── */
   let _audio        = null;      // HTMLAudioElement — Drive tracks (Web Audio graph)
-  let _sdAudio      = null;      // HTMLAudioElement — Soundrop tracks (crossOrigin + same graph)
-  let _sdSourceNode = null;      // MediaElementAudioSourceNode for _sdAudio
-  let _sdGainNode   = null;      // GainNode — compensates YouTube's -14 LUFS vs Drive's ~-9 LUFS
+  let _sdAudio      = null;      // kept for legacy references; no longer used for playback
+  let _sdSourceNode = null;      // unused — SD is not in the WebAudio graph
+  let _sdGainNode   = null;      // GainNode — kept but unconnected (SD plays as plain HTML5)
   let _sdActive      = false;    // true while a Soundrop track is playing
   let _sdPlaySession = 0;       // incremented on each SD play attempt
-  let _sdSrcSession  = 0;       // session# when _sdAudio.src was last written; stale errors ignored
+  let _sdSrcSession  = 0;       // session# of the current SD load; stale callbacks ignored
+
+  // Proxy that wraps Soundrop.yt with an HTMLAudioElement-compatible interface.
+  // _getAudio() returns this when _sdActive is true so pause/resume/seek/time
+  // work transparently through the existing control flow.
+  // (Soundrop is defined in soundrop.js which loads after player.js;
+  //  all methods here are called lazily, so Soundrop is always available.)
+  const _ytProxy = {
+    get paused()       { return Soundrop.yt.isPaused(); },
+    get currentTime()  { return Soundrop.yt.currentTime(); },
+    set currentTime(v) { Soundrop.yt.seekTo(v); },
+    get duration()     { return Soundrop.yt.duration(); },
+    set playbackRate(r){ Soundrop.yt.setRate(r); },
+    get playbackRate() { return _tempo; },
+    pause()            { Soundrop.yt.pause(); },
+    play()             { Soundrop.yt.play(); return Promise.resolve(); },
+  };
   let _audioCtx     = null;      // AudioContext
   let _sourceNode   = null;      // MediaElementAudioSourceNode for _audio
   let _gainNode     = null;      // GainNode (master volume)
@@ -376,7 +392,7 @@ const Player = (() => {
    * Soundrop tracks play through _sdAudio (no Web Audio graph → no CORS silence).
    * Drive tracks play through _audio (full EQ/gain pipeline).
    */
-  function _getAudio() { return _sdActive ? _sdAudio : _audio; }
+  function _getAudio() { return _sdActive ? _ytProxy : _audio; }
 
   /**
    * Create _sdAudio once and wire its events to the same callbacks as _audio.
@@ -410,9 +426,6 @@ const Player = (() => {
 
   function _initAudioGraph() {
     if (_audioCtx) return;
-
-    // _sdAudio must exist before createMediaElementSource is called on it
-    _initSdAudio();
 
     _audioCtx     = new (window.AudioContext || window.webkitAudioContext)();
     _sourceNode   = _audioCtx.createMediaElementSource(_audio);
@@ -527,14 +540,6 @@ const Player = (() => {
     // ensures the AudioContext is created and resumed in a trusted gesture context.
     _initAudioGraph();
     _audioCtx?.resume().catch(() => {});
-
-    // Pre-unlock _sdAudio within the gesture context so play() succeeds even
-    // after the async getAudioLink() network call on Android WebView.
-    // (_sdActive guard prevents interference with an already-playing SD track.)
-    if (_sdAudio && !_sdActive) {
-      _sdAudio.play().catch(() => {});
-      _sdAudio.pause();
-    }
 
     _playCurrentTrack();
   }
@@ -832,8 +837,8 @@ const Player = (() => {
    */
   function setTempo(rate) {
     _tempo = Math.max(0.5, Math.min(2.0, rate));
-    if (_audio)   _audio.playbackRate   = _tempo;
-    if (_sdAudio) _sdAudio.playbackRate = _tempo;
+    if (_audio)   _audio.playbackRate = _tempo;
+    if (_sdActive) Soundrop.yt.setRate(_tempo);
   }
 
   function getTempo() { return _tempo; }
@@ -929,32 +934,71 @@ const Player = (() => {
         // Pause Drive element so only one source is heard
         _audio.pause();
 
-        // Get the YouTube CDN URL from the Worker. _sdAudio has no crossOrigin so
-        // the browser plays the URL without enforcing CORS — googlevideo.com
-        // doesn't return CORS headers but plays fine as opaque media.
-        let audioUrl, lastErr;
-        for (let attempt = 0; attempt < 3; attempt++) {
-          try { audioUrl = await Soundrop.getAudioLink(item.videoId); break; }
-          catch (err) {
-            lastErr = err;
-            if (attempt < 2) await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
-          }
-        }
-        // If the user clicked something else while we were retrying, bail out
+        // Play via YouTube iframe API — runs in the browser with the user's
+        // residential IP, so InnerTube has no datacenter restrictions.
+        // Resolves when the first PLAYING state fires; rejects on error/timeout.
+        await new Promise((resolve, reject) => {
+          let settled = false;
+          const settle = (ok, val) => {
+            if (settled) return;
+            settled = true;
+            ok ? resolve(val) : reject(typeof val === 'string' ? new Error(val) : val);
+          };
+          const timeout = setTimeout(
+            () => settle(false, '[Soundrop] YT timeout (15 s)'), 15000);
+
+          Soundrop.yt.load(item.videoId, {
+            onPlay: (dur) => {
+              if (!settled) {
+                // First PLAYING event — resolve the Promise and set initial state.
+                clearTimeout(timeout);
+                _sdSrcSession = mySession;
+                settle(true, dur);
+                if (_audioCtx?.state === 'suspended') _audioCtx.resume().catch(() => {});
+                _keepAliveStart();
+                _onPlayPause(true);
+                _msSetPlaybackState('playing');
+                _msSetMetadata(item);
+                Soundrop.yt.setRate(_tempo);
+                Soundrop.yt.setVolume(_volume);
+                if (_onDurationReady && dur > 0) _onDurationReady(item, dur);
+              } else if (_sdActive && _sdSrcSession === mySession) {
+                // Subsequent PLAYING events (user resumes after pause).
+                _keepAliveStart();
+                _onPlayPause(true);
+                _msSetPlaybackState('playing');
+              }
+            },
+            onPause: () => {
+              if (_sdActive && _sdSrcSession === mySession) {
+                _keepAliveStop();
+                _onPlayPause(false);
+                _msSetPlaybackState('paused');
+              }
+            },
+            onEnded: () => {
+              if (_sdActive && _sdSrcSession === mySession) {
+                _keepAliveStop();
+                _handleEnded();
+              }
+            },
+            onError: (code) => {
+              clearTimeout(timeout);
+              const msg = (code === 101 || code === 150)
+                ? '[Soundrop] Video no disponible para embeds'
+                : `[Soundrop] Error de YouTube (código ${code})`;
+              settle(false, msg);
+            },
+            onTick: (ct, dur) => {
+              if (_sdActive && _sdSrcSession === mySession) {
+                _onProgress(ct, dur);
+                _msUpdatePositionState();
+              }
+            },
+          });
+        });
+
         if (mySession !== _sdPlaySession) return;
-        if (!audioUrl) throw lastErr;
-
-        _sdSrcSession         = mySession;   // mark this src as belonging to current session
-        _sdAudio.src          = audioUrl;
-        _sdAudio.playbackRate = _tempo;
-
-        if (_audioCtx?.state === 'suspended') {
-          await _audioCtx.resume().catch(() => {});
-        }
-        _keepAliveStart();
-        _msSetMetadata(item);
-        _msSetPlaybackState('playing');
-        await _sdAudio.play();
 
         // Save Soundrop track to recents so it appears on Home
         DB.addRecent({
@@ -994,7 +1038,7 @@ const Player = (() => {
       // ── Drive track: deactivate Soundrop element if it was on ─
       if (_sdActive) {
         _sdActive = false;
-        if (_sdAudio) { _sdAudio.pause(); _sdAudio.src = ''; }
+        Soundrop.yt.stop();
       }
 
       // ── Drive track: blob path ────────────────────────────────
@@ -1313,13 +1357,6 @@ const Player = (() => {
   }
 
   function _handleAudioError(err) {
-    if (err?.target === _sdAudio) {
-      // Ignore errors when SD is not the active source (e.g. src='' after switching to Drive)
-      if (!_sdActive) return;
-      // Ignore errors from a stale src — cold-start retries or the previous song's element
-      // still loading when a new play has already overwritten it.
-      if (_sdSrcSession !== _sdPlaySession) return;
-    }
     const error = err?.target?.error || err;
     console.error('[Player] Audio error:', error);
     _onError({ type: 'audio', message: 'toast_audio_error', error });

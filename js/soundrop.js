@@ -275,7 +275,111 @@ const Soundrop = (() => {
          + parseInt(m[3] || 0);
   }
 
+  // ── YouTube iframe player ─────────────────────────────────
+  //
+  // Replaces the Cloudflare Worker approach for browser playback.
+  // The iframe player runs in the user's browser (residential IP), so
+  // YouTube's InnerTube is called from a real browser session — no
+  // datacenter IP restrictions.  The Worker is kept only for fetchBlob
+  // (save-to-Drive flow).
+  //
+  // Requires a <div id="yt-player-anchor"> in index.html.
+
+  const yt = (() => {
+    let _p      = null;    // YT.Player instance
+    let _ready  = false;   // API + player both ready
+    let _cbs    = {};      // callbacks set by the current load() call
+    let _paused = true;    // tracks playback state
+
+    // Must be defined BEFORE the API script fires onYouTubeIframeAPIReady.
+    window.onYouTubeIframeAPIReady = () => {
+      const anchor = document.getElementById('yt-player-anchor');
+      if (!anchor) return;
+      _p = new YT.Player(anchor, {
+        width: 1, height: 1,
+        playerVars: {
+          controls: 0, disablekb: 1, fs: 0,
+          playsinline: 1, enablejsapi: 1,
+          origin: location.origin,
+        },
+        events: {
+          onReady:       () => { _ready = true; },
+          onStateChange: _onState,
+          onError:       (e) => { if (_cbs.onError) _cbs.onError(e.data); },
+        },
+      });
+    };
+
+    function _onState(e) {
+      const S = e.data;
+      if (S === 1 /* PLAYING */) {
+        _paused = false;
+        const dur = _p.getDuration() || 0;
+        if (_cbs.onPlay) _cbs.onPlay(dur);
+        // Start 250 ms polling for timeupdate
+        _startTick();
+      }
+      if (S === 2 /* PAUSED */) {
+        _paused = true;
+        _stopTick();
+        if (_cbs.onPause) _cbs.onPause();
+      }
+      if (S === 0 /* ENDED */) {
+        _paused = true;
+        _stopTick();
+        if (_cbs.onEnded) _cbs.onEnded();
+      }
+    }
+
+    let _tickId = null;
+    function _startTick() {
+      _stopTick();
+      _tickId = setInterval(() => {
+        if (_p && _cbs.onTick) _cbs.onTick(_p.getCurrentTime() || 0, _p.getDuration() || 0);
+      }, 250);
+    }
+    function _stopTick() {
+      if (_tickId) { clearInterval(_tickId); _tickId = null; }
+    }
+
+    function _whenReady(fn) {
+      if (_ready && _p) fn();
+      else setTimeout(() => _whenReady(fn), 100);
+    }
+
+    // Load the YouTube iframe API dynamically (standard Google approach).
+    // onYouTubeIframeAPIReady is already defined above, so the callback fires
+    // correctly regardless of when the script finishes loading.
+    const _s  = document.createElement('script');
+    _s.src    = 'https://www.youtube.com/iframe_api';
+    (_s.parentNode || document.head).appendChild(_s);
+
+    return {
+      /**
+       * Load and auto-play a YouTube video.
+       * @param {string} videoId
+       * @param {object} cbs  — { onPlay(dur), onPause, onEnded, onError(code), onTick(ct,dur) }
+       */
+      load(videoId, cbs) {
+        _stopTick();
+        _cbs   = cbs || {};
+        _paused = true;
+        _whenReady(() => _p.loadVideoById({ videoId, startSeconds: 0 }));
+      },
+      pause()      { if (_p) _p.pauseVideo(); },
+      play()       { if (_p) _p.playVideo();  },
+      stop()       { _stopTick(); _cbs = {}; _paused = true; if (_p) _p.stopVideo(); },
+      seekTo(s)    { if (_p) _p.seekTo(s, true); },
+      setRate(r)   { if (_p) _p.setPlaybackRate(r); },
+      setVolume(v) { if (_p) _p.setVolume(Math.round(v * 100)); },
+      setMuted(m)  { if (_p) { m ? _p.mute() : _p.unMute(); } },
+      currentTime(){ return (_p && _ready) ? (_p.getCurrentTime() || 0) : 0; },
+      duration()   { return (_p && _ready) ? (_p.getDuration()    || 0) : 0; },
+      isPaused()   { return _paused; },
+    };
+  })();
+
   // ── Expose ────────────────────────────────────────────────
-  return { search, getAudioLink, fetchBlob, saveToDrive };
+  return { search, getAudioLink, fetchBlob, saveToDrive, yt };
 
 })();

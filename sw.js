@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.447';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.447 — Soundrop: sin crossOrigin en _sdAudio (fix CORS CDN)
+const APP_VERSION  = '3.5.448';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.448 — Soundrop: YouTube iframe API (reemplaza Worker para playback)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
