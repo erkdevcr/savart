@@ -9,7 +9,7 @@ const Soundrop = (() => {
   // ── Constants ─────────────────────────────────────────────
   const YT_SEARCH  = 'https://www.googleapis.com/youtube/v3/search';
   const YT_VIDEOS  = 'https://www.googleapis.com/youtube/v3/videos';
-  const WORKER_URL = 'https://sounddrop-worker.erisd17.workers.dev';
+  const WORKER_URL = 'https://sounddrop-worker.erisd17.workers.dev'; // v3 — ANDROID_VR, sin PO token
   const YT_KEY     = 'AIzaSyBgi4D1UclWh6EVAPaXfApI34AF7lh_O4E';
 
   // ── Search YouTube ────────────────────────────────────────
