@@ -330,7 +330,7 @@ const Soundrop = (() => {
 
       let res;
       try {
-        res = await fetch(url, { signal: AbortSignal.timeout(45000) });
+        res = await fetch(url, { signal: AbortSignal.timeout(20000) });
       } catch (err) {
         lastErr = new Error(`[Soundrop] Worker no responde (intento ${attempt}): ${err.message}`);
         console.warn(lastErr.message);

@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.451';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.451 — Soundrop fetchBlob: 3 reintentos automáticos + timeout 45s por intento
+const APP_VERSION  = '3.5.452';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.452 — Soundrop: Worker CDN timeout 10s, browser per-attempt 20s
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
