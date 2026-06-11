@@ -386,10 +386,10 @@ const Player = (() => {
     _sdAudio              = new Audio();
     _sdAudio.preload      = 'auto';
     _sdAudio.playsInline  = true;
-    // crossOrigin must be set BEFORE src and BEFORE createMediaElementSource
-    // so the browser sends CORS headers — required for Web Audio processing.
-    // The Soundrop worker URL supports CORS (fetch() works in the download flow).
-    _sdAudio.crossOrigin  = 'anonymous';
+    // No crossOrigin — Soundrop plays the YouTube CDN URL directly.
+    // crossOrigin='anonymous' would force CORS checks on googlevideo.com, which
+    // doesn't return CORS headers → audio blocked. Without it, the browser plays
+    // the URL as an opaque media resource (no WebAudio graph for SD tracks).
 
     _sdAudio.addEventListener('play',  () => { if (_sdActive) { _onPlayPause(true);  _msSetPlaybackState('playing'); } });
     _sdAudio.addEventListener('pause', () => { if (_sdActive) { _onPlayPause(false); _msSetPlaybackState('paused');  } });
@@ -416,7 +416,8 @@ const Player = (() => {
 
     _audioCtx     = new (window.AudioContext || window.webkitAudioContext)();
     _sourceNode   = _audioCtx.createMediaElementSource(_audio);
-    _sdSourceNode = _audioCtx.createMediaElementSource(_sdAudio);
+    // _sdAudio is NOT connected to WebAudio — it has no crossOrigin so
+    // createMediaElementSource would taint it and block the CDN URL.
     _gainNode     = _audioCtx.createGain();
     _gainNode.gain.value = _volume;
     _preAmpNode   = _audioCtx.createGain();
@@ -467,12 +468,9 @@ const Player = (() => {
       _compressorNode.ratio.value     = 1;
     }
 
-    // Graph: sources → preAmp → normalizer → EQ[12] → compressor → volume → panner → destination
-    // _sourceNode: Drive tracks  |  _sdSourceNode: Soundrop tracks (crossOrigin).
-    // When one is paused it produces silence, so only the active one is heard.
+    // Graph: Drive source → preAmp → normalizer → EQ[12] → compressor → volume → panner → destination
+    // Soundrop (_sdAudio) plays as plain HTML5 audio — no WebAudio graph.
     _sourceNode.connect(_preAmpNode);
-    _sdSourceNode.connect(_sdGainNode);   // SD branch: boost to match Drive loudness
-    _sdGainNode.connect(_preAmpNode);
     _preAmpNode.connect(_normalNode);
     _normalNode.connect(_eqNodes[0]);
     for (let i = 0; i < _eqNodes.length - 1; i++) {
@@ -931,16 +929,23 @@ const Player = (() => {
         // Pause Drive element so only one source is heard
         _audio.pause();
 
-        // Soundrop plays via Worker streaming proxy (?stream=1).
-        // The Worker fetches the InnerTube URL and proxies the audio adding
-        // CORS headers — required because _sdAudio has crossOrigin='anonymous'
-        // for the WebAudio graph. URL is deterministic; no pre-flight API call.
-        // If the stream fails the error event fires → _handleAudioError → silent
-        // retry via _sdRetry (cold-start guard already in the catch block below).
+        // Get the YouTube CDN URL from the Worker. _sdAudio has no crossOrigin so
+        // the browser plays the URL without enforcing CORS — googlevideo.com
+        // doesn't return CORS headers but plays fine as opaque media.
+        let audioUrl, lastErr;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try { audioUrl = await Soundrop.getAudioLink(item.videoId); break; }
+          catch (err) {
+            lastErr = err;
+            if (attempt < 2) await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+          }
+        }
+        // If the user clicked something else while we were retrying, bail out
         if (mySession !== _sdPlaySession) return;
+        if (!audioUrl) throw lastErr;
 
         _sdSrcSession         = mySession;   // mark this src as belonging to current session
-        _sdAudio.src          = Soundrop.getStreamUrl(item.videoId);
+        _sdAudio.src          = audioUrl;
         _sdAudio.playbackRate = _tempo;
 
         if (_audioCtx?.state === 'suspended') {

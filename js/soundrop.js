@@ -275,20 +275,7 @@ const Soundrop = (() => {
          + parseInt(m[3] || 0);
   }
 
-  /**
-   * Returns a Worker streaming-proxy URL for `videoId`.
-   * Use this for <audio> playback — the Worker adds CORS headers so the
-   * WebAudio graph (crossOrigin='anonymous') can consume the stream.
-   * getAudioLink() is kept for fetchBlob / save-to-Drive flows.
-   *
-   * @param {string} videoId
-   * @returns {string}
-   */
-  function getStreamUrl(videoId) {
-    return `${WORKER_URL}?id=${encodeURIComponent(videoId)}&stream=1`;
-  }
-
   // ── Expose ────────────────────────────────────────────────
-  return { search, getAudioLink, getStreamUrl, fetchBlob, saveToDrive };
+  return { search, getAudioLink, fetchBlob, saveToDrive };
 
 })();
