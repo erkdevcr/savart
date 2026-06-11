@@ -9,8 +9,164 @@ const Soundrop = (() => {
   // ── Constants ─────────────────────────────────────────────
   const YT_SEARCH  = 'https://www.googleapis.com/youtube/v3/search';
   const YT_VIDEOS  = 'https://www.googleapis.com/youtube/v3/videos';
-  const WORKER_URL = 'https://sounddrop-worker.erisd17.workers.dev'; // v3 — ANDROID_VR, sin PO token
+  const WORKER_URL = 'https://sounddrop-worker.erisd17.workers.dev'; // v6 — PO token support
   const YT_KEY     = 'AIzaSyBgi4D1UclWh6EVAPaXfApI34AF7lh_O4E';
+
+  // ── BotGuard / PO Token ───────────────────────────────────
+  //
+  // Genera un PO Token (Proof of Origin) en el browser del usuario.
+  // El token se basa en el mismo mecanismo que usa el player oficial de YouTube.
+  // Se pasa al Worker para que lo incluya en la request a InnerTube.
+  //
+  // Implementación basada en el gist de grqz (MIT):
+  //   https://gist.github.com/grqz/dccb66de28799772fb542b66f8e4ae92
+  //
+  // Flujo:
+  //   1. Worker obtiene visitorData de YouTube (evita CORS desde el browser)
+  //   2. Browser llama WAA API de Google → obtiene challenge + script BotGuard
+  //   3. Browser ejecuta el script → inicializa VM de BotGuard
+  //   4. Browser llama WAA API → obtiene integrityToken
+  //   5. Browser mintea token bound al videoId
+  //   6. poToken + visitorData se envían al Worker para el InnerTube request
+  //
+  // El minter se cachea hasta que expire el integrityToken (~6h).
+  // El token sí se genera nuevo por videoId (content-bound, no cacheable).
+
+  const _bg = (() => {
+    const WAA      = 'https://jnn-pa.googleapis.com/$rpc/google.internal.waa.v1.Waa';
+    const GOOG_KEY = 'AIzaSyDyT5W0Jh49F30Pqqtyfdf7pDLFKLJoAnw';
+    const REQ_KEY  = 'O43z0dpjhgX20SCx4KAo';
+
+    let _minter      = null;   // función de minting cacheada
+    let _minterExpiry = 0;     // timestamp de expiración (ms)
+    let _visitorData  = null;  // visitorData cacheado
+
+    // ── Utilidades de base64 ─────────────────────────────────
+    function _u8ToB64(u8) {
+      return btoa(String.fromCharCode(...u8));
+    }
+    function _b64ToU8(b64) {
+      b64 = b64.replace(/-/g, '+').replace(/_/g, '/').replace(/\./g, '=');
+      return new Uint8Array([...atob(b64)].map(c => c.charCodeAt(0)));
+    }
+    function _descramble(s) {
+      const buf = _b64ToU8(s);
+      if (!buf.length) return null;
+      return new TextDecoder().decode(buf.map(b => b + 97));
+    }
+
+    // ── Parser del challenge de BotGuard ─────────────────────
+    function _parseChallenge(raw) {
+      let data = [];
+      if (raw.length > 1 && typeof raw[1] === 'string') {
+        const d = _descramble(raw[1]);
+        data = JSON.parse(d || '[]');
+      } else if (raw.length && typeof raw[0] === 'object') {
+        data = raw[0];
+      }
+      // eslint-disable-next-line no-unused-vars
+      const [, wrappedScript, , , program, globalName] = data;
+      const interpreterJs = Array.isArray(wrappedScript)
+        ? wrappedScript.find(v => v && typeof v === 'string') : null;
+      return { interpreterJs, program, globalName };
+    }
+
+    // ── Llamada a WAA API ─────────────────────────────────────
+    async function _waa(endpoint, payload) {
+      const res = await fetch(`${WAA}/${endpoint}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json+protobuf',
+          'X-Goog-Api-Key': GOOG_KEY,
+          'X-User-Agent':   'grpc-web-javascript/0.1',
+        },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(15000),
+      });
+      if (!res.ok) throw new Error(`[BG] WAA ${endpoint} HTTP ${res.status}`);
+      return res.json();
+    }
+
+    // ── Inicializa BotGuard y crea el minter ─────────────────
+    async function _initMinter() {
+      // 1. Obtener challenge
+      const rawChallenge = await _waa('Create', [REQ_KEY]);
+      const { interpreterJs, program, globalName } = _parseChallenge(rawChallenge);
+      if (!interpreterJs) throw new Error('[BG] Sin interpreter JS en el challenge');
+
+      // 2. Cargar VM de BotGuard en la página
+      // eslint-disable-next-line no-new-func
+      new Function(interpreterJs)();
+      const vm = globalThis[globalName];
+      if (!vm || !vm.a) throw new Error('[BG] VM de BotGuard no encontrada');
+
+      // 3. Inicializar VM → obtener asyncSnapshotFunction
+      let asyncSnapshotFn = null;
+      vm.a(program, (asyncFn) => { asyncSnapshotFn = asyncFn; }, true, undefined, () => {}, [[], []]);
+      if (!asyncSnapshotFn) throw new Error('[BG] asyncSnapshotFunction no disponible');
+
+      // 4. Ejecutar snapshot → obtener botguardResponse + webPoSignalOutput
+      const webPoSignalOutput = [];
+      const botguardResponse = await new Promise((resolve, reject) => {
+        const tid = setTimeout(() => reject(new Error('[BG] Timeout en BotGuard snapshot')), 10000);
+        asyncSnapshotFn((r) => { clearTimeout(tid); resolve(r); }, [
+          undefined,          // contentBinding
+          undefined,          // signedTimestamp
+          webPoSignalOutput,  // ← BotGuard llena esto con el generador de minter
+          undefined,          // skipPrivacyBuffer
+        ]);
+      });
+
+      // 5. Obtener integrity token
+      const [integrityToken, ttlSecs] = await _waa('GenerateIT', [REQ_KEY, botguardResponse]);
+      if (!integrityToken) throw new Error('[BG] Sin integrity token');
+
+      // 6. Construir función de minting
+      const getMinter = webPoSignalOutput[0];
+      if (!getMinter) throw new Error('[BG] getMinter no disponible en webPoSignalOutput');
+      const mintCb = await getMinter(_b64ToU8(integrityToken));
+      if (!(mintCb instanceof Function)) throw new Error('[BG] mintCallback inválido');
+
+      _minter = async (identifier) => {
+        const result = await mintCb(new TextEncoder().encode(identifier));
+        if (!result || !(result instanceof Uint8Array)) throw new Error('[BG] mint falló');
+        return _u8ToB64(result);
+      };
+      _minterExpiry = Date.now() + Math.max(ttlSecs || 3600, 60) * 900; // 90% del TTL en ms
+      console.log('[Soundrop] BotGuard minter listo, expira en', Math.round((ttlSecs || 3600) * 0.9 / 60), 'min');
+    }
+
+    // ── API pública ───────────────────────────────────────────
+
+    /**
+     * Obtiene visitorData desde el Worker (evita CORS directo a YouTube).
+     * Se cachea en memoria para la sesión.
+     */
+    async function getVisitorData() {
+      if (_visitorData) return _visitorData;
+      const res = await fetch(`${WORKER_URL}?visitor_data=1`, { signal: AbortSignal.timeout(10000) });
+      if (!res.ok) throw new Error(`[BG] Worker visitor_data HTTP ${res.status}`);
+      const { visitorData } = await res.json();
+      if (!visitorData) throw new Error('[BG] Worker no devolvió visitorData');
+      _visitorData = visitorData;
+      return visitorData;
+    }
+
+    /**
+     * Genera un PO Token bound al videoId.
+     * Reutiliza el minter cacheado; solo lo reinicia si expiró.
+     * @param {string} videoId
+     * @returns {Promise<string>}
+     */
+    async function generateToken(videoId) {
+      if (!_minter || Date.now() >= _minterExpiry) {
+        await _initMinter();
+      }
+      return _minter(videoId);
+    }
+
+    return { getVisitorData, generateToken };
+  })();
 
   // ── Search YouTube ────────────────────────────────────────
 
@@ -94,14 +250,33 @@ const Soundrop = (() => {
   }
 
   /**
-   * Ask the Cloudflare Worker for a streamable MP3 URL for a given YouTube video.
-   * Returns a string URL on success, or throws.
+   * Ask the Cloudflare Worker for an audio URL for a given YouTube video.
+   * Generates a PO Token in the browser before calling the Worker so that
+   * InnerTube accepts the request from the Worker's datacenter IP.
    *
    * @param {string} videoId  — bare YouTube video ID (no "sd_" prefix)
    * @returns {Promise<string>}
    */
   async function getAudioLink(videoId) {
-    const url = `${WORKER_URL}?id=${encodeURIComponent(videoId)}`;
+    // ── Generar PO token en el browser ─────────────────────
+    let pot = null;
+    let vd  = null;
+    try {
+      [vd, pot] = await Promise.all([
+        _bg.getVisitorData(),
+        _bg.generateToken(videoId),
+      ]);
+    } catch (bgErr) {
+      // No bloquear la descarga si BotGuard falla — el Worker intentará sin token
+      console.warn('[Soundrop] PO token generation failed, trying without:', bgErr.message);
+    }
+
+    // ── Llamar al Worker con (o sin) token ──────────────────
+    let url = `${WORKER_URL}?id=${encodeURIComponent(videoId)}`;
+    if (pot && vd) {
+      url += `&pot=${encodeURIComponent(pot)}&vd=${encodeURIComponent(vd)}`;
+    }
+
     let res;
     try {
       res = await fetch(url, { signal: AbortSignal.timeout(30000) });
