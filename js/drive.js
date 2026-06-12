@@ -265,6 +265,13 @@ const Drive = (() => {
     ];
     const settled = await Promise.allSettled(allQueries);
 
+    // Si TODAS las queries fallaron (p.ej. token expirado, error de red),
+    // propagar el primer error al caller. Sin esto, _doSearch muestra "sin
+    // resultados" en lugar del banner de auth o el mensaje de error correcto.
+    if (settled.length > 0 && settled.every(r => r.status === 'rejected')) {
+      throw settled[0].reason;
+    }
+
     // Merge + deduplicate by id
     const folderMap = new Map();
     const fileMap   = new Map();
