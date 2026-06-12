@@ -265,7 +265,7 @@ const Soundrop = (() => {
     let vd  = null;
     try {
       vd  = await _bg.getVisitorData();
-      pot = await _bg.generateToken(vd);   // ← identificador = visitor_data
+      pot = await _bg.generateToken(videoId);  // token content-bound al videoId
     } catch (bgErr) {
       // No bloquear la descarga si BotGuard falla — el Worker intentará sin token
       console.warn('[Soundrop] PO token generation failed, trying without:', bgErr.message);
@@ -318,7 +318,7 @@ const Soundrop = (() => {
       let vd  = null;
       try {
         vd  = await _bg.getVisitorData();
-        pot = await _bg.generateToken(vd);   // ← identificador = visitor_data
+        pot = await _bg.generateToken(videoId);  // token content-bound al videoId
       } catch (bgErr) {
         console.warn('[Soundrop] PO token generation failed:', bgErr.message);
       }
