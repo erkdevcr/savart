@@ -259,13 +259,13 @@ const Soundrop = (() => {
    */
   async function getAudioLink(videoId) {
     // ── Generar PO token en el browser ─────────────────────
+    // El token debe mintarse con visitor_data como identificador (no videoId).
+    // YouTube valida que el token esté ligado a la sesión, no al video específico.
     let pot = null;
     let vd  = null;
     try {
-      [vd, pot] = await Promise.all([
-        _bg.getVisitorData(),
-        _bg.generateToken(videoId),
-      ]);
+      vd  = await _bg.getVisitorData();
+      pot = await _bg.generateToken(vd);   // ← identificador = visitor_data
     } catch (bgErr) {
       // No bloquear la descarga si BotGuard falla — el Worker intentará sin token
       console.warn('[Soundrop] PO token generation failed, trying without:', bgErr.message);
@@ -313,13 +313,12 @@ const Soundrop = (() => {
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
       // ── Generar PO token (nuevo token en cada intento) ──────────────────
+      // El token se minta con visitor_data como identificador (no videoId).
       let pot = null;
       let vd  = null;
       try {
-        [vd, pot] = await Promise.all([
-          _bg.getVisitorData(),
-          _bg.generateToken(videoId),
-        ]);
+        vd  = await _bg.getVisitorData();
+        pot = await _bg.generateToken(vd);   // ← identificador = visitor_data
       } catch (bgErr) {
         console.warn('[Soundrop] PO token generation failed:', bgErr.message);
       }

@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.453';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.453 — Soundrop: browser per-attempt timeout 90s (permite streaming completo)
+const APP_VERSION  = '3.5.454';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.454 — Soundrop: PO token se minta con visitor_data (no videoId)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
