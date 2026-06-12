@@ -94,17 +94,29 @@ const Soundrop = (() => {
   }
 
   /**
-   * Returns the Cloudflare Worker proxy URL for streaming audio of a YouTube video.
-   * No network call is made here — the URL is constructed instantly.
-   * The browser fetches audio directly from the Worker proxy when used as _sdAudio.src.
-   * The Worker streams cobalt.tools audio with CORS headers (Access-Control-Allow-Origin: *),
-   * which allows the Web Audio API to process the stream through EQ/preamp.
+   * Ask the Cloudflare Worker for the cobalt.tools audio URL for a YouTube video.
+   * Returns the cobalt URL directly — the browser fetches audio from cobalt's servers,
+   * which include CORS headers (Access-Control-Allow-Origin: *) required so that
+   * createMediaElementSource can route the audio through the Web Audio graph (EQ/preamp).
    *
    * @param {string} videoId  — bare YouTube video ID (no "sd_" prefix)
-   * @returns {string}
+   * @returns {Promise<string>}
    */
-  function getAudioLink(videoId) {
-    return `${WORKER_URL}?id=${encodeURIComponent(videoId)}&proxy=1`;
+  async function getAudioLink(videoId) {
+    const url = `${WORKER_URL}?id=${encodeURIComponent(videoId)}`;
+    let res;
+    try {
+      res = await fetch(url, { signal: AbortSignal.timeout(30000) });
+    } catch (err) {
+      throw new Error(`[Soundrop] Worker no responde: ${err.message}`);
+    }
+    if (!res.ok) throw new Error(`[Soundrop] Worker HTTP ${res.status}`);
+    let data;
+    try { data = await res.json(); } catch { throw new Error('[Soundrop] Worker respuesta inválida'); }
+    if (data.status !== 'ok' || !data.link) {
+      throw new Error(`[Soundrop] Worker: ${data.msg || 'sin link de audio'}`);
+    }
+    return data.link;
   }
 
   /**

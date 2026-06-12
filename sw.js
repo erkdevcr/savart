@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.459';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.459 — Soundrop EQ: _sdAudio + Web Audio graph (cobalt proxy streaming)
+const APP_VERSION  = '3.5.460';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.460 — Soundrop EQ: getAudioLink retorna URL cobalt directa (no proxy) para crossOrigin
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
