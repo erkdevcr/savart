@@ -1513,6 +1513,8 @@ img { display: block; }
 #browse-entity-header .lib-detail-entity {
   border-radius: var(--radius-sm);
 }
+/* No header while search results are visible or at root folder */
+.screen-browse.search-active #browse-entity-header { display: none; }
 
 /* ── Search bar (now lives inside Browse header) ─────────── */
 .browse-search-row {

@@ -5671,9 +5671,10 @@ const App = (() => {
       // Render (or clear) the album/collection identity header below the search bar.
       // Pass earlyData so the header can render immediately with Drive-API data
       // while the full DB enrichment runs in the background.
-      // The Soundrop root folder never gets a header — only its subfolders do.
+      // Root folder and Soundrop root folder never get a header.
       const _isSoundropRoot = (folder.name || '').trim().toLowerCase() === 'soundrop';
-      _renderBrowseEntityHeader(folder.id, _isSoundropRoot ? null : curType, {
+      const _isRootFolder   = folder.id === _rootFolderId;
+      _renderBrowseEntityHeader(folder.id, (_isRootFolder || _isSoundropRoot) ? null : curType, {
         folderName: folder.name,
         files:      result.files,
       }).catch(() => {});
