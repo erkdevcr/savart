@@ -44,7 +44,8 @@ const Player = (() => {
   let _shuffle      = false;
   let _repeatMode   = 'off';     // 'off' | 'all' | 'one'
   let _volume       = 1.0;       // 0.0 – 1.0
-  let _currentBlob      = null;  // current blob URL (to revoke on track change)
+  let _currentBlob      = null;  // current blob URL for Drive tracks (to revoke on track change)
+  let _currentSdBlob    = null;  // current blob URL for Soundrop tracks (to revoke on track change)
   let _preloadingId     = null;  // fileId being pre-downloaded
   let _preloadAbortCtrl = null;  // AbortController for the in-flight preload fetch
   let _activeDownloadCtrl = null; // AbortController for the in-flight main download
@@ -923,23 +924,26 @@ const Player = (() => {
         // Pause Drive element so only one source is heard
         _audio.pause();
 
-        // Get audio URL from Cloudflare Worker (cobalt.tools proxy, streaming).
-        // getAudioLink() constructs the URL instantly — no network call here.
-        // Auto-retry up to 3 times to handle transient Worker errors.
-        let audioUrl, lastErr;
-        for (let attempt = 0; attempt < 3; attempt++) {
-          try { audioUrl = await Soundrop.getAudioLink(item.videoId); break; }
-          catch (err) {
-            lastErr = err;
-            if (attempt < 2) await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
-          }
-        }
-        // If the user clicked something else while we were retrying, bail out
+        // Download audio as blob via Worker proxy (cobalt.tools).
+        // Using a local blob URL (same-origin) means createMediaElementSource can
+        // capture the audio through the Web Audio graph → EQ and preamp work.
+        // Direct Worker/cobalt URLs with crossOrigin don't work reliably with Web Audio
+        // in Chrome because the streaming response bypasses graph capture.
+        const sdBlob = await Soundrop.fetchBlob(item.videoId);
+
+        // If the user clicked something else while downloading, bail out
         if (mySession !== _sdPlaySession) return;
-        if (!audioUrl) throw lastErr;
+
+        // Revoke previous Soundrop blob URL to free memory
+        if (_currentSdBlob) {
+          _sdAudio.src = '';
+          URL.revokeObjectURL(_currentSdBlob);
+          _currentSdBlob = null;
+        }
+        _currentSdBlob = URL.createObjectURL(sdBlob);
 
         _sdSrcSession         = mySession;   // mark this src as belonging to current session
-        _sdAudio.src          = audioUrl;
+        _sdAudio.src          = _currentSdBlob;  // local blob URL — Web Audio graph works
         _sdAudio.playbackRate = _tempo;
 
         if (_audioCtx?.state === 'suspended') {
@@ -991,6 +995,10 @@ const Player = (() => {
       if (_sdActive) {
         _sdActive = false;
         _sdAudio.pause(); _sdAudio.src = '';
+        if (_currentSdBlob) {
+          URL.revokeObjectURL(_currentSdBlob);
+          _currentSdBlob = null;
+        }
       }
 
       // ── Drive track: blob path ────────────────────────────────
