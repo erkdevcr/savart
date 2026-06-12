@@ -210,14 +210,11 @@ const Drive = (() => {
    *              Guarantees folder results even when 100+ songs crowd them out.
    * Returns { folders, files }.
    */
-  async function _driveSearchQuery(safeTerm, mode = 'mixed', rootId = null) {
+  async function _driveSearchQuery(safeTerm, mode = 'mixed') {
     const mimeFilter = mode === 'folders'
       ? `mimeType = 'application/vnd.google-apps.folder'`
       : `(mimeType contains 'audio/' or mimeType = 'application/vnd.google-apps.folder')`;
-    // If a root folder is specified, restrict results to its subtree using the
-    // Drive API 'ancestors' filter (recursive — works for all descendant levels).
-    const ancestorFilter = rootId && rootId !== 'root' ? ` and '${rootId}' in ancestors` : '';
-    const q = `${mimeFilter} and name contains '${safeTerm}' and trashed = false${ancestorFilter}`;
+    const q = `${mimeFilter} and name contains '${safeTerm}' and trashed = false`;
     const params = new URLSearchParams({
       q,
       pageSize: mode === 'folders' ? '50' : '100',
@@ -260,17 +257,10 @@ const Drive = (() => {
 
     // Fire mixed queries + dedicated folder queries in parallel
     const allQueries = [
-      ...terms.map(q => _driveSearchQuery(q, 'mixed', rootId)),
-      ...terms.map(q => _driveSearchQuery(q, 'folders', rootId)),
+      ...terms.map(q => _driveSearchQuery(q, 'mixed')),
+      ...terms.map(q => _driveSearchQuery(q, 'folders')),
     ];
     const settled = await Promise.allSettled(allQueries);
-
-    // Si TODAS las queries fallaron (p.ej. token expirado, error de red),
-    // propagar el primer error al caller. Sin esto, _doSearch muestra "sin
-    // resultados" en lugar del banner de auth o el mensaje de error correcto.
-    if (settled.length > 0 && settled.every(r => r.status === 'rejected')) {
-      throw settled[0].reason;
-    }
 
     // Merge + deduplicate by id
     const folderMap = new Map();
@@ -616,22 +606,6 @@ const Drive = (() => {
     return await res.json();
   }
 
-  /* ── trashFile ──────────────────────────────────────────── */
-
-  /**
-   * Move a file or folder to Drive trash.
-   * Safer than permanent delete — user can recover from Drive trash.
-   * @param {string} fileId
-   */
-  async function trashFile(fileId) {
-    const url = `${CONFIG.API_BASE}/files/${encodeURIComponent(fileId)}?fields=id`;
-    await _fetch(url, {
-      method:  'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ trashed: true }),
-    });
-  }
-
   /* ── Expose ─────────────────────────────────────────────── */
   return {
     listFolder,
@@ -648,7 +622,6 @@ const Drive = (() => {
     findOrCreateFolder,
     uploadFile,
     updateFileMeta,
-    trashFile,
     AuthError,
     DriveError,
   };
