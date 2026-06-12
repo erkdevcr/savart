@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.458';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.458 — Ocultar browse-entity-header en root y search
+const APP_VERSION  = '3.5.459';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.459 — Soundrop EQ: _sdAudio + Web Audio graph (cobalt proxy streaming)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
