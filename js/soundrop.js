@@ -121,10 +121,13 @@ const Soundrop = (() => {
 
   /**
    * Download the audio for a Soundrop track as a Blob.
-   * Used only during the "save to Drive" flow.
+   * Used only during the "save to Drive" flow. Playback uses _ytProxy (0 API requests).
    *
-   * Usa cobalt.tools API a través del Cloudflare Worker en modo proxy (&proxy=1).
-   * El Worker llama a cobalt.tools, obtiene el audio y lo hace streaming al browser.
+   * Flujo:
+   *   1. Llama al Worker ?id=VIDEO_ID → RapidAPI youtube-mp36 → JSON { status, link }
+   *   2. Fetchea el link MP3 directamente (URL pública, sin IP restriction)
+   *   3. Valida magic bytes
+   *
    * Reintentos automáticos (hasta 3) para manejar errores transitorios.
    *
    * @param {string} videoId  — bare YouTube video ID (no "sd_" prefix)
@@ -135,46 +138,38 @@ const Soundrop = (() => {
     let lastErr = null;
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-      const url = `${WORKER_URL}?id=${encodeURIComponent(videoId)}&proxy=1`;
-
-      let res;
+      // Step 1: Get MP3 link from Worker (RapidAPI youtube-mp36)
+      let link;
       try {
-        res = await fetch(url, { signal: AbortSignal.timeout(90000) });
+        const workerUrl = `${WORKER_URL}?id=${encodeURIComponent(videoId)}`;
+        const res = await fetch(workerUrl, { signal: AbortSignal.timeout(30000) });
+        if (!res.ok) throw new Error(`Worker HTTP ${res.status}`);
+        const data = await res.json();
+        if (data.status !== 'ok' || !data.link) {
+          throw new Error(data.msg || 'sin link de audio');
+        }
+        link = data.link;
       } catch (err) {
-        lastErr = new Error(`[Soundrop] Worker no responde (intento ${attempt}): ${err.message}`);
+        lastErr = new Error(`[Soundrop] Worker error (intento ${attempt}): ${err.message}`);
         console.warn(lastErr.message);
+        // Si RapidAPI está en overcuota (429) no tiene sentido reintentar inmediatamente
+        if (err.message.includes('429') || err.message.toLowerCase().includes('quota')) break;
         continue;
       }
 
-      if (!res.ok) {
-        let msg = `Worker HTTP ${res.status}`;
-        try {
-          const ct = (res.headers.get('Content-Type') || '');
-          if (ct.includes('json')) { const d = await res.json(); msg = d.msg || msg; }
-        } catch { /* ignore */ }
-        lastErr = new Error(`[Soundrop] ${msg} (intento ${attempt})`);
-        console.warn(lastErr.message);
-        continue;
-      }
-
-      // Validate content-type — debe ser audio, no HTML/JSON de error
-      const ct = (res.headers.get('Content-Type') || '').toLowerCase();
-      if (ct.startsWith('text/') || ct.includes('html') || ct.includes('json')) {
-        lastErr = new Error(`[Soundrop] Respuesta inesperada del Worker (tipo: ${ct})`);
-        console.warn(lastErr.message);
-        continue;
-      }
-
+      // Step 2: Fetch the MP3 link directly (public CDN URL from RapidAPI)
       let blob;
       try {
-        blob = await res.blob();
+        const audioRes = await fetch(link, { signal: AbortSignal.timeout(90000) });
+        if (!audioRes.ok) throw new Error(`CDN HTTP ${audioRes.status}`);
+        blob = await audioRes.blob();
       } catch (err) {
-        lastErr = new Error(`[Soundrop] Error leyendo blob (intento ${attempt}): ${err.message}`);
+        lastErr = new Error(`[Soundrop] Error descargando audio (intento ${attempt}): ${err.message}`);
         console.warn(lastErr.message);
         continue;
       }
 
-      // Magic-byte validation — guard against non-audio responses
+      // Step 3: Magic-byte validation — guard against non-audio responses
       const head = new Uint8Array(await blob.slice(0, 12).arrayBuffer());
       const isMP3  = (head[0] === 0xFF && (head[1] & 0xE0) === 0xE0) ||
                      (head[0] === 0x49 && head[1] === 0x44 && head[2] === 0x33);

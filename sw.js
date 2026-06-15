@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.461';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.461 — Soundrop EQ: fetchBlob → blob URL local (mismo origen, Web Audio funciona)
+const APP_VERSION  = '3.5.463';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.463 — Soundrop: playback vía _ytProxy (0 requests), descarga vía RapidAPI youtube-mp36
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

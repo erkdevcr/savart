@@ -21,12 +21,8 @@ const Player = (() => {
 
   /* ── State ──────────────────────────────────────────────── */
   let _audio        = null;      // HTMLAudioElement — Drive tracks (Web Audio graph)
-  let _sdAudio      = null;      // HTMLAudioElement — Soundrop tracks (crossOrigin + same graph)
-  let _sdSourceNode = null;      // MediaElementAudioSourceNode for _sdAudio
-  let _sdGainNode   = null;      // GainNode — compensates YouTube loudness vs Drive (~5 dB)
   let _sdActive      = false;    // true while a Soundrop track is playing
-  let _sdPlaySession = 0;       // incremented on each SD play attempt
-  let _sdSrcSession  = 0;       // session# when _sdAudio.src was last written; stale errors ignored
+  let _sdPlaySession = 0;        // incremented on each SD play attempt
   let _audioCtx     = null;      // AudioContext
   let _sourceNode   = null;      // MediaElementAudioSourceNode for _audio
   let _gainNode     = null;      // GainNode (master volume)
@@ -45,7 +41,6 @@ const Player = (() => {
   let _repeatMode   = 'off';     // 'off' | 'all' | 'one'
   let _volume       = 1.0;       // 0.0 – 1.0
   let _currentBlob      = null;  // current blob URL for Drive tracks (to revoke on track change)
-  let _currentSdBlob    = null;  // current blob URL for Soundrop tracks (to revoke on track change)
   let _preloadingId     = null;  // fileId being pre-downloaded
   let _preloadAbortCtrl = null;  // AbortController for the in-flight preload fetch
   let _activeDownloadCtrl = null; // AbortController for the in-flight main download
@@ -373,59 +368,41 @@ const Player = (() => {
    * Build the Web Audio graph. Must be called from a user gesture context.
    */
   /**
-   * Returns the currently active HTMLAudioElement.
-   * Soundrop tracks play through _sdAudio (no Web Audio graph → no CORS silence).
-   * Drive tracks play through _audio (full EQ/gain pipeline).
+   * Proxy object that mirrors the HTMLAudioElement interface for Soundrop tracks.
+   * Delegates to Soundrop.yt (YouTube IFrame API) so the player can use _getAudio()
+   * transparently for both Drive and Soundrop tracks.
+   * Playback is via YouTube IFrame API — 0 Worker requests on play.
+   * Worker (cobalt.tools) is only used for explicit save-to-Drive (fetchBlob).
    */
-  function _getAudio() { return _sdActive ? _sdAudio : _audio; }
+  const _ytProxy = {
+    get paused()       { return Soundrop.yt.isPaused(); },
+    get currentTime()  { return Soundrop.yt.currentTime(); },
+    set currentTime(s) { Soundrop.yt.seekTo(s); },
+    get duration()     { return Soundrop.yt.duration(); },
+    get volume()       { return _volume; },
+    set volume(v)      { _volume = v; Soundrop.yt.setVolume(v); },
+    get playbackRate() { return _tempo; },
+    set playbackRate(r){ Soundrop.yt.setRate(r); },
+    pause()            { Soundrop.yt.pause(); },
+    play()             { Soundrop.yt.play(); return Promise.resolve(); },
+  };
 
   /**
-   * Create _sdAudio once and wire its events to the same callbacks as _audio.
+   * Returns the currently active audio interface.
+   * Soundrop tracks use _ytProxy (YouTube IFrame API) — no Worker requests on play.
+   * Drive tracks use _audio (HTMLAudioElement, full Web Audio graph).
    */
-  function _initSdAudio() {
-    if (_sdAudio) return;
-    _sdAudio              = new Audio();
-    _sdAudio.preload      = 'auto';
-    _sdAudio.playsInline  = true;
-    // crossOrigin must be set BEFORE src and BEFORE createMediaElementSource
-    // so the browser sends CORS headers — required for Web Audio processing.
-    // The Soundrop Worker proxy URL supports CORS (Access-Control-Allow-Origin: *).
-    _sdAudio.crossOrigin  = 'anonymous';
-
-    _sdAudio.addEventListener('play',  () => { if (_sdActive) { _onPlayPause(true);  _msSetPlaybackState('playing'); } });
-    _sdAudio.addEventListener('pause', () => { if (_sdActive) { _onPlayPause(false); _msSetPlaybackState('paused');  } });
-    _sdAudio.addEventListener('ended',   _handleEnded);
-    _sdAudio.addEventListener('error',   _handleAudioError);
-    _sdAudio.addEventListener('timeupdate', () => {
-      _onProgress(_sdAudio.currentTime, _sdAudio.duration || 0);
-      _msUpdatePositionState();
-    });
-    _sdAudio.addEventListener('durationchange', _msUpdatePositionState);
-    _sdAudio.addEventListener('loadedmetadata', () => {
-      if (_onDurationReady && isFinite(_sdAudio.duration) && _sdAudio.duration > 0) {
-        const item = _queue[_queueIndex];
-        if (item) _onDurationReady(item, _sdAudio.duration);
-      }
-    });
-  }
+  function _getAudio() { return _sdActive ? _ytProxy : _audio; }
 
   function _initAudioGraph() {
     if (_audioCtx) return;
 
-    // _sdAudio must exist before createMediaElementSource is called on it
-    _initSdAudio();
-
     _audioCtx     = new (window.AudioContext || window.webkitAudioContext)();
     _sourceNode   = _audioCtx.createMediaElementSource(_audio);
-    _sdSourceNode = _audioCtx.createMediaElementSource(_sdAudio);
     _gainNode     = _audioCtx.createGain();
     _gainNode.gain.value = _volume;
     _preAmpNode   = _audioCtx.createGain();
     _preAmpNode.gain.value = 1.0; // 0 dB
-    // YouTube normalizes to -14 LUFS; Drive MP3s average ~-9 LUFS (~5 dB gap).
-    // A 1.2x gain on the SD branch closes that gap without clipping typical tracks.
-    _sdGainNode   = _audioCtx.createGain();
-    _sdGainNode.gain.value = 1.2;
     _pannerNode   = _audioCtx.createStereoPanner
                   ? _audioCtx.createStereoPanner()
                   : null; // fallback: not all browsers support StereoPanner
@@ -468,12 +445,9 @@ const Player = (() => {
       _compressorNode.ratio.value     = 1;
     }
 
-    // Graph: both sources → preAmp → normalizer → EQ[12] → compressor → volume → panner → destination
-    // _sourceNode (Drive) and _sdSourceNode (Soundrop) both feed into _preAmpNode.
-    // When one is paused it produces silence, so only the active one is heard.
+    // Graph: _audio → preAmp → normalizer → EQ[12] → compressor → volume → panner → destination
+    // Soundrop tracks play via YouTube IFrame API (_ytProxy) — separate from this graph.
     _sourceNode.connect(_preAmpNode);
-    _sdSourceNode.connect(_sdGainNode);   // SD branch: boost to match Drive loudness
-    _sdGainNode.connect(_preAmpNode);
     _preAmpNode.connect(_normalNode);
     _normalNode.connect(_eqNodes[0]);
     for (let i = 0; i < _eqNodes.length - 1; i++) {
@@ -494,7 +468,7 @@ const Player = (() => {
     // This guarantees Android WebView computes correct filter coefficients on first play.
     _eqNodes.forEach((node, i) => { node.gain.value = _eqGains[i]; });
 
-    console.log('[Player] Web Audio graph built (Drive + Soundrop sources).');
+    console.log('[Player] Web Audio graph built (Drive source).');
   }
 
   /* ── Queue management ───────────────────────────────────── */
@@ -827,8 +801,8 @@ const Player = (() => {
    */
   function setTempo(rate) {
     _tempo = Math.max(0.5, Math.min(2.0, rate));
-    if (_audio)   _audio.playbackRate = _tempo;
-    if (_sdAudio) _sdAudio.playbackRate = _tempo;
+    if (_audio) _audio.playbackRate = _tempo;
+    if (_sdActive) Soundrop.yt.setRate(_tempo);
   }
 
   function getTempo() { return _tempo; }
@@ -915,48 +889,54 @@ const Player = (() => {
       // to Drive yet (id starts with "sd_"). Saved tracks have a real Drive
       // file ID and must be played through the normal Drive download path.
       if (item.isSoundrop && (item.id || '').startsWith('sd_')) {
-        _initAudioGraph(); // builds graph + _sdSourceNode if not yet done
         _sdActive = true;
 
-        // Tag this play attempt so stale errors from the previous attempt are ignored
+        // Tag this play attempt so stale YT callbacks from a previous load are ignored
         const mySession = ++_sdPlaySession;
 
         // Pause Drive element so only one source is heard
         _audio.pause();
 
-        // Download audio as blob via Worker proxy (cobalt.tools).
-        // Using a local blob URL (same-origin) means createMediaElementSource can
-        // capture the audio through the Web Audio graph → EQ and preamp work.
-        // Direct Worker/cobalt URLs with crossOrigin don't work reliably with Web Audio
-        // in Chrome because the streaming response bypasses graph capture.
-        const sdBlob = await Soundrop.fetchBlob(item.videoId);
-
-        // If the user clicked something else while downloading, bail out
-        if (mySession !== _sdPlaySession) return;
-
-        // Revoke previous Soundrop blob URL to free memory
-        if (_currentSdBlob) {
-          _sdAudio.src = '';
-          URL.revokeObjectURL(_currentSdBlob);
-          _currentSdBlob = null;
-        }
-        _currentSdBlob = URL.createObjectURL(sdBlob);
-
-        _sdSrcSession         = mySession;   // mark this src as belonging to current session
-        _sdAudio.src          = _currentSdBlob;  // local blob URL — Web Audio graph works
-        _sdAudio.playbackRate = _tempo;
-
-        if (_audioCtx?.state === 'suspended') {
-          await _audioCtx.resume().catch(() => {});
-        }
         _keepAliveStart();
         _msSetMetadata(item);
         _msSetPlaybackState('playing');
-        await _sdAudio.play();
 
-        if (mySession !== _sdPlaySession) return;
+        // Playback via YouTube IFrame API — 0 Worker/RapidAPI requests on play.
+        // Worker (RapidAPI youtube-mp36) is used only for explicit save-to-Drive (fetchBlob).
+        Soundrop.yt.load(item.videoId, {
+          onPlay: (dur) => {
+            if (mySession !== _sdPlaySession) return;
+            _onPlayPause(true);
+            _msSetPlaybackState('playing');
+            if (dur && _onDurationReady) {
+              const it = _queue[_queueIndex];
+              if (it) _onDurationReady(it, dur);
+            }
+          },
+          onPause: () => {
+            if (mySession !== _sdPlaySession) return;
+            _onPlayPause(false);
+            _msSetPlaybackState('paused');
+          },
+          onEnded: () => {
+            if (mySession !== _sdPlaySession) return;
+            _handleEnded();
+          },
+          onError: (code) => {
+            if (mySession !== _sdPlaySession) return;
+            console.error('[Player] YT error code:', code);
+            _onError({ type: 'download', message: 'toast_download_error', item });
+            setTimeout(() => {
+              if (_queue[_queueIndex]?.id === item.id) next();
+            }, 1500);
+          },
+          onTick: (ct, dur) => {
+            if (mySession !== _sdPlaySession) return;
+            _onProgress(ct, dur);
+          },
+        });
 
-        // Save Soundrop track to recents so it appears on Home
+        // Save to recents so it appears on Home
         DB.addRecent({
           id:           item.id,
           videoId:      item.videoId,
@@ -991,14 +971,10 @@ const Player = (() => {
         return;
       }
 
-      // ── Drive track: deactivate Soundrop element if it was on ─
+      // ── Drive track: deactivate Soundrop player if it was on ─
       if (_sdActive) {
         _sdActive = false;
-        _sdAudio.pause(); _sdAudio.src = '';
-        if (_currentSdBlob) {
-          URL.revokeObjectURL(_currentSdBlob);
-          _currentSdBlob = null;
-        }
+        Soundrop.yt.stop();
       }
 
       // ── Drive track: blob path ────────────────────────────────
@@ -1309,7 +1285,7 @@ const Player = (() => {
     _msSetPlaybackState('playing');
 
     if (_repeatMode === 'one') {
-      _audio.currentTime = 0;
+      _getAudio().currentTime = 0;
       play();
     } else {
       next();
