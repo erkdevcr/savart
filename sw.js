@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.463';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.463 — Soundrop: playback vía _ytProxy (0 requests), descarga vía RapidAPI youtube-mp36
+const APP_VERSION  = '3.5.464';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.464 — Fix: breadcrumb se resetea correctamente al navegar desde búsqueda
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

@@ -5791,8 +5791,11 @@ const App = (() => {
   }
 
   function onFolderClick(folder) {
-    // If navigating from outside Browse (e.g. Search), reset breadcrumb context
-    if (UI.getCurrentView() !== 'browse') _breadcrumb = [];
+    // Reset breadcrumb when navigating from outside Browse, OR from an active
+    // search within Browse (search is a UI state on top of Browse, not a
+    // separate view, so getCurrentView() still returns 'browse' during search).
+    const fromSearch = !!(document.getElementById('search-input')?.value?.trim());
+    if (UI.getCurrentView() !== 'browse' || fromSearch) _breadcrumb = [];
     _openFolder(folder);
   }
 
