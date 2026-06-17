@@ -23,6 +23,7 @@ const Player = (() => {
   let _audio        = null;      // HTMLAudioElement — Drive tracks (Web Audio graph)
   let _sdActive      = false;    // true while a Soundrop track is playing
   let _sdPlaySession = 0;        // incremented on each SD play attempt
+  let _sdLockedPause = false;    // true when YT auto-paused due to screen lock (not user action)
   let _audioCtx     = null;      // AudioContext
   let _sourceNode   = null;      // MediaElementAudioSourceNode for _audio
   let _gainNode     = null;      // GainNode (master volume)
@@ -117,6 +118,13 @@ const Player = (() => {
     _audio.addEventListener('timeupdate', () => {
       _onProgress(_audio.currentTime, _audio.duration || 0);
       _msUpdatePositionState();
+      // Proactively resume AudioContext if the browser suspended it while the
+      // screen was locked. timeupdate still fires because the HTML audio decoder
+      // keeps running; calling resume() here restores sound without waiting for
+      // the user to unlock the screen.
+      if (_audioCtx?.state === 'suspended') {
+        _audioCtx.resume().catch(() => {});
+      }
     });
     _audio.addEventListener('durationchange', _msUpdatePositionState);
     _audio.addEventListener('loadedmetadata', () => {
@@ -129,10 +137,17 @@ const Player = (() => {
       }
     });
 
-    // Resume AudioContext when page comes back from background/lock screen
+    // Resume AudioContext on any visibility change — covers both unlocking (hidden→visible)
+    // and cases where the browser suspends the context just as the screen locks (visible→hidden).
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible' && _audioCtx?.state === 'suspended') {
+      if (_audioCtx?.state === 'suspended') {
         _audioCtx.resume().catch(() => {});
+      }
+      // Fallback for Soundrop: if the YT player was auto-paused by screen lock and
+      // the onPause→play() call didn't fully stick, resume on screen unlock.
+      if (!document.hidden && _sdLockedPause && _sdActive) {
+        _sdLockedPause = false;
+        Soundrop.yt.play();
       }
     });
 
@@ -602,6 +617,7 @@ const Player = (() => {
    * Pause.
    */
   function pause() {
+    _sdLockedPause = false; // user-initiated pause — cancel any pending screen-lock resume
     _keepAliveStop();
     _getAudio()?.pause();
   }
@@ -915,6 +931,15 @@ const Player = (() => {
           },
           onPause: () => {
             if (mySession !== _sdPlaySession) return;
+            // YouTube IFrame API auto-pauses when the page becomes hidden (screen lock).
+            // Counter this immediately so audio keeps playing in background.
+            // We don't update the UI — from the user's perspective it's still playing.
+            if (document.hidden) {
+              _sdLockedPause = true;
+              Soundrop.yt.play();
+              return;
+            }
+            _sdLockedPause = false;
             _onPlayPause(false);
             _msSetPlaybackState('paused');
           },
