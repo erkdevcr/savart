@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.467';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.467 — Fix: Soundrop/YT sigue sonando con pantalla bloqueada (_sdLockedPause)
+const APP_VERSION  = '3.5.468';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.468 — Fix: keepalive con onda real + resume() sincrónico en visibilitychange
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

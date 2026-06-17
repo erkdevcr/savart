@@ -137,17 +137,26 @@ const Player = (() => {
       }
     });
 
-    // Resume AudioContext on any visibility change — covers both unlocking (hidden→visible)
-    // and cases where the browser suspends the context just as the screen locks (visible→hidden).
     document.addEventListener('visibilitychange', () => {
-      if (_audioCtx?.state === 'suspended') {
-        _audioCtx.resume().catch(() => {});
-      }
-      // Fallback for Soundrop: if the YT player was auto-paused by screen lock and
-      // the onPause→play() call didn't fully stick, resume on screen unlock.
-      if (!document.hidden && _sdLockedPause && _sdActive) {
-        _sdLockedPause = false;
-        Soundrop.yt.play();
+      if (document.hidden) {
+        // ── Going to background (screen lock / home button) ──────────────
+        // Race Chrome's auto-suspension: call resume() SYNCHRONOUSLY here,
+        // before Chrome has a chance to suspend the AudioContext.
+        _audioCtx?.resume().catch(() => {});
+        // Ensure the keepalive loop is running so Chrome detects active audio
+        // and keeps the JS thread alive (required for timeupdate to fire).
+        if (!_sdActive && !_audio.paused) _keepAliveStart();
+      } else {
+        // ── Coming back to foreground (screen unlock / app switch) ────────
+        // Resume AudioContext for Drive tracks (may have been suspended).
+        if (_audioCtx?.state === 'suspended') {
+          _audioCtx.resume().catch(() => {});
+        }
+        // Resume Soundrop if YT auto-paused during screen lock.
+        if (_sdLockedPause && _sdActive) {
+          _sdLockedPause = false;
+          Soundrop.yt.play();
+        }
       }
     });
 
@@ -328,8 +337,15 @@ const Player = (() => {
   /* ── Android keepalive ──────────────────────────────────── */
 
   /**
-   * Build a 1-second silent WAV and return a blob URL.
-   * 8-bit PCM, mono, 8000 Hz — smallest valid audio Android will accept.
+   * Build a 1-second keepalive WAV and return a blob URL.
+   * 8-bit PCM, mono, 8000 Hz — minimal valid audio Chrome/Android will accept.
+   *
+   * IMPORTANT: uses a real (very low amplitude) sine wave instead of DC silence.
+   * Chrome detects pure silence (all 0x80 = 0V DC) as "no audio" and may freeze
+   * the JS thread when the page goes to background. A non-zero oscillation — even
+   * at amplitude 2/128 ≈ 1.5%, volume 0.001 → effectively inaudible — signals to
+   * Chrome that real audio is active, keeping the JS thread alive so resume() calls
+   * and timeupdate events continue to fire.
    */
   function _createSilentBlob() {
     const SR = 8000, SAMPLES = SR; // 1 second
@@ -353,8 +369,12 @@ const Player = (() => {
     // data chunk
     w32(36, 0x64617461, false); // "data"
     w32(40, SAMPLES, true);
-    // 8-bit PCM silence = 0x80 (midpoint)
-    new Uint8Array(buf).fill(0x80, 44);
+    // 440 Hz sine wave at amplitude 2 (out of 128) — inaudible at volume 0.001
+    // but a real oscillating signal that Chrome recognises as active audio.
+    const data = new Uint8Array(buf, 44);
+    for (let i = 0; i < SAMPLES; i++) {
+      data[i] = 128 + Math.round(Math.sin(2 * Math.PI * 440 * i / SR) * 2);
+    }
     return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
   }
 
