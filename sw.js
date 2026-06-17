@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.468';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.468 — Fix: keepalive con onda real + resume() sincrónico en visibilitychange
+const APP_VERSION  = '3.5.469';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.469 — Fix: _sdUserPausing flag — controles Android pausan correctamente con pantalla bloqueada
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
