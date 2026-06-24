@@ -24,6 +24,7 @@ const App = (() => {
   let _browseFiles     = [];    // current open folder audio files (for rescan)
   const _browseScrollMap = new Map(); // folderId → scrollTop, restored on Back
   let _soundropCleanPending = false; // guard: prevents the Soundrop cleanup from looping
+  let _browseSoundropCtx   = false;  // true when browse is showing content inside the Soundrop tree
 
   /* ── Offline mode ────────────────────────────────────────── */
   let _isOffline       = false;  // true = app is in offline mode (auto or manual)
@@ -5548,6 +5549,7 @@ const App = (() => {
       const _isSoundropCtx =
         (folder.name || '').trim().toLowerCase() === 'soundrop' ||
         _breadcrumb.some(b => (b.name || '').trim().toLowerCase() === 'soundrop');
+      _browseSoundropCtx = _isSoundropCtx;
       if (_isSoundropCtx) {
         result.folders.forEach(f => { f._soundropCtx = true; });
         result.files.forEach(f => { f._soundropCtx = true; });
@@ -5752,6 +5754,17 @@ const App = (() => {
   function _serveCachedFolder(folder, cached, stale = false) {
     const { folders = [], files = [] } = cached;
     _sortItems(folders, files);
+
+    // Tag items with Soundrop context (same logic as _openFolder) so the
+    // delete option shows correctly even when loading from stale cache.
+    const _cachedSoundropCtx =
+      (folder.name || '').trim().toLowerCase() === 'soundrop' ||
+      _breadcrumb.some(b => (b.name || '').trim().toLowerCase() === 'soundrop');
+    _browseSoundropCtx = _cachedSoundropCtx;
+    if (_cachedSoundropCtx) {
+      folders.forEach(f => { f._soundropCtx = true; });
+      files.forEach(f => { f._soundropCtx = true; });
+    }
 
     const activeSong = Player.getCurrentTrack();
     UI.renderFolderContents(folders, files, activeSong?.id);
@@ -15133,6 +15146,7 @@ const App = (() => {
     onGoToLibraryAlbum,
     onGoToLibraryCollection,
     isFolderCollection,
+    isBrowseSoundropCtx: () => _browseSoundropCtx,
     onGoToArtist,
     onArtistRadio,
     onSendToScan,

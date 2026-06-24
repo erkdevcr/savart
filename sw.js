@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.469';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.469 — Fix: _sdUserPausing flag — controles Android pausan correctamente con pantalla bloqueada
+const APP_VERSION  = '3.5.470';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.470 — Fix: eliminar en Soundrop visible para todos los usuarios (isBrowseSoundropCtx fallback)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

@@ -2144,8 +2144,10 @@ const UI = (() => {
         _addCtxDivider(menu);
         _addCtxItem(menu, iconTrash(14), t('ctx_remove_from_pl'), () => { App.onRemoveFromPlaylist?.(item.id, item._playlistId); hideContextMenu(); });
       }
-      // Delete option — only for items inside the Soundrop folder tree
-      if (item._soundropCtx || item.isSoundrop) {
+      // Delete option — only for items inside the Soundrop folder tree.
+      // Fallback to App.isBrowseSoundropCtx() handles cases where _soundropCtx was
+      // not set at render time (stale cache, fresh navigation from Recents, etc.)
+      if (item._soundropCtx || item.isSoundrop || (typeof App !== 'undefined' && App.isBrowseSoundropCtx?.())) {
         _addCtxDivider(menu);
         _addCtxItem(menu, iconTrash(14), t('ctx_soundrop_delete'), () => { App.onSoundropDelete?.(item); hideContextMenu(); }, 'destructive');
       }
@@ -2177,8 +2179,9 @@ const UI = (() => {
         _addCtxDivider(menu);
         _addCtxItem(menu, _iconCollection, t('ctx_move_to_collections'), () => { App.onMoveToCollections?.(item); hideContextMenu(); });
       }
-      // Delete option — only for folders inside the Soundrop tree
-      if (item._soundropCtx) {
+      // Delete option — only for folders inside the Soundrop tree.
+      // Fallback to App.isBrowseSoundropCtx() for cases where _soundropCtx wasn't set.
+      if (item._soundropCtx || (typeof App !== 'undefined' && App.isBrowseSoundropCtx?.())) {
         _addCtxDivider(menu);
         _addCtxItem(menu, iconTrash(14), t('ctx_soundrop_delete'), () => { App.onSoundropDelete?.(item); hideContextMenu(); }, 'destructive');
       }
