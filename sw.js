@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.470';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.470 — Fix: eliminar en Soundrop visible para todos los usuarios (isBrowseSoundropCtx fallback)
+const APP_VERSION  = '3.5.471';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.471 — Feat: cachear blob en IndexedDB al guardar en Drive desde Soundrop
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

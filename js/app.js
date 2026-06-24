@@ -14145,8 +14145,17 @@ const App = (() => {
       try {
         // 1. Download blob via Worker proxy (handles CORS for Android WebView)
         const blob = await Soundrop.fetchBlob(track.videoId);
-        // 3. Upload to Drive "Soundrop" folder
+        // 2. Upload to Drive "Soundrop" folder
         const { fileId: driveId, folderId: driveFolderId, filename, folderHierarchy } = await Soundrop.saveToDrive(blob, meta, _rootFolderId);
+
+        // 3. Cache the blob locally so it plays immediately from IndexedDB
+        //    without re-downloading from Drive. Same mimeType logic as saveToDrive.
+        const _blobMime = (blob.type && blob.type !== 'application/octet-stream')
+          ? blob.type.split(';')[0].trim()
+          : 'audio/mpeg';
+        DB.setCachedBlob(driveId, blob, _blobMime).catch(err =>
+          console.warn('[App] SD local cache write failed (non-fatal):', err)
+        );
 
         // 4. Write Drive metadata to DB.
         // manualAt is always stamped (user manually entered all fields).
