@@ -10,7 +10,12 @@
 
 const Lastfm = (() => {
 
-  const API_BASE = 'https://ws.audioscrobbler.com/2.0/';
+  // Las peticiones van vía el Worker proxy (añade la api_key server-side).
+  // Sin proxy configurado, el módulo devuelve null (enriquecimiento desactivado).
+  function _apiBase() {
+    const p = (typeof CONFIG !== 'undefined' && CONFIG.API_PROXY_URL) || '';
+    return p ? `${p}/lastfm` : null;
+  }
 
   // Known Last.fm "no image" placeholder hash — returned when no cover exists.
   // Filter these out so we don't store a gray placeholder as cover art.
@@ -18,7 +23,7 @@ const Lastfm = (() => {
 
   // In-memory cache: "artist::album" → url (string) | null
   // Avoids hitting the API repeatedly for the same album in one session.
-  const _cache = new Map();
+  const _cache = new CappedMap(500); // cota FIFO
 
   /* ── fetchCover ─────────────────────────────────────────────
    * Fetch the largest available album cover from Last.fm.
@@ -33,10 +38,12 @@ const Lastfm = (() => {
     const key = `${artist.trim().toLowerCase()}::${album.trim().toLowerCase()}`;
     if (_cache.has(key)) return _cache.get(key);
 
+    const API_BASE = _apiBase();
+    if (!API_BASE) return null;
+
     try {
       const params = new URLSearchParams({
         method:      'album.getinfo',
-        api_key:     CONFIG.LASTFM_API_KEY,
         artist:      artist.trim(),
         album:       album.trim(),
         format:      'json',
@@ -90,10 +97,12 @@ const Lastfm = (() => {
     const key = `track::${artist.trim().toLowerCase()}::${title.trim().toLowerCase()}`;
     if (_cache.has(key)) return _cache.get(key);
 
+    const API_BASE = _apiBase();
+    if (!API_BASE) return null;
+
     try {
       const params = new URLSearchParams({
         method:      'track.getInfo',
-        api_key:     CONFIG.LASTFM_API_KEY,
         artist:      artist.trim(),
         track:       title.trim(),
         format:      'json',

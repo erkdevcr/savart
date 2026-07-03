@@ -22,6 +22,7 @@ const App = (() => {
   let _browseFolderId  = null;  // current open folder id (for rescan)
   let _browseFolder    = null;  // current open folder object { id, name, folderType } — for browse title 3-dot menu
   let _browseFiles     = [];    // current open folder audio files (for rescan)
+  let _openFolderSeq   = 0;     // navigation token: invalidates stale _openFolder responses
   const _browseScrollMap = new Map(); // folderId → scrollTop, restored on Back
   let _soundropCleanPending = false; // guard: prevents the Soundrop cleanup from looping
   let _browseSoundropCtx   = false;  // true when browse is showing content inside the Soundrop tree
@@ -55,6 +56,7 @@ const App = (() => {
   // Debouncing prevents rapid successive calls from causing multiple full re-renders
   // of the home screen (which resets scroll position and causes visible flicker).
   let _loadHomeDebounceTimer = null;
+  let _loadHomePendingResolvers = []; // resolvers de llamadas colapsadas por el debounce
   const _LOAD_HOME_DEBOUNCE_MS = 350;
 
   /* ── Soft-scan session guard ─────────────────────────────── */
@@ -441,7 +443,7 @@ const App = (() => {
     const _durMigKey = 'savart_dur_migration_v320';
     if (!localStorage.getItem(_durMigKey)) {
       localStorage.setItem(_durMigKey, '1');
-      DB.getAllMeta().then(all => {
+      DB.getAllMetaLight().then(all => {
         const withDur = all.filter(m => m.durationSec > 0);
         console.log(`[Migration] Resetting durationSec for ${withDur.length} records (v3.2.0 fix)`);
         Promise.all(withDur.map(m =>
@@ -1001,11 +1003,24 @@ const App = (() => {
 
   /* ── Queue helpers ───────────────────────────────────────── */
 
+  /* Cache de duraciones para el queue panel — evita N lecturas de IndexedDB en
+     CADA cambio de pista (el panel se re-renderiza en cada avance natural). */
+  const _queueDurCache = new Map(); // id → durationSec (0 = consultado, sin dato)
+
   async function _enrichQueueDurations(queue) {
     return Promise.all(queue.map(async item => {
       if (item.durationSec > 0) return item;
+      if (_queueDurCache.has(item.id)) {
+        const d = _queueDurCache.get(item.id);
+        return d > 0 ? { ...item, durationSec: d } : item;
+      }
       const m = await DB.getMeta(item.id).catch(() => null);
-      return m?.durationSec > 0 ? { ...item, durationSec: m.durationSec } : item;
+      const d = (m?.durationSec > 0) ? m.durationSec : 0;
+      _queueDurCache.set(item.id, d);
+      if (_queueDurCache.size > 2000) { // cota: FIFO simple
+        _queueDurCache.delete(_queueDurCache.keys().next().value);
+      }
+      return d > 0 ? { ...item, durationSec: d } : item;
     }));
   }
 
@@ -1033,7 +1048,9 @@ const App = (() => {
       _enrichQueueDurations(queue).then(enrichedQ => {
         UI.renderQueuePanel(enrichedQ, index);
       }).catch(() => { UI.renderQueuePanel(queue, index); });
-      _prefetchQueueCovers(queue).catch(() => {});
+      // NO _prefetchQueueCovers aquí: ya corrió al abrir el panel y en cambios
+      // estructurales de la cola — repetirlo en cada avance natural era trabajo
+      // redundante (loop completo + lecturas de DB por item).
     }
 
     // Persist current position (track index) so it can be restored after reload
@@ -1463,7 +1480,7 @@ const App = (() => {
       // Drive search (Step 1) supplements with any not-yet-scanned files.
       const _normArtistEarly = (artist || '').normalize('NFC').toLowerCase()
         .replace(/['''""".,/#!$%^&*;:{}=`~()[\]]/g, ' ').replace(/\s+/g, ' ').trim();
-      const dbAllMeta  = await DB.getAllMeta().catch(() => []);
+      const dbAllMeta  = await DB.getAllMetaLight().catch(() => []);
       const dbMatches  = dbAllMeta
         .filter(m => {
           const a = ((m.artist || '').split(';')[0].trim())
@@ -1754,7 +1771,7 @@ const App = (() => {
       };
 
       // ── Step 0: DB lookup — all scanned songs for any of the artists ──────
-      const dbAll = await DB.getAllMeta().catch(() => []);
+      const dbAll = await DB.getAllMetaLight().catch(() => []);
       dbAll
         .filter(m => _matchesAny(m.artist) && m.folderId)
         .forEach(m => _collect({
@@ -3188,7 +3205,7 @@ const App = (() => {
     if (!folders.length) return;
     try {
       const [all, savedCols] = await Promise.all([
-        DB.getAllMeta(),
+        DB.getAllMetaLight(),
         DB.getAllCollections().catch(() => []),
       ]);
       // Rescan: folder meta records carry rescannedAt (record id === folderId)
@@ -3269,7 +3286,7 @@ const App = (() => {
     try {
       const [folderMeta, all, colRec] = await Promise.all([
         DB.getMeta(folderId),
-        DB.getAllMeta(),
+        DB.getAllMetaLight(),
         DB.getCollection(folderId).catch(() => null),
       ]);
       const hasRescan = !!(folderMeta?.rescannedAt);
@@ -5169,8 +5186,19 @@ const App = (() => {
     const homeHasContent = !!document.querySelector('#screen-home .home-section');
     if (debounce && homeHasContent) {
       clearTimeout(_loadHomeDebounceTimer);
+      // Todas las llamadas colapsadas comparten el resultado de la ejecución final.
+      // Antes, cada clearTimeout dejaba colgada para siempre la promesa de la
+      // llamada anterior (awaits aguas arriba que nunca continuaban).
       return new Promise(resolve => {
-        _loadHomeDebounceTimer = setTimeout(() => _loadHomeData().then(resolve).catch(resolve), _LOAD_HOME_DEBOUNCE_MS);
+        _loadHomePendingResolvers.push(resolve);
+        _loadHomeDebounceTimer = setTimeout(() => {
+          const resolvers = _loadHomePendingResolvers;
+          _loadHomePendingResolvers = [];
+          _loadHomeData().then(
+            v => resolvers.forEach(r => r(v)),
+            e => resolvers.forEach(r => r(e))  // resolver (no rechazar) — mismo contrato que antes
+          );
+        }, _LOAD_HOME_DEBOUNCE_MS);
       });
     }
     try {
@@ -5465,6 +5493,10 @@ const App = (() => {
   }
 
   async function _openFolder(folder, appendToBreadcrumb = true, scrollToId = null) {
+    // Token de navegación: si el usuario abre otra carpeta mientras esta carga,
+    // la respuesta tardía NO debe renderizar encima ni pisar _browseFolderId/_browseFiles.
+    const mySeq = ++_openFolderSeq;
+    const _stale = () => mySeq !== _openFolderSeq;
     UI.showView('browse');
 
     // Save current scroll position before leaving this folder (forward navigation).
@@ -5529,6 +5561,7 @@ const App = (() => {
     // When offline, skip Drive API and go straight to the cache
     if (_isOffline) {
       const cached = await DB.getFolderCache(folder.id).catch(() => null);
+      if (_stale()) return; // user navigated elsewhere while reading cache
       if (cached) {
         _serveCachedFolder(folder, cached);
       } else {
@@ -5540,6 +5573,7 @@ const App = (() => {
 
     try {
       const result = await Drive.listFolderAll(folder.id);
+      if (_stale()) return; // respuesta tardía — otra carpeta ya está abierta
       // Persist folder contents for offline use (fire-and-forget)
       DB.saveFolderCache(folder.id, result.folders, result.files).catch(() => {});
       _sortItems(result.folders, result.files);
@@ -5595,6 +5629,7 @@ const App = (() => {
         });
       }
 
+      if (_stale()) return; // último check antes de tocar el DOM y el estado global
       const activeSong = Player.getCurrentTrack();
       UI.renderFolderContents(result.folders, result.files, activeSong?.id);
       UI.setActiveSongRow(activeSong?.id ?? null);
@@ -6715,7 +6750,10 @@ const App = (() => {
             DB.setMeta(sid, { id: sid, ...patch }).catch(() => {});
           }
           if (meta.coverUrl) {
-            _updatePlaylistSidebarCover(pl.id, meta.coverUrl);
+            // FIX: antes llamaba _updatePlaylistSidebarCover (inexistente) — el
+            // ReferenceError era tragado por el catch y la portada nunca se pintaba,
+            // re-descargando 1 MB por canción en cada carga.
+            UI.updatePlaylistSidebarCover(pl.id, meta.coverUrl);
             found = true;
           }
         } catch (_) { /* non-fatal */ }
@@ -9336,7 +9374,7 @@ const App = (() => {
     const origText = btn?.textContent;
     if (btn) { btn.disabled = true; btn.textContent = UI.t('ds_applying_cover') || 'Aplicando…'; }
     try {
-      const all   = await DB.getAllMeta();
+      const all   = await DB.getAllMetaLight();
       const songs = all.filter(m => m.folderId === folderId);
       if (!songs.length) {
         UI.showToast(UI.t('ds_no_songs') || 'No hay canciones', 'warn');
@@ -10133,7 +10171,7 @@ const App = (() => {
     try {
       // Extract unique artists from metadata.
       // When the artist field contains multiple names separated by ";" only the first is used.
-      const all = await DB.getAllMeta().catch(() => []);
+      const all = await DB.getAllMetaLight().catch(() => []);
       const artistMap = new Map(); // lowercase key → display name (first occurrence wins)
       for (const m of all) {
         if (!m.artist) continue;
@@ -11037,7 +11075,7 @@ const App = (() => {
     if (!year && !coverUrl) return;
 
     try {
-      const all = await DB.getAllMeta();
+      const all = await DB.getAllMetaLight();
       let updated = 0;
 
       for (const m of all) {
@@ -11182,7 +11220,7 @@ const App = (() => {
   async function _loadArtists() {
     if (_libInDetail) return; // don't replace a drill-down view
     try {
-      const all = await DB.getAllMeta();
+      const all = await DB.getAllMetaLight();
       const artistMap = new Map();
       all.forEach(m => {
         // Strip collaborators after ';' — e.g. "3 Doors Down;Josh Freese" → "3 Doors Down"
@@ -14549,7 +14587,7 @@ const App = (() => {
       _dsOnlyNoPhoto = !_dsOnlyNoPhoto;
       document.getElementById('ds-toggle-no-photo')?.classList.toggle('on', _dsOnlyNoPhoto);
       // Re-render with same artist/photo data
-      const all = await DB.getAllMeta().catch(() => []);
+      const all = await DB.getAllMetaLight().catch(() => []);
       const artistMap = new Map();
       for (const m of all) {
         if (!m.artist) continue;

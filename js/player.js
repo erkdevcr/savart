@@ -651,11 +651,9 @@ const Player = (() => {
    */
   function next() {
     if (_queue.length === 0) return;
-    if (_repeatMode === 'one') {
-      _getAudio().currentTime = 0;
-      play();
-      return;
-    }
+    // Repeat-one solo aplica al avance AUTOMÁTICO (_handleEnded lo maneja).
+    // El botón next siempre avanza — antes reiniciaba la pista actual y el
+    // usuario quedaba atrapado en la misma canción con repeat-one activo.
     const nextIndex = _queueIndex + 1;
     if (nextIndex >= _queue.length) {
       if (_repeatMode === 'all') {
@@ -665,6 +663,10 @@ const Player = (() => {
         // End of queue — notify UI so EQ bars and play state indicators clear
         _msSetPlaybackState('paused');
         _onPlayPause?.(false);
+        // Detener el keepalive: sin él, el tono inaudible de 440 Hz seguía
+        // sonando indefinidamente tras acabar la cola (batería + sesión de
+        // audio retenida en Android).
+        _keepAliveStop();
       }
       return;
     }
@@ -754,6 +756,11 @@ const Player = (() => {
     _volume = Math.max(0, Math.min(1, value));
     if (_gainNode) _gainNode.gain.value = _volume; // controls both sources via the shared graph
     else if (_audio) _audio.volume = _volume;      // fallback before graph is built
+    // Las pistas Soundrop (YouTube iframe) NO pasan por el grafo WebAudio —
+    // replicar el volumen en el player de YT para que el slider les afecte.
+    if (_sdActive && typeof Soundrop !== 'undefined') {
+      try { Soundrop.yt.setVolume(_volume); } catch (_) {}
+    }
   }
 
   function getVolume() { return _volume; }
@@ -943,6 +950,8 @@ const Player = (() => {
 
         // Playback via YouTube IFrame API — 0 Worker/RapidAPI requests on play.
         // Worker (RapidAPI youtube-mp36) is used only for explicit save-to-Drive (fetchBlob).
+        // Aplicar el volumen actual del slider al player de YT (no pasa por WebAudio).
+        try { Soundrop.yt.setVolume(_volume); } catch (_) {}
         Soundrop.yt.load(item.videoId, {
           onPlay: (dur) => {
             if (mySession !== _sdPlaySession) return;
@@ -1163,8 +1172,12 @@ const Player = (() => {
         _onError({ type: 'download', message: 'toast_download_error', item });
         // Drive tracks (including Soundrop-saved): auto-skip after a short delay.
         // Unsaved Soundrop streams: don't skip — the queue may contain only this one track.
+        // Guard: only skip if the failed track is STILL the current one — if the user
+        // selected another song during the 1.5 s window, next() would skip their choice.
         const isLiveStream = item?.isSoundrop && (item.id || '').startsWith('sd_');
-        if (!isLiveStream) setTimeout(() => next(), 1500);
+        if (!isLiveStream) setTimeout(() => {
+          if (_queue[_queueIndex]?.id === item.id) next();
+        }, 1500);
       }
     }
   }
@@ -1176,6 +1189,11 @@ const Player = (() => {
    * @param {DriveItem} item
    */
   async function _finishFastStartDownload(item) {
+    // Guards: (a) if the user already switched tracks during the head phase, bail;
+    // (b) never clobber the AbortController of a newer play session — doing so left
+    // the new track's download un-abortable and two large downloads competing.
+    if (_queue[_queueIndex]?.id !== item.id) return;
+    if (_activeDownloadCtrl !== null) return; // a newer session owns the slot
     const ctrl = new AbortController();
     _activeDownloadCtrl = ctrl;
     console.log('[Player] Fast-start: fetching full file in background…', item.name);
@@ -1226,6 +1244,19 @@ const Player = (() => {
       if (err.name !== 'AbortError') {
         console.warn('[Player] Fast-start background download failed:', err.message);
         _fastStartActive = false;
+        // Recovery: if the head was already exhausted (_handleEnded paused waiting
+        // for a swap that will never come), the queue would die silently — notify
+        // and advance. If the head is still playing, _fastStartActive=false makes
+        // _handleEnded advance naturally when it runs out.
+        if (_queue[_queueIndex]?.id === item.id) {
+          const headExhausted = _audio.ended ||
+            (_audio.paused && isFinite(_audio.duration) && _audio.duration > 0 &&
+             _audio.currentTime >= _audio.duration - 0.5);
+          if (headExhausted) {
+            _onError({ type: 'download', message: 'toast_download_error', item });
+            next();
+          }
+        }
       }
     } finally {
       if (_activeDownloadCtrl === ctrl) _activeDownloadCtrl = null;

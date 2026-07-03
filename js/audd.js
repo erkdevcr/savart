@@ -21,16 +21,17 @@ const Audd = (() => {
    * @returns {Promise<{ title, artist, album, coverUrl } | null>}
    */
   async function identify(blob) {
-    if (!CONFIG.AUDD_API_KEY || !blob) return null;
+    // Vía Worker proxy — la api_token se añade server-side.
+    const proxy = (typeof CONFIG !== 'undefined' && CONFIG.API_PROXY_URL) || '';
+    if (!proxy || !blob) return null;
 
     console.log(`[AudD] Sending ${(blob.size / 1024).toFixed(0)} KB for fingerprinting…`);
 
     const form = new FormData();
-    form.append('api_token', CONFIG.AUDD_API_KEY);
-    form.append('file',      blob, 'audio.mp3');
-    form.append('return',    'apple_music');   // get artwork URL in response
+    form.append('file',   blob, 'audio.mp3');
+    form.append('return', 'apple_music');   // get artwork URL in response
 
-    const res = await fetch(API_URL, { method: 'POST', body: form });
+    const res = await fetch(`${proxy}/audd`, { method: 'POST', body: form });
     if (!res.ok) throw new Error(`AudD HTTP ${res.status}`);
 
     const data = await res.json();

@@ -18,7 +18,7 @@ const Lyrics = (() => {
 
   // "artist::title" → string (lyrics) | null (not found)
   // undefined (not in map) = not yet fetched
-  const _cache = new Map();
+  const _cache = new CappedMap(300); // cota FIFO — las letras pueden pesar varios KB
 
   /* ── helpers ─────────────────────────────────────────────── */
 

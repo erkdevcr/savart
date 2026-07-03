@@ -24,27 +24,37 @@ const MusicBrainz = (() => {
   const CAA_BASE   = 'https://coverartarchive.org';
   const USER_AGENT = `Savart/${CONFIG.VERSION || '1.0'} (https://github.com/erkdevcr/savart)`;
 
-  /* ── Rate limiter: 1 req / 1.1 s (MusicBrainz only) ─────── */
+  /* ── Rate limiter: 1 req / 1.1 s (MusicBrainz only) ───────
+     Cola FIFO de promesas: serializa llamadas CONCURRENTES. Antes, N llamadas
+     simultáneas leían el mismo _lastMbReqAt, dormían lo mismo y disparaban a la
+     vez al despertar — violando el límite de 1 req/s de MusicBrainz (→ 503). */
   let _lastMbReqAt = 0;
+  let _mbQueue     = Promise.resolve();
 
-  async function _mbFetch(url) {
-    const now  = Date.now();
-    const wait = Math.max(0, 1100 - (now - _lastMbReqAt));
-    if (wait > 0) await new Promise(r => setTimeout(r, wait));
-    _lastMbReqAt = Date.now();
+  function _mbFetch(url) {
+    const run = async () => {
+      const now  = Date.now();
+      const wait = Math.max(0, 1100 - (now - _lastMbReqAt));
+      if (wait > 0) await new Promise(r => setTimeout(r, wait));
+      _lastMbReqAt = Date.now();
 
-    const resp = await fetch(url, {
-      headers: { 'User-Agent': USER_AGENT, 'Accept': 'application/json' },
-    });
-    if (!resp.ok) throw new Error(`MusicBrainz HTTP ${resp.status}`);
-    return resp.json();
+      const resp = await fetch(url, {
+        headers: { 'User-Agent': USER_AGENT, 'Accept': 'application/json' },
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!resp.ok) throw new Error(`MusicBrainz HTTP ${resp.status}`);
+      return resp.json();
+    };
+    const p = _mbQueue.then(run, run);
+    _mbQueue = p.catch(() => {}); // la cola no se rompe por errores
+    return p;
   }
 
   /* ── Session caches ──────────────────────────────────────── */
   // fileId → result object | null
-  const _lookupCache = new Map();
+  const _lookupCache = new CappedMap(500); // cota FIFO — sin crecimiento indefinido
   // releaseMbid → cover URL | null
-  const _coverCache  = new Map();
+  const _coverCache  = new CappedMap(500);
 
   /* ── Helpers ─────────────────────────────────────────────── */
 
@@ -176,6 +186,7 @@ const MusicBrainz = (() => {
       // CAA has no strict rate limit — use plain fetch (no MB throttle)
       const resp = await fetch(`${CAA_BASE}/release/${releaseMbid}`, {
         headers: { 'User-Agent': USER_AGENT, 'Accept': 'application/json' },
+        signal: AbortSignal.timeout(8000),
       });
       if (!resp.ok) { _coverCache.set(releaseMbid, null); return null; }
 

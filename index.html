@@ -19,9 +19,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&family=Baskervville:ital@0;1&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="styles.css?v=3.5.472">
-  <!-- Version global — fallback para Android donde el SW no se registra -->
-  <script>window.SAVART_VERSION = '3.5.458';</script>
+  <link rel="stylesheet" href="styles.css?v=3.5.474">
+  <!-- Version global — fallback para Android donde el SW no se registra.
+       IMPORTANTE: mantener sincronizada con APP_VERSION de sw.js en cada bump. -->
+  <script>window.SAVART_VERSION = '3.5.474';</script>
 </head>
 <body>
 
@@ -1425,7 +1426,9 @@
   if (!window.Capacitor) {
     const gisScript = document.createElement('script');
     gisScript.src = 'https://accounts.google.com/gsi/client';
-    gisScript.onload = () => Auth?.onGISLoad();
+    // window.Auth?. — el optional chaining NO protege una global no declarada;
+    // si GIS cargara antes que auth.js, `Auth?.` lanzaría ReferenceError y el login moriría.
+    gisScript.onload = () => window.Auth?.onGISLoad();
     gisScript.async = true;
     gisScript.defer = true;
     document.head.appendChild(gisScript);
@@ -1433,22 +1436,22 @@
 </script>
 
 <!-- Savart modules -->
-<script src="js/config.js?v=3.5.472"></script>
-<script src="js/auth.js?v=3.5.472"></script>
-<script src="js/drive.js?v=3.5.472"></script>
-<script src="js/db.js?v=3.5.472"></script>
-<script src="js/sync.js?v=3.5.472"></script>
-<script src="js/player.js?v=3.5.472"></script>
-<script src="js/meta.js?v=3.5.472"></script>
-<script src="js/lastfm.js?v=3.5.472"></script>
-<script src="js/audd.js?v=3.5.472"></script>
-<script src="js/musicbrainz.js?v=3.5.472"></script>
-<script src="js/discogs.js?v=3.5.472"></script>
-<script src="js/lyrics.js?v=3.5.472"></script>
-<script src="js/soundrop.js?v=3.5.472"></script>
-<script src="js/ui.js?v=3.5.472"></script>
-<script src="js/app.js?v=3.5.472"></script>
-<script src="js/bg.js?v=3.5.472"></script>
+<script src="js/config.js?v=3.5.474"></script>
+<script src="js/auth.js?v=3.5.474"></script>
+<script src="js/drive.js?v=3.5.474"></script>
+<script src="js/db.js?v=3.5.474"></script>
+<script src="js/sync.js?v=3.5.474"></script>
+<script src="js/player.js?v=3.5.474"></script>
+<script src="js/meta.js?v=3.5.474"></script>
+<script src="js/lastfm.js?v=3.5.474"></script>
+<script src="js/audd.js?v=3.5.474"></script>
+<script src="js/musicbrainz.js?v=3.5.474"></script>
+<script src="js/discogs.js?v=3.5.474"></script>
+<script src="js/lyrics.js?v=3.5.474"></script>
+<script src="js/soundrop.js?v=3.5.474"></script>
+<script src="js/ui.js?v=3.5.474"></script>
+<script src="js/app.js?v=3.5.474"></script>
+<script src="js/bg.js?v=3.5.474"></script>
 
 <!-- Inline: additional bindings that need the DOM -->
 <script>

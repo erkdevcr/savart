@@ -890,7 +890,13 @@ const DB = (() => {
    */
   async function bulkPutHistory(items) {
     if (!_db) return;
-    const valid = (items || []).filter(r => r && r.id).slice(0, CONFIG.HISTORY_MAX);
+    // Cap only LIVE rows — tombstones don't count toward HISTORY_MAX (same rule as
+    // _trimHistory and bulkPutRecents). Capping the combined array silently dropped
+    // all tombstones whenever history was full, letting deleted items resurrect.
+    const all        = (items || []).filter(r => r && r.id);
+    const live       = all.filter(r => !r.removedAt).slice(0, CONFIG.HISTORY_MAX);
+    const tombstones = all.filter(r => r.removedAt);
+    const valid      = [...live, ...tombstones];
     if (!valid.length) return;
     await new Promise((resolve, reject) => {
       const tx    = _db.transaction('history', 'readwrite');
@@ -899,7 +905,8 @@ const DB = (() => {
       tx.onerror    = () => reject(tx.error);
       tx.onabort    = () => reject(tx.error);
       for (const item of valid) {
-        store.put({ ...item, playedAt: item.playedAt ?? Date.now() });
+        // Don't stamp playedAt on tombstones — they're deletion markers, not plays.
+        store.put(item.removedAt ? { ...item } : { ...item, playedAt: item.playedAt ?? Date.now() });
       }
     });
     await _trimHistory();

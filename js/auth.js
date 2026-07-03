@@ -34,7 +34,7 @@ const Auth = (() => {
   let _gestureRenewRetries   = 0;     // counts re-armed gesture renewal attempts
   const MAX_GESTURE_RETRIES  = 3;     // give up re-arming after 3 failed popup attempts
   let _codeClient            = null;  // GIS code client (authorization code flow)
-  let _workerRefreshBusy     = false; // guards concurrent worker refresh calls
+  let _workerRefreshPromise  = null;  // in-flight worker refresh (shared by concurrent callers)
   let _workerRefreshLastFail = 0;     // epoch ms of last failed worker refresh
 
   /* ── LocalStorage keys ─────────────────────────────────── */
@@ -68,11 +68,20 @@ const Auth = (() => {
   async function _workerRefresh(purpose = 'renew') {
     const rt = _getRefreshToken();
     if (!rt || !_workerUrl()) return false;
-    if (_workerRefreshBusy) return false;
+    // Ya hay un refresh en vuelo → devolver LA MISMA promesa para que el caller
+    // espere el resultado real. (Devolver false aquí hacía que el caller
+    // interpretara "en vuelo" como fallo y cayera al flujo legacy → banner espurio.)
+    if (_workerRefreshPromise) return _workerRefreshPromise;
     // Cooldown de 15 s tras un fallo — evita martilleo desde getValidToken()
     if (Date.now() - _workerRefreshLastFail < 15_000) return false;
-    _workerRefreshBusy = true;
-    try {
+    _workerRefreshPromise = _workerRefreshRun(purpose)
+      .finally(() => { _workerRefreshPromise = null; });
+    return _workerRefreshPromise;
+  }
+
+  async function _workerRefreshRun(purpose) {
+    const rt = _getRefreshToken();
+    {
       // Hasta 3 intentos ante fallos de red (5 s entre cada uno)
       for (let attempt = 1; attempt <= 3; attempt++) {
         let res, data;
@@ -93,6 +102,7 @@ const Auth = (() => {
           _saveToken(data.access_token, (data.expires_in || 3600) * 1000);
           _gestureRenewRetries = 0;
           _workerRefreshLastFail = 0;
+          _renewOnGesture = false; // desarmar: el próximo click NO debe pedir token a GIS
           console.log('[Auth] Worker refresh exitoso — token renovado sin interacción.');
           if (purpose === 'login') {
             try { _onReady?.(); } catch (_) {}
@@ -112,8 +122,6 @@ const Auth = (() => {
         return false;
       }
       return false;
-    } finally {
-      _workerRefreshBusy = false;
     }
   }
 
@@ -495,6 +503,7 @@ const Auth = (() => {
       _renewTimeoutId = null;
       if (_isSilentRenew) {
         _isSilentRenew = false;
+        _onAutoLoginFail = null; // limpiar callback stale — evita banner espurio en errores ajenos
         console.warn('[Auth] Renovación proactiva timeout — fallback a gesto');
         _fallbackToGestureRenewal();
       }
@@ -539,6 +548,7 @@ const Auth = (() => {
         _renewTimeoutId = null;
         if (_isSilentRenew) {
           _isSilentRenew = false;
+          _onAutoLoginFail = null; // limpiar callback stale
           console.warn('[Auth] Renovación por gesto timeout — mostrando banner');
           _onExpiring();
         }

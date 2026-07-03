@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.472';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.472 — Auth: refresh token vía Cloudflare Worker (renovación 100% automática, sin banner)
+const APP_VERSION  = '3.5.474';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.474 — 10 pendientes: repeat-one next, volumen Soundrop, keepalive fin de cola, backoff polling, metadata push con hash-skip, Sync reset en logout, _loadHomeData promesas, queue panel sin lecturas DB, caches con cota, API keys proxeadas por Worker
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
@@ -68,7 +68,9 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => {
       return Promise.all(
-        keys.filter(key => key !== CACHE_NAME).map(key => {
+        // Preservar 'savart-fonts': las fuentes no cambian entre versiones del shell;
+        // borrarlas obligaba a re-descargarlas tras cada update y rompía su uso offline.
+        keys.filter(key => key !== CACHE_NAME && key !== 'savart-fonts').map(key => {
           console.log('[SW] Deleting old cache:', key);
           return caches.delete(key);
         })
@@ -106,15 +108,19 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // App shell (same-origin only): Cache First
-  event.respondWith(cacheFirst(event.request, CACHE_NAME));
+  // App shell (same-origin only): Cache First.
+  // ignoreSearch=true: la página pide js/app.js?v=x.x.x pero el precache guarda
+  // js/app.js sin query — sin esto el precache jamás matcheaba y el primer uso
+  // offline tras instalar fallaba. Es seguro: el cache del shell se recrea vacío
+  // en cada bump de versión (CACHE_NAME cambia), nunca conviven dos versiones.
+  event.respondWith(cacheFirst(event.request, CACHE_NAME, /* ignoreSearch */ true));
 });
 
 /* ── Cache strategies ────────────────────────────────────── */
 
-async function cacheFirst(request, cacheName) {
+async function cacheFirst(request, cacheName, ignoreSearch = false) {
   const cache    = await caches.open(cacheName);
-  const cached   = await cache.match(request);
+  const cached   = await cache.match(request, ignoreSearch ? { ignoreSearch: true } : undefined);
   if (cached) return cached;
 
   try {

@@ -88,6 +88,10 @@
           const { inlineSize: w, blockSize: h } = entry.contentBoxSize?.[0] ||
             { inlineSize: entry.contentRect.width, blockSize: entry.contentRect.height };
           if (w > 0 && h > 0) resizeExp(Math.round(w), Math.round(h));
+          // Contenedor oculto (0×0) → desactivar su grid. Sin esto, una vez
+          // abierto el player expandido se seguía dibujando su grid completo
+          // en cada frame para siempre aunque estuviera invisible (CPU/batería).
+          else { Wexp = 0; Hexp = 0; }
         }
       });
       ro.observe(canvasExp.parentElement); // observe #player-expanded
@@ -98,6 +102,7 @@
           const { inlineSize: w, blockSize: h } = entry.contentBoxSize?.[0] ||
             { inlineSize: entry.contentRect.width, blockSize: entry.contentRect.height };
           if (w > 0 && h > 0) resizeDs(Math.round(w), Math.round(h));
+          else { Wds = 0; Hds = 0; } // oculto → no dibujar (ver comentario arriba)
         }
       });
       ro.observe(canvasDs.parentElement); // observe #screen-deep-scan

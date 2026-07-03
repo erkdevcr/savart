@@ -35,6 +35,12 @@ const CONFIG = {
   // Vacío = desactivado (la app usa el flujo implícito clásico).
   AUTH_WORKER_URL: 'https://savart-auth-worker.erisd17.workers.dev',
 
+  // ── API proxy (mismo Worker) ──────────────────────────────
+  // Proxea Last.fm, Discogs y AudD para que las API keys vivan en el Worker
+  // y no expuestas en este archivo (público en GitHub Pages).
+  // Vacío = enriquecimiento externo desactivado (la app funciona igual).
+  API_PROXY_URL: 'https://savart-auth-worker.erisd17.workers.dev',
+
   // ── Cache (IndexedDB) ─────────────────────────────────────
   CACHE_LIMIT_DEFAULT: 1 * 1024 * 1024 * 1024,  // 1 GB
   CACHE_LIMIT_OPTIONS: {
@@ -94,8 +100,8 @@ const CONFIG = {
 
   // ── Last.fm ───────────────────────────────────────────────
   // Used by lastfm.js to fetch album cover art.
-  // Free API key — get one at: https://www.last.fm/api/account/create
-  LASTFM_API_KEY: 'a6a6ef739488b2b0c4a81980f17581e6',
+  // La API key vive en el Worker (API_PROXY_URL) — ya no se expone aquí.
+  LASTFM_API_KEY: '',
 
   // ── Discogs ───────────────────────────────────────────────
   // Used by discogs.js to fetch release cover art and metadata.
@@ -111,14 +117,15 @@ const CONFIG = {
   //   Personal token takes priority when both are set.
   //
   // Authenticated requests: 60 req/min · Unauthenticated: 25 req/min
-  DISCOGS_TOKEN:  'ehjkABXIdIkTauZgObjNDWGDJLWBxBCqMAMDfRjc',   // personal access token (recommended)
+  DISCOGS_TOKEN:  '',   // token vive en el Worker (API_PROXY_URL) — ya no se expone aquí
   DISCOGS_KEY:    '',   // consumer key   (alternative)
   DISCOGS_SECRET: '',   // consumer secret (alternative)
 
   // ── AudD.io ───────────────────────────────────────────────
   // Used by audd.js to identify songs with no ID3 metadata.
   // Free tier: 500 identifications/day — https://dashboard.audd.io
-  AUDD_API_KEY: '512d7b3a673ec6e6695e3d42e2be0a98',
+  // La API key vive en el Worker (API_PROXY_URL) — ya no se expone aquí.
+  AUDD_API_KEY: '',
 
   // Max files to identify per folder open (conserves daily quota).
   // With 500/day this allows ~100 folder opens before hitting the limit.
@@ -128,6 +135,20 @@ const CONFIG = {
   APP_NAME: 'Savart',
   VERSION:  '1.7.63',
 };
+
+/* ── CappedMap — Map con cota FIFO ────────────────────────────
+   Usado por los caches en memoria de sesión (musicbrainz, discogs, lastfm,
+   lyrics) para que no crezcan sin límite en sesiones largas con bibliotecas
+   grandes. Al superar el máximo se desaloja la entrada más antigua. */
+class CappedMap extends Map {
+  constructor(max = 500) { super(); this._max = max; }
+  set(key, value) {
+    if (!this.has(key) && this.size >= this._max) {
+      this.delete(this.keys().next().value); // FIFO: fuera la más antigua
+    }
+    return super.set(key, value);
+  }
+}
 
 /* ── Audio format detection helpers ───────────────────────── */
 

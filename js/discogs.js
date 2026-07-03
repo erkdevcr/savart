@@ -17,7 +17,12 @@
 
 const Discogs = (() => {
 
-  const BASE = 'https://api.discogs.com';
+  // Peticiones vía Worker proxy — el token de Discogs vive server-side.
+  // Sin proxy configurado, lookup() devuelve null (enriquecimiento desactivado).
+  function _base() {
+    const p = (typeof CONFIG !== 'undefined' && CONFIG.API_PROXY_URL) || '';
+    return p ? `${p}/discogs` : null;
+  }
   const UA   = `Savart/${(typeof CONFIG !== 'undefined' ? CONFIG.VERSION : null) || '1.0'} (https://erkdevcr.github.io/savart)`;
 
   /* ── Rate limiter: 1 req / 1.1 s ────────────────────────── */
@@ -26,7 +31,7 @@ const Discogs = (() => {
 
   /* ── Session caches ──────────────────────────────────────── */
   // fileId → result object | null
-  const _lookupCache = new Map();
+  const _lookupCache = new CappedMap(500); // cota FIFO
 
   /* ── Helpers ─────────────────────────────────────────────── */
 
@@ -86,22 +91,35 @@ const Discogs = (() => {
     return null; // unauthenticated — cover_image will be absent
   }
 
-  async function _fetch(path) {
-    const now  = Date.now();
-    const wait = Math.max(0, RATE_MS - (now - _lastReqAt));
-    if (wait > 0) await new Promise(r => setTimeout(r, wait));
-    _lastReqAt = Date.now();
+  /* Cola FIFO: serializa llamadas concurrentes para que el throttle sea real
+     (antes N llamadas simultáneas dormían en paralelo y disparaban a la vez). */
+  let _fetchQueue = Promise.resolve();
 
-    const headers = { 'User-Agent': UA };
-    const auth = _authHeader();
-    if (auth) headers['Authorization'] = auth;
+  function _fetch(path) {
+    const run = async () => {
+      const BASE = _base();
+      if (!BASE) throw new Error('Discogs proxy no configurado (CONFIG.API_PROXY_URL)');
+      const now  = Date.now();
+      const wait = Math.max(0, RATE_MS - (now - _lastReqAt));
+      if (wait > 0) await new Promise(r => setTimeout(r, wait));
+      _lastReqAt = Date.now();
 
-    const res = await fetch(`${BASE}${path}`, {
-      headers,
-      signal: AbortSignal.timeout(8000),
-    });
-    if (!res.ok) throw new Error(`Discogs HTTP ${res.status}`);
-    return res.json();
+      // El Worker añade Authorization (token) y User-Agent server-side.
+      // Fallback: si aún hay token local en CONFIG (build antigua), mandarlo.
+      const headers = {};
+      const auth = _authHeader();
+      if (auth) headers['Authorization'] = auth;
+
+      const res = await fetch(`${BASE}${path}`, {
+        headers,
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!res.ok) throw new Error(`Discogs HTTP ${res.status}`);
+      return res.json();
+    };
+    const p = _fetchQueue.then(run, run);
+    _fetchQueue = p.catch(() => {});
+    return p;
   }
 
   /* ── Public: metadata + cover lookup ────────────────────── */

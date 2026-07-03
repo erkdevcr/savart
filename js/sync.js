@@ -126,7 +126,25 @@ const Sync = (() => {
     return res.json();
   }
 
+  /* ── Write serialization (mutex) ─────────────────────────
+     Todas las escrituras a Drive (archivos de datos y manifest) se encadenan
+     en una cola de promesas. Sin esto, dos pushes con debounce distinto pueden
+     ejecutar read-modify-write del manifest concurrentemente y pisarse los
+     timestamps (los cambios del tipo pisado dejan de propagarse a otros
+     devices), o crear archivos duplicados en appDataFolder cuando aún no
+     existe fileId. */
+  let _writeChain = Promise.resolve();
+  function _serializedWrite(fn) {
+    const p = _writeChain.then(fn, fn);
+    _writeChain = p.catch(() => {}); // la cola nunca se rompe por un error
+    return p;
+  }
+
   async function _writeFile(filename, data) {
+    return _serializedWrite(() => _writeFileRaw(filename, data));
+  }
+
+  async function _writeFileRaw(filename, data) {
     const json    = JSON.stringify(data);
     const content = new Blob([json], { type: 'application/json' });
     const fileId  = _fileIds[filename];
@@ -171,23 +189,28 @@ const Sync = (() => {
    * never roll backwards.
    */
   async function _bumpManifest(types) {
-    const now = Date.now();
-    // Live read to capture changes made by other devices since our last poll
-    let live = {};
-    try { live = await _readManifest(); } catch (_) {}
-    // Merge: for every known key take the higher of the live manifest and our
-    // cached _remoteTs to prevent accidentally rolling back another device's ts.
-    const current = {};
-    const allKeys = new Set([...Object.keys(live), ...Object.keys(_remoteTs)]);
-    for (const k of allKeys) {
-      current[k] = Math.max(live[k] || 0, _remoteTs[k] || 0);
-    }
-    for (const t of types) {
-      current[t] = now;
-      _localTs[t] = now;
-    }
-    await _writeFile(MANIFEST, current);
-    _remoteTs = { ...current };
+    // Serializado junto con _writeFile: el read-modify-write completo del
+    // manifest ocurre dentro del mutex para que dos bumps concurrentes no se
+    // pisen los timestamps entre sí.
+    return _serializedWrite(async () => {
+      const now = Date.now();
+      // Live read to capture changes made by other devices since our last poll
+      let live = {};
+      try { live = await _readManifest(); } catch (_) {}
+      // Merge: for every known key take the higher of the live manifest and our
+      // cached _remoteTs to prevent accidentally rolling back another device's ts.
+      const current = {};
+      const allKeys = new Set([...Object.keys(live), ...Object.keys(_remoteTs)]);
+      for (const k of allKeys) {
+        current[k] = Math.max(live[k] || 0, _remoteTs[k] || 0);
+      }
+      for (const t of types) {
+        current[t] = now;
+        _localTs[t] = now;
+      }
+      await _writeFileRaw(MANIFEST, current);
+      _remoteTs = { ...current };
+    });
   }
 
   /* ── Init-time merge strategies ──────────────────────────── */
@@ -342,21 +365,25 @@ const Sync = (() => {
   /* ── LWW apply (live polling) ────────────────────────────── */
   // Remote is newer → overwrite local entirely. No merge.
 
-  async function _applyRemote(type, data) {
+  async function _applyRemote(type, data, remoteTs = 0) {
     switch (type) {
 
       case 'favorites': {
         // LWW per item: for additions, only apply if remote starredAt >= local starredAt.
-        // For removals (item in local but not in remote), remote wins — the manifest timestamp
-        // already guarantees the remote file is newer overall, so a missing item means un-starred.
+        // For removals (item in local but not in remote), remote wins ONLY if the local
+        // star is older than the remote file (manifest ts). A star created locally AFTER
+        // the remote file was written (e.g. during the push debounce window) is a genuine
+        // offline/new addition and must survive the pull — the pending push will upload it.
         const remote       = data || [];
         const remoteIds    = new Set(remote.map(d => d.id));
         const localStarred = await DB.getStarred();
         const localMap     = new Map(localStarred.map(m => [m.id, m]));
 
-        // Un-star items absent from remote (remote is newer per manifest LWW)
+        // Un-star items absent from remote, except local stars newer than the remote file
         for (const m of localStarred) {
-          if (!remoteIds.has(m.id)) await DB.setMeta(m.id, { starred: false, starredAt: undefined });
+          if (remoteIds.has(m.id)) continue;
+          if (remoteTs > 0 && (m.starredAt || 0) > remoteTs) continue; // local win — keep
+          await DB.setMeta(m.id, { starred: false, starredAt: undefined });
         }
         // Star/update remote items — only overwrite if remote is newer or item is new locally
         for (const item of remote) {
@@ -379,9 +406,12 @@ const Sync = (() => {
         const local     = await DB.getPlaylists();
         const localMap  = new Map(local.map(p => [p.id, p]));
 
-        // Delete playlists absent from remote (remote is authoritative per LWW manifest)
+        // Delete playlists absent from remote — except playlists created/updated locally
+        // AFTER the remote file was written (pending push): those survive the pull.
         for (const pl of local) {
-          if (!remoteIds.has(pl.id)) await DB.deletePlaylist(pl.id);
+          if (remoteIds.has(pl.id)) continue;
+          if (remoteTs > 0 && (pl.updatedAt || 0) > remoteTs) continue; // local win — keep
+          await DB.deletePlaylist(pl.id);
         }
         // Upsert remote playlists — skip if local version is newer (per-playlist LWW)
         for (const pl of remote) {
@@ -406,10 +436,13 @@ const Sync = (() => {
             && Array.isArray(localMeta.order)) {
           localMeta = localMeta.meta || {};
         }
-        // Remote wins for deletions (items absent from remote with older pinnedAt than
-        // the remote file was last written — heuristic: use max remote pinnedAt as ts).
-        const remoteTs    = Math.max(0, ...Object.values(remoteMeta).map(v => v?.pinnedAt || 0));
-        const mergedPinned = _mergePinned(localMeta, remoteMeta, remoteTs);
+        // Remote wins for deletions. Use the manifest timestamp when available (exact);
+        // fall back to the old max(pinnedAt) heuristic only if it's missing. The heuristic
+        // was buggy: un-pinning the item with the highest pinnedAt on another device
+        // lowered the inferred ts and resurrected it from this device's push.
+        const pinnedTs    = remoteTs > 0 ? remoteTs
+          : Math.max(0, ...Object.values(remoteMeta).map(v => v?.pinnedAt || 0));
+        const mergedPinned = _mergePinned(localMeta, remoteMeta, pinnedTs);
 
         // Preserve order: remote order first, then any local-only pins appended.
         const localOnlyIds = Object.keys(mergedPinned).filter(id => !remoteMeta[id]);
@@ -434,7 +467,17 @@ const Sync = (() => {
         if (!remote.length) {
           // Remote cleared or all items pre-date the cut.
           // Only wipe local when there is an explicit clear signal — not an accidental empty push.
-          if (cut > 0) await DB.clearRecents();
+          // Preserve local items accessed AFTER the clear (played on this device since then,
+          // not yet pushed) and local tombstones within their window.
+          if (cut > 0) {
+            const localAll = await DB.getRecentsAll();
+            const week     = Date.now() - 7 * 24 * 60 * 60 * 1000;
+            const survived = localAll.filter(r =>
+              (r.removedAt && r.removedAt > week) ||
+              (!r.removedAt && (r.accessedAt || 0) > cut));
+            await DB.clearRecents();
+            if (survived.length) await DB.bulkPutRecents(survived);
+          }
           break;
         }
         const local = await DB.getRecentsAll(); // include local tombstones
@@ -522,7 +565,16 @@ const Sync = (() => {
           (cut === 0 || (r.removedAt ? r.removedAt > cut : (r.playedAt || 0) > cut)));
         if (!remote.length) {
           // Remote cleared or all items pre-date the cut.
-          if (cut > 0) await DB.clearHistory();
+          // Preserve local plays AFTER the clear (not yet pushed) and recent tombstones.
+          if (cut > 0) {
+            const localAll = await DB.getHistoryAll();
+            const week     = Date.now() - 7 * 24 * 60 * 60 * 1000;
+            const survived = localAll.filter(r =>
+              (r.removedAt && r.removedAt > week) ||
+              (!r.removedAt && (r.playedAt || 0) > cut));
+            await DB.clearHistory();
+            if (survived.length) await DB.bulkPutHistory(survived);
+          }
           break;
         }
         const local = await DB.getHistoryAll(); // include local tombstones
@@ -1059,6 +1111,15 @@ const Sync = (() => {
     console.log(`[Sync] Pushed collections (${payload.length})`);
   }
 
+  /* Hash del último metadata.json subido — evita re-subir la biblioteca completa
+     (varios MB con bibliotecas grandes) cuando el contenido no cambió. */
+  let _lastMetaHash = null;
+  function _strHash(s) { // djb2 — barato y suficiente para detectar cambios
+    let h = 5381;
+    for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+    return h;
+  }
+
   async function _pushMetadata() {
     // Fields that identify the song and its album membership —
     // synced so that other devices can rebuild the Library without re-scanning.
@@ -1094,7 +1155,16 @@ const Sync = (() => {
         if (isExternalUrl(m.coverUrl))     rec.coverUrl     = m.coverUrl;
         return rec;
       });
+    // Skip si el payload es idéntico al último subido — cada push subía la
+    // biblioteca completa aunque nada hubiera cambiado.
+    const json = JSON.stringify(toSync);
+    const hash = _strHash(json);
+    if (hash === _lastMetaHash) {
+      console.log('[Sync] Metadata sin cambios — push omitido');
+      return false; // señal para push()/pushNow(): no bumpear el manifest
+    }
     await _writeFile(FILENAMES.metadata, toSync);
+    _lastMetaHash = hash;
     console.log(`[Sync] Pushed metadata (${toSync.length} songs)`);
   }
 
@@ -1243,14 +1313,33 @@ const Sync = (() => {
 
   /* ── Live polling ────────────────────────────────────────── */
 
+  /* Backoff del polling: tras errores consecutivos, esperar 6s→12s→…→60s en vez
+     de martillear cada 3 s (offline prolongado, rate limit, 403). En background
+     (document.hidden) la cadencia baja a ~1 poll cada 30 s. */
+  let _pollFailures   = 0;
+  let _pollSkipUntil  = 0;
+  let _pollHiddenTick = 0;
+  let _lastFileListRefresh = 0;
+
   async function _poll() {
     if (_polling || !Auth.isAuthenticated()) return;
+    if (Date.now() < _pollSkipUntil) return; // en backoff tras errores
+    if (typeof document !== 'undefined' && document.hidden) {
+      if (++_pollHiddenTick % 10 !== 0) return; // background: 1 de cada 10 ticks
+    } else {
+      _pollHiddenTick = 0;
+    }
     _polling = true;
     try {
-      // Refresh file IDs occasionally (new files may have been created on another device)
-      if (!_fileIds[MANIFEST]) await _refreshFileList();
+      // Refresh file IDs occasionally (new files may have been created on another
+      // device). Throttle a 30 s: en cuentas sin manifest esto corría en CADA tick.
+      if (!_fileIds[MANIFEST] && Date.now() - _lastFileListRefresh > 30_000) {
+        _lastFileListRefresh = Date.now();
+        await _refreshFileList();
+      }
 
       const manifest = await _readManifest();
+      _pollFailures = 0; // el manifest respondió — red OK, resetear backoff
       if (!manifest || !Object.keys(manifest).length) return;
 
       // Always bring _remoteTs up to date (take MAX to prevent rollbacks).
@@ -1280,7 +1369,7 @@ const Sync = (() => {
         const data = results[i].status === 'fulfilled' ? results[i].value : null;
         if (data !== null) {
           try {
-            await _applyRemote(type, data);
+            await _applyRemote(type, data, manifest[type] || 0);
             _localTs[type]  = manifest[type]; // mark as applied
             _remoteTs[type] = manifest[type];
             applied.push(type);
@@ -1296,7 +1385,10 @@ const Sync = (() => {
       }
     } catch (err) {
       // Non-fatal — network issues, token expired, etc.
-      if (err?.message) console.warn('[Sync] poll error:', err.message);
+      _pollFailures++;
+      const backoff = Math.min(60_000, POLL_INTERVAL * 2 ** _pollFailures);
+      _pollSkipUntil = Date.now() + backoff;
+      if (err?.message) console.warn(`[Sync] poll error (backoff ${backoff / 1000}s):`, err.message);
     } finally {
       _polling = false;
     }
@@ -1310,11 +1402,27 @@ const Sync = (() => {
     console.log('[Sync] Live polling started (every ' + POLL_INTERVAL + 'ms)');
   }
 
-  /** Stop polling (call on logout). */
+  /** Stop polling + full module reset (call on logout).
+      Sin el reset, los timestamps/fileIds de la cuenta anterior contaminaban
+      la siguiente sesión: init() marcaba tipos como "frescos" y saltaba el
+      merge, y el primer push subía datos de la cuenta A al Drive de la B. */
   function stopLiveSync() {
     if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
     _polling = false;
-    console.log('[Sync] Live polling stopped');
+    // Cancelar pushes debounced pendientes — dispararían tras el logout
+    for (const k of Object.keys(_timers)) clearTimeout(_timers[k]);
+    _timers   = {};
+    _ready    = false;
+    _fileIds  = {};
+    _localTs  = {};
+    _remoteTs = {};
+    _lastMetaHash  = null;
+    _pollFailures  = 0;
+    _pollSkipUntil = 0;
+    _lastFileListRefresh = 0;
+    // Borrar los timestamps persistidos (son por-cuenta, la key en IDB no lo es)
+    DB.setState('sync_localTs', {}).catch(() => {});
+    console.log('[Sync] Live polling stopped + estado reseteado');
   }
 
   /* ── Public API ─────────────────────────────────────────── */
@@ -1796,7 +1904,7 @@ const Sync = (() => {
     playlists:   1500,
     playcounts:  3000,
     settings:    2000,
-    metadata:    2000,
+    metadata:    10000, // biblioteca completa (varios MB) — debounce amplio + skip por hash
     collections: 2000,
   };
 
@@ -1811,7 +1919,8 @@ const Sync = (() => {
     if (_timers[type]) clearTimeout(_timers[type]);
     _timers[type] = setTimeout(async () => {
       try {
-        await _pushFns[type]?.();
+        const result = await _pushFns[type]?.();
+        if (result === false) return; // pusher decidió omitir (sin cambios) — no bumpear
         await _bumpManifest([type]);
         // Update and persist _localTs so next session knows this type is already
         // up-to-date and skips the download — fixes the re-download loop.
@@ -1854,7 +1963,8 @@ const Sync = (() => {
     // Cancel any pending debounced push for this type
     if (_timers[type]) { clearTimeout(_timers[type]); delete _timers[type]; }
     try {
-      await _pushFns[type]?.();
+      const result = await _pushFns[type]?.();
+      if (result === false) return; // sin cambios — no bumpear
       await _bumpManifest([type]);
       _localTs[type] = Date.now();
       await DB.setState('sync_localTs', { ..._localTs }).catch(() => {});

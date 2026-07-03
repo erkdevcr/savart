@@ -5431,11 +5431,24 @@ const UI = (() => {
       }
     });
 
-    // Close when clicking outside
-    document.addEventListener('mousedown', e => {
-      if (!wrap.contains(e.target)) _hide();
-    }, true);
+    // Close when clicking outside — registro compartido (ver _acRegistry).
+    // Antes: cada llamada añadía un listener permanente en document que retenía
+    // el árbol DOM desconectado tras el siguiente render (fuga de memoria: cientos
+    // de listeners en sesiones largas navegando álbumes).
+    _acRegistry.add({ wrap, hide: _hide });
   }
+
+  /* Registro global de autocompletes activos: UN solo listener en document.
+     Las entradas cuyo wrap ya no está en el DOM se purgan automáticamente,
+     liberando sus closures para el GC. */
+  const _acRegistry = new Set();
+  document.addEventListener('mousedown', (e) => {
+    if (!_acRegistry.size) return;
+    for (const entry of _acRegistry) {
+      if (!entry.wrap.isConnected) { _acRegistry.delete(entry); continue; }
+      if (!entry.wrap.contains(e.target)) entry.hide();
+    }
+  }, true);
 
   function escHtml(str) {
     return String(str ?? '')
