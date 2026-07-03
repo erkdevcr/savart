@@ -33,10 +33,112 @@ const Auth = (() => {
   let _onRenewed             = null;  // callback fired after a silent mid-session renewal
   let _gestureRenewRetries   = 0;     // counts re-armed gesture renewal attempts
   const MAX_GESTURE_RETRIES  = 3;     // give up re-arming after 3 failed popup attempts
+  let _codeClient            = null;  // GIS code client (authorization code flow)
+  let _workerRefreshBusy     = false; // guards concurrent worker refresh calls
+  let _workerRefreshLastFail = 0;     // epoch ms of last failed worker refresh
 
   /* ── LocalStorage keys ─────────────────────────────────── */
   const LS_EXPIRY  = 'savart_token_expiry';
   const LS_AUTHED  = 'savart_authed';
+  const LS_REFRESH = 'savart_refresh_token';
+
+  /* ── Refresh-token (Worker) helpers ─────────────────────── */
+  function _workerUrl() {
+    return (typeof CONFIG !== 'undefined' && CONFIG.AUTH_WORKER_URL) || '';
+  }
+
+  function _getRefreshToken() {
+    try { return localStorage.getItem(LS_REFRESH) || null; } catch (_) { return null; }
+  }
+
+  function _setRefreshToken(rt) {
+    if (!rt) return;
+    try { localStorage.setItem(LS_REFRESH, rt); } catch (_) {}
+  }
+
+  function _clearRefreshToken() {
+    try { localStorage.removeItem(LS_REFRESH); } catch (_) {}
+  }
+
+  /**
+   * Renueva el access token contra el Worker usando el refresh token guardado.
+   * 100% silencioso — sin popup ni gesto. Devuelve true si renovó.
+   * @param {'renew'|'login'} purpose — 'renew' dispara _onRenewed, 'login' dispara _onReady
+   */
+  async function _workerRefresh(purpose = 'renew') {
+    const rt = _getRefreshToken();
+    if (!rt || !_workerUrl()) return false;
+    if (_workerRefreshBusy) return false;
+    // Cooldown de 15 s tras un fallo — evita martilleo desde getValidToken()
+    if (Date.now() - _workerRefreshLastFail < 15_000) return false;
+    _workerRefreshBusy = true;
+    try {
+      // Hasta 3 intentos ante fallos de red (5 s entre cada uno)
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        let res, data;
+        try {
+          res = await fetch(_workerUrl() + '/refresh', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refresh_token: rt }),
+          });
+          data = await res.json().catch(() => ({}));
+        } catch (netErr) {
+          console.warn(`[Auth] Worker refresh: error de red (intento ${attempt}/3)`, netErr?.message || netErr);
+          if (attempt < 3) { await new Promise(r => setTimeout(r, 5000)); continue; }
+          _workerRefreshLastFail = Date.now();
+          return false;
+        }
+        if (res.ok && data.access_token) {
+          _saveToken(data.access_token, (data.expires_in || 3600) * 1000);
+          _gestureRenewRetries = 0;
+          _workerRefreshLastFail = 0;
+          console.log('[Auth] Worker refresh exitoso — token renovado sin interacción.');
+          if (purpose === 'login') {
+            try { _onReady?.(); } catch (_) {}
+          } else {
+            try { _onRenewed?.(); } catch (_) {}
+          }
+          return true;
+        }
+        // invalid_grant = refresh token revocado o expirado → borrar y no reintentar
+        if (data.error === 'invalid_grant') {
+          console.warn('[Auth] Worker refresh: refresh token inválido — se elimina.');
+          _clearRefreshToken();
+          return false;
+        }
+        console.warn('[Auth] Worker refresh falló:', res.status, data.error || '');
+        _workerRefreshLastFail = Date.now();
+        return false;
+      }
+      return false;
+    } finally {
+      _workerRefreshBusy = false;
+    }
+  }
+
+  /**
+   * Intercambia un authorization code por tokens en el Worker y los guarda.
+   * @param {string} code
+   * @param {string} redirectUri — 'postmessage' (GIS popup) o '' (serverAuthCode Android)
+   */
+  async function _exchangeCode(code, redirectUri = 'postmessage') {
+    const res = await fetch(_workerUrl() + '/exchange', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, redirect_uri: redirectUri }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.access_token) {
+      throw new Error(data.error || ('exchange HTTP ' + res.status));
+    }
+    if (data.refresh_token) {
+      _setRefreshToken(data.refresh_token);
+      console.log('[Auth] Refresh token obtenido y guardado — renovación automática activa.');
+    }
+    _saveToken(data.access_token, (data.expires_in || 3600) * 1000);
+    return true;
+  }
 
   /* ── Platform detection ────────────────────────────────── */
   function _isNative() {
@@ -127,6 +229,15 @@ const Auth = (() => {
       _onAutoLoginFail = null;
       _onReady?.();
 
+      // grantOfflineAccess entrega un serverAuthCode → intercambiarlo en el
+      // Worker para obtener un refresh token (renovación automática sin plugin).
+      const serverCode = user?.serverAuthCode || user?.authentication?.serverAuthCode;
+      if (serverCode && _workerUrl()) {
+        _exchangeCode(serverCode, '')
+          .then(() => console.log('[Auth] Native: refresh token obtenido vía Worker.'))
+          .catch((e) => console.warn('[Auth] Native: intercambio de serverAuthCode falló:', e?.message || e));
+      }
+
     } catch (err) {
       console.error('[Auth] Native sign-in error:', err);
       _isSilentRenew = false;
@@ -204,15 +315,71 @@ const Auth = (() => {
 
   /* ── Web-mode GIS helpers ───────────────────────────────── */
   function _tryCreateClient() {
-    if (_tokenClient) return;
     if (!window.google?.accounts?.oauth2) return;
-    _tokenClient = google.accounts.oauth2.initTokenClient({
-      client_id: CONFIG.CLIENT_ID,
-      scope: CONFIG.SCOPES,
-      callback: _handleTokenResponse,
-      error_callback: _handleTokenError,
-    });
-    console.log('[Auth] GIS token client listo.');
+    if (!_tokenClient) {
+      _tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: CONFIG.CLIENT_ID,
+        scope: CONFIG.SCOPES,
+        callback: _handleTokenResponse,
+        error_callback: _handleTokenError,
+      });
+      console.log('[Auth] GIS token client listo.');
+    }
+    if (!_codeClient && _workerUrl()) {
+      _codeClient = google.accounts.oauth2.initCodeClient({
+        client_id: CONFIG.CLIENT_ID,
+        scope: CONFIG.SCOPES,
+        ux_mode: 'popup',
+        callback: _handleCodeResponse,
+        error_callback: _handleTokenError,
+      });
+      console.log('[Auth] GIS code client listo (refresh token vía Worker).');
+    }
+  }
+
+  /**
+   * Callback del code client (login con authorization code flow).
+   * Intercambia el code en el Worker → access token + refresh token.
+   */
+  function _handleCodeResponse(response) {
+    if (_renewTimeoutId) { clearTimeout(_renewTimeoutId); _renewTimeoutId = null; }
+    if (response.error || !response.code) {
+      console.error('[Auth] Code flow error:', response.error || 'sin code');
+      _isSilentRenew = false;
+      if (_onAutoLoginFail) {
+        const cb = _onAutoLoginFail;
+        _onAutoLoginFail = null;
+        cb(response.error || 'no_code');
+      } else {
+        UI?.showToast('Error de autenticación: ' + (response.error || 'sin código'), 'error');
+      }
+      return;
+    }
+    const wasSilent = _isSilentRenew;
+    _exchangeCode(response.code, 'postmessage')
+      .then(() => {
+        _onAutoLoginFail = null;
+        if (wasSilent) {
+          _isSilentRenew = false;
+          _gestureRenewRetries = 0;
+          console.log('[Auth] Renovación vía code flow exitosa.');
+          try { _onRenewed?.(); } catch (_) {}
+        } else {
+          console.log('[Auth] Login vía code flow exitoso. Llamando _onReady');
+          try { _onReady(); } catch (err) { console.error('[Auth] _onReady() error:', err.message); }
+        }
+      })
+      .catch((err) => {
+        console.error('[Auth] Intercambio de code falló:', err?.message || err);
+        _isSilentRenew = false;
+        if (_onAutoLoginFail) {
+          const cb = _onAutoLoginFail;
+          _onAutoLoginFail = null;
+          cb('exchange_failed');
+        } else {
+          UI?.showToast('Error al completar el inicio de sesión', 'error');
+        }
+      });
   }
 
   function onGISLoad() {
@@ -293,12 +460,27 @@ const Auth = (() => {
   }
 
   function _queueGestureRenewal() {
+    // Vía preferida (web y nativo): refresh token vía Worker — sin popup ni gesto.
+    if (_getRefreshToken() && _workerUrl()) {
+      _workerRefresh('renew').then((ok) => {
+        if (ok) return;
+        console.warn('[Auth] Worker refresh falló — usando fallback de plataforma');
+        if (_isNative()) _nativeRefresh();
+        else _queueGestureRenewalLegacy();
+      });
+      return;
+    }
+
     // Modo nativo: refresh silencioso directo (no requiere gesto del usuario)
     if (_isNative()) {
       _nativeRefresh();
       return;
     }
 
+    _queueGestureRenewalLegacy();
+  }
+
+  function _queueGestureRenewalLegacy() {
     // Modo web: lógica original con GIS
     _tryCreateClient();
     if (!_tokenClient) {
@@ -377,6 +559,21 @@ const Auth = (() => {
 
   function tryAutoLogin(onFail) {
     _onAutoLoginFail = typeof onFail === 'function' ? onFail : null;
+
+    // Vía preferida: refresh token vía Worker (funciona en web y nativo, sin UI)
+    if (_getRefreshToken() && _workerUrl()) {
+      console.log('[Auth] Auto-login vía refresh token (Worker)…');
+      _workerRefresh('login').then((ok) => {
+        if (ok) { _onAutoLoginFail = null; return; }
+        console.warn('[Auth] Auto-login vía Worker falló — fallback de plataforma');
+        _tryAutoLoginLegacy();
+      });
+      return;
+    }
+    _tryAutoLoginLegacy();
+  }
+
+  function _tryAutoLoginLegacy() {
     if (_isNative()) {
       _nativeSignIn(/* silent= */ true);
       return;
@@ -408,6 +605,12 @@ const Auth = (() => {
       return;
     }
     _tryCreateClient();
+    // Con Worker configurado: code flow con consentimiento → además obtiene refresh token
+    if (_codeClient) {
+      console.log('[Auth] Solicitando code con pantalla de consentimiento');
+      _codeClient.requestCode();
+      return;
+    }
     if (!_tokenClient) return;
     console.log('[Auth] Solicitando token con pantalla de consentimiento');
     _tokenClient.requestAccessToken({ prompt: 'consent' });
@@ -418,11 +621,32 @@ const Auth = (() => {
     // capture-phase click listener before this handler fires), skip to avoid
     // a double requestAccessToken call on the same user gesture.
     if (_isSilentRenew) return;
+
+    // Si hay refresh token, renovar vía Worker (sin popup). Si falla, seguir
+    // con el flujo interactivo normal.
+    if (_getRefreshToken() && _workerUrl()) {
+      // Con sesión previa en memoria → renovación; sin ella → login (llama _onReady)
+      _workerRefresh(_accessToken ? 'renew' : 'login').then((ok) => {
+        if (!ok) _requestTokenInteractive();
+      });
+      return;
+    }
+    _requestTokenInteractive();
+  }
+
+  function _requestTokenInteractive() {
     if (_isNative()) {
       _nativeSignIn(/* silent= */ false);
       return;
     }
     _tryCreateClient();
+    // Con Worker configurado: usar code flow para obtener refresh token
+    // (renovación automática de por vida a partir de este login).
+    if (_codeClient) {
+      console.log('[Auth] Login vía code flow (obtendrá refresh token)…');
+      _codeClient.requestCode();
+      return;
+    }
     if (!_tokenClient) {
       console.error('[Auth] GIS aún no cargado — intenta de nuevo en un momento');
       if (typeof UI !== 'undefined') {
@@ -435,7 +659,18 @@ const Auth = (() => {
 
   function getValidToken() {
     if (!_accessToken) return null;
-    if (Date.now() > _expiresAt - 30_000) return null;
+    if (Date.now() > _expiresAt - 30_000) {
+      // Safety net: si el timer de renovación no corrió (tab en background,
+      // throttling), dispara la renovación vía Worker ahora mismo.
+      if (_getRefreshToken() && _workerUrl()) _workerRefresh('renew');
+      return null;
+    }
+    // Renovación perezosa anticipada: si queda poco tiempo, renovar ya
+    // (sin bloquear — el token actual sigue siendo válido).
+    if (Date.now() > _expiresAt - CONFIG.TOKEN_WARN_BEFORE_EXPIRY_MS &&
+        _getRefreshToken() && _workerUrl()) {
+      _workerRefresh('renew');
+    }
     return _accessToken;
   }
 
@@ -480,6 +715,11 @@ const Auth = (() => {
    * Web mode only — native mode uses GoogleAuth.refresh() directly.
    */
   function autoAttemptRenewal() {
+    // Vía preferida: refresh token vía Worker — sin popup ni gesto
+    if (_getRefreshToken() && _workerUrl()) {
+      _workerRefresh('renew');
+      return;
+    }
     // Modo nativo: reintenta refresh silencioso directo (no requiere gesto)
     if (_isNative()) {
       if (!_isSilentRenew) _nativeRefresh();
@@ -533,6 +773,7 @@ const Auth = (() => {
     _gestureRenewRetries   = 0;
     if (_warnTimer)      { clearTimeout(_warnTimer);      _warnTimer      = null; }
     if (_renewTimeoutId) { clearTimeout(_renewTimeoutId); _renewTimeoutId = null; }
+    _clearRefreshToken();
     try {
       localStorage.removeItem(LS_EXPIRY);
       localStorage.removeItem(LS_AUTHED);

@@ -30,6 +30,11 @@ const CONFIG = {
   // Show "renew session" banner this many ms before token expires
   TOKEN_WARN_BEFORE_EXPIRY_MS: 5 * 60 * 1000,  // 5 minutes
 
+  // Cloudflare Worker que guarda el client_secret y hace el
+  // intercambio code→tokens y el refresh silencioso (sin popup).
+  // Vacío = desactivado (la app usa el flujo implícito clásico).
+  AUTH_WORKER_URL: 'https://savart-auth-worker.erisd17.workers.dev',
+
   // ── Cache (IndexedDB) ─────────────────────────────────────
   CACHE_LIMIT_DEFAULT: 1 * 1024 * 1024 * 1024,  // 1 GB
   CACHE_LIMIT_OPTIONS: {
