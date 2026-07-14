@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.498';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.498 — EQ toggle label "Ajustes personalizados"; quitar fecha de chips
+const APP_VERSION  = '3.5.499';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.499 — EQ custom preset cards: altura reducida (padding 7px, sparkline 16px)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
