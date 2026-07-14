@@ -13880,7 +13880,6 @@ const App = (() => {
           <path d="${_gainsToSparkline(preset.gains)}"
             fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
-        <div class="eq-custom-date">${preset.savedAt}</div>
       `;
       // Click anywhere on card (except delete) applies the preset
       card.addEventListener('click', (e) => {

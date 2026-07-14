@@ -4139,7 +4139,7 @@ body.queue-open #mini-player { z-index: 65; }
     padding: 48px 32px;
   }
   #overlay-eq #screen-eq {
-    max-width: 100%;            /* fill the column width on desktop */
+    max-width: 640px;           /* cap width on desktop; never wider than 640px */
     animation: sheetUpDesk 0.28s cubic-bezier(0.22, 1, 0.36, 1);
   }
 }
@@ -6107,10 +6107,12 @@ body.queue-open #mini-player { z-index: 65; }
   text-overflow: ellipsis;
 }
 
-.eq-custom-date {
-  font-size: 10px;
+.eq-toggle-label {
+  font-size: 11px;
+  font-weight: 500;
   color: var(--text-muted);
-  margin-top: 2px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .eq-custom-actions {

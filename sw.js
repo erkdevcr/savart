@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.496';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.496 — fix: sd_blocked_convert usa UI.t() en lugar de texto hardcodeado
+const APP_VERSION  = '3.5.498';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.498 — EQ toggle label "Ajustes personalizados"; quitar fecha de chips
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
