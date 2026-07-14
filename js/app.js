@@ -6410,6 +6410,13 @@ const App = (() => {
     if (filter === 'soundrop') {
       try {
         const sdTracks = await Soundrop.search(term);
+        // Merge del aprendizaje local: videos que ya fallaron con 101/150 en este
+        // device (la API los reporta embeddable pero bloquean por licencia).
+        await Promise.all(sdTracks.map(async t => {
+          if (t.embedBlocked) return;
+          const m = await DB.getMeta(t.id).catch(() => null);
+          if (m?.embedBlocked) t.embedBlocked = true;
+        }));
         sdTracks.forEach(t => _cacheItem(t));
         _lastSearchFiles = sdTracks;
         _cachedSdResults = { soundrop: sdTracks };

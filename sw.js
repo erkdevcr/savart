@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.479';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.479 — Popup canción bloqueada: abre el modal de guardado normal (con auto-play al terminar), texto simplificado con márgenes, progreso naranja (sd-save-status)
+const APP_VERSION  = '3.5.480';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.480 — Candado SD con aprendizaje: los errores reales 101/150 se persisten (setMeta embedBlocked, sync incluido) y el candado se pinta en vivo y en búsquedas futuras
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

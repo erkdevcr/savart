@@ -1133,6 +1133,7 @@ const Sync = (() => {
       'normalGain', 'normalGainDb',                 // per-track loudness normalization gain
       'normalGainClearedAt',                        // epoch ms when gains were last bulk-cleared
       'soundropSaved',                              // true = saved from Soundrop to Drive; eligible for auto-reorganize
+      'embedBlocked',                               // aprendizaje: video YT bloqueado por licencia (error 101/150 real)
     ];
     // googleusercontent.com = Drive CDN thumbnailLinks — accessible in <img> without auth.
     // googleapis.com       = Drive API download endpoints — require Bearer token, skip those.

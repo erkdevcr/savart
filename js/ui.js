@@ -1989,12 +1989,31 @@ const UI = (() => {
    * status.embeddable), incluye un candado DENTRO del mismo chip — avisa
    * antes de tocar play que la canción requerirá conversión.
    */
+  function _sdChipLockSvg() {
+    return `<svg class="sd-chip-lock" width="8" height="8" viewBox="0 0 24 24" fill="currentColor" aria-label="Restringido"><path d="M18 8h-1V6a5 5 0 0 0-10 0v2H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V10a2 2 0 0 0-2-2zm-9-2a3 3 0 0 1 6 0v2H9V6z"/></svg>`;
+  }
+
   function _sdChipHtml(item) {
     if (!item?.isSoundrop) return '';
-    const lock = item.embedBlocked
-      ? `<svg class="sd-chip-lock" width="8" height="8" viewBox="0 0 24 24" fill="currentColor" aria-label="Restringido"><path d="M18 8h-1V6a5 5 0 0 0-10 0v2H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V10a2 2 0 0 0-2-2zm-9-2a3 3 0 0 1 6 0v2H9V6z"/></svg>`
-      : '';
-    return `<span class="sd-thumb-chip">SD${lock}</span>`;
+    return `<span class="sd-thumb-chip">SD${item.embedBlocked ? _sdChipLockSvg() : ''}</span>`;
+  }
+
+  /**
+   * Pinta el candado en los chips SD ya renderizados de una pista (search
+   * results + queue panel). Llamado cuando la reproducción falla con YT
+   * error 101/150 — aprendizaje en vivo de videos bloqueados por licencia
+   * que la API reporta como embeddable.
+   */
+  function markSdTrackBlocked(id) {
+    if (!id) return;
+    document.querySelectorAll(
+      `.song-row[data-id="${CSS.escape(id)}"] .sd-thumb-chip, ` +
+      `.queue-item[data-id="${CSS.escape(id)}"] .sd-thumb-chip`
+    ).forEach(chip => {
+      if (!chip.querySelector('.sd-chip-lock')) {
+        chip.insertAdjacentHTML('beforeend', _sdChipLockSvg());
+      }
+    });
   }
 
   function _buildSongRow(file, isActive = false, idx) {
@@ -5638,6 +5657,7 @@ const UI = (() => {
     setLibSearchPlaceholder,
     // Search
     renderSearchResults,
+    markSdTrackBlocked,
     updateSearchChipCounts,
     // Context menu
     showContextMenu,

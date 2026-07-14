@@ -1062,6 +1062,15 @@ const Player = (() => {
             // Códigos 101/150 = el dueño del video deshabilitó el embedding
             // (muy común en videos largos: mixes, álbumes completos, conciertos).
             console.error('[Player] YT error code:', code, '— embedding bloqueado');
+            // Aprendizaje: la API de YouTube reporta embeddable=true para muchos
+            // videos que igual bloquean por licencia — el error real (101/150) es
+            // la fuente de verdad. Se persiste para que el candado del chip SD
+            // aparezca de inmediato y en búsquedas futuras.
+            if (code === 101 || code === 150) {
+              item.embedBlocked = true;
+              DB.setMeta(item.id, { embedBlocked: true, isSoundrop: true, videoId: item.videoId }).catch(() => {});
+              if (typeof UI !== 'undefined') UI.markSdTrackBlocked?.(item.id);
+            }
             // 1) Cache persistente: si ya se convirtió alguna vez, reproducir
             //    directo — 0 tokens RapidAPI, sin popup.
             const okCache = await _sdFallbackToBlob(item, mySession, /* cacheOnly */ true);
