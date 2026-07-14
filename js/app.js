@@ -5237,6 +5237,11 @@ const App = (() => {
         topPlayed: data.topPlayed || [],
         playlists: data.playlists || [],
       });
+      // CRÍTICO: el snapshot no lleva URLs blob (covers embebidos = placeholder).
+      // Invalidar las firmas para que el render fresco de _loadHomeData haga
+      // rebuild completo e inyecte los coverBlobs — sin esto, el render
+      // diferencial se saltaba el rebuild y los covers de Drive no se pintaban.
+      UI.invalidateHomeRender?.();
       // Re-mark active row after fresh DOM nodes are created
       UI.setActiveSongRow(Player.getCurrentTrack()?.id ?? null);
     } catch (_) { /* ignore parse/missing errors */ }

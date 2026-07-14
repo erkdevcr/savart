@@ -1141,6 +1141,19 @@ const UI = (() => {
     ).join('§');
   }
 
+  /**
+   * Invalida las firmas del render diferencial — el PRÓXIMO renderHome hará
+   * rebuild completo aunque los datos parezcan iguales. Necesario tras el
+   * pintado desde el snapshot de localStorage: ese snapshot no lleva URLs
+   * blob (se filtran al guardar), así que las cards de canciones con cover
+   * embebido quedan en placeholder; sin invalidar, el render fresco (que sí
+   * inyecta los coverBlobs de IDB de forma síncrona) se saltaría por firma
+   * idéntica y los covers de Drive no se pintarían al cargar la app.
+   */
+  function invalidateHomeRender() {
+    _homeSectionSigs = {};
+  }
+
   function renderHome({ pinned = [], recents = [], topPlayed = [], playlists = [] }) {
     const screen = document.getElementById('screen-home');
     if (!screen) return;
@@ -5738,6 +5751,7 @@ const UI = (() => {
     // Search
     renderSearchResults,
     markSdTrackBlocked,
+    invalidateHomeRender,
     updateSearchChipCounts,
     // Context menu
     showContextMenu,

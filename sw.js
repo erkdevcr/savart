@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.499';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.499 — EQ custom preset cards: altura reducida (padding 7px, sparkline 16px)
+const APP_VERSION  = '3.5.500';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.500 — Fix covers Drive en boot: el pintado desde cache invalida las firmas del render diferencial (UI.invalidateHomeRender) para que el render fresco reconstruya e inyecte los coverBlobs
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
