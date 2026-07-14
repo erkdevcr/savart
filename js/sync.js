@@ -481,7 +481,7 @@ const Sync = (() => {
           // not yet pushed) and local tombstones within their window.
           if (cut > 0) {
             const localAll = await DB.getRecentsAll();
-            const week     = Date.now() - 7 * 24 * 60 * 60 * 1000;
+            const week     = Date.now() - (CONFIG.TOMBSTONE_MAX_DAYS || 30) * 24 * 60 * 60 * 1000;
             const survived = localAll.filter(r =>
               (r.removedAt && r.removedAt > week) ||
               (!r.removedAt && (r.accessedAt || 0) > cut));
@@ -495,7 +495,7 @@ const Sync = (() => {
 
         // Preserve local tombstones + apply new remote tombstones so deletions survive
         // subsequent clearRecents() calls.
-        const week = Date.now() - 7 * 24 * 60 * 60 * 1000;
+        const week = Date.now() - (CONFIG.TOMBSTONE_MAX_DAYS || 30) * 24 * 60 * 60 * 1000;
         const localTombstones = local.filter(r => r.removedAt && r.removedAt > week);
         const localMap = new Map(local.map(r => [r.id, r]));
         const newRemoteTombstones = tombstoneRecords.filter(t => {
@@ -578,7 +578,7 @@ const Sync = (() => {
           // Preserve local plays AFTER the clear (not yet pushed) and recent tombstones.
           if (cut > 0) {
             const localAll = await DB.getHistoryAll();
-            const week     = Date.now() - 7 * 24 * 60 * 60 * 1000;
+            const week     = Date.now() - (CONFIG.TOMBSTONE_MAX_DAYS || 30) * 24 * 60 * 60 * 1000;
             const survived = localAll.filter(r =>
               (r.removedAt && r.removedAt > week) ||
               (!r.removedAt && (r.playedAt || 0) > cut));
@@ -603,7 +603,7 @@ const Sync = (() => {
           if (!ex || (item.playedAt || 0) > (ex.playedAt || 0)) map.set(item.id, item);
         }
         const cutoff = Date.now() - CONFIG.HISTORY_MAX_DAYS * 24 * 60 * 60 * 1000;
-        const week   = Date.now() - 7 * 24 * 60 * 60 * 1000;
+        const week   = Date.now() - (CONFIG.TOMBSTONE_MAX_DAYS || 30) * 24 * 60 * 60 * 1000;
         const allH   = Array.from(map.values());
         const live   = allH.filter(e => !e.removedAt && (e.playedAt || 0) >= cutoff)
                            .sort((a, b) => (b.playedAt || 0) - (a.playedAt || 0))
@@ -660,7 +660,7 @@ const Sync = (() => {
           // AND all local tombstones still within their 7-day window.  Without this,
           // clearRecents() would destroy the local tombstone and a subsequent init()
           // merge with a stale savart_recents.json would resurrect the deleted item.
-          const week = Date.now() - 7 * 24 * 60 * 60 * 1000;
+          const week = Date.now() - (CONFIG.TOMBSTONE_MAX_DAYS || 30) * 24 * 60 * 60 * 1000;
           const localTombstones = local.filter(r => r.removedAt && r.removedAt > week);
           // Also apply remote tombstones that aren't already local
           const localHomeMap = new Map(local.map(r => [r.id, r]));
@@ -751,7 +751,7 @@ const Sync = (() => {
             if (!ex || (item.playedAt || 0) > (ex.playedAt || 0)) map.set(item.id, item);
           }
           const cutoff  = Date.now() - CONFIG.HISTORY_MAX_DAYS * 24 * 60 * 60 * 1000;
-          const week    = Date.now() - 7 * 24 * 60 * 60 * 1000;
+          const week    = Date.now() - (CONFIG.TOMBSTONE_MAX_DAYS || 30) * 24 * 60 * 60 * 1000;
           const allHH   = Array.from(map.values());
           const liveH   = allHH.filter(e => !e.removedAt && (e.playedAt || 0) >= cutoff)
                                .sort((a, b) => (b.playedAt || 0) - (a.playedAt || 0))
@@ -1007,7 +1007,7 @@ const Sync = (() => {
 
   async function _pushRecents() {
     const all  = await DB.getRecentsAll();
-    const week = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const week = Date.now() - (CONFIG.TOMBSTONE_MAX_DAYS || 30) * 24 * 60 * 60 * 1000;
 
     // Live items (up to RECENTS_MAX)
     const liveRaw = all
@@ -1275,7 +1275,7 @@ const Sync = (() => {
       pinnedMeta  = pinnedMeta.meta || {};
     }
 
-    const week = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const week = Date.now() - (CONFIG.TOMBSTONE_MAX_DAYS || 30) * 24 * 60 * 60 * 1000;
     // Separate live items and fresh tombstones
     const recentsLive = (allRecents || []).filter(r => !r.removedAt)
       .sort((a, b) => (b.accessedAt || 0) - (a.accessedAt || 0))

@@ -564,7 +564,8 @@ const App = (() => {
       if (_bootBarFill) _bootBarFill.style.width = pct + '%';
     };
     _accountCheckDone.then(() => Sync.readHome())
-      .then(data => { if (data) _loadHomeData(); })
+      // debounce (fix M10): colapsa con el render del boot si llegan casi juntos
+      .then(data => { if (data) _loadHomeData({ debounce: true }); })
       .catch(() => {})
       .finally(() => {
         // Full sync in background — merges all types, pushes merged state back.
@@ -572,7 +573,9 @@ const App = (() => {
         // race where readHome()'s clearRecents() fires during init()'s push phase.
         Sync.init({ onProgress: _onBootProgress }).then(() => {
           _restoreSettings();
-          _loadHomeData();
+          // debounce (fix M10): el boot podía encadenar 3-4 renders completos del
+          // Home (cache → DB fresca → readHome → init). Los debounced colapsan.
+          _loadHomeData({ debounce: true });
           const view = UI.getCurrentView();
           if (view === 'library') { _setLibTab(_currentLibTab || 'albums'); _libStale = false; } // [STALE-FIX]
           else { _libStale = true; } // [STALE-FIX] user not on Library — refresh on next visit
@@ -1138,22 +1141,11 @@ const App = (() => {
       const bestArtist = dbMeta?.artist      || track.artist      || '';
       const bestAlbum  = dbMeta?.album       || track.albumName   || '';
       const bestYear   = dbMeta?.year        || track.year        || '';
-      const _dbThumb   = dbMeta?.thumbnailUrl;
-      let   bestThumb  = (_dbThumb && _dbThumb !== 'id3' && !_dbThumb.startsWith('blob:'))
-                         ? _dbThumb : safeThumb;
-
-      // If the track has an embedded cover stored locally, inject it into the Meta
-      // cache right now — the player cover shows immediately without waiting for
-      // the full blob download and _onBlobReady to fire.
-      // Exception: if any external URL already exists (Last.fm / AudD / manual / rescanned),
-      // skip blob injection — external URL takes priority over ID3 blob.
-      // Fix C5: solo una URL ESTABLE cuenta como "externa" — una googleusercontent
-      // caducada no debe ganarle al coverBlob válido que está en IDB.
-      const _hasExternalUrl = _isStableCoverUrl(dbMeta?.thumbnailUrl);
-      if (dbMeta?.coverBlob && !_hasExternalUrl && typeof Meta !== 'undefined') {
-        const _injected = Meta.injectCover(track.id, dbMeta.coverBlob);
-        if (_injected) bestThumb = _injected;
-      }
+      // Fix I8: resolutor canónico compartido (manual > coverBlob > URL estable) —
+      // antes el player priorizaba la URL externa sobre el arte embebido y podía
+      // mostrar una portada distinta a la del Home para la misma canción.
+      const _resolved = _resolveCoverPriority(track.id, dbMeta);
+      let bestThumb = _resolved?.url || safeThumb;
 
       // Patch the Meta cache with DB values so subsequent _enrichTrack() calls
       // (e.g. _onPlayPause, queue navigation) return the correct enriched names.
@@ -4229,18 +4221,27 @@ const App = (() => {
    *
    * @param {Object[]} items — array of items with .id
    */
-  async function _softScanItems(items) {
+  async function _softScanItems(items, sharedMeta = null) {
     if (!items.length || typeof Meta === 'undefined') return;
 
-    // Pre-fetch DB meta for all items in one batch
-    const metaEntries = await Promise.allSettled(
-      items.map(item => DB.getMeta(item.id).catch(() => null))
-    );
+    // Pre-fetch DB meta for all items in one batch.
+    // fix I3: si el caller ya leyó estos registros (metaMap de _loadHomeData),
+    // reutilizarlos — solo se consulta IDB para los ids que falten.
     const metaMap = new Map();
-    items.forEach((item, i) => {
-      const m = metaEntries[i].status === 'fulfilled' ? metaEntries[i].value : null;
-      metaMap.set(item.id, m);
-    });
+    const _toFetch = [];
+    for (const item of items) {
+      if (sharedMeta && sharedMeta.has(item.id)) metaMap.set(item.id, sharedMeta.get(item.id));
+      else _toFetch.push(item);
+    }
+    if (_toFetch.length) {
+      const metaEntries = await Promise.allSettled(
+        _toFetch.map(item => DB.getMeta(item.id).catch(() => null))
+      );
+      _toFetch.forEach((item, i) => {
+        const m = metaEntries[i].status === 'fulfilled' ? metaEntries[i].value : null;
+        metaMap.set(item.id, m);
+      });
+    }
 
     const toScan   = [];  // needs fresh ID3 scan this session
     const toApply  = [];  // has rescannedAt/manualAt — skip scan, just apply DB to DOM
@@ -4701,14 +4702,16 @@ const App = (() => {
    * Pass 3: Drive thumbnail API for songs still without cover.
    * @param {Object[]} items — recents array from DB
    */
-  async function _prefetchHomeCovers(items) {
+  async function _prefetchHomeCovers(items, sharedMeta = null) {
+    // fix I3: lee del metaMap compartido cuando existe (0 lecturas IDB extra)
+    const _getM = async (id) => (sharedMeta && sharedMeta.has(id)) ? sharedMeta.get(id) : DB.getMeta(id);
     const songs = items.filter(r => r.type === 'song');
     if (!songs.length || typeof Meta === 'undefined') return;
 
     // Pass 0: persisted covers from IndexedDB — manual cover always wins, then blob, then external URL
     await Promise.allSettled(songs.map(async song => {
       try {
-        const dbMeta = await DB.getMeta(song.id);
+        const dbMeta = await _getM(song.id);
         if (!dbMeta) return;
         // Manual cover wins over embedded ID3 art — user explicitly chose this URL.
         const hasManualUrl = (dbMeta.manualAt || 0) > 0
@@ -4737,7 +4740,7 @@ const App = (() => {
       const meta = Meta.getCached(song.id);
       if (!meta?.coverUrl) return;
       try {
-        const dbMeta = await DB.getMeta(song.id).catch(() => null);
+        const dbMeta = await _getM(song.id).catch(() => null);
         const hasManualUrl = (dbMeta?.manualAt || 0) > 0
           && dbMeta?.thumbnailUrl && dbMeta.thumbnailUrl !== 'id3'
           && !dbMeta.thumbnailUrl.startsWith('blob:');
@@ -4748,7 +4751,7 @@ const App = (() => {
     // Pass 2: soft scan — download ID3 header for every song not yet scanned on this
     // device (regardless of whether it already has a cover from Pass 0/1 — we want
     // softScannedAt stamped and all metadata fields populated).
-    await _softScanItems(songs);
+    await _softScanItems(songs, sharedMeta);
 
     // Pass 3: Last.fm cover lookup for songs still without cover after ID3 scan.
     // Uses artist + album/title from DB (populated by soft scan above).
@@ -4766,13 +4769,15 @@ const App = (() => {
    * Pass 3: Drive thumbnail API fallback.
    * @param {Object[]} items — topPlayed array
    */
-  async function _prefetchTopPlayedCovers(items) {
+  async function _prefetchTopPlayedCovers(items, sharedMeta = null) {
+    // fix I3: lee del metaMap compartido cuando existe (0 lecturas IDB extra)
+    const _getM = async (id) => (sharedMeta && sharedMeta.has(id)) ? sharedMeta.get(id) : DB.getMeta(id);
     if (!items || !items.length || typeof Meta === 'undefined') return;
 
     // Pass 0: persisted covers from IndexedDB — manual cover always wins, then blob, then external URL
     await Promise.allSettled(items.map(async item => {
       try {
-        const dbMeta = await DB.getMeta(item.id);
+        const dbMeta = await _getM(item.id);
         if (!dbMeta) return;
         // Manual cover wins over embedded ID3 art — user explicitly chose this URL.
         const hasManualUrl = (dbMeta.manualAt || 0) > 0
@@ -4799,7 +4804,7 @@ const App = (() => {
       const meta = Meta.getCached(item.id);
       if (!meta?.coverUrl) return;
       try {
-        const dbMeta = await DB.getMeta(item.id).catch(() => null);
+        const dbMeta = await _getM(item.id).catch(() => null);
         const hasManualUrl = (dbMeta?.manualAt || 0) > 0
           && dbMeta?.thumbnailUrl && dbMeta.thumbnailUrl !== 'id3'
           && !dbMeta.thumbnailUrl.startsWith('blob:');
@@ -4808,7 +4813,7 @@ const App = (() => {
     }));
 
     // Pass 2: soft scan — same logic as home: scan all items not yet scanned on this device
-    await _softScanItems(items);
+    await _softScanItems(items, sharedMeta);
 
     // Pass 3: Last.fm cover lookup for items still without cover after ID3 scan
     await _lastfmCoverFallback(items, _topListHasCover, _updateTopListThumb);
@@ -5454,10 +5459,13 @@ const App = (() => {
       // before the DB is ready (stale-while-revalidate).
       _saveHomeCache({ pinned: displayPinned, recents: displayRecents, topPlayed, playlists: enrichedPlaylists });
 
-      // Async: load cover art for song cards and top-played in the background
-      _prefetchHomeCovers(displayRecents).catch(() => {});
-      _prefetchTopPlayedCovers(topPlayed).catch(() => {});
-      _prefetchPinnedCovers(displayPinned).catch(() => {});
+      // Async: load cover art for song cards and top-played in the background.
+      // fix I3: comparten el metaMap ya leído — antes cada prefetcher releía de
+      // IndexedDB los MISMOS registros (4-6 lecturas por canción por render).
+      const _sharedMeta = new Map([...metaMap, ...pinnedMetaMap]);
+      _prefetchHomeCovers(displayRecents, _sharedMeta).catch(() => {});
+      _prefetchTopPlayedCovers(topPlayed, _sharedMeta).catch(() => {});
+      _prefetchPinnedCovers(displayPinned, _sharedMeta).catch(() => {});
       _prefetchHomePlaylists(enrichedPlaylists).catch(() => {});
 
       // Async: fix any items still with no name by fetching from Drive API
@@ -7055,7 +7063,9 @@ const App = (() => {
    * Folders are skipped (they show a static folder icon).
    * @param {Object[]} pinned — items from DB.getPinnedFolders()
    */
-  async function _prefetchPinnedCovers(pinned) {
+  async function _prefetchPinnedCovers(pinned, sharedMeta = null) {
+    // fix I3: lee del metaMap compartido cuando existe (0 lecturas IDB extra)
+    const _getM = async (id) => (sharedMeta && sharedMeta.has(id)) ? sharedMeta.get(id) : DB.getMeta(id);
     if (typeof Meta === 'undefined') return;
     const songs = pinned.filter(item => item.type !== 'folder' && !item.isFolder);
     if (!songs.length) return;
@@ -7068,7 +7078,7 @@ const App = (() => {
     // Pass 0: DB persisted covers — manual cover always wins, then blob, then external URL
     await Promise.allSettled(songs.map(async item => {
       try {
-        const dbMeta = await DB.getMeta(item.id);
+        const dbMeta = await _getM(item.id);
         if (!dbMeta) return;
         // Manual cover wins over embedded ID3 art — user explicitly chose this URL.
         const hasManualUrl = (dbMeta.manualAt || 0) > 0
@@ -7095,7 +7105,7 @@ const App = (() => {
       const inMem = Meta.getCached(item.id);
       if (!inMem?.coverUrl) return;
       try {
-        const dbMeta = await DB.getMeta(item.id).catch(() => null);
+        const dbMeta = await _getM(item.id).catch(() => null);
         const hasManualUrl = (dbMeta?.manualAt || 0) > 0
           && dbMeta?.thumbnailUrl && dbMeta.thumbnailUrl !== 'id3'
           && !dbMeta.thumbnailUrl.startsWith('blob:');
@@ -7104,7 +7114,7 @@ const App = (() => {
     }));
 
     // Pass 2: soft scan — all pinned songs not yet scanned on this device
-    await _softScanItems(songs);
+    await _softScanItems(songs, sharedMeta);
 
     // Pass 3: Drive API fallback — songs still without cover after scan
     await _driveThumbFallback(songs, _pinnedHasCover, _updatePinnedItemCover);
@@ -10956,39 +10966,37 @@ const App = (() => {
    * just written — ensures home cards, browse rows and top-list rows all reflect
    * the cover without waiting for the next full _loadHomeData cycle.
    */
+  /**
+   * Resolutor ÚNICO de prioridad de portada (fix I8).
+   * Regla canónica para TODAS las superficies (Home, player, browse, listas):
+   *   1. URL manual (manualAt > 0) — el usuario la eligió, siempre gana
+   *   2. Arte embebido (coverBlob / ID3) — mejor calidad, disponible offline
+   *   3. URL externa ESTABLE (Last.fm / CAA / AudD)
+   * Antes cada superficie tenía su propio orden (player y _ensureCoverVisible
+   * ponían la externa sobre el blob) y la misma canción podía mostrar hasta
+   * tres portadas distintas a la vez.
+   * @returns {{ url: string, isId3: boolean } | null}
+   */
+  function _resolveCoverPriority(fileId, dbMeta) {
+    if (!dbMeta) return null;
+    if ((dbMeta.manualAt || 0) > 0 && _isStableCoverUrl(dbMeta.thumbnailUrl)) {
+      return { url: dbMeta.thumbnailUrl, isId3: false };
+    }
+    if (dbMeta.coverBlob && typeof Meta !== 'undefined') {
+      const u = Meta.injectCover(fileId, dbMeta.coverBlob);
+      if (u) return { url: u, isId3: true };
+    }
+    const ext = [dbMeta.thumbnailUrl, dbMeta.coverUrl].find(u => _isStableCoverUrl(u));
+    if (ext) return { url: ext, isId3: false };
+    return null;
+  }
+
   function _ensureCoverVisible(fileId, dbMeta) {
-    if (!dbMeta) return;
-
-    // Priority order:
-    //  1. Manual URL (manualAt > 0) — user explicitly chose this, always wins
-    //  2. STABLE external HTTP URL (Last.fm / AudD / rescanned) — wins over ID3 blob.
-    //     Fix C5: las googleusercontent caducadas ya no cuentan — dejaban la
-    //     portada rota teniendo el coverBlob válido en IDB.
-    //  3. ID3 embedded blob — fallback when no external URL exists
-    const isExternalUrl = (url) => _isStableCoverUrl(url);
-
-    const manualUrl   = (dbMeta.manualAt || 0) > 0 && isExternalUrl(dbMeta.thumbnailUrl)
-      ? dbMeta.thumbnailUrl : null;
-    const externalUrl = !manualUrl && isExternalUrl(dbMeta.thumbnailUrl)
-      ? dbMeta.thumbnailUrl : null;
-    const displayUrl  = manualUrl || externalUrl;
-
-    if (displayUrl) {
-      _updateHomeCardThumbnail(fileId, displayUrl, false);
-      _updateRowThumbnail(fileId, displayUrl, false);
-      _updateTopListThumb(fileId, displayUrl, false);
-      return;
-    }
-
-    // No external URL — fall back to ID3 embedded cover
-    if (dbMeta.coverBlob) {
-      const url = Meta.injectCover(fileId, dbMeta.coverBlob);
-      if (url) {
-        _updateHomeCardThumbnail(fileId, url, true);
-        _updateRowThumbnail(fileId, url, true);
-        _updateTopListThumb(fileId, url, true);
-      }
-    }
+    const r = _resolveCoverPriority(fileId, dbMeta); // fix I8: orden canónico
+    if (!r) return;
+    _updateHomeCardThumbnail(fileId, r.url, r.isId3);
+    _updateRowThumbnail(fileId, r.url, r.isId3);
+    _updateTopListThumb(fileId, r.url, r.isId3);
   }
 
   async function _preScanBeforePlay(item) {

@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.481';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.481 — Auditoría Home/Covers/Sync: hash-skip anti ping-pong, guards snapshot home (playcounts/playlists/history), clock skew, hidden LWW, fin del bucle de covers, URLs volátiles fuera de DB/sync, guard blob: central, getTopPlayed light, skips de head-downloads, throttle snapshot, refresh vistas vía home
+const APP_VERSION  = '3.5.487';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.487 — I2: render diferencial del Home — firmas por sección; sin cambios = DOM intacto (0 flicker), cambios parciales = solo esa sección se reconstruye
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

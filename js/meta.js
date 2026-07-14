@@ -56,16 +56,41 @@ const Meta = (() => {
 
   /**
    * Evict the least-recently-used entries until cache is within _MAX_CACHE.
-   * Revokes any blob: Object URLs in evicted entries so the browser can free
-   * the underlying image memory immediately.
+   *
+   * Revocación DIFERIDA (fix I9): revocar inmediatamente rompía las portadas
+   * todavía visibles — en carpetas con >300 pistas con arte embebido, el scroll
+   * evictaba entradas cuyas <img> seguían en el DOM (mismo bug que ya ocurrió
+   * con la cota en 40). Ahora la URL evictada va a una cola y solo se revoca
+   * ~30 s después Y si ningún <img> del documento la está usando.
    */
+  const _pendingRevoke = []; // { url, at }
+  let   _revokeTimer   = null;
+
+  function _scheduleRevoke(url) {
+    _pendingRevoke.push({ url, at: Date.now() });
+    if (_revokeTimer) return;
+    _revokeTimer = setInterval(() => {
+      const now = Date.now();
+      for (let i = _pendingRevoke.length - 1; i >= 0; i--) {
+        const { url: u, at } = _pendingRevoke[i];
+        if (now - at < 30_000) continue; // aún en periodo de gracia
+        // ¿Sigue algún <img> visible usando esta URL? — no revocar todavía
+        const inUse = !!document.querySelector(`img[src="${CSS.escape(u)}"]`);
+        if (inUse) { _pendingRevoke[i].at = now; continue; } // re-agendar
+        URL.revokeObjectURL(u);
+        _objectUrls.delete(u);
+        _pendingRevoke.splice(i, 1);
+      }
+      if (!_pendingRevoke.length) { clearInterval(_revokeTimer); _revokeTimer = null; }
+    }, 15_000);
+  }
+
   function _evictLRU() {
     while (_cache.size > _MAX_CACHE) {
       const oldest = _cache.keys().next().value; // first key = LRU
       const entry  = _cache.get(oldest);
       if (entry?.coverUrl?.startsWith('blob:')) {
-        URL.revokeObjectURL(entry.coverUrl);
-        _objectUrls.delete(entry.coverUrl);
+        _scheduleRevoke(entry.coverUrl);
       }
       _cache.delete(oldest);
     }

@@ -94,6 +94,12 @@ const CONFIG = {
   HISTORY_MAX:      100,
   HISTORY_MAX_DAYS: 7,
 
+  // Ventana de vida de los tombstones (marcadores de borrado) para sync.
+  // 30 días (fix M5): con 7, un dispositivo que pasara más de una semana
+  // apagado podía resucitar items borrados al volver (su copia local ya no
+  // encontraba el tombstone en Drive y re-pusheaba el item viejo).
+  TOMBSTONE_MAX_DAYS: 30,
+
   // ── IndexedDB ─────────────────────────────────────────────
   DB_NAME:    'savart_db',
   DB_VERSION: 6,

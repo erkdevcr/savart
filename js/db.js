@@ -624,7 +624,7 @@ const DB = (() => {
     const store   = _tx('recents', 'readwrite');
     const entries = await _promisify(store.getAll());
     // Purge tombstones older than 7 days — they've had enough time to propagate
-    const week = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const week = Date.now() - (CONFIG.TOMBSTONE_MAX_DAYS || 30) * 24 * 60 * 60 * 1000;
     for (const e of entries) {
       if (e.removedAt && e.removedAt < week) await _promisify(store.delete(e.id));
     }
@@ -1007,7 +1007,7 @@ const DB = (() => {
     const store   = _tx('history', 'readwrite');
     const entries = await _promisify(store.getAll());
     const cutoff  = Date.now() - CONFIG.HISTORY_MAX_DAYS * 24 * 60 * 60 * 1000;
-    const week    = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const week    = Date.now() - (CONFIG.TOMBSTONE_MAX_DAYS || 30) * 24 * 60 * 60 * 1000;
 
     // Purge tombstones older than 7 days (they've propagated to all devices by then)
     // Drop stale live entries by age

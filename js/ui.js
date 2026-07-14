@@ -1117,12 +1117,78 @@ const UI = (() => {
    * Render the Home screen with pinned, recents, and top played.
    * @param {{ pinned: Object[], recents: Object[], topPlayed: Object[] }} data
    */
+  /* Firmas del último render por sección (fix I2 — render diferencial).
+     Solo campos ESTABLES (ids, nombres, contadores): las URLs blob cambian en
+     cada render y anularían el skip; los covers se parchean in-place por los
+     prefetchers, no requieren rebuild. */
+  let _homeSectionSigs = {};
+
+  function _homeSectionSig(items) {
+    return (items || []).map(i =>
+      `${i.id}|${i.displayName || i.name || ''}|${i.artist || ''}|${i.playCount || 0}|` +
+      `${i.songCount || 0}|${(i.resolvedCovers || i.coverUrls || []).length}|${i.folderType || ''}`
+    ).join('§');
+  }
+
   function renderHome({ pinned = [], recents = [], topPlayed = [], playlists = [] }) {
     const screen = document.getElementById('screen-home');
     if (!screen) return;
 
     const content = screen.querySelector('.home-content') || screen;
 
+    // ── Render diferencial (fix I2) ─────────────────────────────────────────
+    const recentSongsPre = recents.filter(r => r.type === 'song').slice(0, 12);
+    const hasDataPre = pinned.length > 0 || recents.length > 0 || topPlayed.length > 0;
+    const sigs = {
+      cta:        hasDataPre ? '' : 'CTA',
+      pinned:     _homeSectionSig(pinned),
+      playlists:  playlists.length > 0 ? _homeSectionSig(playlists) : '',
+      recents:    _homeSectionSig(recentSongsPre),
+      top_played: _homeSectionSig(topPlayed),
+    };
+    const domHasSections = !!content.querySelector('.home-section[data-section-type]');
+
+    // Fast path 1: NADA cambió → no tocar el DOM (adiós flicker y re-decode de covers)
+    if (domHasSections && JSON.stringify(sigs) === JSON.stringify(_homeSectionSigs)) return;
+
+    // Fast path 2: misma estructura (mismas secciones presentes, sin CTA) →
+    // reemplazar SOLO las secciones cuya firma cambió; las demás quedan intactas.
+    const samePresence = domHasSections &&
+      sigs.cta === '' && (_homeSectionSigs.cta ?? 'x') === '' &&
+      ((sigs.playlists !== '') === !!content.querySelector('.home-section[data-section-type="playlists"]')) &&
+      !!content.querySelector('.home-section[data-section-type="pinned"]') &&
+      !!content.querySelector('.home-section[data-section-type="recents"]') &&
+      !!content.querySelector('.home-section[data-section-type="top_played"]');
+
+    if (samePresence) {
+      const builders = {
+        pinned:     () => _buildHomeSection(t('pinned'), pinned, 'pinned'),
+        playlists:  () => _buildHomeSection(t('recent_playlists'), playlists, 'playlists'),
+        recents:    () => _buildHomeSection(t('recents_songs'), recentSongsPre, 'recents'),
+        top_played: () => _buildHomeSection(t('top_played'), topPlayed, 'top_played'),
+      };
+      for (const type of ['pinned', 'playlists', 'recents', 'top_played']) {
+        if (type === 'playlists' && sigs.playlists === '') continue;
+        if (sigs[type] === _homeSectionSigs[type]) continue; // sección sin cambios
+        const cur = content.querySelector(`.home-section[data-section-type="${type}"]`);
+        if (!cur) continue;
+        const row = cur.querySelector('.home-cards-scroll');
+        const h   = row ? row.scrollLeft : 0;
+        const fresh = builders[type]();
+        cur.replaceWith(fresh);
+        if (h > 0) {
+          requestAnimationFrame(() => {
+            const newRow = fresh.querySelector('.home-cards-scroll');
+            if (newRow) newRow.scrollLeft = h;
+          });
+        }
+      }
+      _homeSectionSigs = sigs;
+      return;
+    }
+    _homeSectionSigs = sigs;
+
+    // ── Rebuild completo (primera vez o cambio de estructura) ───────────────
     // Save scroll positions before tearing down DOM so we can restore them after rebuild.
     // Vertical: main screen scroll (user may have scrolled past the first section).
     // Horizontal: each section's card-row scroll (recents, top_played, etc.).
