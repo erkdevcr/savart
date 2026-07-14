@@ -400,6 +400,10 @@ const UI = (() => {
       ctx_soundrop_delete_confirm:'¿Eliminar',
       ctx_soundrop_deleted:       'Eliminado de Soundrop',
       ctx_soundrop_delete_error:  'Error al eliminar',
+      // ── Soundrop blocked modal ─────────────────────────────
+      sd_blocked_title:   'Canción bloqueada',
+      sd_blocked_body:    'Para escucharla, conviértela y descárgala en tu Drive.',
+      sd_blocked_convert: 'Convertir y guardar',
     },
     en: {
       // ── Navigation ─────────────────────────────────────────
@@ -778,6 +782,10 @@ const UI = (() => {
       ctx_soundrop_delete_confirm:'Delete',
       ctx_soundrop_deleted:       'Deleted from Soundrop',
       ctx_soundrop_delete_error:  'Error deleting item',
+      // ── Soundrop blocked modal ─────────────────────────────
+      sd_blocked_title:   'Blocked song',
+      sd_blocked_body:    'To play it, convert it and save it to your Drive.',
+      sd_blocked_convert: 'Convert and save',
     },
   };
 

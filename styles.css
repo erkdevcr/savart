@@ -3020,6 +3020,7 @@ img { display: block; }
 .pexp-panel-hdr {
   display: flex;
   align-items: center;
+  gap: 8px;
   padding: 0 0 10px;   /* sits at top of info panel, 10px bottom separates from track name */
   flex-shrink: 0;
 }
@@ -3058,8 +3059,8 @@ img { display: block; }
 .pexp-more-circle:hover { opacity: 0.85 !important; background: var(--accent) !important; }
 .pexp-more-circle:active { transform: scale(0.93); }
 
-/* Panel header: empuja el botón a la derecha */
-#btn-pexp-more-hdr { margin-left: auto; }
+/* Panel header: LETRA + 3-dot juntos a la derecha */
+#btn-pexp-lyrics { margin-left: auto; }
 
 /* Track info + favorite */
 .pexp-track-row {
@@ -3293,7 +3294,6 @@ img { display: block; }
   .pexp-panel-hdr {
     display: flex;
     align-items: center;
-    justify-content: space-between;
     padding: 14px 0 12px;   /* no horizontal — parent already has 16px; bottom separates from track name */
     flex-shrink: 0;
   }
