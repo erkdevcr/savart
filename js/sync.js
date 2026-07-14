@@ -205,8 +205,11 @@ const Sync = (() => {
         current[k] = Math.max(live[k] || 0, _remoteTs[k] || 0);
       }
       for (const t of types) {
-        current[t] = now;
-        _localTs[t] = now;
+        // Clock skew (fix I5): si el reloj de este device va ATRÁS del que hizo
+        // el último bump, un Date.now() puro sería <= al ts existente y los demás
+        // devices nunca detectarían este cambio. Garantizar avance monotónico.
+        current[t] = Math.max(now, (current[t] || 0) + 1);
+        _localTs[t] = current[t];
       }
       await _writeFileRaw(MANIFEST, current);
       _remoteTs = { ...current };
@@ -318,12 +321,19 @@ const Sync = (() => {
       if (!ex) {
         map.set(item.id, { ...item });
       } else {
-        // "hide" is permanent — if either side flagged hiddenFromTopPlayed, it wins.
-        const hidden = !!(ex.hiddenFromTopPlayed || item.hiddenFromTopPlayed);
+        // Flag hidden por LWW (fix I7): gana el lado con hiddenChangedAt más nuevo.
+        // Sin timestamps (registros legacy) → comportamiento anterior (OR permanente).
+        const exTs  = ex.hiddenChangedAt   || 0;
+        const remTs = item.hiddenChangedAt || 0;
+        let hidden;
+        if      (remTs > exTs) hidden = !!item.hiddenFromTopPlayed;
+        else if (exTs > remTs) hidden = !!ex.hiddenFromTopPlayed;
+        else                   hidden = !!(ex.hiddenFromTopPlayed || item.hiddenFromTopPlayed);
         map.set(item.id, {
           ...ex, ...item,
           playCount: hidden ? 0 : Math.max(ex.playCount || 0, item.playCount || 0),
-          ...(hidden ? { hiddenFromTopPlayed: true } : {}),
+          hiddenFromTopPlayed: hidden,
+          ...(Math.max(exTs, remTs) > 0 ? { hiddenChangedAt: Math.max(exTs, remTs) } : {}),
         });
       }
     }
@@ -334,7 +344,7 @@ const Sync = (() => {
       toUpsert: merged.filter(m => {
         const l = localMap.get(m.id);
         if (!l) return true;                                          // new remote item
-        if (m.hiddenFromTopPlayed && !l.hiddenFromTopPlayed) return true; // hide from remote
+        if (!!m.hiddenFromTopPlayed !== !!l.hiddenFromTopPlayed) return true; // flag cambió (hide u unhide)
         return m.playCount > (l.playCount || 0);                     // higher remote count
       }),
     };
@@ -697,21 +707,27 @@ const Sync = (() => {
 
           if (valid.length) {
             await DB.bulkApplyPlaycounts(valid);
-          } else if (!cut) {
-            // playcounts: [] without a clearedAt signal — Device A cleared; propagate.
-            await DB.clearPlaycounts();
           }
+          // NOTA (fix C3): playcounts:[] SIN clearedAt ya NO limpia. Un device que
+          // nunca reproduce (o con IDB aún vacío) subía su snapshot con [] y borraba
+          // "Más reproducidas" en todos los demás. Un clear real siempre viaja con
+          // playCountsClearedAt > 0 (rama de arriba) — igual que el caso 'playcounts'.
         }
 
         if (Array.isArray(playlists)) {
           // Per-playlist LWW using updatedAt; deletions follow remote as authoritative.
-          // Empty array means all playlists were deleted on Device A — the remoteIds.has()
-          // check below will delete all local playlists, which is the correct behaviour.
+          // Guard temporal (fix C4, mismo patrón que _applyRemote('playlists')):
+          // una playlist creada/actualizada localmente DESPUÉS de que el snapshot
+          // remoto fue escrito (data.ts) es una adición pendiente de push — debe
+          // sobrevivir. Sin esto, el snapshot casi-simultáneo de otro device la mataba.
+          const snapTs   = data.ts || 0;
           const local    = await DB.getPlaylists();
           const localMap = new Map(local.map(p => [p.id, p]));
           const remoteIds = new Set(playlists.map(p => p.id));
           for (const pl of local) {
-            if (!remoteIds.has(pl.id)) await DB.deletePlaylist(pl.id);
+            if (remoteIds.has(pl.id)) continue;
+            if (snapTs > 0 && (pl.updatedAt || 0) > snapTs) continue; // local win — keep
+            await DB.deletePlaylist(pl.id);
           }
           for (const pl of playlists) {
             const loc = localMap.get(pl.id);
@@ -935,21 +951,29 @@ const Sync = (() => {
 
   /* ── Push helpers ────────────────────────────────────────── */
 
+  /* URL segura para sincronizar como cover (fix C5): sin blob: (muere al
+     recargar), sin 'id3' (centinela local), sin googleapis (requiere Bearer) y
+     sin googleusercontent (URLs firmadas de Drive que CADUCAN en horas — se
+     sincronizaban como covers "válidos" y quedaban rotas en el otro device). */
+  const _syncSafeUrl = u => (u && !u.startsWith('blob:') && u !== 'id3'
+    && !u.includes('googleapis.com') && !u.includes('googleusercontent.com')) ? u : null;
+
   async function _pushFavorites() {
     const starred = await DB.getStarred();
     const now = Date.now();
-    await _writeFile(FILENAMES.favorites, starred.map(m => ({
+    const payload = starred.map(m => ({
       id: m.id, name: m.name || null, displayName: m.displayName || m.name || null,
       artist: m.artist || null, albumName: m.albumName || null, folderId: m.folderId || null,
-      thumbnailUrl: (m.thumbnailUrl && !m.thumbnailUrl.startsWith('blob:') && m.thumbnailUrl !== 'id3') ? m.thumbnailUrl : null,
+      thumbnailUrl: _syncSafeUrl(m.thumbnailUrl),
       starredAt: m.starredAt || now, // LWW: carry timestamp; existing items without starredAt get push-time
-    })));
+    }));
+    if (!(await _writeIfChanged('favorites', FILENAMES.favorites, payload))) return false;
     console.log(`[Sync] Pushed favorites (${starred.length})`);
   }
 
   async function _pushPlaylists() {
     const pls = await DB.getPlaylists();
-    await _writeFile(FILENAMES.playlists, pls);
+    if (!(await _writeIfChanged('playlists', FILENAMES.playlists, pls))) return false;
     console.log(`[Sync] Pushed playlists (${pls.length})`);
   }
 
@@ -972,12 +996,12 @@ const Sync = (() => {
         // Backfill pinnedAt for items pinned before the field was added —
         // without it the LWW merge can't distinguish offline-pins from deletions.
         pinnedAt:     item.pinnedAt || now,
-        thumbnailUrl: (item.thumbnailUrl && !item.thumbnailUrl.startsWith('blob:')) ? item.thumbnailUrl : null,
+        thumbnailUrl: _syncSafeUrl(item.thumbnailUrl),
       };
     }
     // Include pinnedOrder so the receiving device can restore drag order.
     // Wrap as { meta, order } object — backward-compatible: old clients ignore order.
-    await _writeFile(FILENAMES.pinned, { meta: clean, order });
+    if (!(await _writeIfChanged('pinned', FILENAMES.pinned, { meta: clean, order }))) return false;
     console.log(`[Sync] Pushed pinned (${Object.keys(clean).length})`);
   }
 
@@ -997,7 +1021,7 @@ const Sync = (() => {
     // always the authoritative, up-to-date source.
     const metaRecords = await Promise.all(liveRaw.map(r => DB.getMeta(r.id).catch(() => null)));
 
-    const _safeUrl = u => (u && !u.startsWith('blob:') && u !== 'id3') ? u : null;
+    const _safeUrl = _syncSafeUrl; // fix C5: sin URLs volátiles de Drive
 
     const live = liveRaw.map((r, i) => {
       const m = metaRecords[i];
@@ -1026,7 +1050,7 @@ const Sync = (() => {
     // Format: { clearedAt, items } — clearedAt > 0 lets other devices distinguish an
     // intentional user-clear from an accidental empty push (e.g. race on first install).
     const clearedAt = await DB.getState('recentsClearedAt').catch(() => 0) || 0;
-    await _writeFile(FILENAMES.recents, { clearedAt, items: [...live, ...tombstones] });
+    if (!(await _writeIfChanged('recents', FILENAMES.recents, { clearedAt, items: [...live, ...tombstones] }))) return false;
     console.log(`[Sync] Pushed recents (${live.length} live, ${tombstones.length} tombstones)`);
   }
 
@@ -1042,16 +1066,18 @@ const Sync = (() => {
     // Format: { clearedAt, items } — allows other devices to discard their own
     // local playcount records that pre-date this clear, even when items is non-empty
     // (e.g. songs played AFTER the clear that survive legitimately).
-    await _writeFile(FILENAMES.playcounts, {
+    const payload = {
       clearedAt,
       items: played.map(m => ({
         id: m.id, name: m.name || null, displayName: m.displayName || m.name || null,
         artist: m.artist || null, folderId: m.folderId || null, playCount: m.playCount || 0,
         playedAt: m.playedAt || 0,
-        thumbnailUrl: (m.thumbnailUrl && !m.thumbnailUrl.startsWith('blob:') && m.thumbnailUrl !== 'id3') ? m.thumbnailUrl : null,
+        thumbnailUrl: _syncSafeUrl(m.thumbnailUrl),
         ...(m.hiddenFromTopPlayed ? { hiddenFromTopPlayed: true } : {}),
+        ...(m.hiddenChangedAt ? { hiddenChangedAt: m.hiddenChangedAt } : {}), // LWW del flag (fix I7)
       })),
-    });
+    };
+    if (!(await _writeIfChanged('playcounts', FILENAMES.playcounts, payload))) return false;
     console.log(`[Sync] Pushed playcounts (${played.length})`);
   }
 
@@ -1067,14 +1093,14 @@ const Sync = (() => {
       rootFolderName:  s.rootFolderName || null,
       savedAt:         s.savedAt || Date.now(),
     };
-    await _writeFile(FILENAMES.settings, payload);
+    if (!(await _writeIfChanged('settings', FILENAMES.settings, payload))) return false;
     console.log('[Sync] Pushed settings (custom presets + root folder)');
   }
 
   async function _pushHistory() {
     const history   = await DB.getHistoryAll(); // include tombstones so deletions propagate
     const clearedAt = await DB.getState('historyClearedAt').catch(() => 0) || 0;
-    await _writeFile(FILENAMES.history, {
+    const payload = {
       clearedAt,
       items: history.map(h => ({
         id:           h.id,
@@ -1082,13 +1108,14 @@ const Sync = (() => {
         displayName:  h.displayName  || h.name || null,
         artist:       h.artist       || null,
         folderId:     h.folderId     || null,
-        thumbnailUrl: (h.thumbnailUrl && !h.thumbnailUrl.startsWith('blob:') && h.thumbnailUrl !== 'id3') ? h.thumbnailUrl : null,
+        thumbnailUrl: _syncSafeUrl(h.thumbnailUrl),
         isSoundrop:   h.isSoundrop   || false,
         videoId:      h.videoId      || null,
         playedAt:     h.playedAt     || null,
         removedAt:    h.removedAt    || null,  // tombstone — prevents remote re-add on next login
       })),
-    });
+    };
+    if (!(await _writeIfChanged('history', FILENAMES.history, payload))) return false;
     const live = history.filter(h => !h.removedAt).length;
     console.log(`[Sync] Pushed history (${live} live, ${history.length - live} tombstones)`);
   }
@@ -1107,7 +1134,7 @@ const Sync = (() => {
         if (c.updatedAt)             rec.updatedAt = c.updatedAt;
         return rec;
       });
-    await _writeFile(FILENAMES.collections, payload);
+    if (!(await _writeIfChanged('collections', FILENAMES.collections, payload))) return false;
     console.log(`[Sync] Pushed collections (${payload.length})`);
   }
 
@@ -1118,6 +1145,24 @@ const Sync = (() => {
     let h = 5381;
     for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
     return h;
+  }
+
+  /* Hash-skip generalizado (fix C2 — ping-pong entre devices): cada pusher
+     compara su payload contra el último subido y omite la escritura + el bump
+     si es idéntico. Sin esto, el soft-scan del Home pusheaba recents/home sin
+     cambios reales → el otro device detectaba el bump, re-renderizaba, su
+     soft-scan volvía a pushear… bucle indefinido de escrituras a Drive. */
+  let _lastPushHash = {}; // type → hash del último payload subido
+
+  async function _writeIfChanged(type, filename, payload) {
+    const hash = _strHash(JSON.stringify(payload));
+    if (_lastPushHash[type] === hash) {
+      console.log(`[Sync] ${type} sin cambios — push omitido (sin bump)`);
+      return false;
+    }
+    await _writeFile(filename, payload);
+    _lastPushHash[type] = hash; // solo tras escritura exitosa
+    return true;
   }
 
   async function _pushMetadata() {
@@ -1135,12 +1180,11 @@ const Sync = (() => {
       'soundropSaved',                              // true = saved from Soundrop to Drive; eligible for auto-reorganize
       'embedBlocked',                               // aprendizaje: video YT bloqueado por licencia (error 101/150 real)
     ];
-    // googleusercontent.com = Drive CDN thumbnailLinks — accessible in <img> without auth.
-    // googleapis.com       = Drive API download endpoints — require Bearer token, skip those.
-    const isExternalUrl = u => u && !u.startsWith('blob:') && u !== 'id3'
-      && !u.includes('googleapis.com');
+    const isExternalUrl = u => !!_syncSafeUrl(u); // fix C5: incluye exclusión de googleusercontent
 
-    const all = await DB.getAllMeta();
+    // Light (fix I1): _pushMetadata solo usa campos de texto — no materializar
+    // los coverBlobs de toda la biblioteca en cada push.
+    const all = await DB.getAllMetaLight();
     const toSync = all
       // Include every song that has been scanned into any folder OR has any enrichment.
       // Songs with only a folderId carry name/displayName/folderId so other devices can
@@ -1188,8 +1232,7 @@ const Sync = (() => {
       'normalGainClearedAt',
       'soundropSaved',
     ];
-    const isExternalUrl = u => u && !u.startsWith('blob:') && u !== 'id3'
-      && !u.includes('googleapis.com');
+    const isExternalUrl = u => !!_syncSafeUrl(u); // fix C5: incluye exclusión de googleusercontent
 
     const toSync = metas.map(m => {
       const rec = { id: m.id };
@@ -1210,10 +1253,7 @@ const Sync = (() => {
    * so boot reads can restore the entire home screen in a single API call.
    */
   async function _pushHome() {
-    // googleusercontent.com = Drive CDN thumbnails — work in <img> without auth, sync them.
-    // googleapis.com        = Drive API download endpoints — need Bearer token, skip.
-    const isExternal = u => u && !u.startsWith('blob:') && u !== 'id3'
-      && !u.includes('googleapis.com');
+    const isExternal = u => !!_syncSafeUrl(u); // fix C5
     const cleanUrl = u => isExternal(u) ? u : null;
 
     let [pinnedMeta, pinnedOrder, allRecents, playcounts, playlists, history,
@@ -1223,7 +1263,7 @@ const Sync = (() => {
       DB.getRecentsAll(),          // ALL records including tombstones
       DB.getAllPlaycounts(),   // includes hidden songs so other devices get hiddenFromTopPlayed
       DB.getPlaylists(),
-      DB.getHistory(CONFIG.HISTORY_MAX),
+      DB.getHistoryAll(), // fix M4: incluye tombstones (y campos SD) — antes los borrados podían resucitar en un device fresco
       DB.getState('playCountsClearedAt').catch(() => 0),
       DB.getState('recentsClearedAt').catch(() => 0),
       DB.getState('historyClearedAt').catch(() => 0),
@@ -1251,7 +1291,8 @@ const Sync = (() => {
     );
 
     const payload = {
-      ts:                  Date.now(),
+      // ts se añade DESPUÉS del hash-check — si estuviera en el hash, ningún
+      // snapshot se consideraría jamás "sin cambios".
       playCountsClearedAt: _playCountsClearedTs || 0,
       recentsClearedAt:    _recentsClearedTs    || 0,
       historyClearedAt:    _historyClearedTs    || 0,
@@ -1284,17 +1325,41 @@ const Sync = (() => {
         playedAt: m.playedAt || 0,
         thumbnailUrl: cleanUrl(m.thumbnailUrl),
         ...(m.hiddenFromTopPlayed ? { hiddenFromTopPlayed: true } : {}),
+        ...(m.hiddenChangedAt ? { hiddenChangedAt: m.hiddenChangedAt } : {}), // LWW del flag (fix I7)
       })),
       playlists: (playlists || []),
-      history: (history || []).map(h => ({
-        id: h.id, name: h.name || null, displayName: h.displayName || h.name || null,
-        artist: h.artist || null, album: h.album || h.albumName || null,
-        folderId: h.folderId || null,
-        thumbnailUrl: cleanUrl(h.thumbnailUrl), playedAt: h.playedAt ?? Date.now(),
-      })),
+      // Fix M4: live (cutoff + cap) + tombstones frescos + campos SD — antes el
+      // snapshot omitía removedAt/isSoundrop/videoId y en un device fresco los
+      // borrados resucitaban y las pistas SD del historial no podían reproducirse.
+      history: (() => {
+        const cutoff = Date.now() - CONFIG.HISTORY_MAX_DAYS * 24 * 60 * 60 * 1000;
+        const live = (history || [])
+          .filter(h => !h.removedAt && (h.playedAt || 0) >= cutoff)
+          .sort((a, b) => (b.playedAt || 0) - (a.playedAt || 0))
+          .slice(0, CONFIG.HISTORY_MAX)
+          .map(h => ({
+            id: h.id, name: h.name || null, displayName: h.displayName || h.name || null,
+            artist: h.artist || null, album: h.album || h.albumName || null,
+            folderId: h.folderId || null,
+            thumbnailUrl: cleanUrl(h.thumbnailUrl), playedAt: h.playedAt ?? Date.now(),
+            ...(h.isSoundrop ? { isSoundrop: true, videoId: h.videoId || null } : {}),
+            ...(h.durationSec > 0 ? { durationSec: h.durationSec } : {}),
+          }));
+        const tombs = (history || [])
+          .filter(h => h.removedAt && h.removedAt > week)
+          .map(h => ({ id: h.id, removedAt: h.removedAt }));
+        return [...live, ...tombs];
+      })(),
     };
 
-    await _writeFile(FILENAMES.home, payload);
+    // Hash-skip sobre el contenido real (sin ts); si cambió, escribir con ts fresco.
+    const hash = _strHash(JSON.stringify(payload));
+    if (_lastPushHash.home === hash) {
+      console.log('[Sync] home sin cambios — push omitido (sin bump)');
+      return false;
+    }
+    await _writeFile(FILENAMES.home, { ts: Date.now(), ...payload });
+    _lastPushHash.home = hash;
     console.log('[Sync] Pushed home snapshot');
   }
 
@@ -1324,6 +1389,10 @@ const Sync = (() => {
 
   async function _poll() {
     if (_polling || !Auth.isAuthenticated()) return;
+    // Guard (fix I6): no pollear hasta que init() haya terminado el merge.
+    // Una renovación de token a mitad del boot llamaba startLiveSync y el poll
+    // corría en paralelo con el merge de init → carreras sobre los mismos stores.
+    if (!_ready) return;
     if (Date.now() < _pollSkipUntil) return; // en backoff tras errores
     if (typeof document !== 'undefined' && document.hidden) {
       if (++_pollHiddenTick % 10 !== 0) return; // background: 1 de cada 10 ticks
@@ -1418,6 +1487,7 @@ const Sync = (() => {
     _localTs  = {};
     _remoteTs = {};
     _lastMetaHash  = null;
+    _lastPushHash  = {};
     _pollFailures  = 0;
     _pollSkipUntil = 0;
     _lastFileListRefresh = 0;
@@ -1938,16 +2008,22 @@ const Sync = (() => {
     // reflects the new song (or cleared counts) quickly. Other types use 3 s.
     if (HOME_TYPES.has(type)) {
       const homeDelay = (type === 'recents' || type === 'history' || type === 'playcounts') ? 1000 : 3000;
-      if (_timers._home) clearTimeout(_timers._home);
-      _timers._home = setTimeout(async () => {
-        try {
-          await _pushHome();
-          await _bumpManifest(['home']);
-        } catch (err) {
-          if (err.isScope) return;
-          console.warn('[Sync] push(home) failed:', err.message);
-        }
-      }, homeDelay);
+      // Throttle en vez de debounce (fix M6): con actividad sostenida (<1 s entre
+      // pushes) el clearTimeout+setTimeout perpetuo posponía el snapshot para
+      // siempre. Si ya hay uno agendado, se respeta — saldrá a tiempo.
+      if (!_timers._home) {
+        _timers._home = setTimeout(async () => {
+          delete _timers._home; // liberar el slot ANTES del trabajo async
+          try {
+            const r = await _pushHome();
+            if (r === false) return; // snapshot idéntico — no bumpear
+            await _bumpManifest(['home']);
+          } catch (err) {
+            if (err.isScope) return;
+            console.warn('[Sync] push(home) failed:', err.message);
+          }
+        }, homeDelay);
+      }
     }
   }
 
@@ -1977,8 +2053,8 @@ const Sync = (() => {
     if (HOME_TYPES.has(type)) {
       if (_timers._home) { clearTimeout(_timers._home); delete _timers._home; }
       try {
-        await _pushHome();
-        await _bumpManifest(['home']);
+        const r = await _pushHome();
+        if (r !== false) await _bumpManifest(['home']);
       } catch (err) {
         if (err.isScope) return;
         console.warn('[Sync] pushNow(home) failed:', err.message);

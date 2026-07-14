@@ -1364,7 +1364,7 @@ const UI = (() => {
     const year    = meta?.year   || item.year    || '';
     const coverSrc = meta?.coverUrl || item.coverUrl || item.thumbnailUrl || item.thumbnailLink || '';
 
-    const thumbHtml = `<div style="display:flex;align-items:center;justify-content:center;color:var(--text-disabled)">${isFolder ? iconFolder(18) : iconMusicNote(18)}</div>${coverSrc ? `<img src="${coverSrc}" alt="" loading="lazy" onerror="this.style.display='none'">` : ''}`;
+    const thumbHtml = `<div style="display:flex;align-items:center;justify-content:center;color:var(--text-disabled)">${isFolder ? iconFolder(18) : iconMusicNote(18)}</div>${coverSrc ? `<img src="${escHtml(coverSrc)}" alt="" loading="lazy" onerror="this.style.display='none'">` : ''}`;
 
     // Secondary line: artist | album · year (only non-empty parts)
     const metaParts = [artist, [album, year].filter(Boolean).join(' · ')].filter(Boolean);
@@ -1410,7 +1410,7 @@ const UI = (() => {
     card.innerHTML = `
       <div class="home-card-art">
         ${coverSrc
-          ? `<img src="${coverSrc}" alt="" loading="lazy" draggable="false" onerror="this.style.display='none';this.nextElementSibling.style.display=''"><div class="folder-icon-placeholder" style="display:none;color:var(--text-disabled)">${isFolder ? iconFolder(32) : iconMusicNote(28)}</div>`
+          ? `<img src="${escHtml(coverSrc)}" alt="" loading="lazy" draggable="false" onerror="this.style.display='none';this.nextElementSibling.style.display=''"><div class="folder-icon-placeholder" style="display:none;color:var(--text-disabled)">${isFolder ? iconFolder(32) : iconMusicNote(28)}</div>`
           : isFolder
             ? `<div class="folder-icon-placeholder">${iconFolder(32)}</div>`
             : `<div class="folder-icon-placeholder" style="color:var(--text-disabled)">${iconMusicNote(28)}</div>`
@@ -1503,7 +1503,7 @@ const UI = (() => {
     const _durSec  = item.durationSec > 0 ? item.durationSec : (item.durationMs > 0 ? item.durationMs / 1000 : 0);
     const _dur     = _durSec > 0 ? formatTime(Math.round(_durSec)) : '';
 
-    const thumbHtml = `<div style="display:flex;align-items:center;justify-content:center;color:var(--text-disabled)">${iconMusicNote(18)}</div>${coverSrc ? `<img src="${coverSrc}" alt="" loading="lazy" onerror="this.style.display='none'">` : ''}`;
+    const thumbHtml = `<div style="display:flex;align-items:center;justify-content:center;color:var(--text-disabled)">${iconMusicNote(18)}</div>${coverSrc ? `<img src="${escHtml(coverSrc)}" alt="" loading="lazy" onerror="this.style.display='none'">` : ''}`;
 
     // Secondary line: "artist — album · year" (same format as top-played)
     const metaParts = [artist, [album, year].filter(Boolean).join(' · ')].filter(Boolean);
@@ -2041,7 +2041,7 @@ const UI = (() => {
       ${numHtml}
       <div class="song-thumb">
         <div class="thumb-placeholder">${iconMusicNote(20)}</div>
-        ${file.thumbnailUrl ? `<img src="${file.thumbnailUrl}" alt="" loading="lazy" onerror="this.style.display='none'">` : ''}
+        ${file.thumbnailUrl ? `<img src="${escHtml(file.thumbnailUrl)}" alt="" loading="lazy" onerror="this.style.display='none'">` : ''}
         <div class="eq-bars">
           <div class="eq-bar"></div>
           <div class="eq-bar"></div>
@@ -3183,7 +3183,7 @@ const UI = (() => {
     const _qDur    = _qDurSec > 0 ? formatTime(Math.round(_qDurSec)) : '';
 
     const thumbHtml = cover
-      ? `<img src="${cover}" alt="">`
+      ? `<img src="${escHtml(cover)}" alt="">`
       : `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z"/></svg>`;
 
     el.innerHTML = `
@@ -3262,7 +3262,7 @@ const UI = (() => {
         <div class="top-list-rank">${i + 1}</div>
         <div class="top-list-thumb">
           <div style="display:flex;align-items:center;justify-content:center;color:var(--text-disabled)">${iconMusicNote(22)}</div>
-          ${song.thumbnailUrl ? `<img src="${song.thumbnailUrl}" alt="" loading="lazy" onerror="this.style.display='none'">` : ''}
+          ${song.thumbnailUrl ? `<img src="${escHtml(song.thumbnailUrl)}" alt="" loading="lazy" onerror="this.style.display='none'">` : ''}
           <div class="eq-bars"><div class="eq-bar"></div><div class="eq-bar"></div><div class="eq-bar"></div><div class="eq-bar"></div></div>
         </div>
         <div class="top-list-info">
@@ -3392,7 +3392,7 @@ const UI = (() => {
       row.innerHTML = `
         <div class="song-thumb">
           <div class="thumb-placeholder">${iconMusicNote(20)}</div>
-          ${song.thumbnailUrl ? `<img src="${song.thumbnailUrl}" alt="" onerror="this.style.display='none'">` : ''}
+          ${song.thumbnailUrl ? `<img src="${escHtml(song.thumbnailUrl)}" alt="" onerror="this.style.display='none'">` : ''}
           <div class="eq-bars">
             <div class="eq-bar"></div>
             <div class="eq-bar"></div>
@@ -3478,7 +3478,7 @@ const UI = (() => {
         ? ''
         : `background:${colors.bg};color:${colors.fg}`;
       const avatarInner = artist.imageUrl
-        ? `<img src="${artist.imageUrl}" alt="" loading="lazy">`
+        ? `<img src="${escHtml(artist.imageUrl)}" alt="" loading="lazy">`
         : initials;
 
       card.innerHTML = `
@@ -3539,7 +3539,7 @@ const UI = (() => {
       const albumLabel = artist.albumCount === 1 ? '1 álbum' : `${artist.albumCount} álbumes`;
       const artistKey  = norm(artist.name || '');
       const avatarStyle = artist.imageUrl ? '' : `background:${colors.bg};color:${colors.fg}`;
-      const avatarInner = artist.imageUrl ? `<img src="${artist.imageUrl}" alt="" loading="lazy">` : initials;
+      const avatarInner = artist.imageUrl ? `<img src="${escHtml(artist.imageUrl)}" alt="" loading="lazy">` : initials;
 
       card.innerHTML = `
         <div class="lib-artist-avatar-wrap">
@@ -4062,7 +4062,7 @@ const UI = (() => {
         <div class="top-list-rank">${i + 1}</div>
         <div class="top-list-thumb">
           <div style="display:flex;align-items:center;justify-content:center;color:var(--text-disabled)">${iconMusicNote(22)}</div>
-          ${song.thumbnailUrl ? `<img src="${song.thumbnailUrl}" alt="" loading="lazy" onerror="this.style.display='none'">` : ''}
+          ${song.thumbnailUrl ? `<img src="${escHtml(song.thumbnailUrl)}" alt="" loading="lazy" onerror="this.style.display='none'">` : ''}
           <div class="eq-bars"><div class="eq-bar"></div><div class="eq-bar"></div><div class="eq-bar"></div><div class="eq-bar"></div></div>
         </div>
         <div class="top-list-info">
@@ -4614,7 +4614,7 @@ const UI = (() => {
         <div class="top-list-rank">${i + 1}</div>
         <div class="top-list-thumb">
           <div style="display:flex;align-items:center;justify-content:center;color:var(--text-disabled)">${iconMusicNote(22)}</div>
-          ${song.thumbnailUrl ? `<img src="${song.thumbnailUrl}" alt="" loading="lazy" onerror="this.style.display='none'">` : ''}
+          ${song.thumbnailUrl ? `<img src="${escHtml(song.thumbnailUrl)}" alt="" loading="lazy" onerror="this.style.display='none'">` : ''}
           <div class="eq-bars"><div class="eq-bar"></div><div class="eq-bar"></div><div class="eq-bar"></div><div class="eq-bar"></div></div>
         </div>
         <div class="top-list-info">

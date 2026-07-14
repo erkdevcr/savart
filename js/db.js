@@ -317,6 +317,13 @@ const DB = (() => {
     const cleanMeta = Object.fromEntries(
       Object.entries(meta).filter(([, v]) => v !== undefined && v !== null)
     );
+    // Guard central (fix C6): NUNCA persistir object URLs de sesión como cover.
+    // Un 'blob:…' muere al recargar la app — persistirlo pisaba el centinela 'id3'
+    // y dejaba canciones sin ruta de recuperación de portada. Toda la clase de
+    // bugs se cierra aquí, sin depender de que cada caller lo recuerde.
+    for (const k of ['thumbnailUrl', 'coverUrl']) {
+      if (typeof cleanMeta[k] === 'string' && cleanMeta[k].startsWith('blob:')) delete cleanMeta[k];
+    }
     return _promisify(store.put({ ...existing, ...cleanMeta, id: fileId }));
   }
 
@@ -328,8 +335,14 @@ const DB = (() => {
     const meta = await getMeta(fileId) || { id: fileId, playCount: 0, starred: false };
     meta.playCount = (meta.playCount || 0) + 1;
     meta.playedAt  = Date.now(); // stamp time of play — used by clearedAt merge to decide if this record survives
-    // Re-surface the song if it was previously hidden from top-played
-    delete meta.hiddenFromTopPlayed;
+    // Re-surface the song if it was previously hidden from top-played.
+    // Explícito con flag=false + timestamp (fix I7): `delete` no funcionaba —
+    // setMeta mergea con el registro existente y el flag viejo sobrevivía.
+    // El timestamp hace LWW contra el hide de otros devices.
+    if (meta.hiddenFromTopPlayed) {
+      meta.hiddenFromTopPlayed = false;
+      meta.hiddenChangedAt     = Date.now();
+    }
     return setMeta(fileId, meta);
   }
 
@@ -372,8 +385,10 @@ const DB = (() => {
    * @returns {Promise<Object[]>}
    */
   async function getTopPlayed(limit = CONFIG.TOP_PLAYED_MAX) {
-    const store   = _tx('metadata');
-    const entries = await _promisify(store.getAll());
+    // Light (fix I1): corre en CADA render del Home — no retener los coverBlobs
+    // de toda la biblioteca solo para ordenar por playCount. Los callers que
+    // necesiten el blob de los 12 ganadores lo leen por id (getMeta).
+    const entries = await getAllMetaLight();
     return entries
       .filter(e => e.playCount > 0 && !e.hiddenFromTopPlayed)
       .sort((a, b) => b.playCount - a.playCount)
@@ -502,8 +517,10 @@ const DB = (() => {
             if (hasExisting) delete safeClean.thumbnailUrl;
           }
           const merged   = { ...existing, ...safeClean, id: item.id };
-          // Never restore playCount while the user has explicitly hidden the song
-          if (existing.hiddenFromTopPlayed && 'playCount' in safeClean) merged.playCount = 0;
+          // Never restore playCount while the song is (post-merge) hidden.
+          // Usa el flag MERGEADO (fix I7): un patch que des-oculta (flag=false)
+          // debe poder llevar su playCount; antes se zereaba por el flag viejo.
+          if (merged.hiddenFromTopPlayed === true && 'playCount' in safeClean) merged.playCount = 0;
           store.put(merged);
         };
       }
@@ -534,9 +551,18 @@ const DB = (() => {
         const req = store.get(item.id);
         req.onsuccess = () => {
           const existing  = req.result || { playCount: 0 };
-          // "hide" wins on either side: local OR remote hiddenFromTopPlayed → playCount stays 0
-          const hidden   = existing.hiddenFromTopPlayed || item.hiddenFromTopPlayed || false;
-          const maxCount = hidden ? 0 : Math.max(existing.playCount || 0, item.playCount || 0);
+          // Flag hidden por LWW (fix I7): gana el lado con hiddenChangedAt más
+          // nuevo. Sin timestamps en ninguno de los dos lados (registros legacy),
+          // se conserva el comportamiento anterior: OR permanente + count 0.
+          const exTs  = existing.hiddenChangedAt || 0;
+          const remTs = item.hiddenChangedAt     || 0;
+          let hidden;
+          if      (remTs > exTs) hidden = !!item.hiddenFromTopPlayed;
+          else if (exTs > remTs) hidden = !!existing.hiddenFromTopPlayed;
+          else                   hidden = !!(existing.hiddenFromTopPlayed || item.hiddenFromTopPlayed);
+          // Contador: MAX salvo oculto (el hide zerea en todos los devices; tras
+          // un unhide el MAX arranca de los counts post-hide, sin regresiones).
+          const mergedCount = hidden ? 0 : Math.max(existing.playCount || 0, item.playCount || 0);
           // thumbnailUrl — fill-only: never overwrite an existing cover URL or blob.
           // Synced playcounts carry thumbnailUrl only for display convenience on new devices.
           const safeClean = { ...clean };
@@ -545,8 +571,9 @@ const DB = (() => {
                              || existing.coverBlob;
             if (hasExisting) delete safeClean.thumbnailUrl;
           }
-          store.put({ ...existing, ...safeClean, id: item.id, playCount: maxCount,
-                      ...(hidden ? { hiddenFromTopPlayed: true } : {}) });
+          store.put({ ...existing, ...safeClean, id: item.id, playCount: mergedCount,
+                      hiddenFromTopPlayed: hidden,
+                      ...(Math.max(exTs, remTs) > 0 ? { hiddenChangedAt: Math.max(exTs, remTs) } : {}) });
         };
       }
     });

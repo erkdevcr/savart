@@ -33,7 +33,8 @@ const App = (() => {
 
   /* ── Folder cover art cache ──────────────────────────────── */
   // folderId → object URL string | null (null = no image found)
-  const _folderCoverCache = new Map();
+  // CappedMap (fix M1): sin cota crecía indefinido en sesiones largas
+  const _folderCoverCache = new CappedMap(200);
 
 
   /* ── Blob size cache ─────────────────────────────────────── */
@@ -507,12 +508,20 @@ const App = (() => {
     // Fetch real user info and update Settings panel.
     // Also detects account switches: if a different user logs in, wipe all
     // user-specific local state so the previous user's data doesn't bleed through.
-    Auth.fetchUserInfo().then(info => {
+    // Fix I6b: los clears de cambio de cuenta deben terminar ANTES de que
+    // readHome()/init() empiecen a leer/mergear — antes corrían en paralelo y un
+    // clear a mitad del merge podía dejar estados inconsistentes o pushear vacío.
+    const _accountCheckDone = Auth.fetchUserInfo().then(info => {
       if (!info) return;
 
       const prevEmail = (localStorage.getItem('savart_user_email') || '').toLowerCase();
       const newEmail  = (info.email || '').toLowerCase();
       const isDifferentUser = prevEmail && newEmail && prevEmail !== newEmail;
+
+      const emailEl = document.getElementById('account-email');
+      if (emailEl) emailEl.textContent = info.email || info.name || '—';
+      try { localStorage.setItem('savart_user_email', info.email || '');
+            localStorage.setItem('savart_user_name',  info.name  || ''); } catch (_) {}
 
       if (isDifferentUser) {
         // ── Account switch detected — clear all user-specific state ──────────
@@ -526,17 +535,13 @@ const App = (() => {
         _rootFolderName = 'Drive';
         const rootLbl = document.getElementById('root-folder-name');
         if (rootLbl) rootLbl.textContent = _rootFolderName;
-        // Clear user-specific DB sections, then re-render home with fresh (empty) state
-        Promise.all([
+        // Clear user-specific DB sections, then re-render home with fresh (empty)
+        // state. RETORNAR la promesa: el boot de sync espera este clear.
+        return Promise.all([
           DB.clearRecents(), DB.clearHistory(), DB.clearPinned(),
           DB.clearPlaylists(), DB.clearPlaycounts(),
-        ]).catch(() => {}).finally(() => { _loadHomeData(); });
+        ]).catch(() => {}).then(() => { _loadHomeData(); });
       }
-
-      const emailEl = document.getElementById('account-email');
-      if (emailEl) emailEl.textContent = info.email || info.name || '—';
-      try { localStorage.setItem('savart_user_email', info.email || '');
-            localStorage.setItem('savart_user_name',  info.name  || ''); } catch (_) {}
     }).catch(() => {});
     // Restore cached user info immediately (avoids flicker on re-load)
     _restoreUserInfo();
@@ -558,7 +563,7 @@ const App = (() => {
     const _onBootProgress = (pct) => {
       if (_bootBarFill) _bootBarFill.style.width = pct + '%';
     };
-    Sync.readHome()
+    _accountCheckDone.then(() => Sync.readHome())
       .then(data => { if (data) _loadHomeData(); })
       .catch(() => {})
       .finally(() => {
@@ -596,8 +601,10 @@ const App = (() => {
     const view = UI.getCurrentView();
 
     const needsHome = types.some(t => ['recents', 'history', 'pinned', 'playcounts', 'favorites', 'playlists', 'home'].includes(t));
-    // Debounce: live sync fires every 3 s — collapse rapid refreshes into one render
-    if (needsHome) _loadHomeData({ debounce: true });
+    // Debounce: live sync fires every 3 s — collapse rapid refreshes into one render.
+    // Solo si el Home está visible (fix I2): onNavClick('home') ya refresca al
+    // volver — re-renderizar una vista oculta era trabajo (y flicker) gratis.
+    if (needsHome && view === 'home') _loadHomeData({ debounce: true });
 
     // When recents or a home snapshot arrive from another device, scan any items
     // that came without a cover (embedded ID3 art can't be synced — only the blob
@@ -607,7 +614,8 @@ const App = (() => {
       setTimeout(() => _scanIncomingRecents().catch(() => {}), 1000);
     }
 
-    if (view === 'library' && types.some(t => ['playlists', 'favorites'].includes(t))) {
+    // 'home' incluido (fix M3): el snapshot también trae playlists
+    if (view === 'library' && types.some(t => ['playlists', 'favorites', 'home'].includes(t))) {
       _setLibTab(_currentLibTab || 'albums');
     }
 
@@ -620,11 +628,15 @@ const App = (() => {
       } else {
         _libStale = true; // [STALE-FIX] user not on Library — refresh on next visit
       }
-      // Also refresh home cards (top-played, recents may show stale covers)
-      _loadHomeData({ debounce: true });
+      // Also refresh home cards (top-played, recents may show stale covers) —
+      // solo si el Home está visible (fix I2); al volver se refresca igual.
+      if (view === 'home') _loadHomeData({ debounce: true });
     }
 
-    if (view === 'history' && types.includes('history')) _loadHistory();
+    // 'home' incluido (fix M3): el snapshot home también trae history — sin esto
+    // la vista Historial quedaba stale hasta navegar cuando el cambio llegaba solo
+    // vía snapshot.
+    if (view === 'history' && (types.includes('history') || types.includes('home'))) _loadHistory();
 
     // When history arrives from another device, scan items that came without a cover.
     // Runs regardless of which screen is active — same pattern as _scanIncomingRecents.
@@ -1135,9 +1147,9 @@ const App = (() => {
       // the full blob download and _onBlobReady to fire.
       // Exception: if any external URL already exists (Last.fm / AudD / manual / rescanned),
       // skip blob injection — external URL takes priority over ID3 blob.
-      const _hasExternalUrl = dbMeta?.thumbnailUrl
-        && dbMeta.thumbnailUrl !== 'id3'
-        && !dbMeta.thumbnailUrl.startsWith('blob:');
+      // Fix C5: solo una URL ESTABLE cuenta como "externa" — una googleusercontent
+      // caducada no debe ganarle al coverBlob válido que está en IDB.
+      const _hasExternalUrl = _isStableCoverUrl(dbMeta?.thumbnailUrl);
       if (dbMeta?.coverBlob && !_hasExternalUrl && typeof Meta !== 'undefined') {
         const _injected = Meta.injectCover(track.id, dbMeta.coverBlob);
         if (_injected) bestThumb = _injected;
@@ -1210,7 +1222,9 @@ const App = (() => {
       // Only write non-empty values to avoid overwriting enriched fields with blanks.
       const _metaUpdate = { name: track.name, folderId: recentData.folderId };
       if (bestName)         _metaUpdate.displayName  = bestName;
-      if (bestThumb)        _metaUpdate.thumbnailUrl = bestThumb;
+      // Fix C6: NUNCA persistir blob: (muere al recargar y pisaba el centinela
+      // 'id3') ni URLs volátiles de Drive — solo URLs estables.
+      if (_isStableCoverUrl(bestThumb)) _metaUpdate.thumbnailUrl = bestThumb;
       if (bestArtist)       _metaUpdate.artist       = bestArtist;
       if (track.isSoundrop) { _metaUpdate.isSoundrop = true; _metaUpdate.videoId = track.videoId; }
       if (track.durationSec > 0) _metaUpdate.durationSec = track.durationSec;
@@ -2796,6 +2810,9 @@ const App = (() => {
             if (!m?.mbReleaseMbid) return;
             // Never overwrite a manually set cover
             if ((m.manualAt || 0) > 0) return;
+            // Fix M2: arte embebido en DB (aunque no esté pintado en el DOM en
+            // este momento) — no desplazarlo con la URL de CAA.
+            if (m.coverBlob || m.thumbnailUrl === 'id3') return;
             if (_rowHasCover(file.id)) {
               // Only upgrade if not already an ID3 cover
               const eid = CSS.escape(file.id);
@@ -4067,14 +4084,17 @@ const App = (() => {
    *   source).  External covers (thumbnailLink, Last.fm, folder.jpg) only fill empty
    *   slots and never overwrite a previously set ID3 cover.
    */
-  function _updateRowThumbnail(fileId, coverUrl, isId3 = false) {
+  function _updateRowThumbnail(fileId, coverUrl, isId3 = false, force = false) {
     const eid = CSS.escape(fileId);
 
     function _applyToThumb(thumb) {
       if (!thumb) return;
       const img = thumb.querySelector('img');
       if (!isId3 && img) {
-        if (img.dataset.coverSrc === 'id3') return; // ID3 is always protected
+        // force (fix M8): una portada MANUAL (ej. "aplicar a las canciones" en
+        // Deep Scan) sí debe pisar el cover ID3 pintado — el usuario la eligió.
+        if (img.dataset.coverSrc === 'id3' && !force) return; // ID3 is protected
+        if (img.dataset.coverSrc === 'id3' && force) delete img.dataset.coverSrc;
         img.src = coverUrl;
         return;
       }
@@ -4230,6 +4250,11 @@ const App = (() => {
       const m = metaMap.get(item.id);
       if (m?.manualAt || m?.rescannedAt) {
         toApply.push(item);                     // authoritative DB — mandatory DB read
+      } else if (m?.softScannedAt && (m?.coverBlob || _isStableCoverUrl(m?.thumbnailUrl))) {
+        // Fix I4: escaneada en una sesión ANTERIOR y con cover ya resuelto
+        // (blob local o URL estable) — pintar desde DB sin re-descargar 300KB+
+        // por item. Antes, cada arranque re-descargaba TODOS los items del Home.
+        toPaint.push(item);
       } else if (!_sessionScannedIds.has(item.id)) {
         _sessionScannedIds.add(item.id);        // reserve slot before async work
         toScan.push(item);
@@ -4981,8 +5006,12 @@ const App = (() => {
             const info = await Drive.getFileInfo(item.id).catch(() => null);
             const url  = info?.thumbnailUrl || null;
             if (url) {
-              updateFn(item.id, url);
-              DB.setMeta(item.id, { thumbnailUrl: url }).catch(() => {});
+              updateFn(item.id, url); // mostrar en esta sesión está bien
+              // Fix C5: NO persistir — los thumbnailLink de Drive caducan en horas
+              // y quedaban sincronizados como covers "válidos" que luego rompían.
+              if (_isStableCoverUrl(url)) {
+                DB.setMeta(item.id, { thumbnailUrl: url }).catch(() => {});
+              }
             }
           }
         } catch (_) { /* non-fatal */ }
@@ -5020,6 +5049,11 @@ const App = (() => {
 
           // Manual cover — never overwrite
           if ((m?.manualAt || 0) > 0) continue;
+
+          // Fix M2: arte embebido presente (coverBlob / centinela 'id3') — no
+          // desplazarlo con una URL externa de Last.fm. El arte del archivo es
+          // mejor fuente que la búsqueda por nombre.
+          if (m?.coverBlob || m?.thumbnailUrl === 'id3') continue;
 
           // A valid URL already in DB but just not rendered yet — apply it directly
           const persisted = m?.thumbnailUrl || m?.coverUrl || null;
@@ -6009,9 +6043,13 @@ const App = (() => {
     // record via bulkWriteMeta and must not have it overwritten by this async DB.setMeta.
     if (skipDbPersist) return;
     const thumb = item.thumbnailLink || item.thumbnailUrl;
-    if (thumb && !thumb.startsWith('blob:')) {
+    // Fix C5: solo persistir URLs ESTABLES. Los thumbnailLink de Drive
+    // (googleusercontent) son URLs firmadas que caducan en horas — persistirlas
+    // dejaba covers rotas en la próxima sesión y encima le ganaban la prioridad
+    // al coverBlob válido en IDB. Tampoco pisar el centinela 'id3'.
+    if (thumb && _isStableCoverUrl(thumb)) {
       DB.getMeta(item.id).then(m => {
-        if (!((m?.manualAt || 0) > 0)) {
+        if (!((m?.manualAt || 0) > 0) && m?.thumbnailUrl !== 'id3') {
           DB.setMeta(item.id, { thumbnailUrl: thumb }).catch(() => {});
         }
       }).catch(() => {});
@@ -6046,7 +6084,10 @@ const App = (() => {
   async function onRemoveFromTopPlayed(item) {
     // Set hiddenFromTopPlayed so sync can't restore it via Math.max on playCount.
     // playCount is zeroed so legacy getTopPlayed callers also exclude it.
-    await DB.setMeta(item.id, { playCount: 0, hiddenFromTopPlayed: true }).catch(() => {});
+    // hiddenChangedAt (fix I7): LWW del flag entre devices — reproducir la canción
+    // la des-oculta con timestamp más nuevo y eso gana al hide viejo (antes el
+    // hide era un OR permanente y re-ocultaba/zereaba en cada merge).
+    await DB.setMeta(item.id, { playCount: 0, hiddenFromTopPlayed: true, hiddenChangedAt: Date.now() }).catch(() => {});
     UI.showToast(UI.t('toast_removed_top_played'));
     _loadHomeData();
     if (typeof Sync !== 'undefined') Sync.push('playcounts'); // propagate hide to other devices
@@ -6704,7 +6745,9 @@ const App = (() => {
       const enriched = await Promise.all(playlists.map(async pl => {
         const songIds = pl.songIds || [];
         const coverUrls = [];
-        for (const sid of songIds) {
+        // Cota (fix M9): solo las primeras 24 canciones — una playlist grande sin
+        // covers hacía un getMeta+resolve por CADA canción en cada render.
+        for (const sid of songIds.slice(0, 24)) {
           if (coverUrls.length >= 4) break;
           const m = await DB.getMeta(sid).catch(() => null);
           const url = await _resolveCoverUrl(sid, m?.thumbnailUrl);
@@ -6757,6 +6800,14 @@ const App = (() => {
             const url = Meta.injectCover(sid, dbMeta.coverBlob);
             if (url) { UI.updatePlaylistSidebarCover(pl.id, url); found = true; break; }
           }
+          // Pass 1b: URL externa estable ya persistida — usarla sin red
+          if (_isStableCoverUrl(dbMeta?.thumbnailUrl)) {
+            UI.updatePlaylistSidebarCover(pl.id, dbMeta.thumbnailUrl);
+            found = true; break;
+          }
+          // Fix I4b: ya soft-escaneada y sin arte encontrado — no re-descargar
+          // 1MB en CADA render del sidebar; el resultado no va a cambiar.
+          if (dbMeta?.softScannedAt) continue;
 
           // Pass 2: try cached audio blob first, then range request
           let blob = await DB.getCachedBlob(sid).catch(() => null);
@@ -8928,7 +8979,11 @@ const App = (() => {
         if (!meta) continue;
         let url = '';
         if (meta.coverBlob) {
-          url = URL.createObjectURL(meta.coverBlob);
+          // Meta.injectCover gestiona LRU + revocación (fix M1) — un
+          // createObjectURL crudo por re-render fugaba blobs de imagen
+          // pinneados en memoria hasta recargar la app.
+          url = (typeof Meta !== 'undefined' && Meta.injectCover(file.id, meta.coverBlob))
+             || URL.createObjectURL(meta.coverBlob);
         } else {
           url = (meta.coverUrl || meta.thumbnailUrl || meta.thumbnailLink || '')
             .replace(/^blob:.*|(?:googleusercontent|lh\d+\.).*/, '');
@@ -9050,7 +9105,10 @@ const App = (() => {
         try {
           const meta = await DB.getMeta(id).catch(() => null);
           if (!meta?.coverBlob) continue;
-          setImg(artEl, URL.createObjectURL(meta.coverBlob));
+          // Vía Meta.injectCover (fix M1): LRU + revocación gestionadas
+          const _u = (typeof Meta !== 'undefined' && Meta.injectCover(id, meta.coverBlob))
+                  || URL.createObjectURL(meta.coverBlob);
+          setImg(artEl, _u);
           break;
         } catch (_) {}
       }
@@ -9416,7 +9474,7 @@ const App = (() => {
       for (const m of songs) {
         await DB.setMeta(m.id, { thumbnailUrl: coverUrl, manualAt: now });
         if (typeof Meta !== 'undefined') Meta.revoke?.(m.id);
-        _updateRowThumbnail(m.id, coverUrl);
+        _updateRowThumbnail(m.id, coverUrl, false, true); // force (fix M8): cover manual pisa ID3 pintado
       }
       if (typeof Sync !== 'undefined') Sync.push('metadata');
       UI.showToast(`${songs.length} ${UI.t('lbl_songs_updated') || 'canciones actualizadas'}`);
@@ -10645,12 +10703,16 @@ const App = (() => {
         if (m.manualAt)     return false;      // user manually edited → never touch
         if (m.rescannedAt)  return false;      // full rescan done → authoritative
         if (m.softScannedAt) {
-          // Previously soft-scanned but may still carry a stale external URL
-          // (set before this fix landed). Re-scan to clear it.
-          const hasExternalUrl =
-            (m.thumbnailUrl && m.thumbnailUrl !== 'id3' && !m.thumbnailUrl.startsWith('blob:')) ||
-            (m.coverUrl     && !m.coverUrl.startsWith('blob:'));
-          return hasExternalUrl;              // re-scan only if stale URL present
+          // Fix C1 (bucle infinito): re-scan SOLO si quedó una URL VOLÁTIL
+          // (googleusercontent caducada de versiones viejas). Las URLs estables
+          // de enriquecimiento (Last.fm/CAA/AudD) son legítimas — tratarlas como
+          // "stale" creaba el ciclo perpetuo: descargar 1MB → borrar URL →
+          // re-enriquecer → volver a descargar en la próxima apertura…
+          const staleUrl =
+            (m.thumbnailUrl && m.thumbnailUrl !== 'id3' &&
+             !m.thumbnailUrl.startsWith('blob:') && !_isStableCoverUrl(m.thumbnailUrl)) ||
+            (m.coverUrl && !m.coverUrl.startsWith('blob:') && !_isStableCoverUrl(m.coverUrl));
+          return !!staleUrl;                  // re-scan only if volatile URL present
         }
         return true;                           // anything else: scan to get real ID3
       });
@@ -10899,9 +10961,11 @@ const App = (() => {
 
     // Priority order:
     //  1. Manual URL (manualAt > 0) — user explicitly chose this, always wins
-    //  2. Any external HTTP URL (Last.fm / AudD / rescanned / etc.) — wins over ID3 blob
+    //  2. STABLE external HTTP URL (Last.fm / AudD / rescanned) — wins over ID3 blob.
+    //     Fix C5: las googleusercontent caducadas ya no cuentan — dejaban la
+    //     portada rota teniendo el coverBlob válido en IDB.
     //  3. ID3 embedded blob — fallback when no external URL exists
-    const isExternalUrl = (url) => url && url !== 'id3' && !url.startsWith('blob:');
+    const isExternalUrl = (url) => _isStableCoverUrl(url);
 
     const manualUrl   = (dbMeta.manualAt || 0) > 0 && isExternalUrl(dbMeta.thumbnailUrl)
       ? dbMeta.thumbnailUrl : null;
@@ -10948,7 +11012,9 @@ const App = (() => {
       // NOTE: rescannedAt is deliberately NOT a fast-path here — it is synced from
       // other devices, so a song can arrive with rescannedAt but no local coverBlob.
       const hasLocalBlob   = !!existing?.coverBlob;
-      const hasLocalUrl    = !!(existing?.thumbnailUrl && existing?.thumbnailUrl !== 'id3');
+      // Fix C5: solo URLs estables cuentan — una googleusercontent caducada no es
+      // "tener cover" (bloqueaba el re-scan y la portada quedaba rota).
+      const hasLocalUrl    = _isStableCoverUrl(existing?.thumbnailUrl);
       if (hasLocalBlob || hasLocalUrl) {
         _ensureCoverVisible(item.id, existing);
         return;
@@ -14597,7 +14663,7 @@ const App = (() => {
           // Evict the in-memory Meta cache so the next resolve reads from DB.
           if (typeof Meta !== 'undefined') Meta.revoke(m.id);
           // Update the cover in the collection detail song list row immediately.
-          _updateRowThumbnail(m.id, coverUrl);
+          _updateRowThumbnail(m.id, coverUrl, false, true); // force (fix M8)
         }
 
         // Rebuild mosaic in the collection header with the new uniform cover.
