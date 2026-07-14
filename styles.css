@@ -6008,19 +6008,18 @@ body.queue-open #mini-player { z-index: 65; }
 
 .eq-custom-list {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
-  overflow-x: auto;
-  scrollbar-width: none;
   padding-bottom: 4px;
 }
 
 .eq-custom-list::-webkit-scrollbar { display: none; }
 
-/* Mobile: horizontal list rows */
+/* Custom preset cards — wrap into rows, dark background */
 .eq-custom-card {
   flex-shrink: 0;
   width: 140px;
-  background: var(--bg-elevated);
+  background: var(--bg-surface);
   border-radius: var(--radius-md);
   border: 1px solid var(--bg-hover);
   padding: 10px;
