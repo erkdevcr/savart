@@ -75,6 +75,7 @@ const Player = (() => {
   let _onPreloadComplete = null; // (driveItem, blob) => void — fires after next-track preload is cached
   let _onBeforePlay     = null;  // async (driveItem) => void — awaited before blob fetch (e.g. soft scan)
   let _onDurationReady  = null;  // (driveItem, durationSec) => void — fires on loadedmetadata with real duration
+  let _onSdBlocked      = null;  // (sdItem) => void — YT bloqueó el embedding y no hay MP3 en cache: app muestra popup "Convertir y guardar"
 
   /* ── Web Audio comment ─────────────────────────────────── */
   /*
@@ -89,7 +90,7 @@ const Player = (() => {
    * Call once on app startup.
    * @param {Object} callbacks
    */
-  function init({ onTrackChange, onPlayPause, onProgress, onQueueChange, onError, onBlobReady, onFullBlobReady, onBeforePlay, onDurationReady, onPreloadComplete } = {}) {
+  function init({ onTrackChange, onPlayPause, onProgress, onQueueChange, onError, onBlobReady, onFullBlobReady, onBeforePlay, onDurationReady, onPreloadComplete, onSdBlocked } = {}) {
     _onTrackChange    = onTrackChange    || (() => {});
     _onPlayPause      = onPlayPause      || (() => {});
     _onProgress       = onProgress       || (() => {});
@@ -100,6 +101,7 @@ const Player = (() => {
     _onBeforePlay      = onBeforePlay      || null;
     _onDurationReady   = onDurationReady   || null;
     _onPreloadComplete = onPreloadComplete || null;
+    _onSdBlocked       = onSdBlocked       || null;
 
     _audio = new Audio();
     _audio.preload    = 'auto';
@@ -900,12 +902,16 @@ const Player = (() => {
    *
    * @returns {Promise<boolean>} true si el fallback quedó reproduciendo
    */
-  async function _sdFallbackToBlob(item, mySession) {
+  async function _sdFallbackToBlob(item, mySession, cacheOnly = false) {
     if (typeof Soundrop === 'undefined' || !item?.videoId) return false;
     try {
       // Cache persistente primero (IndexedDB, key = sd_<videoId>): si este video
       // ya se convirtió alguna vez, reproducir el MP3 guardado — 0 tokens RapidAPI.
       let blob = await DB.getCachedBlob(item.id).catch(() => null);
+
+      // cacheOnly: solo reproducir si ya hay MP3 local — la decisión de convertir
+      // (gastar cuota) la toma el usuario vía el popup "Convertir y guardar".
+      if (!blob && cacheOnly) return false;
 
       if (!blob) {
         if (typeof UI !== 'undefined') {
@@ -1055,9 +1061,20 @@ const Player = (() => {
             if (mySession !== _sdPlaySession) return;
             // Códigos 101/150 = el dueño del video deshabilitó el embedding
             // (muy común en videos largos: mixes, álbumes completos, conciertos).
-            // Fallback: convertir a MP3 vía Worker y reproducir por el audio
-            // element normal — con EQ y normalizador incluidos.
-            console.error('[Player] YT error code:', code, '— intentando fallback por conversión');
+            console.error('[Player] YT error code:', code, '— embedding bloqueado');
+            // 1) Cache persistente: si ya se convirtió alguna vez, reproducir
+            //    directo — 0 tokens RapidAPI, sin popup.
+            const okCache = await _sdFallbackToBlob(item, mySession, /* cacheOnly */ true);
+            if (okCache) return;
+            // 2) Popup "Convertir y guardar": la conversión gasta cuota, así que
+            //    la decide el usuario. El flujo guarda en Drive y reproduce.
+            if (_onSdBlocked) {
+              _msSetPlaybackState('paused');
+              _onPlayPause?.(false);
+              try { _onSdBlocked(item); } catch (_) {}
+              return;
+            }
+            // 3) Sin popup registrado: conversión automática (comportamiento previo)
             const ok = await _sdFallbackToBlob(item, mySession);
             if (ok) return;
             _onError({ type: 'download', message: 'toast_download_error', item });

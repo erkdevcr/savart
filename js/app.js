@@ -240,6 +240,7 @@ const App = (() => {
       onPreloadComplete:  _onPreloadComplete,  // fires when next-track preload is cached → pre-analyze loudness
       onBeforePlay:    _preScanBeforePlay,  // blocks audio until soft scan completes
       onDurationReady: _onDurationReady,    // fires on loadedmetadata with accurate duration
+      onSdBlocked:     _showSdBlockedModal, // YT bloqueó el embedding y no hay MP3 en cache → popup
     });
 
     // 5. Init auth
@@ -937,6 +938,30 @@ const App = (() => {
       b.classList.toggle('active', b.dataset.size === size);
     });
     localStorage.setItem('savart_uizoom', size);
+  }
+
+  /* ── Soundrop: modal de canción bloqueada ─────────────────
+     YouTube deshabilitó el embedding del video y no hay MP3 en cache.
+     El usuario decide si convertir (gasta cuota RapidAPI) — al confirmar se
+     convierte, se guarda en Drive y se reproduce de una vez. */
+  function _showSdBlockedModal(item) {
+    const modal = document.getElementById('sd-blocked-modal');
+    if (!modal || !item) return;
+    modal._sdItem = item;
+    const nameEl   = document.getElementById('sd-blocked-track-name');
+    const btn      = document.getElementById('btn-sd-blocked-convert');
+    const label    = document.getElementById('sd-blocked-convert-label');
+    const statusEl = document.getElementById('sd-blocked-status');
+    if (nameEl)   nameEl.textContent = item.displayName || item.name || '';
+    if (btn)      btn.disabled = false;
+    if (label)    label.textContent = 'Convertir y guardar';
+    if (statusEl) { statusEl.textContent = ''; statusEl.style.display = 'none'; }
+    modal.style.display = '';
+  }
+
+  function _closeSdBlockedModal() {
+    const modal = document.getElementById('sd-blocked-modal');
+    if (modal) { modal.style.display = 'none'; modal._sdItem = null; }
   }
 
   function _onTokenExpiring() {
@@ -14181,8 +14206,85 @@ const App = (() => {
       saveLabel.textContent = 'Guardando…';
 
       try {
+        await _saveSdTrackToDrive(track, meta, (st) => {
+          saveLabel.textContent = st === 'converting'  ? 'Convirtiendo…'
+                                : st === 'downloading' ? 'Descargando…'
+                                : 'Guardando…';
+        });
+        _closeSdSaveModal();
+        modal._sdItem = null;
+        saveBtn.disabled = false;
+        saveLabel.textContent = 'Guardar';
+      } catch (err) {
+        console.error('[App] SD save error:', err);
+        saveBtn.disabled = false;
+        saveLabel.textContent = 'Guardar';
+        // Show the specific error step so it's easy to diagnose
+        const msg = err?.message || UI.t('toast_sd_save_error');
+        UI.showToast(msg, 'error', 6000);
+      }
+    });
+
+    // SD blocked modal: YT deshabilitó el embedding → convertir + guardar + reproducir
+    document.getElementById('btn-sd-blocked-close')?.addEventListener('click',  () => _closeSdBlockedModal());
+    document.getElementById('btn-sd-blocked-cancel')?.addEventListener('click', () => _closeSdBlockedModal());
+    document.getElementById('sd-blocked-modal-backdrop')?.addEventListener('click', () => _closeSdBlockedModal());
+    document.getElementById('btn-sd-blocked-convert')?.addEventListener('click', async () => {
+      const modal = document.getElementById('sd-blocked-modal');
+      const track = modal?._sdItem;
+      if (!track?.videoId) return;
+
+      const btn      = document.getElementById('btn-sd-blocked-convert');
+      const label    = document.getElementById('sd-blocked-convert-label');
+      const statusEl = document.getElementById('sd-blocked-status');
+      btn.disabled = true;
+      if (statusEl) { statusEl.style.display = ''; statusEl.textContent = 'Iniciando conversión…'; }
+
+      try {
+        const driveTrack = await _saveSdTrackToDrive(track, {
+          title:  track.displayName || track.name || 'Sin título',
+          artist: track.artist || '',
+          album:  track.album  || '',
+          year:   track.year   || '',
+        }, (st) => {
+          const txt = st === 'converting'  ? 'Convirtiendo… (los videos largos pueden tardar minutos)'
+                    : st === 'downloading' ? 'Descargando audio…'
+                    : 'Guardando en Drive…';
+          label.textContent = 'Procesando…';
+          if (statusEl) statusEl.textContent = txt;
+        });
+        // Si el usuario cerró el modal durante la conversión, no auto-reproducir
+        // (el guardado igual se completó — ya estaba pagado).
+        const stillOpen = modal._sdItem === track;
+        _closeSdBlockedModal();
+        if (stillOpen) {
+          // Reproducir de una vez: el item de la cola ya fue reemplazado por el
+          // archivo de Drive (patchQueueItem) y el blob quedó cacheado en IDB →
+          // arranca al instante y sin gastar más requests.
+          const { queue } = Player.getQueue();
+          const idx = queue.findIndex(q => q.id === driveTrack.id);
+          if (idx >= 0) Player.jumpTo(idx);
+        }
+      } catch (err) {
+        console.error('[App] SD blocked-convert error:', err);
+        btn.disabled = false;
+        label.textContent = 'Convertir y guardar';
+        if (statusEl) { statusEl.textContent = ''; statusEl.style.display = 'none'; }
+        UI.showToast(err?.message || UI.t('toast_sd_save_error'), 'error', 6000);
+      }
+    });
+
+    /**
+     * Pipeline reutilizable: convierte un track Soundrop a MP3 (vía Worker, con
+     * polling), lo sube a Drive, lo cachea en IDB, escribe metadata, reemplaza
+     * las entradas sd_ en recents/history/cola y actualiza la UI.
+     * Usado por el modal de guardado manual Y el popup de canción bloqueada.
+     * @returns {Promise<Object>} driveTrack — item de Drive resultante
+     */
+    async function _saveSdTrackToDrive(track, meta, onStatus) {
         // 1. Download blob via Worker proxy (handles CORS for Android WebView)
-        const blob = await Soundrop.fetchBlob(track.videoId);
+        const blob = await Soundrop.fetchBlob(track.videoId, onStatus);
+        try { onStatus?.('saving'); } catch (_) {}
         // 2. Upload to Drive "Soundrop" folder
         const { fileId: driveId, folderId: driveFolderId, filename, folderHierarchy } = await Soundrop.saveToDrive(blob, meta, _rootFolderId);
 
@@ -14254,9 +14356,6 @@ const App = (() => {
         await DB.addToHistory(_savedDriveItem).catch(() => {});
         Sync.push('history');
 
-        _closeSdSaveModal();
-        modal._sdItem = null;
-
         // Update the player queue so the saved track reflects the Drive file.
         const driveTrack = {
           id:          driveId,
@@ -14290,15 +14389,8 @@ const App = (() => {
         _loadHomeData().catch(() => {});
 
         UI.showToast(UI.t('toast_sd_saved'));
-      } catch (err) {
-        console.error('[App] SD save error:', err);
-        saveBtn.disabled = false;
-        saveLabel.textContent = 'Guardar';
-        // Show the specific error step so it's easy to diagnose
-        const msg = err?.message || UI.t('toast_sd_save_error');
-        UI.showToast(msg, 'error', 6000);
-      }
-    });
+        return driveTrack;
+    }
 
     // Expanded player: Cola button → open queue panel
     document.getElementById('btn-pexp-queue')?.addEventListener('click', () => {
