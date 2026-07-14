@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.489';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.489 — EQ custom presets: flex-wrap+filas verticales, fondo bg-surface (#141418)
+const APP_VERSION  = '3.5.491';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.491 — EQ ventana reducida 15% (zoom: 0.85 global)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

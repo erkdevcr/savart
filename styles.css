@@ -1671,25 +1671,31 @@ img { display: block; }
   line-height: 1.4;
 }
 
-/* Chip SD con candado — píldora de DOS tonos: "SD" sobre naranja + candado
-   gris oscuro sobre fondo gris casi blanco (video con embedding restringido) */
+/* Chip SD con candado — píldora de DOS tonos: 2/3 naranja ("SD") + 1/3 blanco (candado).
+   overflow:hidden + border-radius explícito garantizan que el segmento blanco
+   quede integrado en la píldora sin parecer un rect flotante. */
 .sd-thumb-chip--locked {
   display: inline-flex;
   align-items: stretch;
   padding: 0;              /* el padding vive en cada segmento */
-  overflow: hidden;        /* respeta el border-radius de la píldora */
+  overflow: hidden;        /* clips los hijos al border-radius de la píldora */
+  border-radius: 3px;      /* explícito — herencia no siempre activa el clip */
 }
 .sd-thumb-chip--locked .sd-chip-txt {
   display: flex;
   align-items: center;
+  flex: 2;                 /* ocupa 2/3 del ancho */
+  justify-content: center;
   padding: 1px 4px;        /* mismo padding que el chip normal */
 }
 .sd-thumb-chip--locked .sd-chip-lock-seg {
   display: flex;
   align-items: center;
-  padding: 0 3.5px;
-  background: #f4f4f5;     /* gris casi blanco */
-  color: #3f3f46;          /* candado gris oscuro (svg usa currentColor) */
+  justify-content: center;
+  flex: 1;                 /* ocupa 1/3 del ancho */
+  padding: 0 3px;
+  background: #ffffff;     /* blanco puro — 1/3 derecho del chip */
+  color: #1a1a1a;          /* candado oscuro sobre blanco */
 }
 
 /* Progreso de conversión/guardado en el modal SD — naranja (color de marca SD) */
@@ -1708,6 +1714,9 @@ img { display: block; }
   border-radius: 4px;
   bottom: 5px;
   right: 5px;
+}
+.home-card-art .sd-thumb-chip--locked {
+  border-radius: 4px;  /* match home-card radius for the locked variant */
 }
 
 /* Expanded player art chip — 2.5× the base size */
@@ -4066,6 +4075,7 @@ body.queue-open #mini-player { z-index: 65; }
   flex-direction: column;
   box-shadow: 0 16px 48px rgba(0,0,0,0.5);
   animation: sheetUp 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+  zoom: 0.85;                   /* ventana EQ reducida 15% */
 }
 
 /* Custom section:
@@ -4103,22 +4113,22 @@ body.queue-open #mini-player { z-index: 65; }
     padding: 32px 12px;          /* less side/vertical room at narrow widths */
   }
   #overlay-eq #screen-eq {
-    zoom: 0.92;
+    zoom: 0.78;                  /* 0.85 base × 0.92 */
   }
 }
 @media (max-width: 374px) {
   #overlay-eq #screen-eq {
-    zoom: 0.84;
+    zoom: 0.71;                  /* 0.85 base × 0.84 */
   }
 }
 @media (max-width: 349px) {
   #overlay-eq #screen-eq {
-    zoom: 0.76;
+    zoom: 0.65;                  /* 0.85 base × 0.76 */
   }
 }
 @media (max-width: 319px) {
   #overlay-eq #screen-eq {
-    zoom: 0.68;
+    zoom: 0.58;                  /* 0.85 base × 0.68 */
   }
 }
 
