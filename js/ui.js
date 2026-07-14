@@ -1983,6 +1983,20 @@ const UI = (() => {
     return row;
   }
 
+  /**
+   * Chip "SD" para thumbnails de pistas Soundrop. Si el video tiene el
+   * embedding restringido (embedBlocked, detectado en la búsqueda vía
+   * status.embeddable), incluye un candado DENTRO del mismo chip — avisa
+   * antes de tocar play que la canción requerirá conversión.
+   */
+  function _sdChipHtml(item) {
+    if (!item?.isSoundrop) return '';
+    const lock = item.embedBlocked
+      ? `<svg class="sd-chip-lock" width="8" height="8" viewBox="0 0 24 24" fill="currentColor" aria-label="Restringido"><path d="M18 8h-1V6a5 5 0 0 0-10 0v2H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V10a2 2 0 0 0-2-2zm-9-2a3 3 0 0 1 6 0v2H9V6z"/></svg>`
+      : '';
+    return `<span class="sd-thumb-chip">SD${lock}</span>`;
+  }
+
   function _buildSongRow(file, isActive = false, idx) {
     const row = document.createElement('div');
     row.className = 'song-row' + (isActive ? ' active' : '') + (file.isWma ? ' wma' : '');
@@ -2015,7 +2029,7 @@ const UI = (() => {
           <div class="eq-bar"></div>
           <div class="eq-bar"></div>
         </div>
-        ${file.isSoundrop ? `<span class="sd-thumb-chip">SD</span>` : ''}
+        ${_sdChipHtml(file)}
       </div>
       <div class="song-row-info">
         <div class="song-row-title">${escHtml(file.displayName || file.name)}</div>
@@ -3157,7 +3171,7 @@ const UI = (() => {
       <span class="queue-item-num">${isActive ? '' : queueIndex}</span>
       <div class="queue-item-thumb">
         ${thumbHtml}
-        ${item.isSoundrop ? `<span class="sd-thumb-chip">SD</span>` : ''}
+        ${_sdChipHtml(item)}
       </div>
       <div class="queue-item-info">
         <div class="queue-item-title">${escHtml(title)}</div>

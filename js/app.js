@@ -14111,7 +14111,7 @@ const App = (() => {
       modal.style.height = `${vv.height}px`;
     }
 
-    function _openSdSaveModal(item) {
+    function _openSdSaveModal(item, playAfterSave = false) {
       const track = item || Player.getCurrentTrack();
       if (!track?.isSoundrop) return;
       document.getElementById('sd-save-modal')._sdItem = track; // save handler reads this
@@ -14121,7 +14121,12 @@ const App = (() => {
       document.getElementById('sd-save-year').value   = track.year   || '';
       document.getElementById('sd-modal-save-label').textContent = UI.t('ctx_sd_download') || 'Guardar';
       document.getElementById('btn-sd-modal-save').disabled = false;
+      const statusEl = document.getElementById('sd-save-status');
+      if (statusEl) { statusEl.textContent = ''; statusEl.style.display = 'none'; }
       const modal = document.getElementById('sd-save-modal');
+      // true cuando se llega desde el popup «Canción bloqueada»: al terminar el
+      // guardado, la canción se reproduce de una vez.
+      modal._playAfterSave = playAfterSave;
       modal.style.display = '';
 
       // Mobile: track visual viewport so card rises with keyboard
@@ -14200,25 +14205,42 @@ const App = (() => {
         year:   document.getElementById('sd-save-year').value.trim()   || '',
       };
 
-      const saveBtn = document.getElementById('btn-sd-modal-save');
+      const saveBtn   = document.getElementById('btn-sd-modal-save');
       const saveLabel = document.getElementById('sd-modal-save-label');
+      const statusEl  = document.getElementById('sd-save-status');
       saveBtn.disabled = true;
       saveLabel.textContent = 'Guardando…';
+      const _setStatus = (txt) => {
+        if (statusEl) { statusEl.style.display = ''; statusEl.textContent = txt; }
+      };
 
       try {
-        await _saveSdTrackToDrive(track, meta, (st) => {
-          saveLabel.textContent = st === 'converting'  ? 'Convirtiendo…'
-                                : st === 'downloading' ? 'Descargando…'
-                                : 'Guardando…';
+        const driveTrack = await _saveSdTrackToDrive(track, meta, (st) => {
+          // Progreso en naranja bajo el hint del modal
+          _setStatus(st === 'converting'  ? 'Convirtiendo… (los videos largos pueden tardar minutos)'
+                   : st === 'downloading' ? 'Descargando audio…'
+                   : 'Guardando en Drive…');
         });
+        const playAfterSave = modal._playAfterSave === true;
         _closeSdSaveModal();
         modal._sdItem = null;
+        modal._playAfterSave = false;
         saveBtn.disabled = false;
         saveLabel.textContent = 'Guardar';
+        if (statusEl) { statusEl.textContent = ''; statusEl.style.display = 'none'; }
+        // Flujo «Canción bloqueada»: reproducir de una vez. El item de la cola
+        // ya fue reemplazado por el archivo de Drive (patchQueueItem) y el blob
+        // quedó cacheado en IDB → arranca al instante, sin más requests.
+        if (playAfterSave && driveTrack) {
+          const { queue } = Player.getQueue();
+          const idx = queue.findIndex(q => q.id === driveTrack.id);
+          if (idx >= 0) Player.jumpTo(idx);
+        }
       } catch (err) {
         console.error('[App] SD save error:', err);
         saveBtn.disabled = false;
         saveLabel.textContent = 'Guardar';
+        if (statusEl) { statusEl.textContent = ''; statusEl.style.display = 'none'; }
         // Show the specific error step so it's easy to diagnose
         const msg = err?.message || UI.t('toast_sd_save_error');
         UI.showToast(msg, 'error', 6000);
@@ -14229,49 +14251,14 @@ const App = (() => {
     document.getElementById('btn-sd-blocked-close')?.addEventListener('click',  () => _closeSdBlockedModal());
     document.getElementById('btn-sd-blocked-cancel')?.addEventListener('click', () => _closeSdBlockedModal());
     document.getElementById('sd-blocked-modal-backdrop')?.addEventListener('click', () => _closeSdBlockedModal());
-    document.getElementById('btn-sd-blocked-convert')?.addEventListener('click', async () => {
+    document.getElementById('btn-sd-blocked-convert')?.addEventListener('click', () => {
       const modal = document.getElementById('sd-blocked-modal');
       const track = modal?._sdItem;
+      _closeSdBlockedModal();
       if (!track?.videoId) return;
-
-      const btn      = document.getElementById('btn-sd-blocked-convert');
-      const label    = document.getElementById('sd-blocked-convert-label');
-      const statusEl = document.getElementById('sd-blocked-status');
-      btn.disabled = true;
-      if (statusEl) { statusEl.style.display = ''; statusEl.textContent = 'Iniciando conversión…'; }
-
-      try {
-        const driveTrack = await _saveSdTrackToDrive(track, {
-          title:  track.displayName || track.name || 'Sin título',
-          artist: track.artist || '',
-          album:  track.album  || '',
-          year:   track.year   || '',
-        }, (st) => {
-          const txt = st === 'converting'  ? 'Convirtiendo… (los videos largos pueden tardar minutos)'
-                    : st === 'downloading' ? 'Descargando audio…'
-                    : 'Guardando en Drive…';
-          label.textContent = 'Procesando…';
-          if (statusEl) statusEl.textContent = txt;
-        });
-        // Si el usuario cerró el modal durante la conversión, no auto-reproducir
-        // (el guardado igual se completó — ya estaba pagado).
-        const stillOpen = modal._sdItem === track;
-        _closeSdBlockedModal();
-        if (stillOpen) {
-          // Reproducir de una vez: el item de la cola ya fue reemplazado por el
-          // archivo de Drive (patchQueueItem) y el blob quedó cacheado en IDB →
-          // arranca al instante y sin gastar más requests.
-          const { queue } = Player.getQueue();
-          const idx = queue.findIndex(q => q.id === driveTrack.id);
-          if (idx >= 0) Player.jumpTo(idx);
-        }
-      } catch (err) {
-        console.error('[App] SD blocked-convert error:', err);
-        btn.disabled = false;
-        label.textContent = 'Convertir y guardar';
-        if (statusEl) { statusEl.textContent = ''; statusEl.style.display = 'none'; }
-        UI.showToast(err?.message || UI.t('toast_sd_save_error'), 'error', 6000);
-      }
+      // Abrir el modal de guardado normal (título/artista/álbum/año) con la
+      // marca de auto-reproducir al terminar — misma UX que "Guardar en Drive".
+      _openSdSaveModal(track, /* playAfterSave */ true);
     });
 
     /**

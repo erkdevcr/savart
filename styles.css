@@ -1671,6 +1671,21 @@ img { display: block; }
   line-height: 1.4;
 }
 
+/* Candado dentro del chip SD — video con embedding restringido (requerirá conversión) */
+.sd-thumb-chip .sd-chip-lock {
+  vertical-align: -1px;
+  margin-left: 2px;
+}
+
+/* Progreso de conversión/guardado en el modal SD — naranja (color de marca SD) */
+.sd-save-status {
+  margin: 10px 2px 0;
+  color: #f97316;
+  font-size: 0.85em;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
 /* Home-card chip — slightly larger to match the bigger art square */
 .home-card-art .sd-thumb-chip {
   font-size: 12px;

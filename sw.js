@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.477';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.477 — Soundrop: popup «Canción bloqueada» con Convertir y guardar (usuario controla la cuota; guarda en Drive y reproduce de una vez)
+const APP_VERSION  = '3.5.479';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.479 — Popup canción bloqueada: abre el modal de guardado normal (con auto-play al terminar), texto simplificado con márgenes, progreso naranja (sd-save-status)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

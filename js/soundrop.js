@@ -39,9 +39,11 @@ const Soundrop = (() => {
 
     const videoIds = items.map(i => i.id.videoId).filter(Boolean).join(',');
 
-    // 2. Content details (duration) for each video
+    // 2. Content details (duration) + status (embeddable) for each video.
+    // 'status' viene gratis en la misma llamada y trae status.embeddable —
+    // permite marcar con candado los videos que requerirán conversión.
     const detailParams = new URLSearchParams({
-      part: 'snippet,contentDetails',
+      part: 'snippet,contentDetails,status',
       id: videoIds,
       key: YT_KEY,
     });
@@ -62,6 +64,13 @@ const Soundrop = (() => {
       // Parse ISO 8601 duration → seconds
       const durStr  = detail?.contentDetails?.duration || '';
       const durSec  = _parseDuration(durStr);
+
+      // Restricción de incrustado: embeddable=false (errores 101/150 del iframe)
+      // o restricción de edad (tampoco reproduce embebido). El chip SD muestra
+      // un candado para avisar ANTES de tocar play que requerirá conversión.
+      const embedBlocked =
+        detail?.status?.embeddable === false ||
+        detail?.contentDetails?.contentRating?.ytRating === 'ytAgeRestricted';
 
       // Decode HTML entities — YouTube API encodes ' → &#39;, & → &amp;, etc.
       const rawTitle   = _decodeHtml(snippet.title || '');
@@ -89,6 +98,7 @@ const Soundrop = (() => {
         mimeType:     'audio/mpeg',
         durationSec:  durSec,
         size:         0,
+        embedBlocked: embedBlocked,
       };
     });
   }
