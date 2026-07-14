@@ -1671,10 +1671,25 @@ img { display: block; }
   line-height: 1.4;
 }
 
-/* Candado dentro del chip SD — video con embedding restringido (requerirá conversión) */
-.sd-thumb-chip .sd-chip-lock {
-  vertical-align: -1px;
-  margin-left: 2px;
+/* Chip SD con candado — píldora de DOS tonos: "SD" sobre naranja + candado
+   gris oscuro sobre fondo gris casi blanco (video con embedding restringido) */
+.sd-thumb-chip--locked {
+  display: inline-flex;
+  align-items: stretch;
+  padding: 0;              /* el padding vive en cada segmento */
+  overflow: hidden;        /* respeta el border-radius de la píldora */
+}
+.sd-thumb-chip--locked .sd-chip-txt {
+  display: flex;
+  align-items: center;
+  padding: 1px 4px;        /* mismo padding que el chip normal */
+}
+.sd-thumb-chip--locked .sd-chip-lock-seg {
+  display: flex;
+  align-items: center;
+  padding: 0 3.5px;
+  background: #f4f4f5;     /* gris casi blanco */
+  color: #3f3f46;          /* candado gris oscuro (svg usa currentColor) */
 }
 
 /* Progreso de conversión/guardado en el modal SD — naranja (color de marca SD) */

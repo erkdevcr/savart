@@ -1191,6 +1191,7 @@ const App = (() => {
         folderId:     track.parents?.[0]  || track.folderId || null,
         // Preserve SD fields so the recents store never loses them on re-write
         ...(track.isSoundrop ? { isSoundrop: true, videoId: track.videoId } : {}),
+        ...(track.embedBlocked ? { embedBlocked: true } : {}), // candado chip SD
         ...(track.durationSec > 0 ? { durationSec: track.durationSec } : {}),
       };
       DB.addRecent(recentData).then(() => {
@@ -5357,6 +5358,7 @@ const App = (() => {
           folderType:   _stampFolderType(p, dbMeta),
           isSoundrop:   _isSd  || false,
           videoId:      _vidId || null,
+          embedBlocked: !!(dbMeta?.embedBlocked || p.embedBlocked), // candado en el chip SD
         };
       });
 
@@ -5383,6 +5385,7 @@ const App = (() => {
           accessedAt:   r.playedAt || r.accessedAt,  // renderHome/recentMap may use accessedAt
           isSoundrop:   _isSd  || false,
           videoId:      _vidId || null,
+          embedBlocked: !!(dbMeta?.embedBlocked || r.embedBlocked), // candado en el chip SD
         };
       });
 
@@ -5409,6 +5412,7 @@ const App = (() => {
           year:         _pick(dbMeta?.year,          inMem?.year,      item.year,       r?.year),
           folderId:     dbMeta?.folderId || item.folderId || r?.folderId || null,
           folderType:   _stampFolderType(item, dbMeta),
+          embedBlocked: !!(dbMeta?.embedBlocked || item.embedBlocked || r?.embedBlocked), // candado chip SD
         };
       });
 
@@ -6162,6 +6166,7 @@ const App = (() => {
           isSoundrop:   _isSd  || false,
           videoId:      _vidId || null,
           durationSec:  dbMeta?.durationSec > 0 ? dbMeta.durationSec : (item.durationSec || 0),
+          embedBlocked: !!(dbMeta?.embedBlocked || item.embedBlocked), // candado en el chip SD
         };
       });
 

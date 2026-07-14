@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.487';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.487 — I2: render diferencial del Home — firmas por sección; sin cambios = DOM intacto (0 flicker), cambios parciales = solo esa sección se reconstruye
+const APP_VERSION  = '3.5.488';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.488 — Chip SD candado: píldora de dos tonos (SD naranja + candado gris oscuro sobre gris casi blanco) en TODAS las superficies (home, history, recents, top played, search, cola); embedBlocked propagado en enriquecimientos y stores
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

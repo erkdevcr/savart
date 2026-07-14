@@ -1112,6 +1112,7 @@ const Player = (() => {
           year:         item.year    || '',
           folderId:     null,
           ...(item.durationSec > 0 ? { durationSec: item.durationSec } : {}),
+          ...(item.embedBlocked ? { embedBlocked: true } : {}), // candado chip SD
         }).catch(() => {});
         // Chain setMeta AFTER incrementPlayCount so the final IDB write always
         // includes isSoundrop + videoId (avoids a race where incrementPlayCount's
@@ -1127,6 +1128,7 @@ const Player = (() => {
             isSoundrop:   true,
             videoId:      item.videoId,
             ...(item.durationSec > 0 ? { durationSec: item.durationSec } : {}),
+            ...(item.embedBlocked ? { embedBlocked: true } : {}), // candado chip SD
           }))
           .catch(() => {});
         return;

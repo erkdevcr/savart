@@ -1126,7 +1126,8 @@ const UI = (() => {
   function _homeSectionSig(items) {
     return (items || []).map(i =>
       `${i.id}|${i.displayName || i.name || ''}|${i.artist || ''}|${i.playCount || 0}|` +
-      `${i.songCount || 0}|${(i.resolvedCovers || i.coverUrls || []).length}|${i.folderType || ''}`
+      `${i.songCount || 0}|${(i.resolvedCovers || i.coverUrls || []).length}|${i.folderType || ''}|` +
+      `${i.embedBlocked ? 1 : 0}`
     ).join('§');
   }
 
@@ -1376,7 +1377,7 @@ const UI = (() => {
       <div class="pinned-card-art" data-id="${escHtml(item.id)}" style="background:${bg}">
         ${imgHtml}${iconHtml}
         <div class="pinned-art-play">${iconPlay(13)}</div>
-        ${item.isSoundrop ? `<span class="sd-thumb-chip">SD</span>` : ''}
+        ${_sdChipHtml(item)}
       </div>
       <div class="pinned-card-type-banner" style="background:${bannerBg}">
         <span style="color:${bannerColor}">${bannerLabel}</span>
@@ -1440,7 +1441,7 @@ const UI = (() => {
       <span class="top-list-rank">${rank}</span>
       <div class="top-list-thumb">
         ${thumbHtml}
-        ${item.isSoundrop ? `<span class="sd-thumb-chip">SD</span>` : ''}
+        ${_sdChipHtml(item)}
         <div class="eq-bars"><div class="eq-bar"></div><div class="eq-bar"></div><div class="eq-bar"></div><div class="eq-bar"></div></div>
       </div>
       <div class="top-list-info">
@@ -1481,7 +1482,7 @@ const UI = (() => {
             ? `<div class="folder-icon-placeholder">${iconFolder(32)}</div>`
             : `<div class="folder-icon-placeholder" style="color:var(--text-disabled)">${iconMusicNote(28)}</div>`
         }
-        ${item.isSoundrop ? `<span class="sd-thumb-chip">SD</span>` : ''}
+        ${_sdChipHtml(item)}
       </div>
       <button class="home-card-more" aria-label="Más opciones">${iconDots(14)}</button>
       <div class="home-card-name">${escHtml(item.displayName || item.name || '—')}</div>
@@ -1579,7 +1580,7 @@ const UI = (() => {
       <span class="top-list-rank">${rank}</span>
       <div class="top-list-thumb">
         ${thumbHtml}
-        ${item.isSoundrop ? `<span class="sd-thumb-chip">SD</span>` : ''}
+        ${_sdChipHtml(item)}
         <div class="eq-bars"><div class="eq-bar"></div><div class="eq-bar"></div><div class="eq-bar"></div><div class="eq-bar"></div></div>
       </div>
       <div class="top-list-info">
@@ -2059,9 +2060,15 @@ const UI = (() => {
     return `<svg class="sd-chip-lock" width="8" height="8" viewBox="0 0 24 24" fill="currentColor" aria-label="Restringido"><path d="M18 8h-1V6a5 5 0 0 0-10 0v2H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V10a2 2 0 0 0-2-2zm-9-2a3 3 0 0 1 6 0v2H9V6z"/></svg>`;
   }
 
+  function _sdChipLockedHtml() {
+    // Píldora de dos tonos: "SD" sobre naranja + candado gris oscuro sobre
+    // fondo gris casi blanco.
+    return `<span class="sd-thumb-chip sd-thumb-chip--locked"><span class="sd-chip-txt">SD</span><span class="sd-chip-lock-seg">${_sdChipLockSvg()}</span></span>`;
+  }
+
   function _sdChipHtml(item) {
     if (!item?.isSoundrop) return '';
-    return `<span class="sd-thumb-chip">SD${item.embedBlocked ? _sdChipLockSvg() : ''}</span>`;
+    return item.embedBlocked ? _sdChipLockedHtml() : `<span class="sd-thumb-chip">SD</span>`;
   }
 
   /**
@@ -2072,13 +2079,10 @@ const UI = (() => {
    */
   function markSdTrackBlocked(id) {
     if (!id) return;
-    document.querySelectorAll(
-      `.song-row[data-id="${CSS.escape(id)}"] .sd-thumb-chip, ` +
-      `.queue-item[data-id="${CSS.escape(id)}"] .sd-thumb-chip`
-    ).forEach(chip => {
-      if (!chip.querySelector('.sd-chip-lock')) {
-        chip.insertAdjacentHTML('beforeend', _sdChipLockSvg());
-      }
+    // Cualquier superficie con data-id (search, cola, home cards, history, top played)
+    document.querySelectorAll(`[data-id="${CSS.escape(id)}"] .sd-thumb-chip`).forEach(chip => {
+      if (chip.classList.contains('sd-thumb-chip--locked')) return;
+      chip.outerHTML = _sdChipLockedHtml();
     });
   }
 
