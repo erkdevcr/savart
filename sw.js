@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.494';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.494 — sidebar desktop: bg-surface igual que home header
+const APP_VERSION  = '3.5.496';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.496 — fix: sd_blocked_convert usa UI.t() en lugar de texto hardcodeado
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

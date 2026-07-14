@@ -4094,8 +4094,7 @@ body.queue-open #mini-player { z-index: 65; }
   #overlay-eq .eq-custom-list {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    overflow-x: hidden;
-    overflow-y: visible;
+    overflow: hidden; /* no bleeding — drawer is the scroll container */
   }
   #overlay-eq .eq-custom-card {
     width: auto !important;
@@ -6006,14 +6005,26 @@ body.queue-open #mini-player { z-index: 65; }
 }
 .eq-presets-drawer.open {
   max-height: 225px;
+  overflow-x: hidden;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;                        /* Firefox: thin track */
+  scrollbar-color: var(--bg-hover) transparent; /* Firefox: subtle thumb */
+}
+.eq-presets-drawer.open::-webkit-scrollbar {
+  width: 4px;
+}
+.eq-presets-drawer.open::-webkit-scrollbar-thumb {
+  background: var(--bg-hover);
+  border-radius: 2px;
+}
+.eq-presets-drawer.open::-webkit-scrollbar-track {
+  background: transparent;
 }
 
-/* Inner list padding inside the drawer */
+/* Inner list — no overflow override; drawer is the scroll container */
 .eq-presets-drawer .eq-custom-list {
   margin: 0 16px 12px;
-  overflow: visible; /* parent drawer scrolls, list must not clip itself */
 }
 
 .eq-custom-list {
@@ -6219,7 +6230,6 @@ body.queue-open #mini-player { z-index: 65; }
   .eq-custom-list {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-    overflow: visible;
   }
 
   .eq-custom-card {

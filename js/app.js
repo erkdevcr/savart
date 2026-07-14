@@ -969,7 +969,7 @@ const App = (() => {
     const statusEl = document.getElementById('sd-blocked-status');
     if (nameEl)   nameEl.textContent = item.displayName || item.name || '';
     if (btn)      btn.disabled = false;
-    if (label)    label.textContent = 'Convertir y guardar';
+    if (label)    label.textContent = UI.t('sd_blocked_convert');
     if (statusEl) { statusEl.textContent = ''; statusEl.style.display = 'none'; }
     modal.style.display = '';
   }
