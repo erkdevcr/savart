@@ -891,6 +891,75 @@ const Player = (() => {
   /**
    * Load and play the track at _queueIndex.
    */
+  /**
+   * Fallback de reproducción Soundrop: cuando el iframe de YouTube da error
+   * (típicamente 101/150 = embedding deshabilitado — muy común en videos
+   * largos), se convierte el video a MP3 vía el Worker (con polling: los
+   * videos de 15-30 min tardan minutos) y se reproduce por el audio element
+   * normal, pasando por el grafo WebAudio (EQ + normalizador incluidos).
+   *
+   * @returns {Promise<boolean>} true si el fallback quedó reproduciendo
+   */
+  async function _sdFallbackToBlob(item, mySession) {
+    if (typeof Soundrop === 'undefined' || !item?.videoId) return false;
+    try {
+      // Cache persistente primero (IndexedDB, key = sd_<videoId>): si este video
+      // ya se convirtió alguna vez, reproducir el MP3 guardado — 0 tokens RapidAPI.
+      let blob = await DB.getCachedBlob(item.id).catch(() => null);
+
+      if (!blob) {
+        if (typeof UI !== 'undefined') {
+          UI.showToast('YouTube bloqueó este video — convirtiendo audio, puede tardar unos minutos…', 'info');
+        }
+        blob = await Soundrop.fetchBlob(item.videoId, (st) => {
+          console.log('[Player] SD fallback:', st);
+        });
+        // Persistir para futuras sesiones (mismo cache con evicción por tamaño
+        // que usan las pistas de Drive)
+        const _mime = (blob.type && blob.type !== 'application/octet-stream')
+          ? blob.type.split(';')[0].trim() : 'audio/mpeg';
+        DB.setCachedBlob(item.id, blob, _mime).catch(() => {});
+      } else {
+        console.log('[Player] SD fallback: MP3 en cache local — sin conversión:', item.name);
+      }
+
+      // El usuario pudo cambiar de pista durante la conversión — abortar en silencio
+      if (mySession !== _sdPlaySession) return true;
+      if (_queue[_queueIndex]?.id !== item.id) return true;
+
+      // Reproducir el blob por el camino normal (audio element + WebAudio)
+      _sdActive = false;
+      try { Soundrop.yt.stop(); } catch (_) {}
+
+      if (_onBlobReady) {
+        try { _onBlobReady(item, blob); } catch (_) {}
+      }
+      if (_currentBlob) {
+        _audio.src = '';
+        URL.revokeObjectURL(_currentBlob);
+        _currentBlob = null;
+      }
+      _currentBlob = URL.createObjectURL(blob);
+      _audio.src = _currentBlob;
+      _audio.playbackRate = _tempo;
+
+      _initAudioGraph();
+      if (_audioCtx?.state === 'suspended') {
+        await _audioCtx.resume().catch(() => {});
+      }
+      _keepAliveStart();
+      if (_audio.volume < 1.0) _audio.volume = 1.0;
+      _msSetMetadata(item);
+      _msSetPlaybackState('playing');
+      await _audio.play();
+      console.log('[Player] SD fallback: reproduciendo vía conversión MP3:', item.name);
+      return true;
+    } catch (err) {
+      console.warn('[Player] SD fallback falló:', err?.message || err);
+      return false;
+    }
+  }
+
   // _sdRetry=true means this is an automatic second attempt after a Soundrop cold-start
   // failure.  Only one silent retry is allowed; if it also fails, the error toast shows.
   async function _playCurrentTrack(_sdRetry = false) {
@@ -932,6 +1001,7 @@ const Player = (() => {
       // ── Soundrop track ────────────────────────────────────────
       // _sdAudio has crossOrigin='anonymous', so the Web Audio graph can
       // process it through the full EQ/gain chain without CORS silence.
+      // (Fallback de conversión: ver _sdFallbackToBlob más abajo.)
       // Only use the Soundrop/Worker path for tracks that have NOT been saved
       // to Drive yet (id starts with "sd_"). Saved tracks have a real Drive
       // file ID and must be played through the normal Drive download path.
@@ -981,9 +1051,15 @@ const Player = (() => {
             if (mySession !== _sdPlaySession) return;
             _handleEnded();
           },
-          onError: (code) => {
+          onError: async (code) => {
             if (mySession !== _sdPlaySession) return;
-            console.error('[Player] YT error code:', code);
+            // Códigos 101/150 = el dueño del video deshabilitó el embedding
+            // (muy común en videos largos: mixes, álbumes completos, conciertos).
+            // Fallback: convertir a MP3 vía Worker y reproducir por el audio
+            // element normal — con EQ y normalizador incluidos.
+            console.error('[Player] YT error code:', code, '— intentando fallback por conversión');
+            const ok = await _sdFallbackToBlob(item, mySession);
+            if (ok) return;
             _onError({ type: 'download', message: 'toast_download_error', item });
             setTimeout(() => {
               if (_queue[_queueIndex]?.id === item.id) next();

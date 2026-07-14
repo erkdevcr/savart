@@ -102,22 +102,96 @@ const Soundrop = (() => {
    * @param {string} videoId  — bare YouTube video ID (no "sd_" prefix)
    * @returns {Promise<string>}
    */
-  async function getAudioLink(videoId) {
-    const url = `${WORKER_URL}?id=${encodeURIComponent(videoId)}`;
-    let res;
-    try {
-      res = await fetch(url, { signal: AbortSignal.timeout(30000) });
-    } catch (err) {
-      throw new Error(`[Soundrop] Worker no responde: ${err.message}`);
-    }
-    if (!res.ok) throw new Error(`[Soundrop] Worker HTTP ${res.status}`);
-    let data;
-    try { data = await res.json(); } catch { throw new Error('[Soundrop] Worker respuesta inválida'); }
-    if (data.status !== 'ok' || !data.link) {
+  async function getAudioLink(videoId, onStatus) {
+    return _getLinkPolling(videoId, onStatus);
+  }
+
+  /**
+   * Obtiene el link MP3 del Worker, POLLEANDO mientras la conversión esté en
+   * curso. Los videos largos (15-30+ min) tardan MINUTOS en convertirse en
+   * youtube-mp36 — antes el Worker devolvía error a los ~12 s y el cliente se
+   * rendía, por eso las canciones largas fallaban y las de 3-4 min no.
+   *
+   * @param {string}   videoId
+   * @param {function} [onStatus]  — recibe 'converting' en cada poll
+   * @param {number}   [totalMs]   — presupuesto total de espera (def. 5 min)
+   */
+  async function _getLinkPolling(videoId, onStatus, totalMs = 300000) {
+    const url      = `${WORKER_URL}?id=${encodeURIComponent(videoId)}`;
+    const deadline = Date.now() + totalMs;
+    // Backoff progresivo: 5s → 7.5s → 11s → 17s → 25s → 30s (cap).
+    // CADA poll consume 1 request de RapidAPI (el Worker re-consulta el estado),
+    // así que menos polls = menos cuota gastada. ~12 polls máx. en 5 min
+    // en vez de ~60 con intervalo fijo de 5 s.
+    let pollMs = 5000;
+
+    while (true) {
+      let res;
+      try {
+        res = await fetch(url, { signal: AbortSignal.timeout(30000) });
+      } catch (err) {
+        throw new Error(`[Soundrop] Worker no responde: ${err.message}`);
+      }
+      if (!res.ok) throw new Error(`[Soundrop] Worker HTTP ${res.status}`);
+      let data;
+      try { data = await res.json(); } catch { throw new Error('[Soundrop] Worker respuesta inválida'); }
+
+      if (data.status === 'ok' && data.link) return data.link;
+
+      if (data.status === 'processing') {
+        if (Date.now() + pollMs > deadline) {
+          throw new Error('[Soundrop] La conversión no terminó a tiempo (video muy largo)');
+        }
+        try { onStatus?.('converting'); } catch (_) {}
+        await new Promise(r => setTimeout(r, pollMs));
+        pollMs = Math.min(30000, Math.round(pollMs * 1.5));
+        continue; // volver a consultar — la conversión sigue en curso
+      }
+
       throw new Error(`[Soundrop] Worker: ${data.msg || 'sin link de audio'}`);
     }
-    return data.link;
   }
+
+  /**
+   * Descarga el audio con watchdog de INACTIVIDAD (45 s sin recibir bytes)
+   * en vez de un timeout total fijo — un archivo de 30-60 MB en conexión
+   * lenta excedía los 90 s aunque estuviera bajando perfectamente.
+   */
+  async function _downloadWithWatchdog(link, onStatus) {
+    try { onStatus?.('downloading'); } catch (_) {}
+    const ctrl = new AbortController();
+    let watchdog = setTimeout(() => ctrl.abort(), 45000);
+    let res;
+    try {
+      res = await fetch(link, { signal: ctrl.signal });
+    } catch (err) {
+      clearTimeout(watchdog);
+      throw err;
+    }
+    if (!res.ok) { clearTimeout(watchdog); throw new Error(`CDN HTTP ${res.status}`); }
+    if (!res.body) { clearTimeout(watchdog); return res.blob(); }
+    const reader = res.body.getReader();
+    const chunks = [];
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        clearTimeout(watchdog);
+        if (done) break;
+        watchdog = setTimeout(() => ctrl.abort(), 45000); // reset con cada chunk recibido
+        chunks.push(value);
+      }
+    } catch (err) {
+      clearTimeout(watchdog);
+      throw new Error(`descarga interrumpida: ${err.message}`);
+    }
+    const type = (res.headers.get('Content-Type') || 'audio/mpeg').split(';')[0].trim();
+    return new Blob(chunks, { type });
+  }
+
+  /* Cache de blobs por sesión (videoId → Blob). El fallback de reproducción y
+     el guardado a Drive comparten la misma descarga — sin convertir dos veces. */
+  const _blobCache = new Map();
+  const BLOB_CACHE_MAX = 3; // blobs de audio pesan MB — cota corta
 
   /**
    * Download the audio for a Soundrop track as a Blob.
@@ -133,36 +207,33 @@ const Soundrop = (() => {
    * @param {string} videoId  — bare YouTube video ID (no "sd_" prefix)
    * @returns {Promise<Blob>}
    */
-  async function fetchBlob(videoId) {
-    const MAX_ATTEMPTS = 3;
+  async function fetchBlob(videoId, onStatus) {
+    // Cache de sesión: si el fallback de reproducción ya convirtió/descargó
+    // este video, el guardado a Drive lo reutiliza (y viceversa).
+    if (_blobCache.has(videoId)) return _blobCache.get(videoId);
+
+    const MAX_ATTEMPTS = 2; // el polling interno ya es paciente — menos reintentos externos
     let lastErr = null;
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-      // Step 1: Get MP3 link from Worker (RapidAPI youtube-mp36)
+      // Step 1: link MP3 del Worker — pollea mientras la conversión esté en curso
       let link;
       try {
-        const workerUrl = `${WORKER_URL}?id=${encodeURIComponent(videoId)}`;
-        const res = await fetch(workerUrl, { signal: AbortSignal.timeout(30000) });
-        if (!res.ok) throw new Error(`Worker HTTP ${res.status}`);
-        const data = await res.json();
-        if (data.status !== 'ok' || !data.link) {
-          throw new Error(data.msg || 'sin link de audio');
-        }
-        link = data.link;
+        link = await _getLinkPolling(videoId, onStatus);
       } catch (err) {
         lastErr = new Error(`[Soundrop] Worker error (intento ${attempt}): ${err.message}`);
         console.warn(lastErr.message);
-        // Si RapidAPI está en overcuota (429) no tiene sentido reintentar inmediatamente
-        if (err.message.includes('429') || err.message.toLowerCase().includes('quota')) break;
+        // Overcuota (429) o timeout de conversión: reintentar no ayuda
+        if (err.message.includes('429') ||
+            err.message.toLowerCase().includes('quota') ||
+            err.message.includes('no terminó a tiempo')) break;
         continue;
       }
 
-      // Step 2: Fetch the MP3 link directly (public CDN URL from RapidAPI)
+      // Step 2: descarga con watchdog de inactividad (sin límite total fijo)
       let blob;
       try {
-        const audioRes = await fetch(link, { signal: AbortSignal.timeout(90000) });
-        if (!audioRes.ok) throw new Error(`CDN HTTP ${audioRes.status}`);
-        blob = await audioRes.blob();
+        blob = await _downloadWithWatchdog(link, onStatus);
       } catch (err) {
         lastErr = new Error(`[Soundrop] Error descargando audio (intento ${attempt}): ${err.message}`);
         console.warn(lastErr.message);
@@ -180,6 +251,12 @@ const Soundrop = (() => {
         lastErr = new Error('[Soundrop] El archivo descargado no es audio válido');
         console.warn(lastErr.message);
         continue;
+      }
+
+      // Cachear (cota FIFO corta — los blobs pesan varios MB)
+      _blobCache.set(videoId, blob);
+      if (_blobCache.size > BLOB_CACHE_MAX) {
+        _blobCache.delete(_blobCache.keys().next().value);
       }
 
       return blob;  // ✓ éxito
