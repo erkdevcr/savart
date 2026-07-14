@@ -139,7 +139,7 @@ img { display: block; }
   display: none;
   flex-direction: column;
   width: var(--sidebar-w);
-  background: var(--bg-base);
+  background: var(--bg-surface);
   border-right: 1px solid var(--bg-hover);
   flex-shrink: 0;
   z-index: 10;
