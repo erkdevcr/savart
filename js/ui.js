@@ -332,6 +332,10 @@ const UI = (() => {
       toast_photo_deleted:  'Foto eliminada',
       toast_save_error:     'Error al guardar',
       toast_preset_loaded:  'cargado',
+      toast_preset_deleted: 'eliminado',
+      eq_del_title:         'Eliminar preset',
+      eq_del_msg:           '¿Eliminar el preset',
+      eq_del_confirm:       'Eliminar',
       rescan_confirm_msg:   'álbumes serán rescaneados. Este proceso puede tardar varios minutos. ¿Deseas continuar?',
       // ── Deep scan HTML labels ──────────────────────────────
       ds_folder_label:      'Carpeta:',
@@ -715,6 +719,10 @@ const UI = (() => {
       toast_photo_deleted:  'Photo deleted',
       toast_save_error:     'Error saving',
       toast_preset_loaded:  'loaded',
+      toast_preset_deleted: 'deleted',
+      eq_del_title:         'Delete preset',
+      eq_del_msg:           'Delete the preset',
+      eq_del_confirm:       'Delete',
       rescan_confirm_msg:   'albums will be rescanned. This may take several minutes. Continue?',
       // ── Deep scan HTML labels ──────────────────────────────
       ds_folder_label:      'Folder:',

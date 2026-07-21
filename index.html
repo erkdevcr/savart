@@ -19,10 +19,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&family=Baskervville:ital@0;1&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="styles.css?v=3.5.501">
+  <link rel="stylesheet" href="styles.css?v=3.5.502">
   <!-- Version global — fallback para Android donde el SW no se registra.
        IMPORTANTE: mantener sincronizada con APP_VERSION de sw.js en cada bump. -->
-  <script>window.SAVART_VERSION = '3.5.501';</script>
+  <script>window.SAVART_VERSION = '3.5.502';</script>
 </head>
 <body>
 
@@ -762,6 +762,26 @@
     </div>
   </div>
 
+  <!-- EQ custom preset delete confirmation -->
+  <div id="eq-del-modal" class="ds-modal" style="display:none">
+    <div class="ds-modal-backdrop" id="eq-del-modal-backdrop"></div>
+    <div class="ds-modal-card ds-modal-card--sm">
+      <div class="ds-modal-header">
+        <span class="ds-modal-title" id="eq-del-title">Eliminar preset</span>
+        <button class="ds-modal-close" id="btn-eq-del-close">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </div>
+      <div class="ds-modal-body" style="padding:18px 22px">
+        <p id="eq-del-msg" style="margin:0;color:var(--text-secondary,#aaa);font-size:0.9em;line-height:1.5"></p>
+      </div>
+      <div class="ds-modal-footer">
+        <button id="btn-eq-del-cancel" class="btn-secondary">Cancelar</button>
+        <button id="btn-eq-del-confirm" class="btn-primary">Eliminar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Soundrop blocked-video modal: YT deshabilitó el embedding → ofrecer convertir y guardar -->
   <div id="sd-blocked-modal" class="ds-modal" style="display:none">
     <div class="ds-modal-backdrop" id="sd-blocked-modal-backdrop"></div>
@@ -1463,22 +1483,22 @@
 </script>
 
 <!-- Savart modules -->
-<script src="js/config.js?v=3.5.501"></script>
-<script src="js/auth.js?v=3.5.501"></script>
-<script src="js/drive.js?v=3.5.501"></script>
-<script src="js/db.js?v=3.5.501"></script>
-<script src="js/sync.js?v=3.5.501"></script>
-<script src="js/player.js?v=3.5.501"></script>
-<script src="js/meta.js?v=3.5.501"></script>
-<script src="js/lastfm.js?v=3.5.501"></script>
-<script src="js/audd.js?v=3.5.501"></script>
-<script src="js/musicbrainz.js?v=3.5.501"></script>
-<script src="js/discogs.js?v=3.5.501"></script>
-<script src="js/lyrics.js?v=3.5.501"></script>
-<script src="js/soundrop.js?v=3.5.501"></script>
-<script src="js/ui.js?v=3.5.501"></script>
-<script src="js/app.js?v=3.5.501"></script>
-<script src="js/bg.js?v=3.5.501"></script>
+<script src="js/config.js?v=3.5.502"></script>
+<script src="js/auth.js?v=3.5.502"></script>
+<script src="js/drive.js?v=3.5.502"></script>
+<script src="js/db.js?v=3.5.502"></script>
+<script src="js/sync.js?v=3.5.502"></script>
+<script src="js/player.js?v=3.5.502"></script>
+<script src="js/meta.js?v=3.5.502"></script>
+<script src="js/lastfm.js?v=3.5.502"></script>
+<script src="js/audd.js?v=3.5.502"></script>
+<script src="js/musicbrainz.js?v=3.5.502"></script>
+<script src="js/discogs.js?v=3.5.502"></script>
+<script src="js/lyrics.js?v=3.5.502"></script>
+<script src="js/soundrop.js?v=3.5.502"></script>
+<script src="js/ui.js?v=3.5.502"></script>
+<script src="js/app.js?v=3.5.502"></script>
+<script src="js/bg.js?v=3.5.502"></script>
 
 <!-- Inline: additional bindings that need the DOM -->
 <script>

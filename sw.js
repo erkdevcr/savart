@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.501';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.501 — Fix radio: el refill se evalúa en cada cambio de pista (antes solo en cambios estructurales de la cola → nunca corría al llegar a la penúltima y la radio moría)
+const APP_VERSION  = '3.5.502';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.502 — Popup de confirmación al borrar un custom EQ preset (i18n ES/EN, modal eq-del-modal)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

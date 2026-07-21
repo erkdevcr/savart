@@ -13879,6 +13879,33 @@ const App = (() => {
     _saveSettings();
   }
 
+  /**
+   * Popup de confirmación antes de borrar un preset custom del EQ.
+   * Textos vía UI.t() — se resuelven al abrir, así respetan el idioma actual.
+   */
+  function _confirmDeletePreset(preset) {
+    const modal = document.getElementById('eq-del-modal');
+    if (!modal) { _deleteCustomPreset(preset.id); return; } // fallback sin modal
+
+    document.getElementById('eq-del-title').textContent = UI.t('eq_del_title') || 'Eliminar preset';
+    document.getElementById('eq-del-msg').textContent =
+      `${UI.t('eq_del_msg') || '¿Eliminar el preset'} "${preset.name}"?`;
+    document.getElementById('btn-eq-del-cancel').textContent  = UI.t('cancel_btn')      || 'Cancelar';
+    document.getElementById('btn-eq-del-confirm').textContent = UI.t('eq_del_confirm')  || 'Eliminar';
+
+    const close = () => { modal.style.display = 'none'; };
+    // onclick (no addEventListener): el modal se reusa — evita acumular listeners
+    document.getElementById('btn-eq-del-close').onclick        = close;
+    document.getElementById('btn-eq-del-cancel').onclick       = close;
+    document.getElementById('eq-del-modal-backdrop').onclick   = close;
+    document.getElementById('btn-eq-del-confirm').onclick = () => {
+      close();
+      _deleteCustomPreset(preset.id);
+      UI.showToast(`"${preset.name}" ${UI.t('toast_preset_deleted') || 'eliminado'}`);
+    };
+    modal.style.display = '';
+  }
+
   function _renderCustomPresets() {
     const list = document.getElementById('eq-custom-list');
     if (!list) return;
@@ -13924,7 +13951,7 @@ const App = (() => {
       });
       card.querySelector('[data-action="del"]').addEventListener('click', (e) => {
         e.stopPropagation();
-        _deleteCustomPreset(preset.id);
+        _confirmDeletePreset(preset); // popup de confirmación (EN/ES)
       });
       list.appendChild(card);
     });
