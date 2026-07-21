@@ -790,6 +790,24 @@ const Sync = (() => {
         for (const item of (data || [])) {
           if (!item?.id) continue;
           const ex     = localMap.get(item.id) || {};
+
+          // ── Propagación de reset (una sola fuente de verdad) ──────────
+          // Reset REMOTO más nuevo que cualquier verdad local → dejar el
+          // registro local virgen (resetToVirgin REEMPLAZA el registro;
+          // bulkWriteMeta no sirve porque mergea y no puede borrar campos).
+          const _remoteResetAt = item.resetAt || 0;
+          const _exTruthTs     = Math.max(ex.manualAt || 0, ex.rescannedAt || 0, ex.resetAt || 0);
+          if (_remoteResetAt > _exTruthTs) {
+            await DB.resetToVirgin(item.id, _remoteResetAt).catch(() => {});
+            if (typeof Meta !== 'undefined') Meta.revoke?.(item.id);
+            continue;
+          }
+          // Reset LOCAL más nuevo que la verdad del remoto → ignorar su
+          // enrichment viejo (el fill-only lo re-llenaría y desharía el reset).
+          if ((ex.resetAt || 0) > Math.max(item.manualAt || 0, item.rescannedAt || 0, item.resetAt || 0)) {
+            continue;
+          }
+
           const merged = { ...ex, id: item.id };   // start with full local record; id always set
 
           if (item.mbTried)   merged.mbTried   = true;
@@ -1179,6 +1197,8 @@ const Sync = (() => {
       'normalGainClearedAt',                        // epoch ms when gains were last bulk-cleared
       'soundropSaved',                              // true = saved from Soundrop to Drive; eligible for auto-reorganize
       'embedBlocked',                               // aprendizaje: video YT bloqueado por licencia (error 101/150 real)
+      'resetAt',                                    // reset a virgen — propaga el borrado total a otros devices
+      'skipAutoEnrich',                             // item reseteado: solo ID3/rescan/manual pueden re-poblarlo
     ];
     const isExternalUrl = u => !!_syncSafeUrl(u); // fix C5: incluye exclusión de googleusercontent
 
@@ -1231,6 +1251,8 @@ const Sync = (() => {
       'normalGain', 'normalGainDb',
       'normalGainClearedAt',
       'soundropSaved',
+      'resetAt',
+      'skipAutoEnrich',
     ];
     const isExternalUrl = u => !!_syncSafeUrl(u); // fix C5: incluye exclusión de googleusercontent
 
@@ -1791,6 +1813,19 @@ const Sync = (() => {
         for (const item of remoteMetadata) {
           if (!item?.id) continue;
           const ex     = localMap.get(item.id) || {};
+
+          // ── Propagación de reset (misma lógica que el merge principal) ──
+          const _remoteResetAt = item.resetAt || 0;
+          const _exTruthTs     = Math.max(ex.manualAt || 0, ex.rescannedAt || 0, ex.resetAt || 0);
+          if (_remoteResetAt > _exTruthTs) {
+            await DB.resetToVirgin(item.id, _remoteResetAt).catch(() => {});
+            if (typeof Meta !== 'undefined') Meta.revoke?.(item.id);
+            continue;
+          }
+          if ((ex.resetAt || 0) > Math.max(item.manualAt || 0, item.rescannedAt || 0, item.resetAt || 0)) {
+            continue; // reset local más nuevo — ignorar enrichment viejo del remoto
+          }
+
           const merged = { ...ex, id: item.id };   // id always set even for new records
 
           if (item.mbTried)   merged.mbTried   = true;

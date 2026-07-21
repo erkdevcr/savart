@@ -1079,16 +1079,26 @@ const DB = (() => {
    *
    * @param {string} fileId
    */
-  async function resetToVirgin(fileId) {
+  async function resetToVirgin(fileId, resetAt = Date.now()) {
     const store    = _tx('metadata', 'readwrite');
     const existing = await _promisify(store.get(fileId));
     if (!existing) return;
 
     // Preserve only the identity + user-interaction fields
     const keep = {};
-    for (const f of ['id', 'name', 'folderId', 'starred', 'playCount', 'playedAt', 'addedAt']) {
+    for (const f of ['id', 'name', 'folderId', 'starred', 'starredAt', 'playCount', 'playedAt',
+                     'addedAt', 'hiddenFromTopPlayed', 'hiddenChangedAt',
+                     'isSoundrop', 'videoId', 'embedBlocked']) {
       if (existing[f] !== undefined) keep[f] = existing[f];
     }
+    // resetAt: timestamp del reset — viaja por sync (SYNC_FIELDS) para que los
+    // demás devices también dejen el item virgen y no re-suban su enrichment
+    // viejo (sin esto, el merge fill-only deshacía el reset en segundos).
+    // skipAutoEnrich: un item reseteado solo puede recuperar datos de una
+    // fuente de verdad explícita (su ID3 vía scan, un rescan o un manual edit)
+    // — nunca del enriquecimiento automático (Last.fm/CAA/AudD/Drive thumb).
+    keep.resetAt        = resetAt;
+    keep.skipAutoEnrich = true;
     return _promisify(store.put(keep));
   }
 

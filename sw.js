@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.502';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.502 — Popup de confirmación al borrar un custom EQ preset (i18n ES/EN, modal eq-del-modal)
+const APP_VERSION  = '3.5.503';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.503 — Reset total (una sola fuente de verdad): resetToVirgin estampa resetAt+skipAutoEnrich, se propaga por sync (los merges aplican el reset y bloquean re-fill), 9 guards vetan el auto-enrichment (Last.fm/CAA/AudD/Drive thumb) en items reseteados, limpieza de caches de sesión, y el reset por fila ahora sí pushea metadata
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

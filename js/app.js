@@ -1246,7 +1246,8 @@ const App = (() => {
       // _onBlobReady may later find a better (ID3-embedded) cover — that is fine,
       // it will overwrite this one via the protected isId3 path.
       const _hasManual = (dbMeta?.manualAt || 0) > 0;
-      if (!bestThumb && !_hasManual && bestArtist && (bestAlbum || bestName)) {
+      // skipAutoEnrich (reset a virgen): el enriquecimiento automático queda vetado
+      if (!bestThumb && !_hasManual && !dbMeta?.skipAutoEnrich && bestArtist && (bestAlbum || bestName)) {
         (async () => {
           try {
             const stillCurrent = () => Player.getCurrentTrack()?.id === track.id;
@@ -2207,7 +2208,7 @@ const App = (() => {
       // 1c. AudD fingerprinting — runs when any key identity field is missing
       //     (artist, title, or cover). Being here means its results are available
       //     to Last.fm and Lyrics in Pass 2 below.
-      const _needsAudd = !meta.coverUrl || !meta.artist || !meta.title;
+      const _needsAudd = (!meta.coverUrl || !meta.artist || !meta.title) && !dbMeta?.skipAutoEnrich;
       if (_needsAudd && typeof Audd !== 'undefined') {
         try {
           const sample = blob.slice(0, 1024 * 1024); // first 1MB is enough for fingerprinting
@@ -2251,7 +2252,7 @@ const App = (() => {
       ─────────────────────────────────────────────────────────── */
 
       // 2a. Last.fm by album (album.getInfo — most reliable when album is known)
-      if (!meta.coverUrl && !playManual && typeof Lastfm !== 'undefined' && meta.artist && meta.album) {
+      if (!meta.coverUrl && !playManual && !dbMeta?.skipAutoEnrich && typeof Lastfm !== 'undefined' && meta.artist && meta.album) {
         const lfmUrl = await Lastfm.fetchCover(meta.artist, meta.album);
         if (lfmUrl) {
           meta.coverUrl = lfmUrl;
@@ -2260,7 +2261,7 @@ const App = (() => {
       }
 
       // 2b. Last.fm by track (track.getInfo — works with artist+title alone)
-      if (!meta.coverUrl && !playManual && typeof Lastfm !== 'undefined' && meta.artist && (meta.title || item.displayName)) {
+      if (!meta.coverUrl && !playManual && !dbMeta?.skipAutoEnrich && typeof Lastfm !== 'undefined' && meta.artist && (meta.title || item.displayName)) {
         const trackTitle = meta.title || item.displayName;
         const lfmUrl = await Lastfm.fetchCoverByTrack(meta.artist, trackTitle);
         if (lfmUrl) {
@@ -2822,6 +2823,7 @@ const App = (() => {
             // Fix M2: arte embebido en DB (aunque no esté pintado en el DOM en
             // este momento) — no desplazarlo con la URL de CAA.
             if (m.coverBlob || m.thumbnailUrl === 'id3') return;
+            if (m.skipAutoEnrich) return; // item reseteado — sin auto-enrichment
             if (_rowHasCover(file.id)) {
               // Only upgrade if not already an ID3 cover
               const eid = CSS.escape(file.id);
@@ -2881,6 +2883,7 @@ const App = (() => {
         // and would cause cover bleeding — skip those songs rather than store wrong art.
         const inMemArtist = inMem?.artist || '';
         const inMemAlbum  = inMem?.album  || '';
+        if (dbM?.skipAutoEnrich) return; // item reseteado — sin auto-enrichment
         const dbTrusted   = !!(dbM?.coverBlob || dbM?.auddTried || (dbM?.manualAt || 0) > 0);
         const artist      = inMemArtist || (dbTrusted ? (dbM?.artist || '') : '');
         const album       = inMemAlbum  || (dbTrusted ? (dbM?.album  || '') : '');
@@ -5024,7 +5027,7 @@ const App = (() => {
           }
 
           // ── Pass B: Drive file metadata thumbnailLink (rarely set for audio) ──
-          if (!dtManual) {
+          if (!dtManual && !dtMeta?.skipAutoEnrich) {
             const info = await Drive.getFileInfo(item.id).catch(() => null);
             const url  = info?.thumbnailUrl || null;
             if (url) {
@@ -5076,6 +5079,7 @@ const App = (() => {
           // desplazarlo con una URL externa de Last.fm. El arte del archivo es
           // mejor fuente que la búsqueda por nombre.
           if (m?.coverBlob || m?.thumbnailUrl === 'id3') continue;
+          if (m?.skipAutoEnrich) continue; // item reseteado — sin auto-enrichment
 
           // A valid URL already in DB but just not rendered yet — apply it directly
           const persisted = m?.thumbnailUrl || m?.coverUrl || null;
@@ -10074,8 +10078,11 @@ const App = (() => {
       // Also stamp skipAutoEnrich so opening the folder doesn't trigger MB/Discogs automatically.
       // Cleared by resetToVirgin when the user runs an explicit rescan.
       for (const m of toReset) {
-        await DB.resetToVirgin(m.id).catch(() => {});
-        await DB.setMeta(m.id, { skipAutoEnrich: true }).catch(() => {});
+        await DB.resetToVirgin(m.id).catch(() => {}); // estampa resetAt + skipAutoEnrich
+        // Limpieza de sesión: sin esto, el cache en memoria seguía pintando el
+        // cover viejo (Last.fm) durante toda la sesión aunque la DB ya estuviera virgen.
+        if (typeof Meta !== 'undefined') Meta.revoke?.(m.id);
+        _itemCache?.delete?.(m.id);
       }
 
       // Delete collection records for every tracked folder
@@ -10210,8 +10217,9 @@ const App = (() => {
       const allMeta = await DB.getAllMeta().catch(() => []);
       const songs   = allMeta.filter(m => m.folderId === folderId);
       for (const m of songs) {
-        await DB.resetToVirgin(m.id).catch(() => {});
-        await DB.setMeta(m.id, { skipAutoEnrich: true }).catch(() => {});
+        await DB.resetToVirgin(m.id).catch(() => {}); // estampa resetAt + skipAutoEnrich
+        if (typeof Meta !== 'undefined') Meta.revoke?.(m.id);
+        _itemCache?.delete?.(m.id);
       }
 
       // Clear folder-level rescannedAt / manualAt from the folder's own DB record
@@ -10226,7 +10234,10 @@ const App = (() => {
       // Delete collection record if it exists
       await DB.deleteCollection(folderId).catch(() => {});
       _collectionFolderIdsCache?.delete?.(folderId);
-      if (typeof Sync !== 'undefined') Sync.push('collections');
+      if (typeof Sync !== 'undefined') {
+        Sync.push('metadata');    // FIX: el reset por fila no pusheaba metadata —
+        Sync.push('collections'); // el enrichment viejo volvía desde Drive
+      }
 
       // Clear coverUrl from whichever session list holds this folder
       const sessionFolder = _dsSession.folders?.[folderId]
@@ -10565,6 +10576,7 @@ const App = (() => {
               const sm = await DB.getMeta(id);
               if ((sm?.manualAt || 0) > 0) return; // respect manual cover
               if (sm?.coverBlob) return;             // respect ID3 embedded art
+              if (sm?.skipAutoEnrich) return;        // item reseteado — sin auto-enrichment
               await DB.setMeta(id, { thumbnailUrl: url });
             } catch (_) {}
           }));
