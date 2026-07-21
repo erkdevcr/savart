@@ -1080,6 +1080,22 @@ const App = (() => {
     UI.setActiveSongRow(track?.id);
     document.title = track ? `${enriched.displayName} — Savart` : 'Savart';
 
+    // Radio refill — FIX: disparar también en el AVANCE NATURAL de pista.
+    // El chequeo vivía solo en _onQueueChange, que se emite únicamente en
+    // cambios estructurales de la cola (add/remove/reorder) — al reproducirse
+    // la penúltima canción nunca se evaluaba y la radio moría al acabarse la
+    // cola. Ahora se evalúa en cada cambio de pista (natural o manual).
+    if (_radioModeActive && !_radioInFlight && total > 0) {
+      const remaining = total - index - 1;
+      if (remaining <= 2) {
+        if (_radioArtists.length > 1) {
+          _triggerRadioForArtists(_radioArtists, null).catch(() => {});
+        } else if (_radioArtist) {
+          _triggerRadio(_radioArtist, null).catch(() => {});
+        }
+      }
+    }
+
     // Keep the queue panel in sync: re-render + scroll to the now-playing item.
     // _onQueueChange only fires on structural queue edits (add/remove/reorder),
     // not on natural track advancement — so we refresh it here instead.

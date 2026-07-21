@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.500';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.500 — Fix covers Drive en boot: el pintado desde cache invalida las firmas del render diferencial (UI.invalidateHomeRender) para que el render fresco reconstruya e inyecte los coverBlobs
+const APP_VERSION  = '3.5.501';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.501 — Fix radio: el refill se evalúa en cada cambio de pista (antes solo en cambios estructurales de la cola → nunca corría al llegar a la penúltima y la radio moría)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
