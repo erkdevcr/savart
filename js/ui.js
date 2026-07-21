@@ -3279,7 +3279,11 @@ const UI = (() => {
     const meta = (typeof Meta !== 'undefined') ? Meta.getCached(item.id) : null;
     const title  = meta?.title  || item.displayName || item.name;
     const artist = meta?.artist || item.artist       || '';
-    const cover  = meta?.coverUrl || item.thumbnailUrl || '';
+    // blob: del item filtrado salvo que venga del cache vivo (fix A3): la cola
+    // restaurada de IDB podía traer object URLs muertos de la sesión anterior.
+    const _itemThumb = (item.thumbnailUrl && !item.thumbnailUrl.startsWith('blob:'))
+      ? item.thumbnailUrl : '';
+    const cover  = meta?.coverUrl || _itemThumb || '';
     const _qDurSec = item.durationSec > 0 ? item.durationSec : (item.durationMs > 0 ? item.durationMs / 1000 : 0);
     const _qDur    = _qDurSec > 0 ? formatTime(Math.round(_qDurSec)) : '';
 

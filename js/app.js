@@ -847,7 +847,11 @@ const App = (() => {
   function _savePlayerState() {
     const { queue, index } = Player.getQueue();
     if (!queue.length) return;
-    DB.setState('player_state', { queue, queueIndex: index }).catch(() => {});
+    // No persistir object URLs (fix A3): mueren al recargar y el mini/expanded
+    // player mostraba placeholder en la cola restaurada (onerror ocultaba el img).
+    const cleanQueue = queue.map(q =>
+      q?.thumbnailUrl?.startsWith('blob:') ? { ...q, thumbnailUrl: null } : q);
+    DB.setState('player_state', { queue: cleanQueue, queueIndex: index }).catch(() => {});
   }
 
   /**
@@ -918,18 +922,11 @@ const App = (() => {
           if (dbMeta.album)       track.albumName   = dbMeta.album;
           if (dbMeta.year)        track.year        = dbMeta.year;
 
-          // Cover art — resolve in priority order:
-          //   1. valid external thumbnailUrl (Last.fm / AudD / manual) — wins over ID3
-          //   2. coverBlob in DB (embedded ID3 art) → create fresh Object URL
-          let coverUrl = null;
-          const _storedUrl = dbMeta.thumbnailUrl || dbMeta.coverUrl || null;
-          if (_storedUrl && _storedUrl !== 'id3' && !_storedUrl.startsWith('blob:')) {
-            coverUrl = _storedUrl;
-            if (typeof Meta !== 'undefined') Meta.patchCached(track.id, { coverUrl });
-          }
-          if (!coverUrl && dbMeta.coverBlob && typeof Meta !== 'undefined') {
-            coverUrl = Meta.injectCover(track.id, dbMeta.coverBlob);
-          }
+          // Cover art — canon (fix M5): manual > coverBlob > URL estable.
+          // Antes la externa ganaba al ID3 y encima se metía a la caché de
+          // sesión (patchCached) — envenenaba injectCover desde el boot y el
+          // player mostraba una portada distinta a la del Home.
+          const coverUrl = _resolveCoverPriority(track.id, dbMeta)?.url || null;
 
           const reEnriched = _enrichTrack(track);
           UI.updateMiniPlayer(reEnriched, false);
@@ -1393,7 +1390,11 @@ const App = (() => {
       artist:        (meta?.artist)   || track.artist        || '',
       albumName:     (meta?.album)    || track.albumName    || '',
       year:          (meta?.year)     || track.year          || '',
-      thumbnailUrl:  (meta?.coverUrl) || (track.thumbnailUrl === 'id3' ? null : track.thumbnailUrl) || null,
+      // blob: del track filtrado (fix A3): la cola restaurada de IDB traía
+      // object URLs de la sesión anterior — muertos → onerror → placeholder.
+      thumbnailUrl:  (meta?.coverUrl)
+        || ((track.thumbnailUrl === 'id3' || track.thumbnailUrl?.startsWith('blob:')) ? null : track.thumbnailUrl)
+        || null,
       bitrate:       meta?.bitrate      ?? track.bitrate      ?? null,
       sampleRate:    meta?.sampleRate   ?? track.sampleRate   ?? null,
       bitsPerSample: meta?.bitsPerSample ?? track.bitsPerSample ?? null,
@@ -1464,8 +1465,13 @@ const App = (() => {
     const coverUrl = dbPatch.thumbnailUrl && !dbPatch.thumbnailUrl.startsWith('blob:') && dbPatch.thumbnailUrl !== 'id3'
       ? dbPatch.thumbnailUrl : null;
     for (const id of editedIds) {
-      if (coverUrl)           _updateHomeCardThumbnail(id, coverUrl);
-      if (coverUrl)           _updateRowThumbnail(id, coverUrl, false);
+      // force=true (fix A4): edición manual = autoritativa — debe pisar el
+      // cover ID3 pintado; antes la protección 'id3' la bloqueaba en Home/
+      // TopList/Pinned mientras el player sí la mostraba (portadas distintas).
+      if (coverUrl)           _updateHomeCardThumbnail(id, coverUrl, false, true);
+      if (coverUrl)           _updateRowThumbnail(id, coverUrl, false, true);
+      if (coverUrl)           _updateTopListThumb(id, coverUrl, false, true);
+      if (coverUrl)           _updatePinnedItemCover(id, coverUrl, false, true);
       if (coverUrl)           _updateQueueItemCover(id, coverUrl);
       if (dbPatch.displayName || dbPatch.artist || dbPatch.album || dbPatch.year) {
         _patchMetaText(id, {
@@ -4042,9 +4048,12 @@ const App = (() => {
     // home-card covers and recents text never updating for previously-played tracks.
 
     if (meta.coverUrl) {
-      _updateRowThumbnail(item.id, meta.coverUrl, true);
-      _updateHomeCardThumbnail(item.id, meta.coverUrl, true);
-      _updateTopListThumb(item.id, meta.coverUrl, true);
+      // isId3 real (fix A6): meta.coverUrl puede venir de Last.fm/AudD/folder —
+      // etiquetarlo 'id3' congelaba la superficie contra updates legítimos.
+      const _isId3 = !!meta.coverBlob || meta.coverUrl.startsWith('blob:');
+      _updateRowThumbnail(item.id, meta.coverUrl, _isId3);
+      _updateHomeCardThumbnail(item.id, meta.coverUrl, _isId3);
+      _updateTopListThumb(item.id, meta.coverUrl, _isId3);
       // Queue panel rows are also song-id keyed — update them too
       _updateQueueItemCover(item.id, meta.coverUrl);
     }
@@ -4195,14 +4204,16 @@ const App = (() => {
    * @param {string} fileId
    * @param {string} coverUrl
    */
-  function _updateHomeCardThumbnail(fileId, coverUrl, isId3 = false) {
+  function _updateHomeCardThumbnail(fileId, coverUrl, isId3 = false, force = false) {
     const card = document.querySelector(`#screen-home .home-card[data-id="${CSS.escape(fileId)}"]`);
     if (!card) return;
     const art = card.querySelector('.home-card-art');
     if (!art) return;
     const img = art.querySelector('img');
     if (!isId3 && img) {
-      if (img.dataset.coverSrc === 'id3') return; // ID3 is always protected
+      // force (fix A4): un cover MANUAL debe poder pisar el ID3 pintado
+      if (img.dataset.coverSrc === 'id3' && !force) return; // ID3 protected
+      if (img.dataset.coverSrc === 'id3' && force) delete img.dataset.coverSrc;
       img.src = coverUrl;
       return;
     }
@@ -4352,8 +4363,10 @@ const App = (() => {
           // ── Instant URL paint ────────────────────────────────────────────────────
           // If the item already has an external URL in DB, paint it immediately
           // before the download starts — one scanned, one shown, no waiting for others.
-          const _existingUrl = (existing?.thumbnailUrl && existing.thumbnailUrl !== 'id3'
-            && !existing.thumbnailUrl.startsWith('blob:')) ? existing.thumbnailUrl : null;
+          // Solo URLs ESTABLES (fix A2): una googleusercontent caducada pintaba,
+          // fallaba el onerror y dejaba placeholder.
+          const _existingUrl = _isStableCoverUrl(existing?.thumbnailUrl) && existing.thumbnailUrl !== 'id3'
+            ? existing.thumbnailUrl : null;
           if (_existingUrl) {
             _updateHomeCardThumbnail(item.id, _existingUrl, false);
             _updateTopListThumb(item.id, _existingUrl, false);
@@ -4450,27 +4463,21 @@ const App = (() => {
           // overwrites with fresh ID3 data (including explicit nulls).
           await DB.bulkWriteMeta([{ ...existing, id: item.id, ...patch }]);
 
-          // Resolve cover URL for DOM update — external URL wins over ID3 blob
-          const coverUrl = _existingUrl
-            || meta?.coverUrl
-            || (meta?.coverBlob ? Meta.injectCover(item.id, meta.coverBlob) : null)
-            || null;
+          // Canon (fix A2): el ID3 recién parseado GANA a la URL externa — antes
+          // estaba invertido y encima se etiquetaba la externa como 'id3',
+          // congelando cada superficie con la portada que le tocara primero.
+          const _id3Url  = meta?.coverUrl
+            || (meta?.coverBlob ? Meta.injectCover(item.id, meta.coverBlob) : null);
+          const coverUrl = _id3Url || _existingUrl || null;
+          const _isId3   = !!_id3Url;
 
           // Paint cover + text on every visible surface
           if (coverUrl) {
-            _updateHomeCardThumbnail(item.id, coverUrl, true);
-            _updateTopListThumb(item.id, coverUrl, true);
-            _updatePinnedItemCover(item.id, coverUrl, true);
-            _updateRowThumbnail(item.id, coverUrl, true);
+            _updateHomeCardThumbnail(item.id, coverUrl, _isId3);
+            _updateTopListThumb(item.id, coverUrl, _isId3);
+            _updatePinnedItemCover(item.id, coverUrl, _isId3);
+            _updateRowThumbnail(item.id, coverUrl, _isId3);
             Player.patchQueueItem?.(item.id, { thumbnailUrl: coverUrl });
-            // Sync Meta cache with the winning URL.
-            // Meta.parse(force=true) above may have stored an ID3 blob URL in the
-            // cache, but if an external URL takes priority (_existingUrl wins),
-            // the player would still show the stale ID3 cover via _enrichTrack.
-            // Patching the cache here ensures browse rows and player are consistent.
-            if (_existingUrl && typeof Meta !== 'undefined') {
-              Meta.patchCached(item.id, { coverUrl: _existingUrl });
-            }
           }
           if (meta?.title) {
             _updateHomeCardName(item.id, meta.title);
@@ -4755,15 +4762,15 @@ const App = (() => {
     }));
 
     // Pass 1: in-memory Meta cache (current session — instant, no DB call).
-    // Skip songs that already show a manual cover (manualAt wins over session cache).
+    // Fix M2: SOLO blobs de sesión (ID3 real) — antes cualquier URL cacheada
+    // (Last.fm/volátil) pisaba el resultado canónico de Pass 0 y quedaba
+    // etiquetada 'id3', congelando la card con la portada equivocada.
     await Promise.allSettled(songs.map(async song => {
       const meta = Meta.getCached(song.id);
-      if (!meta?.coverUrl) return;
+      if (!meta?.coverUrl?.startsWith('blob:')) return;
       try {
         const dbMeta = await _getM(song.id).catch(() => null);
-        const hasManualUrl = (dbMeta?.manualAt || 0) > 0
-          && dbMeta?.thumbnailUrl && dbMeta.thumbnailUrl !== 'id3'
-          && !dbMeta.thumbnailUrl.startsWith('blob:');
+        const hasManualUrl = (dbMeta?.manualAt || 0) > 0 && _isStableCoverUrl(dbMeta?.thumbnailUrl);
         if (!hasManualUrl) _updateHomeCardThumbnail(song.id, meta.coverUrl, true);
       } catch (_) {}
     }));
@@ -4819,15 +4826,13 @@ const App = (() => {
       } catch (_) {}
     }));
 
-    // Pass 1: in-memory Meta cache — skip songs with a manual cover (manualAt wins).
+    // Pass 1: in-memory Meta cache — SOLO blobs de sesión (fix M2, ver Home).
     await Promise.allSettled(items.map(async item => {
       const meta = Meta.getCached(item.id);
-      if (!meta?.coverUrl) return;
+      if (!meta?.coverUrl?.startsWith('blob:')) return;
       try {
         const dbMeta = await _getM(item.id).catch(() => null);
-        const hasManualUrl = (dbMeta?.manualAt || 0) > 0
-          && dbMeta?.thumbnailUrl && dbMeta.thumbnailUrl !== 'id3'
-          && !dbMeta.thumbnailUrl.startsWith('blob:');
+        const hasManualUrl = (dbMeta?.manualAt || 0) > 0 && _isStableCoverUrl(dbMeta?.thumbnailUrl);
         if (!hasManualUrl) _updateTopListThumb(item.id, meta.coverUrl, true);
       } catch (_) {}
     }));
@@ -4853,14 +4858,15 @@ const App = (() => {
     return true;
   }
 
-  function _updateTopListThumb(fileId, coverUrl, isId3 = false) {
+  function _updateTopListThumb(fileId, coverUrl, isId3 = false, force = false) {
     const el = document.querySelector(`.top-list-item[data-id="${CSS.escape(fileId)}"]`);
     if (!el) return;
     const thumb = el.querySelector('.top-list-thumb');
     if (!thumb) return;
     const img = thumb.querySelector('img');
     if (!isId3 && img) {
-      if (img.dataset.coverSrc === 'id3') return;  // ID3 cover protected
+      if (img.dataset.coverSrc === 'id3' && !force) return;  // ID3 cover protected
+      if (img.dataset.coverSrc === 'id3' && force) delete img.dataset.coverSrc; // manual pisa (fix A4)
       img.src = coverUrl; // external replaces external
       return;
     }
@@ -5348,16 +5354,16 @@ const App = (() => {
       //   • coverBlob (embedded ID3 art) → wins over external URLs (Last.fm / AudD).
       //   • fallbacks → external URLs, Drive thumbnail, etc.
       const _resolveCoverUrl = (id, dbMeta, inMem, ...fallbacks) => {
-        const hasManual = (dbMeta?.manualAt || 0) > 0
-          && dbMeta?.thumbnailUrl
-          && dbMeta.thumbnailUrl !== 'id3'
-          && !dbMeta.thumbnailUrl.startsWith('blob:');
-        if (dbMeta?.coverBlob && !hasManual) {
-          return inMem?.coverUrl
-            || (typeof Meta !== 'undefined' ? Meta.injectCover(id, dbMeta.coverBlob) : null)
-            || null;
-        }
-        return _pick(...fallbacks);
+        // Canon (fix A5): manual > coverBlob > URL externa ESTABLE — la misma
+        // regla que usa el player (_resolveCoverPriority). Antes el Home prefería
+        // la caché de sesión (posiblemente una URL Last.fm/volátil) sobre el blob
+        // de DB → player y Home mostraban portadas distintas de la misma canción.
+        const r = _resolveCoverPriority(id, dbMeta);
+        if (r) return r.url;
+        // Blob de sesión (ID3 parseado en esta sesión, aún sin persistir a DB)
+        if (inMem?.coverUrl?.startsWith('blob:')) return inMem.coverUrl;
+        // Fallbacks del item — solo URLs estables (googleusercontent caduca)
+        return fallbacks.find(u => _isStableCoverUrl(u)) || null;
       };
 
       const enrichedPinned = pinned.map(p => {
@@ -5443,8 +5449,9 @@ const App = (() => {
 
       // Resolve covers for recent playlists (first 4 unique usable URLs per playlist).
       // Priority per song: in-memory blob (session) → DB coverBlob inject → DB external URL.
-      const _isUsableExt = u => u && u !== 'id3' && !u.startsWith('blob:')
-        && !(u.includes('googleapis.com') && !u.includes('googleusercontent.com'));
+      // Fix M6: solo URLs ESTABLES (las googleusercontent caducan en horas y
+      // dejaban mosaicos rotos al día siguiente)
+      const _isUsableExt = u => _isStableCoverUrl(u);
       const enrichedPlaylists = await Promise.all(
         rawPlaylists.slice(0, 12).map(async pl => {
           const covers = [];
@@ -6166,14 +6173,13 @@ const App = (() => {
       const items = raw.map((item, i) => {
         const dbMeta  = metaRecords[i];
         const inMem   = (typeof Meta !== 'undefined') ? Meta.getCached(item.id) : null;
-        // Inject coverBlob into Meta cache synchronously so the first render
-        // already shows the embedded cover — same pattern as _loadHomeData 3.4.8
-        let coverUrl = inMem?.coverUrl || null;
-        if (!coverUrl && dbMeta?.coverBlob && typeof Meta !== 'undefined') {
-          coverUrl = Meta.injectCover(item.id, dbMeta.coverBlob) || null;
-        }
+        // Canon (fix M3): manual > coverBlob > URL estable — misma regla que
+        // player y Home. Antes History ponía la caché de sesión primero e
+        // ignoraba manualAt → título/portada distintos entre superficies.
+        let coverUrl = _resolveCoverPriority(item.id, dbMeta)?.url || null;
+        if (!coverUrl && inMem?.coverUrl?.startsWith('blob:')) coverUrl = inMem.coverUrl;
         if (!coverUrl) {
-          coverUrl = _pick(_safeUrl(dbMeta?.thumbnailUrl), _safeUrl(dbMeta?.coverUrl), _safeUrl(item.thumbnailUrl)) || null;
+          coverUrl = [item.thumbnailUrl].find(u => _isStableCoverUrl(u)) || null;
         }
         // Reconstruct isSoundrop/videoId from the ID prefix so items played
         // before v3.5.288 still show the SD chip and replay correctly.
@@ -6184,9 +6190,9 @@ const App = (() => {
           // dbMeta (metadata store) reflects the latest rescan result — always
           // prefer it over item.displayName which was snapshot-saved at play time
           // and may be a stale filename from before the rescan ran.
-          displayName:  _pick(inMem?.title,    dbMeta?.displayName, item.displayName,  item.name, dbMeta?.name),
-          artist:       _pick(inMem?.artist,   dbMeta?.artist,      item.artist),
-          albumName:    _pick(inMem?.album,     dbMeta?.album,       item.albumName),
+          displayName:  _pick(dbMeta?.displayName, inMem?.title,    item.displayName,  item.name, dbMeta?.name),
+          artist:       _pick(dbMeta?.artist,       inMem?.artist,   item.artist),
+          albumName:    _pick(dbMeta?.album,        inMem?.album,    item.albumName),
           thumbnailUrl: coverUrl,
           isSoundrop:   _isSd  || false,
           videoId:      _vidId || null,
@@ -7130,15 +7136,13 @@ const App = (() => {
       } catch (_) { /* non-fatal */ }
     }));
 
-    // Pass 1: in-memory Meta cache — skip songs with a manual cover (manualAt wins).
+    // Pass 1: in-memory Meta cache — SOLO blobs de sesión (fix M2, ver Home).
     await Promise.allSettled(songs.map(async item => {
       const inMem = Meta.getCached(item.id);
-      if (!inMem?.coverUrl) return;
+      if (!inMem?.coverUrl?.startsWith('blob:')) return;
       try {
         const dbMeta = await _getM(item.id).catch(() => null);
-        const hasManualUrl = (dbMeta?.manualAt || 0) > 0
-          && dbMeta?.thumbnailUrl && dbMeta.thumbnailUrl !== 'id3'
-          && !dbMeta.thumbnailUrl.startsWith('blob:');
+        const hasManualUrl = (dbMeta?.manualAt || 0) > 0 && _isStableCoverUrl(dbMeta?.thumbnailUrl);
         if (!hasManualUrl) _updatePinnedItemCover(item.id, inMem.coverUrl, true);
       } catch (_) {}
     }));
@@ -7167,10 +7171,8 @@ const App = (() => {
   async function _prefetchHomePlaylists(playlists) {
     if (!playlists.length || typeof Meta === 'undefined') return;
 
-    // External URLs that work in <img> without auth token
-    const _isUsableExt = url =>
-      url && url !== 'id3' && !url.startsWith('blob:') &&
-      !(url.includes('googleapis.com') && !url.includes('googleusercontent.com'));
+    // Fix M6: solo URLs ESTABLES (googleusercontent caduca → mosaico roto)
+    const _isUsableExt = url => _isStableCoverUrl(url);
 
     // Resolve one cover for a single song id. Priority:
     //   1. In-memory Meta cache (blob: from current session — always valid)
@@ -7178,19 +7180,13 @@ const App = (() => {
     //   3. DB external URL (googleusercontent.com, Last.fm, etc.)
     // Returns null if nothing found.
     const _resolveOne = async (sid) => {
-      const inMem = Meta.getCached(sid);
-      if (inMem?.coverUrl) return inMem.coverUrl; // blob: or ext — both valid in session
-
+      // Canon (fix M6): manual > coverBlob > blob de sesión > ext estable
       const dbM = await DB.getMeta(sid).catch(() => null);
-      if (!dbM) return null;
-
-      if (dbM.coverBlob) {
-        const injected = Meta.injectCover(sid, dbM.coverBlob);
-        if (injected) return injected; // blob: URL — valid this session
-      }
-
-      const extUrl = dbM.thumbnailUrl || dbM.coverUrl || null;
-      return _isUsableExt(extUrl) ? extUrl : null;
+      const r = _resolveCoverPriority(sid, dbM);
+      if (r) return r.url;
+      const inMem = Meta.getCached(sid);
+      if (inMem?.coverUrl?.startsWith('blob:')) return inMem.coverUrl;
+      return null;
     };
 
     for (const pl of playlists) {
@@ -7243,12 +7239,13 @@ const App = (() => {
   }
 
   /** Patch the cover art of a pinned card for a given song id. */
-  function _updatePinnedItemCover(id, url, isId3 = false) {
+  function _updatePinnedItemCover(id, url, isId3 = false, force = false) {
     const art = document.querySelector(`.pinned-card-art[data-id="${CSS.escape(id)}"]`);
     if (!art) return;
     const img = art.querySelector('.pinned-art-img');
     if (!isId3 && img) {
-      if (img.dataset.coverSrc === 'id3') return; // ID3 is always protected
+      if (img.dataset.coverSrc === 'id3' && !force) return; // ID3 protected
+      if (img.dataset.coverSrc === 'id3' && force) delete img.dataset.coverSrc; // manual pisa (fix A4)
       img.src = url;
     } else if (isId3 && img?.dataset.coverSrc === 'id3') {
       img.src = url; // refresh session URL — same embedded cover, new blob: URL
@@ -7332,25 +7329,27 @@ const App = (() => {
     // This is what makes "Apply to all" actually stick.
     if ((dbMeta?.manualAt || 0) > 0) {
       const manualUrl = dbMeta?.thumbnailUrl;
-      if (manualUrl && manualUrl !== 'id3' && !manualUrl.startsWith('blob:')) {
+      if (_isStableCoverUrl(manualUrl)) { // estable (fix M4)
         _cacheExternalCover(id, manualUrl).catch(() => {});
         return manualUrl;
       }
     }
 
-    // Priority for non-manual songs: ID3 embedded art > external persisted URL
-    // 1. In-memory Meta cache: song was parsed this session (fastest, no DB round-trip)
-    const inMem = (typeof Meta !== 'undefined') ? Meta.getCached(id) : null;
-    if (inMem?.coverUrl) return inMem.coverUrl;
-    // 2. Persisted coverBlob in DB (ID3 embedded — wins over external URLs)
+    // Canon (fix M4): coverBlob (ID3) > caché de sesión SOLO si es blob vivo >
+    // URL externa ESTABLE. Antes la caché de sesión iba primero (podía tener
+    // una URL Last.fm/volátil) y el paso externo aceptaba googleusercontent
+    // caducadas → placeholders al volver al día siguiente.
+    // 1. Persisted coverBlob in DB (ID3 embedded — wins over external URLs)
     if (dbMeta?.coverBlob && typeof Meta !== 'undefined') {
       const url = Meta.injectCover(id, dbMeta.coverBlob);
       if (url) return url;
     }
-    // 3. Stored web URL (non-blob, from Last.fm / AudD / Drive thumbnailLink)
-    //    'id3' is a sentinel meaning "use embedded art" — skip it as a real URL
-    const ext = dbMeta?.thumbnailUrl || storedUrl || null;
-    if (ext && ext !== 'id3' && !ext.startsWith('blob:')) {
+    // 2. In-memory session blob (ID3 parseado en esta sesión, sin persistir aún)
+    const inMem = (typeof Meta !== 'undefined') ? Meta.getCached(id) : null;
+    if (inMem?.coverUrl?.startsWith('blob:')) return inMem.coverUrl;
+    // 3. Stored web URL — solo estables
+    const ext = [dbMeta?.thumbnailUrl, dbMeta?.coverUrl, storedUrl].find(u => _isStableCoverUrl(u)) || null;
+    if (ext) {
       // Cache the image locally so it loads offline next time (fire-and-forget)
       _cacheExternalCover(id, ext).catch(() => {});
       return ext;

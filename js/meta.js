@@ -112,13 +112,11 @@ const Meta = (() => {
       return _cache.get(fileId);
     }
 
-    // When force-re-parsing, revoke the old object URL so we don't leak it.
+    // When force-re-parsing, retire the old object URL (deferred — fix M1:
+    // revocar al instante rompía los <img> de superficies aún no repintadas).
     if (force) {
       const old = _cache.get(fileId);
-      if (old?.coverUrl) {
-        URL.revokeObjectURL(old.coverUrl);
-        _objectUrls.delete(old.coverUrl);
-      }
+      if (old?.coverUrl?.startsWith('blob:')) _scheduleRevoke(old.coverUrl);
       _cache.delete(fileId);
     }
 
@@ -154,10 +152,10 @@ const Meta = (() => {
    */
   function revoke(fileId) {
     const result = _cache.get(fileId);
-    if (result?.coverUrl) {
-      URL.revokeObjectURL(result.coverUrl);
-      _objectUrls.delete(result.coverUrl);
-    }
+    // Diferido (fix M1): la entrada sale del cache YA (el resolutor no la
+    // reutiliza), pero el object URL vive 30 s más por si algún <img> visible
+    // (cola, history, mosaicos) todavía lo referencia.
+    if (result?.coverUrl?.startsWith('blob:')) _scheduleRevoke(result.coverUrl);
     _cache.delete(fileId);
   }
 
@@ -517,7 +515,13 @@ const Meta = (() => {
   function injectCover(fileId, blob) {
     if (!blob) return null;
     const existing = _cache.get(fileId);
-    if (existing?.coverUrl) {
+    // FIX A1: solo reutilizar la URL cacheada si ya es un object URL (blob:)
+    // vivo — o sea, el MISMO arte embebido ya inyectado. Antes, cualquier
+    // coverUrl cacheado (Last.fm, volátil, lo que forcePatch/patchCached
+    // hubiera escrito) se devolvía tal cual y el resolutor canónico dejaba
+    // de garantizar el arte ID3 → cada superficie mostraba una portada
+    // distinta según el orden en que corrieron las rutinas.
+    if (existing?.coverUrl?.startsWith('blob:')) {
       _touch(fileId); // already resolved — just mark as recently used
       return existing.coverUrl;
     }
@@ -568,10 +572,7 @@ const Meta = (() => {
     if (next.coverUrl && next.coverUrl !== existing.coverUrl) {
       // Revoke the old blob: URL before replacing it — prevents Object URL leak.
       // External URLs (https:) don't need revoking; only blob: URLs hold live memory.
-      if (existing.coverUrl?.startsWith('blob:')) {
-        URL.revokeObjectURL(existing.coverUrl);
-        _objectUrls.delete(existing.coverUrl);
-      }
+      if (existing.coverUrl?.startsWith('blob:')) _scheduleRevoke(existing.coverUrl); // diferido (fix M1)
       _objectUrls.add(next.coverUrl);
     }
     // delete + re-set → moves entry to most-recently-used position

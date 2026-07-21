@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.503';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.503 — Reset total (una sola fuente de verdad): resetToVirgin estampa resetAt+skipAutoEnrich, se propaga por sync (los merges aplican el reset y bloquean re-fill), 9 guards vetan el auto-enrichment (Last.fm/CAA/AudD/Drive thumb) en items reseteados, limpieza de caches de sesión, y el reset por fila ahora sí pushea metadata
+const APP_VERSION  = '3.5.504';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.504 — Coherencia total de covers: injectCover ya no devuelve URLs envenenadas (A1), soft-scan y _applyMeta con isId3 real y canon ID3>externa (A2/A6), force en Home/TopList/Pinned para covers manuales (A4), Home/History/favoritos/mosaicos/restore usan _resolveCoverPriority (A5/M3/M4/M5/M6), Pass 1 solo blobs de sesión (M2), revokes diferidos en forcePatch/revoke/parse-force (M1), blob: muertos filtrados en cola persistida y _enrichTrack (A3)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
