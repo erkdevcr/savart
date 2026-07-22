@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.512';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.512 — playlists se comportan como colecciones: click en item carga TODA la playlist al queue; radio agrega +25 por artista variado al agotarse (row click, botón Reproducir del detalle y play del menú contextual)
+const APP_VERSION  = '3.5.513';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.513 — tab Playlists: orden alfabético siempre (localeCompare es, sin distinción de mayúsculas/tildes, numérico)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

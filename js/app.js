@@ -6852,6 +6852,9 @@ const App = (() => {
   async function _loadPlaylists() {
     try {
       const playlists = await DB.getPlaylists();
+      // v3.5.513: orden alfabético SIEMPRE (insensible a mayúsculas y tildes)
+      playlists.sort((a, b) =>
+        (a.name || '').localeCompare(b.name || '', 'es', { sensitivity: 'base', numeric: true }));
       const enriched = await Promise.all(playlists.map(async pl => {
         const songIds = pl.songIds || [];
         const coverUrls = [];
