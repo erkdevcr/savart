@@ -208,11 +208,16 @@ const Player = (() => {
       if (_fadeTimer) { clearInterval(_fadeTimer); _fadeTimer = null; }
       const steps    = Math.max(1, Math.round(ms / 16)); // ~60fps
       const start    = audio.volume;
-      const delta    = (target - start) / steps;
+      const goingDown = target < start;
       let   step     = 0;
       _fadeTimer = setInterval(() => {
         step++;
-        audio.volume = Math.min(1, Math.max(0, start + delta * step));
+        const p = step / steps;
+        // Easing: al BAJAR ease-out (cede rápido al inicio para que el timbre
+        // se oiga ya, y aterriza suave); al SUBIR smoothstep (entrada y salida
+        // suaves — la restauración lineal se percibía como un golpe de volumen).
+        const eased = goingDown ? (1 - Math.pow(1 - p, 2)) : (p * p * (3 - 2 * p));
+        audio.volume = Math.min(1, Math.max(0, start + (target - start) * eased));
         if (step >= steps) {
           audio.volume = target;
           clearInterval(_fadeTimer);
@@ -228,14 +233,16 @@ const Player = (() => {
       const audio = _getAudio();
       _duckedAudio   = audio;
       _preDuckVolume = audio ? audio.volume : 1.0;
-      _fadeVolume(e.volume ?? 0.2, 200, audio);
+      _fadeVolume(e.volume ?? 0.2, 250, audio);
     });
 
     plugin.addListener('audioFocusGain', () => {
       // Restore the element that was ducked, not necessarily the current one.
       const toRestore = _duckedAudio || _getAudio();
       _duckedAudio = null;
-      _fadeVolume(_preDuckVolume, 400, toRestore);
+      // 700 ms: la restauración es lo que más se percibe como "golpe" — una
+      // subida más larga y con smoothstep se siente natural.
+      _fadeVolume(_preDuckVolume, 700, toRestore);
       if (_pausedByFocus) {
         _pausedByFocus = false;
         play();

@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.505';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.505 — Custom speed per track: toggle en modal de velocidad guarda/sincroniza customSpeed en DB y entre devices; restore automático al salir de pista pinada
+const APP_VERSION  = '3.5.506';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.506 — Audio focus (APK): duck/restore con easing (ease-out 250ms al bajar, smoothstep 700ms al restaurar) — la restauración lineal se sentía como golpe. En web el duck es del OS y no es interceptable
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
