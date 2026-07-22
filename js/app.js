@@ -14449,32 +14449,51 @@ const App = (() => {
       }
     };
 
-    // ── Soundrop move (v3.5.516) — mover archivo DENTRO del árbol Soundrop ──
-    // Picker con las carpetas del árbol (root + artistas + álbumes, 2 niveles)
-    // o crear una carpeta nueva bajo el root de Soundrop.
+    // ── Soundrop move (v3.5.517) — explorador de carpetas del árbol Soundrop ──
+    // Navegación tipo explorador: doble clic / doble tap ABRE una carpeta;
+    // tap simple la SELECCIONA (toggle). "Mover" manda el archivo a la carpeta
+    // seleccionada, o a la carpeta ABIERTA si no hay selección. "Crear" crea la
+    // carpeta nueva DENTRO de la carpeta abierta, previa confirmación, y mueve.
     App.onSoundropMove = async (item) => {
       if (!item?.id || String(item.id).startsWith('sd_')) return; // solo archivos reales de Drive
-      const modal  = document.getElementById('sd-move-modal');
+      const modal = document.getElementById('sd-move-modal');
       if (!modal) return;
-      const listEl = document.getElementById('sd-move-list');
-      const songEl = document.getElementById('sd-move-song');
-      const input  = document.getElementById('sd-move-new-input');
-      const btnNew = document.getElementById('btn-sd-move-create');
+      const $g = (id) => document.getElementById(id);
+      const listEl = $g('sd-move-list'), songEl = $g('sd-move-song');
+      const pathEl = $g('sd-move-path'), btnUp = $g('btn-sd-move-up');
+      const input  = $g('sd-move-new-input'), btnNew = $g('btn-sd-move-create');
+      const tt = (k, fb) => UI.t(k) || fb;
 
       songEl.textContent = item.displayName || item.name || '';
       input.value        = '';
-      input.placeholder  = UI.t('sd_move_new_ph') || 'Nueva carpeta…';
-      btnNew.textContent = UI.t('sd_move_create') || 'Crear';
+      input.placeholder  = tt('sd_move_new_ph', 'Nueva carpeta…');
       btnNew.disabled    = false;
-      listEl.innerHTML   = `<div class="sd-move-loading">${UI.t('sd_move_loading') || 'Cargando carpetas…'}</div>`;
       modal.style.display = '';
 
       const close = () => { modal.style.display = 'none'; };
       // onclick (no addEventListener): el modal se reusa — evita acumular listeners
-      document.getElementById('btn-sd-move-close').onclick      = close;
-      document.getElementById('sd-move-modal-backdrop').onclick = close;
+      $g('btn-sd-move-close').onclick      = close;
+      $g('sd-move-modal-backdrop').onclick = close;
+      $g('btn-sd-move-cancel').onclick     = close;
 
-      // Carpeta actual del archivo (para excluirla del picker y como removeParents)
+      // Vistas: explorador ↔ confirmación de crear
+      const showBrowse = () => {
+        $g('sd-move-browse').style.display         = '';
+        $g('sd-move-footer').style.display         = '';
+        $g('sd-move-confirm').style.display        = 'none';
+        $g('sd-move-confirm-footer').style.display = 'none';
+      };
+      const showConfirm = (msg) => {
+        $g('sd-move-confirm-msg').textContent      = msg;
+        $g('sd-move-browse').style.display         = 'none';
+        $g('sd-move-footer').style.display         = 'none';
+        $g('sd-move-confirm').style.display        = '';
+        $g('sd-move-confirm-footer').style.display = '';
+      };
+      showBrowse();
+      listEl.innerHTML = `<div class="sd-move-loading">${tt('sd_move_loading', 'Cargando carpetas…')}</div>`;
+
+      // Carpeta actual del archivo (removeParents + guard "ya está ahí")
       const dbMeta    = await DB.getMeta(item.id).catch(() => null);
       let curFolderId = dbMeta?.folderId || item.folderId || item.parents?.[0] || null;
       if (!curFolderId) {
@@ -14484,10 +14503,19 @@ const App = (() => {
 
       let rootId = null;
       try { rootId = await Drive.findOrCreateFolder('Soundrop', _rootFolderId); }
-      catch (_) { close(); UI.showToast(UI.t('sd_move_error'), 'error'); return; }
+      catch (_) { close(); UI.showToast(tt('sd_move_error', 'Error al mover'), 'error'); return; }
+
+      // Estado del explorador
+      let openId = rootId, openName = 'Soundrop';
+      let selectedId = null, selectedName = null;
+      const stack = [];                      // ancestros de la carpeta abierta
+      let _lastTap = { id: null, ts: 0 };    // detección doble tap/clic
+
+      const folderSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>`;
 
       const doMove = async (targetId, targetName) => {
-        if (!targetId || targetId === curFolderId) return;
+        if (!targetId) return;
+        if (targetId === curFolderId) { UI.showToast(tt('sd_move_same', 'Ya está en esa carpeta'), 'error'); return; }
         close();
         try {
           await Drive.updateFileMeta(item.id, {
@@ -14496,7 +14524,7 @@ const App = (() => {
           });
           await DB.setMeta(item.id, { folderId: targetId }).catch(() => {});
           if (typeof Sync !== 'undefined') Sync.push('metadata');
-          UI.showToast(`📁 ${UI.t('sd_move_done') || 'Movida a'} "${targetName}"`);
+          UI.showToast(`📁 ${tt('sd_move_done', 'Movida a')} "${targetName}"`);
           // Refrescar browse si estamos viendo la carpeta origen o destino
           if (_browseFolderId === curFolderId || _browseFolderId === targetId) {
             const cur = _browseFolder || { id: _browseFolderId, name: '' };
@@ -14506,45 +14534,89 @@ const App = (() => {
           setTimeout(() => { _deepCleanSoundropFolders(rootId).catch(() => {}); }, 3000);
         } catch (err) {
           console.error('[App] Soundrop move error:', err);
-          UI.showToast(UI.t('sd_move_error'), 'error');
+          UI.showToast(tt('sd_move_error', 'Error al mover'), 'error');
         }
       };
 
-      btnNew.onclick = async () => {
-        const name = input.value.trim();
-        if (!name) { input.focus(); return; }
-        btnNew.disabled = true;
-        try {
-          const newId = await Drive.findOrCreateFolder(name, rootId);
-          await doMove(newId, name);
-        } catch (_) { UI.showToast(UI.t('sd_move_error'), 'error'); }
-        btnNew.disabled = false;
+      const clearSelection = () => {
+        selectedId = null; selectedName = null;
+        listEl.querySelectorAll('.sd-move-row.selected').forEach(r => r.classList.remove('selected'));
       };
 
-      // Construir el árbol de carpetas: Soundrop + artistas + álbumes (2 niveles)
-      try {
-        const { folders: lvl1 } = await Drive.listFolderAll(rootId);
-        const subLists = await Promise.all(
-          lvl1.map(f => Drive.listFolderAll(f.id).then(r => r.folders || []).catch(() => []))
-        );
-        const rows = [{ id: rootId, name: 'Soundrop', depth: 0 }];
-        lvl1.forEach((f, i) => {
-          rows.push({ id: f.id, name: f.name, depth: 1 });
-          subLists[i].forEach(s => rows.push({ id: s.id, name: s.name, depth: 2 }));
-        });
-        const folderSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>`;
-        listEl.innerHTML = '';
-        rows.forEach(r => {
-          const el = document.createElement('div');
-          el.className = 'sd-move-row' + (r.id === curFolderId ? ' current' : '');
-          el.style.paddingLeft = (10 + r.depth * 16) + 'px';
-          el.innerHTML = `${folderSvg}<span>${_escHtml(r.name)}</span>`;
-          if (r.id !== curFolderId) el.addEventListener('click', () => doMove(r.id, r.name));
-          listEl.appendChild(el);
-        });
-      } catch (err) {
-        listEl.innerHTML = `<div class="sd-move-loading">${UI.t('sd_move_error') || 'Error'}</div>`;
-      }
+      const onRowTap = (f, el) => {
+        const now = Date.now();
+        if (_lastTap.id === f.id && (now - _lastTap.ts) < 400) {
+          // Doble clic / doble tap → abrir la carpeta
+          _lastTap = { id: null, ts: 0 };
+          stack.push({ id: openId, name: openName });
+          openId = f.id; openName = f.name;
+          render();
+          return;
+        }
+        _lastTap = { id: f.id, ts: now };
+        // Tap simple → seleccionar (toggle)
+        const wasSelected = el.classList.contains('selected');
+        clearSelection();
+        if (!wasSelected) { el.classList.add('selected'); selectedId = f.id; selectedName = f.name; }
+      };
+
+      const render = async () => {
+        clearSelection();
+        btnUp.style.display = stack.length ? '' : 'none';
+        pathEl.textContent  = [...stack.map(s => s.name), openName].join(' / ');
+        listEl.innerHTML    = `<div class="sd-move-loading">${tt('sd_move_loading', 'Cargando carpetas…')}</div>`;
+        try {
+          const { folders } = await Drive.listFolderAll(openId);
+          listEl.innerHTML = '';
+          if (!folders.length) {
+            listEl.innerHTML = `<div class="sd-move-loading">${tt('sd_move_empty', '(sin subcarpetas)')}</div>`;
+            return;
+          }
+          folders.forEach(f => {
+            const el = document.createElement('div');
+            el.className = 'sd-move-row';
+            el.innerHTML = `${folderSvg}<span>${_escHtml(f.name)}</span>`;
+            el.addEventListener('click', () => onRowTap(f, el));
+            listEl.appendChild(el);
+          });
+        } catch (_) {
+          listEl.innerHTML = `<div class="sd-move-loading">${tt('sd_move_error', 'Error')}</div>`;
+        }
+      };
+
+      btnUp.onclick = () => {
+        const prev = stack.pop();
+        if (prev) { openId = prev.id; openName = prev.name; render(); }
+      };
+
+      // Mover → a la seleccionada, o a la carpeta abierta si no hay selección
+      $g('btn-sd-move-go').onclick = () => {
+        const targetId   = selectedId || openId;
+        const targetName = selectedId ? selectedName : openName;
+        doMove(targetId, targetName);
+      };
+
+      // Crear → confirmación: crea DENTRO de la carpeta ABIERTA y mueve el archivo
+      btnNew.onclick = () => {
+        const name = input.value.trim();
+        if (!name) { input.focus(); return; }
+        const msg = tt('sd_move_create_q', '¿Quieres crear la carpeta «{n}» dentro de la carpeta «{f}» y mover tu archivo?')
+          .replace('{n}', name).replace('{f}', openName);
+        showConfirm(msg);
+        $g('btn-sd-move-confirm-cancel').onclick = () => showBrowse();
+        $g('btn-sd-move-confirm-ok').onclick = async () => {
+          const okBtn = $g('btn-sd-move-confirm-ok');
+          okBtn.disabled = true;
+          try {
+            const newId = await Drive.findOrCreateFolder(name, openId);
+            await doMove(newId, name);
+          } catch (_) { UI.showToast(tt('sd_move_error', 'Error al mover'), 'error'); }
+          okBtn.disabled = false;
+          showBrowse();
+        };
+      };
+
+      render();
     };
 
     document.getElementById('btn-pexp-sd-download')?.addEventListener('click', (e) => {

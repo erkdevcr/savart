@@ -416,6 +416,11 @@ const UI = (() => {
       sd_move_loading:            'Cargando carpetas…',
       sd_move_done:               'Movida a',
       sd_move_error:              'Error al mover',
+      sd_move_btn:                'Mover',
+      sd_move_same:               'Ya está en esa carpeta',
+      sd_move_empty:              '(sin subcarpetas)',
+      sd_move_create_q:           '¿Quieres crear la carpeta «{n}» dentro de la carpeta «{f}» y mover tu archivo?',
+      sd_move_confirm_create:     'Crear y mover',
       // ── Soundrop blocked modal ─────────────────────────────
       sd_blocked_title:   'Canción bloqueada',
       sd_blocked_body:    'Para escucharla, conviértela y descárgala en tu Drive.',
@@ -814,6 +819,11 @@ const UI = (() => {
       sd_move_loading:            'Loading folders…',
       sd_move_done:               'Moved to',
       sd_move_error:              'Move failed',
+      sd_move_btn:                'Move',
+      sd_move_same:               'Already in that folder',
+      sd_move_empty:              '(no subfolders)',
+      sd_move_create_q:           'Create folder “{n}” inside “{f}” and move your file?',
+      sd_move_confirm_create:     'Create & move',
       // ── Soundrop blocked modal ─────────────────────────────
       sd_blocked_title:   'Blocked song',
       sd_blocked_body:    'To play it, convert it and save it to your Drive.',

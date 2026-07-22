@@ -19,10 +19,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&family=Baskervville:ital@0;1&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="styles.css?v=3.5.516">
+  <link rel="stylesheet" href="styles.css?v=3.5.517">
   <!-- Version global — fallback para Android donde el SW no se registra.
        IMPORTANTE: mantener sincronizada con APP_VERSION de sw.js en cada bump. -->
-  <script>window.SAVART_VERSION = '3.5.516';</script>
+  <script>window.SAVART_VERSION = '3.5.517';</script>
 </head>
 <body>
 
@@ -819,11 +819,32 @@
       </div>
       <div class="ds-modal-body" style="padding:12px 14px">
         <p id="sd-move-song" style="margin:0 0 10px;font-weight:500;line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></p>
-        <div id="sd-move-list" class="sd-move-list"></div>
-        <div class="sd-move-new-row">
-          <input id="sd-move-new-input" class="ds-artist-url-modal-input" data-i18n-ph="sd_move_new_ph" placeholder="Nueva carpeta…">
-          <button id="btn-sd-move-create" class="btn-primary" data-i18n="sd_move_create">Crear</button>
+        <!-- Vista explorador: doble clic/tap abre carpeta, tap simple selecciona -->
+        <div id="sd-move-browse">
+          <div class="sd-move-pathbar">
+            <button id="btn-sd-move-up" class="sd-move-up" aria-label="Subir" style="display:none">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+            </button>
+            <span id="sd-move-path"></span>
+          </div>
+          <div id="sd-move-list" class="sd-move-list"></div>
+          <div class="sd-move-new-row">
+            <input id="sd-move-new-input" class="ds-artist-url-modal-input" placeholder="Nueva carpeta…">
+            <button id="btn-sd-move-create" class="btn-secondary" data-i18n="sd_move_create">Crear</button>
+          </div>
         </div>
+        <!-- Vista confirmación de crear carpeta + mover -->
+        <div id="sd-move-confirm" style="display:none">
+          <p id="sd-move-confirm-msg" style="margin:0;color:var(--text-secondary,#aaa);font-size:0.92em;line-height:1.5"></p>
+        </div>
+      </div>
+      <div class="ds-modal-footer" id="sd-move-footer">
+        <button id="btn-sd-move-cancel" class="btn-secondary" data-i18n="cancel_btn">Cancelar</button>
+        <button id="btn-sd-move-go" class="btn-primary" data-i18n="sd_move_btn">Mover</button>
+      </div>
+      <div class="ds-modal-footer" id="sd-move-confirm-footer" style="display:none">
+        <button id="btn-sd-move-confirm-cancel" class="btn-secondary" data-i18n="cancel_btn">Cancelar</button>
+        <button id="btn-sd-move-confirm-ok" class="btn-primary" data-i18n="sd_move_confirm_create">Crear y mover</button>
       </div>
     </div>
   </div>
@@ -1508,22 +1529,22 @@
 </script>
 
 <!-- Savart modules -->
-<script src="js/config.js?v=3.5.516"></script>
-<script src="js/auth.js?v=3.5.516"></script>
-<script src="js/drive.js?v=3.5.516"></script>
-<script src="js/db.js?v=3.5.516"></script>
-<script src="js/sync.js?v=3.5.516"></script>
-<script src="js/player.js?v=3.5.516"></script>
-<script src="js/meta.js?v=3.5.516"></script>
-<script src="js/lastfm.js?v=3.5.516"></script>
-<script src="js/audd.js?v=3.5.516"></script>
-<script src="js/musicbrainz.js?v=3.5.516"></script>
-<script src="js/discogs.js?v=3.5.516"></script>
-<script src="js/lyrics.js?v=3.5.516"></script>
-<script src="js/soundrop.js?v=3.5.516"></script>
-<script src="js/ui.js?v=3.5.516"></script>
-<script src="js/app.js?v=3.5.516"></script>
-<script src="js/bg.js?v=3.5.516"></script>
+<script src="js/config.js?v=3.5.517"></script>
+<script src="js/auth.js?v=3.5.517"></script>
+<script src="js/drive.js?v=3.5.517"></script>
+<script src="js/db.js?v=3.5.517"></script>
+<script src="js/sync.js?v=3.5.517"></script>
+<script src="js/player.js?v=3.5.517"></script>
+<script src="js/meta.js?v=3.5.517"></script>
+<script src="js/lastfm.js?v=3.5.517"></script>
+<script src="js/audd.js?v=3.5.517"></script>
+<script src="js/musicbrainz.js?v=3.5.517"></script>
+<script src="js/discogs.js?v=3.5.517"></script>
+<script src="js/lyrics.js?v=3.5.517"></script>
+<script src="js/soundrop.js?v=3.5.517"></script>
+<script src="js/ui.js?v=3.5.517"></script>
+<script src="js/app.js?v=3.5.517"></script>
+<script src="js/bg.js?v=3.5.517"></script>
 
 <!-- Inline: additional bindings that need the DOM -->
 <script>

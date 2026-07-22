@@ -1828,12 +1828,38 @@ img { display: block; }
   cursor: pointer;
   color: var(--text-secondary);
   overflow: hidden;
+  /* Doble tap no debe seleccionar texto ni hacer zoom */
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
 }
 .sd-move-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sd-move-row svg { flex-shrink: 0; opacity: 0.65; }
 .sd-move-row:hover { background: var(--bg-hover); color: var(--text-primary); }
-.sd-move-row.current { opacity: 0.4; cursor: default; }
-.sd-move-row.current:hover { background: transparent; color: var(--text-secondary); }
+.sd-move-row.selected { background: var(--accent-soft); color: var(--accent); }
+.sd-move-row.selected svg { opacity: 1; }
+.sd-move-pathbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+  min-height: 22px;
+}
+.sd-move-pathbar span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sd-move-up {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+.sd-move-up:hover { color: var(--text-primary); }
 .sd-move-loading { padding: 14px 10px; font-size: 12px; color: var(--text-muted); }
 .sd-move-new-row { display: flex; gap: 8px; align-items: stretch; }
 .sd-move-new-row .btn-primary { flex-shrink: 0; }
