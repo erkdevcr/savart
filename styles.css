@@ -5244,6 +5244,20 @@ body.queue-open #mini-player { z-index: 65; }
   padding-bottom: 2px;
 }
 
+/* Speed — pin to track toggle row */
+.speed-pin-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 2px 4px;
+  gap: 12px;
+}
+.speed-pin-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  flex: 1;
+}
+
 .settings-value-label {
   font-size: 13px;
   color: var(--text-secondary);

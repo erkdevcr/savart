@@ -1199,6 +1199,8 @@ const Sync = (() => {
       'embedBlocked',                               // aprendizaje: video YT bloqueado por licencia (error 101/150 real)
       'resetAt',                                    // reset a virgen — propaga el borrado total a otros devices
       'skipAutoEnrich',                             // item reseteado: solo ID3/rescan/manual pueden re-poblarlo
+      'customSpeed',                                // velocidad de reproducción personalizada para esta canción
+      'customSpeedAt',                              // LWW timestamp del cambio de customSpeed
     ];
     const isExternalUrl = u => !!_syncSafeUrl(u); // fix C5: incluye exclusión de googleusercontent
 
@@ -1210,7 +1212,7 @@ const Sync = (() => {
       // Songs with only a folderId carry name/displayName/folderId so other devices can
       // build the Library; enrichment flags prevent redundant lookups on the remote device.
       // Also include folder records (id === folderId) that carry rescannedAt.
-      .filter(m => m.folderId || m.mbTried || m.auddTried || m.artist || m.album || m.year || m.rescannedAt || m.manualAt)
+      .filter(m => m.folderId || m.mbTried || m.auddTried || m.artist || m.album || m.year || m.rescannedAt || m.manualAt || m.customSpeed)
       .map(m => {
         const rec = { id: m.id };
         for (const f of SYNC_FIELDS) {
@@ -1253,6 +1255,8 @@ const Sync = (() => {
       'soundropSaved',
       'resetAt',
       'skipAutoEnrich',
+      'customSpeed',
+      'customSpeedAt',
     ];
     const isExternalUrl = u => !!_syncSafeUrl(u); // fix C5: incluye exclusión de googleusercontent
 

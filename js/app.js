@@ -52,6 +52,13 @@ const App = (() => {
   let _trackLoading    = false;
   let _pendingNormGain = null;
 
+  /* ── Custom speed per track ──────────────────────────────── */
+  // true = the currently playing track has a DB-saved customSpeed applied.
+  let _speedPinnedToTrack = false;
+  // The global (settings) speed that was active BEFORE a pinned track
+  // overrode it. Restored when the pinned track ends. null = no override.
+  let _globalSpeedBeforePin = null;
+
   /* ── Home-data debounce ──────────────────────────────────── */
   // _loadHomeData is called from many places (sync events, track start, boot).
   // Debouncing prevents rapid successive calls from causing multiple full re-renders
@@ -1147,7 +1154,31 @@ const App = (() => {
         }
       }
 
-      // Speed badge — always reflects the current global tempo
+      // Custom speed per track
+      if (stillCurrent) {
+        const savedSpeed  = (typeof dbMeta?.customSpeed === 'number') ? dbMeta.customSpeed : null;
+        const pinToggle   = document.getElementById('speed-pin-toggle');
+        const wasPinned   = _speedPinnedToTrack;
+        if (savedSpeed) {
+          // Track has a pinned speed — save global speed (once) then apply
+          if (_globalSpeedBeforePin === null) {
+            _globalSpeedBeforePin = Player.getTempo() ?? 1.0;
+          }
+          _applyTempoUI(savedSpeed, false); // don't overwrite global settings
+          _speedPinnedToTrack = true;
+          if (pinToggle) pinToggle.classList.add('on');
+        } else {
+          // No pinned speed — if previous track was pinned, restore global speed
+          if (wasPinned && _globalSpeedBeforePin !== null) {
+            _applyTempoUI(_globalSpeedBeforePin, true);
+            _globalSpeedBeforePin = null;
+          }
+          _speedPinnedToTrack = false;
+          if (pinToggle) pinToggle.classList.remove('on');
+        }
+      }
+
+      // Speed badge — always reflects current tempo (already set above)
       _updateSpeedBadge(Player.getTempo());
 
       const bestName   = dbMeta?.displayName || track.displayName || track.name || '';
@@ -2095,6 +2126,27 @@ const App = (() => {
   function _updateSpeedBadge(rate) {
     const badge = document.getElementById('pexp-badge-speed');
     if (badge) badge.textContent = rate.toFixed(2) + ' X';
+  }
+
+  /**
+   * Apply a playback rate to the player + all slider/display elements.
+   * @param {number} rate        – e.g. 1.05
+   * @param {boolean} [save=true] – whether to persist via _saveSettings()
+   */
+  function _applyTempoUI(rate, save = true) {
+    Player.setTempo(rate);
+    const sliderVal = Math.round(rate * 100);
+    const oSlider = document.getElementById('overlay-tempo-slider');
+    const oVal    = document.getElementById('overlay-tempo-val');
+    const s       = document.getElementById('tempo-slider');
+    const sv      = document.getElementById('tempo-val');
+    const display = rate.toFixed(2) + '×';
+    if (oSlider) oSlider.value = sliderVal;
+    if (oVal)    oVal.textContent = display;
+    if (s)       s.value = sliderVal;
+    if (sv)      sv.textContent = display;
+    _updateSpeedBadge(rate);
+    if (save) _saveSettings();
   }
 
   async function _onBlobReady(item, blob) {
@@ -14004,6 +14056,9 @@ const App = (() => {
       const tValEl  = document.getElementById('overlay-tempo-val');
       const tVal    = parseFloat(tSlider?.value ?? 100);
       if (tValEl)  tValEl.textContent = (tVal / 100).toFixed(2) + '×';
+      // Sync pin toggle with current track's pinned state
+      const pinToggle = document.getElementById('speed-pin-toggle');
+      if (pinToggle) pinToggle.classList.toggle('on', _speedPinnedToTrack);
     }
 
     // Timer: pills already synced via shared .sleep-pill querySelectorAll
@@ -14228,6 +14283,14 @@ const App = (() => {
       if (sv) sv.textContent = display;
       _updateSpeedBadge(rate);
       _saveSettings();
+      // Auto-save to DB if this track has its speed pinned
+      if (_speedPinnedToTrack) {
+        const track = Player.getCurrentTrack();
+        if (track?.id) {
+          DB.setMeta(track.id, { customSpeed: rate, customSpeedAt: Date.now() }).catch(() => {});
+          Sync.push('metadata');
+        }
+      }
     });
 
     // Expanded player: ⋮ more options (desktop header) → same menu as mobile topbar
@@ -15020,6 +15083,25 @@ const App = (() => {
           e.currentTarget.classList.remove('on');
         }
       }
+    });
+
+    // Speed pin toggle — save/remove custom speed for current track
+    document.getElementById('speed-pin-toggle')?.addEventListener('click', async (e) => {
+      const isOn = e.currentTarget.classList.toggle('on');
+      _speedPinnedToTrack = isOn;
+      const track = Player.getCurrentTrack();
+      if (!track?.id) return;
+      const rate = parseFloat(document.getElementById('overlay-tempo-slider')?.value ?? 100) / 100;
+      if (isOn) {
+        // Pin current speed to this track
+        if (_globalSpeedBeforePin === null) _globalSpeedBeforePin = rate;
+        await DB.setMeta(track.id, { customSpeed: rate, customSpeedAt: Date.now() });
+      } else {
+        // Unpin — remove saved speed
+        await DB.setMeta(track.id, { customSpeed: null, customSpeedAt: Date.now() });
+        _globalSpeedBeforePin = null;
+      }
+      Sync.push('metadata');
     });
 
     // EQ close button → close EQ overlay (animated)
