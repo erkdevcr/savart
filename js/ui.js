@@ -3523,7 +3523,11 @@ const UI = (() => {
 
       row.addEventListener('click', e => {
         if (e.target.closest('.btn-more')) return;
-        if (typeof App !== 'undefined') App.onSongClick(song);
+        // v3.5.512: pasar la playlist completa como contexto — el queue se carga
+        // con TODOS los items de la playlist (misma conducta que una colección)
+        // y radio agrega +25 por artista variado después, en vez de que radio
+        // llenara la cola con 25 del mismo artista desde una sola canción.
+        if (typeof App !== 'undefined') App.onSongClick(song, songs);
       });
 
       if (typeof App !== 'undefined') App._cacheItem?.(song);

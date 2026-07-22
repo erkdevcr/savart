@@ -5607,7 +5607,11 @@ const App = (() => {
   function onPlaylistDetailPlay(songs) {
     if (!songs || songs.length === 0) return;
     _resetRadio();
+    songs.forEach(s => _cacheItem(s));
     Player.setQueue(songs, 0);
+    // v3.5.512: una playlist se comporta como una colección — al agotarse,
+    // radio agrega +25 por artista (artistas variados de la playlist).
+    _activateRadioForSongs(songs).catch(() => {});
   }
 
   /** Open Library view and navigate directly to the tapped playlist. */
@@ -12906,8 +12910,11 @@ const App = (() => {
     try {
       const songs = await _getPlaylistSongs(pl);
       if (songs.length === 0) { UI.showToast(UI.t('toast_playlist_empty'), 'error'); return; }
-      _resetRadio(); // playlist = curated queue, no radio expansion
+      _resetRadio();
+      songs.forEach(s => _cacheItem(s));
       Player.setQueue(songs, 0);
+      // v3.5.512: playlist = colección — radio agrega +25 por artista variado al agotarse
+      _activateRadioForSongs(songs).catch(() => {});
     } catch (err) { UI.showToast(UI.t('toast_playlist_play_error'), 'error'); }
   }
 

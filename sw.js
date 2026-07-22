@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.511';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.511 — covers: de-letterbox del arte ID3 de Soundrop (franjas negras horneadas); fast path boot respeta canon manual>ID3; reset ID3 estampa resetAt+skipAutoEnrich (la URL ya no resucita vía sync/appProperties)
+const APP_VERSION  = '3.5.512';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.512 — playlists se comportan como colecciones: click en item carga TODA la playlist al queue; radio agrega +25 por artista variado al agotarse (row click, botón Reproducir del detalle y play del menú contextual)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
