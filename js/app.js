@@ -15104,8 +15104,15 @@ const App = (() => {
         if (_globalSpeedBeforePin === null) _globalSpeedBeforePin = rate;
         await DB.setMeta(track.id, { customSpeed: rate, customSpeedAt: Date.now() });
       } else {
-        // Unpin — remove saved speed
-        await DB.setMeta(track.id, { customSpeed: null, customSpeedAt: Date.now() });
+        // Unpin — FIX: setMeta filtra los null, así que customSpeed nunca se
+        // borraba (la canción volvía a fijarse en el próximo track-change).
+        // Borrado real vía bulkWriteMeta (put directo, sin merge).
+        const rec = await DB.getMeta(track.id).catch(() => null);
+        if (rec) {
+          delete rec.customSpeed;
+          rec.customSpeedAt = Date.now(); // el unpin también viaja por sync (LWW)
+          await DB.bulkWriteMeta([rec]).catch(() => {});
+        }
         _globalSpeedBeforePin = null;
       }
       Sync.push('metadata');

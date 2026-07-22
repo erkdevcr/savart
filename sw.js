@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.506';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.506 — Audio focus (APK): duck/restore con easing (ease-out 250ms al bajar, smoothstep 700ms al restaurar) — la restauración lineal se sentía como golpe. En web el duck es del OS y no es interceptable
+const APP_VERSION  = '3.5.507';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.507 — Fix sync de customSpeed: el merge receptor ahora aplica customSpeed (LWW por customSpeedAt, unpin incluido), embedBlocked y soundropSaved (se pusheaban pero nunca se aplicaban); unpin local borra de verdad (setMeta filtraba el null)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

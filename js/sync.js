@@ -881,6 +881,22 @@ const Sync = (() => {
             merged.durationSec = item.durationSec;
           }
 
+          // customSpeed — LWW por customSpeedAt (FIX: se pusheaba pero el merge
+          // nunca lo aplicaba → el otro device jamás detectaba el speed guardado).
+          // El unpin viaja como customSpeedAt nuevo SIN customSpeed (el push
+          // filtra nulls) → aquí se borra el campo (bulkWriteMeta es put directo).
+          const _remSpeedAt = item.customSpeedAt || 0;
+          if (_remSpeedAt > (ex.customSpeedAt || 0)) {
+            merged.customSpeedAt = _remSpeedAt;
+            if (typeof item.customSpeed === 'number') merged.customSpeed = item.customSpeed;
+            else delete merged.customSpeed; // unpin remoto
+          }
+
+          // Flags one-way (solo se activan): aprendizaje de embedding bloqueado
+          // y marca de "guardada desde Soundrop" — también se pusheaban sin aplicarse.
+          if (item.embedBlocked)  merged.embedBlocked  = true;
+          if (item.soundropSaved) merged.soundropSaved = true;
+
           // normalGain / normalGainDb:
           //   • If remote was bulk-cleared more recently (normalGainClearedAt), propagate the clear.
           //   • Otherwise fill-only: take remote value if local doesn't have one yet.
@@ -1885,6 +1901,22 @@ const Sync = (() => {
           if (item.durationSec > 0 && item.durationSec > (merged.durationSec || 0)) {
             merged.durationSec = item.durationSec;
           }
+
+          // customSpeed — LWW por customSpeedAt (FIX: se pusheaba pero el merge
+          // nunca lo aplicaba → el otro device jamás detectaba el speed guardado).
+          // El unpin viaja como customSpeedAt nuevo SIN customSpeed (el push
+          // filtra nulls) → aquí se borra el campo (bulkWriteMeta es put directo).
+          const _remSpeedAt = item.customSpeedAt || 0;
+          if (_remSpeedAt > (ex.customSpeedAt || 0)) {
+            merged.customSpeedAt = _remSpeedAt;
+            if (typeof item.customSpeed === 'number') merged.customSpeed = item.customSpeed;
+            else delete merged.customSpeed; // unpin remoto
+          }
+
+          // Flags one-way (solo se activan): aprendizaje de embedding bloqueado
+          // y marca de "guardada desde Soundrop" — también se pusheaban sin aplicarse.
+          if (item.embedBlocked)  merged.embedBlocked  = true;
+          if (item.soundropSaved) merged.soundropSaved = true;
 
           // normalGain / normalGainDb:
           //   • If remote was bulk-cleared more recently (normalGainClearedAt), propagate the clear.
