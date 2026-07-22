@@ -337,6 +337,9 @@ const UI = (() => {
       eq_del_title:         'Eliminar preset',
       eq_del_msg:           '¿Eliminar el preset',
       eq_del_confirm:       'Eliminar',
+      pl_del_title:         'Eliminar playlist',
+      pl_del_msg:           '¿Eliminar la playlist',
+      pl_del_confirm:       'Eliminar',
       rescan_confirm_msg:   'álbumes serán rescaneados. Este proceso puede tardar varios minutos. ¿Deseas continuar?',
       // ── Deep scan HTML labels ──────────────────────────────
       ds_folder_label:      'Carpeta:',
@@ -725,6 +728,9 @@ const UI = (() => {
       eq_del_title:         'Delete preset',
       eq_del_msg:           'Delete the preset',
       eq_del_confirm:       'Delete',
+      pl_del_title:         'Delete playlist',
+      pl_del_msg:           'Delete the playlist',
+      pl_del_confirm:       'Delete',
       rescan_confirm_msg:   'albums will be rescanned. This may take several minutes. Continue?',
       // ── Deep scan HTML labels ──────────────────────────────
       ds_folder_label:      'Folder:',

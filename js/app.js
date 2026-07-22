@@ -5869,7 +5869,9 @@ const App = (() => {
       _browseFiles    = result.files;
       // Keep a full folder object so the browse title 3-dot menu can pass the right
       // folderType (album / collection / null) to showContextMenu — same data as a subfolder row.
-      _browseFolder   = { id: folder.id, name: folder.name, folderType: curType || null };
+      // isFolder (v3.5.515): sin este flag, onShowPlaylistPicker no tagueaba el item
+      // como carpeta y "Agregar a playlist" metía el ID del FOLDER como canción fantasma.
+      _browseFolder   = { id: folder.id, name: folder.name, isFolder: true, type: 'folder', folderType: curType || null };
       // Hide back button when at root; show it when inside a subfolder
       { const _bb = document.getElementById('btn-browse-back'); if (_bb) _bb.style.display = folder.id === _rootFolderId ? 'none' : ''; }
       // Update the rescan dot: show green if this folder was previously scanned
@@ -5976,7 +5978,7 @@ const App = (() => {
 
     _browseFolderId = folder.id;
     _browseFiles    = files;
-    _browseFolder   = { id: folder.id, name: folder.name, folderType: null };
+    _browseFolder   = { id: folder.id, name: folder.name, isFolder: true, type: 'folder', folderType: null };
     // Hide back button when at root; show it when inside a subfolder
     { const _bb = document.getElementById('btn-browse-back'); if (_bb) _bb.style.display = folder.id === _rootFolderId ? 'none' : ''; }
     _updateBrowseLegend(folder.id);
@@ -12941,7 +12943,32 @@ const App = (() => {
   }
 
   async function onDeletePlaylist(pl) {
-    if (!confirm(`${UI.t('confirm_delete_playlist')} "${pl.name}"?`)) return;
+    // v3.5.515: popup propio de confirmación (ES/EN) — reutiliza el modal
+    // genérico #eq-del-modal (título/mensaje/botones se setean al abrir).
+    const modal = document.getElementById('eq-del-modal');
+    if (!modal) {
+      // Fallback sin modal: confirm nativo
+      if (!confirm(`${UI.t('confirm_delete_playlist')} "${pl.name}"?`)) return;
+      return _doDeletePlaylist(pl);
+    }
+    document.getElementById('eq-del-title').textContent = UI.t('pl_del_title') || 'Eliminar playlist';
+    document.getElementById('eq-del-msg').textContent =
+      `${UI.t('pl_del_msg') || '¿Eliminar la playlist'} "${pl.name}"?`;
+    document.getElementById('btn-eq-del-cancel').textContent  = UI.t('cancel_btn')     || 'Cancelar';
+    document.getElementById('btn-eq-del-confirm').textContent = UI.t('pl_del_confirm') || 'Eliminar';
+    const close = () => { modal.style.display = 'none'; };
+    // onclick (no addEventListener): el modal se reusa — evita acumular listeners
+    document.getElementById('btn-eq-del-close').onclick      = close;
+    document.getElementById('btn-eq-del-cancel').onclick     = close;
+    document.getElementById('eq-del-modal-backdrop').onclick = close;
+    document.getElementById('btn-eq-del-confirm').onclick = () => {
+      close();
+      _doDeletePlaylist(pl).catch(() => {});
+    };
+    modal.style.display = '';
+  }
+
+  async function _doDeletePlaylist(pl) {
     await DB.deletePlaylist(pl.id);
     UI.showToast(`"${pl.name}" — ${UI.t('ctx_delete').toLowerCase()}`);
     _loadPlaylists();
