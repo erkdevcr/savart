@@ -91,8 +91,8 @@ const CONFIG = {
   EQ_BANDS: [32, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 12000, 16000, 20000],
 
   // ── History ───────────────────────────────────────────────
-  HISTORY_MAX:      100,
-  HISTORY_MAX_DAYS: 7,
+  HISTORY_MAX:      300,
+  HISTORY_MAX_DAYS: 60,
 
   // Ventana de vida de los tombstones (marcadores de borrado) para sync.
   // 30 días (fix M5): con 7, un dispositivo que pasara más de una semana

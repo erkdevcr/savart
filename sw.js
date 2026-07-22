@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.508';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.508 — Frescura del Home: pollNow() en visibilitychange (al volver a la app: poll inmediato + refresco del Home) y refresco same-device tras el commit del historial
+const APP_VERSION  = '3.5.510';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.510 — HISTORY_MAX_DAYS 7 → 60 días (el historial conserva hasta 300 items por 60 días)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
