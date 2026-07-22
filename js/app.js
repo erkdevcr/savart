@@ -14490,6 +14490,10 @@ const App = (() => {
         DB.setCachedBlob(driveId, blob, _blobMime).catch(err =>
           console.warn('[App] SD local cache write failed (non-fatal):', err)
         );
+        // El mismo blob quedó cacheado bajo sd_<videoId> por el fallback de
+        // reproducción — eliminar el duplicado huérfano (liberaba espacio solo
+        // por evicción LRU eventual).
+        DB.removeCachedBlob?.(`sd_${track.videoId}`).catch?.(() => {});
 
         // 4. Write Drive metadata to DB.
         // manualAt is always stamped (user manually entered all fields).
@@ -15010,6 +15014,9 @@ const App = (() => {
       const bytes = parseInt(e.target.value, 10);
       if (!bytes) return;
       await DB.setState('cacheLimit', bytes);
+      // Evicción inmediata (fix): al BAJAR el límite, antes el espacio no se
+      // liberaba hasta que se cacheara la siguiente canción.
+      await DB.evictIfNeeded?.().catch?.(() => {});
       _refreshCacheBar();
       UI.showToast(`${UI.t('settings_cache_limit')}: ${formatBytes(bytes)}`, 'success');
     });

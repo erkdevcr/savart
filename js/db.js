@@ -1322,6 +1322,7 @@ const DB = (() => {
     isCached,
     getCacheSize,
     clearCache,
+    evictIfNeeded: _evictIfNeeded, // evicción manual (ej. al bajar el límite en Ajustes)
     // Metadata
     getMeta,
     getAllMeta,

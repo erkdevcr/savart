@@ -1396,8 +1396,11 @@ const Player = (() => {
       blob = await Drive.downloadFile(item.id, null, signal);
     }
 
-    // Cache it
-    await DB.setCachedBlob(item.id, blob, item.mimeType);
+    // Cache it — NO fatal (fix): con la cuota de IndexedDB llena, el
+    // QuotaExceededError abortaba la reproducción AUNQUE el blob ya estaba
+    // descargado y listo para sonar.
+    await DB.setCachedBlob(item.id, blob, item.mimeType).catch(err =>
+      console.warn('[Player] Cache write failed (non-fatal):', err?.message || err));
 
     return blob;
   }
