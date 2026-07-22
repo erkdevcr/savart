@@ -14449,6 +14449,104 @@ const App = (() => {
       }
     };
 
+    // ── Soundrop move (v3.5.516) — mover archivo DENTRO del árbol Soundrop ──
+    // Picker con las carpetas del árbol (root + artistas + álbumes, 2 niveles)
+    // o crear una carpeta nueva bajo el root de Soundrop.
+    App.onSoundropMove = async (item) => {
+      if (!item?.id || String(item.id).startsWith('sd_')) return; // solo archivos reales de Drive
+      const modal  = document.getElementById('sd-move-modal');
+      if (!modal) return;
+      const listEl = document.getElementById('sd-move-list');
+      const songEl = document.getElementById('sd-move-song');
+      const input  = document.getElementById('sd-move-new-input');
+      const btnNew = document.getElementById('btn-sd-move-create');
+
+      songEl.textContent = item.displayName || item.name || '';
+      input.value        = '';
+      input.placeholder  = UI.t('sd_move_new_ph') || 'Nueva carpeta…';
+      btnNew.textContent = UI.t('sd_move_create') || 'Crear';
+      btnNew.disabled    = false;
+      listEl.innerHTML   = `<div class="sd-move-loading">${UI.t('sd_move_loading') || 'Cargando carpetas…'}</div>`;
+      modal.style.display = '';
+
+      const close = () => { modal.style.display = 'none'; };
+      // onclick (no addEventListener): el modal se reusa — evita acumular listeners
+      document.getElementById('btn-sd-move-close').onclick      = close;
+      document.getElementById('sd-move-modal-backdrop').onclick = close;
+
+      // Carpeta actual del archivo (para excluirla del picker y como removeParents)
+      const dbMeta    = await DB.getMeta(item.id).catch(() => null);
+      let curFolderId = dbMeta?.folderId || item.folderId || item.parents?.[0] || null;
+      if (!curFolderId) {
+        const info = await Drive.getFileInfo(item.id).catch(() => null);
+        curFolderId = info?.parents?.[0] || null;
+      }
+
+      let rootId = null;
+      try { rootId = await Drive.findOrCreateFolder('Soundrop', _rootFolderId); }
+      catch (_) { close(); UI.showToast(UI.t('sd_move_error'), 'error'); return; }
+
+      const doMove = async (targetId, targetName) => {
+        if (!targetId || targetId === curFolderId) return;
+        close();
+        try {
+          await Drive.updateFileMeta(item.id, {
+            addParents: targetId,
+            ...(curFolderId ? { removeParents: curFolderId } : {}),
+          });
+          await DB.setMeta(item.id, { folderId: targetId }).catch(() => {});
+          if (typeof Sync !== 'undefined') Sync.push('metadata');
+          UI.showToast(`📁 ${UI.t('sd_move_done') || 'Movida a'} "${targetName}"`);
+          // Refrescar browse si estamos viendo la carpeta origen o destino
+          if (_browseFolderId === curFolderId || _browseFolderId === targetId) {
+            const cur = _browseFolder || { id: _browseFolderId, name: '' };
+            _openFolder(cur, false).catch(() => {});
+          }
+          // Limpieza de carpetas vacías tras propagación del move en Drive
+          setTimeout(() => { _deepCleanSoundropFolders(rootId).catch(() => {}); }, 3000);
+        } catch (err) {
+          console.error('[App] Soundrop move error:', err);
+          UI.showToast(UI.t('sd_move_error'), 'error');
+        }
+      };
+
+      btnNew.onclick = async () => {
+        const name = input.value.trim();
+        if (!name) { input.focus(); return; }
+        btnNew.disabled = true;
+        try {
+          const newId = await Drive.findOrCreateFolder(name, rootId);
+          await doMove(newId, name);
+        } catch (_) { UI.showToast(UI.t('sd_move_error'), 'error'); }
+        btnNew.disabled = false;
+      };
+
+      // Construir el árbol de carpetas: Soundrop + artistas + álbumes (2 niveles)
+      try {
+        const { folders: lvl1 } = await Drive.listFolderAll(rootId);
+        const subLists = await Promise.all(
+          lvl1.map(f => Drive.listFolderAll(f.id).then(r => r.folders || []).catch(() => []))
+        );
+        const rows = [{ id: rootId, name: 'Soundrop', depth: 0 }];
+        lvl1.forEach((f, i) => {
+          rows.push({ id: f.id, name: f.name, depth: 1 });
+          subLists[i].forEach(s => rows.push({ id: s.id, name: s.name, depth: 2 }));
+        });
+        const folderSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>`;
+        listEl.innerHTML = '';
+        rows.forEach(r => {
+          const el = document.createElement('div');
+          el.className = 'sd-move-row' + (r.id === curFolderId ? ' current' : '');
+          el.style.paddingLeft = (10 + r.depth * 16) + 'px';
+          el.innerHTML = `${folderSvg}<span>${_escHtml(r.name)}</span>`;
+          if (r.id !== curFolderId) el.addEventListener('click', () => doMove(r.id, r.name));
+          listEl.appendChild(el);
+        });
+      } catch (err) {
+        listEl.innerHTML = `<div class="sd-move-loading">${UI.t('sd_move_error') || 'Error'}</div>`;
+      }
+    };
+
     document.getElementById('btn-pexp-sd-download')?.addEventListener('click', (e) => {
       e.stopPropagation();
       _openSdSaveModal();

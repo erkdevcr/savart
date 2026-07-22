@@ -19,10 +19,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&family=Baskervville:ital@0;1&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="styles.css?v=3.5.515">
+  <link rel="stylesheet" href="styles.css?v=3.5.516">
   <!-- Version global — fallback para Android donde el SW no se registra.
        IMPORTANTE: mantener sincronizada con APP_VERSION de sw.js en cada bump. -->
-  <script>window.SAVART_VERSION = '3.5.515';</script>
+  <script>window.SAVART_VERSION = '3.5.516';</script>
 </head>
 <body>
 
@@ -807,6 +807,27 @@
     </div>
   </div>
 
+  <!-- Soundrop move modal: mover archivo a otra carpeta DENTRO del árbol Soundrop -->
+  <div id="sd-move-modal" class="ds-modal" style="display:none">
+    <div class="ds-modal-backdrop" id="sd-move-modal-backdrop"></div>
+    <div class="ds-modal-card ds-modal-card--sm">
+      <div class="ds-modal-header">
+        <span class="ds-modal-title" data-i18n="sd_move_title">Mover a</span>
+        <button class="ds-modal-close" id="btn-sd-move-close">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </div>
+      <div class="ds-modal-body" style="padding:12px 14px">
+        <p id="sd-move-song" style="margin:0 0 10px;font-weight:500;line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></p>
+        <div id="sd-move-list" class="sd-move-list"></div>
+        <div class="sd-move-new-row">
+          <input id="sd-move-new-input" class="ds-artist-url-modal-input" data-i18n-ph="sd_move_new_ph" placeholder="Nueva carpeta…">
+          <button id="btn-sd-move-create" class="btn-primary" data-i18n="sd_move_create">Crear</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Collection edit modal (name + cover URL + apply-to-all) -->
   <div id="collection-edit-modal" class="ds-modal" style="display:none">
     <div class="ds-modal-backdrop" id="collection-edit-backdrop"></div>
@@ -1487,22 +1508,22 @@
 </script>
 
 <!-- Savart modules -->
-<script src="js/config.js?v=3.5.515"></script>
-<script src="js/auth.js?v=3.5.515"></script>
-<script src="js/drive.js?v=3.5.515"></script>
-<script src="js/db.js?v=3.5.515"></script>
-<script src="js/sync.js?v=3.5.515"></script>
-<script src="js/player.js?v=3.5.515"></script>
-<script src="js/meta.js?v=3.5.515"></script>
-<script src="js/lastfm.js?v=3.5.515"></script>
-<script src="js/audd.js?v=3.5.515"></script>
-<script src="js/musicbrainz.js?v=3.5.515"></script>
-<script src="js/discogs.js?v=3.5.515"></script>
-<script src="js/lyrics.js?v=3.5.515"></script>
-<script src="js/soundrop.js?v=3.5.515"></script>
-<script src="js/ui.js?v=3.5.515"></script>
-<script src="js/app.js?v=3.5.515"></script>
-<script src="js/bg.js?v=3.5.515"></script>
+<script src="js/config.js?v=3.5.516"></script>
+<script src="js/auth.js?v=3.5.516"></script>
+<script src="js/drive.js?v=3.5.516"></script>
+<script src="js/db.js?v=3.5.516"></script>
+<script src="js/sync.js?v=3.5.516"></script>
+<script src="js/player.js?v=3.5.516"></script>
+<script src="js/meta.js?v=3.5.516"></script>
+<script src="js/lastfm.js?v=3.5.516"></script>
+<script src="js/audd.js?v=3.5.516"></script>
+<script src="js/musicbrainz.js?v=3.5.516"></script>
+<script src="js/discogs.js?v=3.5.516"></script>
+<script src="js/lyrics.js?v=3.5.516"></script>
+<script src="js/soundrop.js?v=3.5.516"></script>
+<script src="js/ui.js?v=3.5.516"></script>
+<script src="js/app.js?v=3.5.516"></script>
+<script src="js/bg.js?v=3.5.516"></script>
 
 <!-- Inline: additional bindings that need the DOM -->
 <script>

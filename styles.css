@@ -1809,6 +1809,35 @@ img { display: block; }
   margin-top: 4px;
 }
 
+/* ── SD move modal (mover dentro de Soundrop, v3.5.516) ───── */
+#sd-move-modal .ds-modal-card { background: var(--bg-elevated); }
+#sd-move-modal .ds-artist-url-modal-input { background: var(--bg-surface); flex: 1; min-width: 0; }
+.sd-move-list {
+  max-height: 42vh;
+  overflow-y: auto;
+  border: 1px solid var(--bg-hover);
+  border-radius: var(--radius-sm);
+  margin-bottom: 10px;
+}
+.sd-move-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px;
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  overflow: hidden;
+}
+.sd-move-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sd-move-row svg { flex-shrink: 0; opacity: 0.65; }
+.sd-move-row:hover { background: var(--bg-hover); color: var(--text-primary); }
+.sd-move-row.current { opacity: 0.4; cursor: default; }
+.sd-move-row.current:hover { background: transparent; color: var(--text-secondary); }
+.sd-move-loading { padding: 14px 10px; font-size: 12px; color: var(--text-muted); }
+.sd-move-new-row { display: flex; gap: 8px; align-items: stretch; }
+.sd-move-new-row .btn-primary { flex-shrink: 0; }
+
 /* ── SD save modal: same color as EQ card ─────────────────── */
 #sd-save-modal .ds-modal-card {
   background: var(--bg-elevated);   /* #1C1C22 = rgb(28,28,34) */

@@ -409,6 +409,13 @@ const UI = (() => {
       ctx_soundrop_delete_confirm:'¿Eliminar',
       ctx_soundrop_deleted:       'Eliminado de Soundrop',
       ctx_soundrop_delete_error:  'Error al eliminar',
+      ctx_soundrop_move:          'Mover a…',
+      sd_move_title:              'Mover a',
+      sd_move_new_ph:             'Nueva carpeta…',
+      sd_move_create:             'Crear',
+      sd_move_loading:            'Cargando carpetas…',
+      sd_move_done:               'Movida a',
+      sd_move_error:              'Error al mover',
       // ── Soundrop blocked modal ─────────────────────────────
       sd_blocked_title:   'Canción bloqueada',
       sd_blocked_body:    'Para escucharla, conviértela y descárgala en tu Drive.',
@@ -800,6 +807,13 @@ const UI = (() => {
       ctx_soundrop_delete_confirm:'Delete',
       ctx_soundrop_deleted:       'Deleted from Soundrop',
       ctx_soundrop_delete_error:  'Error deleting item',
+      ctx_soundrop_move:          'Move to…',
+      sd_move_title:              'Move to',
+      sd_move_new_ph:             'New folder…',
+      sd_move_create:             'Create',
+      sd_move_loading:            'Loading folders…',
+      sd_move_done:               'Moved to',
+      sd_move_error:              'Move failed',
       // ── Soundrop blocked modal ─────────────────────────────
       sd_blocked_title:   'Blocked song',
       sd_blocked_body:    'To play it, convert it and save it to your Drive.',
@@ -2291,6 +2305,10 @@ const UI = (() => {
       // not set at render time (stale cache, fresh navigation from Recents, etc.)
       if (item._soundropCtx || item.isSoundrop || (typeof App !== 'undefined' && App.isBrowseSoundropCtx?.())) {
         _addCtxDivider(menu);
+        // Mover (v3.5.516) — solo archivos reales de Drive (no sd_ virtuales)
+        if (!String(item.id || '').startsWith('sd_')) {
+          _addCtxItem(menu, _iconFolder, t('ctx_soundrop_move'), (e) => { hideContextMenu(); App.onSoundropMove?.(item); });
+        }
         _addCtxItem(menu, iconTrash(14), t('ctx_soundrop_delete'), () => { App.onSoundropDelete?.(item); hideContextMenu(); }, 'destructive');
       }
     }

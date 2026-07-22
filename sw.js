@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.515';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.515 — browse header: add-to-playlist del folder-more agrega todas las canciones del folder (antes: 1 item fantasma); popup propio ES/EN para eliminar playlist (reutiliza #eq-del-modal)
+const APP_VERSION  = '3.5.516';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.516 — Soundrop: acción "Mover a…" en el menú contextual — mueve archivos dentro del árbol Soundrop (picker de carpetas 2 niveles o carpeta nueva bajo el root); limpia carpetas vacías tras el move
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
