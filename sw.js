@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.510';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.510 — HISTORY_MAX_DAYS 7 → 60 días (el historial conserva hasta 300 items por 60 días)
+const APP_VERSION  = '3.5.511';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.511 — covers: de-letterbox del arte ID3 de Soundrop (franjas negras horneadas); fast path boot respeta canon manual>ID3; reset ID3 estampa resetAt+skipAutoEnrich (la URL ya no resucita vía sync/appProperties)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

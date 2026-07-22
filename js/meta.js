@@ -127,6 +127,19 @@ const Meta = (() => {
       console.warn('[Meta] Parse error for', fileId, err.message);
     }
 
+    // v3.5.511: recortar franjas negras horneadas (letterbox) ANTES de cachear
+    // y de que el caller persista coverBlob — así el arte guardado ya va limpio.
+    if (result.coverBlob) {
+      try {
+        const cropped = await _deLetterbox(result.coverBlob);
+        if (cropped) {
+          if (result.coverUrl?.startsWith('blob:')) URL.revokeObjectURL(result.coverUrl);
+          result.coverBlob = cropped;
+          result.coverUrl  = URL.createObjectURL(cropped);
+        }
+      } catch (_) { /* detección fallida → arte original intacto */ }
+    }
+
     // Cache without the raw blob (avoid double-memory; blob is for DB persistence only)
     const { coverBlob, ...cacheResult } = result;
     _cache.set(fileId, cacheResult);
@@ -504,6 +517,93 @@ const Meta = (() => {
   function _uint24(b, i)   { return (b[i]<<16) | (b[i+1]<<8) | b[i+2]; }
   function _str(b, i, len) { return String.fromCharCode(...b.slice(i, i + len)); }
 
+  /* ── De-letterbox (v3.5.511) ─────────────────────────────────
+     Los MP3 convertidos desde Soundrop (RapidAPI youtube-mp36) traen el arte
+     embebido como lienzo CUADRADO con el thumbnail 16:9 centrado y franjas
+     negras puras arriba/abajo HORNEADAS en la imagen. No es un problema de
+     CSS: object-fit:cover no puede recortar barras que son parte del JPEG.
+     Detección ESTRICTA para no tocar portadas legítimas oscuras:
+       • lienzo ~cuadrado (0.85 ≤ w/h ≤ 1.2)
+       • franjas negras casi puras (canal máx ≤ 26) que cubren TODA la fila,
+         con un grosor ≥8% del alto tanto arriba COMO abajo
+       • banda de contenido con firma 16:9 (1.35 ≤ ratio ≤ 2.15)
+     Devuelve un blob nuevo con solo la banda de contenido, o null si la
+     imagen no matchea la firma (se deja intacta). */
+  async function _deLetterbox(blob) {
+    try {
+      if (!blob || blob.size < 2000) return null;
+      const bmp = await createImageBitmap(blob);
+      const W = bmp.width, H = bmp.height;
+      const ratio = W / H;
+      if (W < 100 || H < 100 || ratio < 0.85 || ratio > 1.2) { bmp.close?.(); return null; }
+      // Muestreo reducido (64px de ancho) — abarata la lectura de píxeles
+      const SW = 64, SH = Math.max(16, Math.round(H * (SW / W)));
+      const s  = document.createElement('canvas');
+      s.width = SW; s.height = SH;
+      const sx = s.getContext('2d', { willReadFrequently: true });
+      sx.drawImage(bmp, 0, 0, SW, SH);
+      const d = sx.getImageData(0, 0, SW, SH).data;
+      const rowIsBlack = (y) => {
+        for (let i = y * SW * 4, n = i + SW * 4; i < n; i += 4) {
+          if (d[i] > 26 || d[i + 1] > 26 || d[i + 2] > 26) return false;
+        }
+        return true;
+      };
+      let top = 0;
+      while (top < SH * 0.45 && rowIsBlack(top)) top++;
+      let bot = SH - 1;
+      while (bot > SH * 0.55 && rowIsBlack(bot)) bot--;
+      const minBar    = Math.max(2, SH * 0.08);
+      const contentH  = bot - top + 1;
+      if (top < minBar || (SH - 1 - bot) < minBar) { bmp.close?.(); return null; }
+      if (contentH < SH * 0.3)                     { bmp.close?.(); return null; }
+      const contentRatio = ratio * (SH / contentH); // ratio real de la banda de contenido
+      if (contentRatio < 1.35 || contentRatio > 2.15) { bmp.close?.(); return null; }
+      // Recorte a resolución original
+      const topPx = Math.round(top * (H / SH));
+      const hPx   = Math.min(H - topPx, Math.round(contentH * (H / SH)));
+      const out   = document.createElement('canvas');
+      out.width = W; out.height = hPx;
+      out.getContext('2d').drawImage(bmp, 0, topPx, W, hPx, 0, 0, W, hPx);
+      bmp.close?.();
+      const nb = await new Promise(res => out.toBlob(res, 'image/jpeg', 0.9));
+      return (nb && nb.size > 500) ? nb : null;
+    } catch (_) { return null; }
+  }
+
+  /* Migración one-shot de coverBlobs YA persistidos con letterbox (guardados
+     antes del fix). Corre en background la primera vez que un blob se inyecta
+     en la sesión; estampa coverBarsChecked en DB para no re-analizar nunca.
+     Si recorta: persiste el blob limpio, refresca el cache de sesión y avisa
+     a app.js (evento 'savart:cover-recropped') para repintar superficies. */
+  const _recropChecked = new Set();
+  function _maybeRecropPersisted(fileId, blob) {
+    if (_recropChecked.has(fileId)) return;
+    _recropChecked.add(fileId);
+    (async () => {
+      try {
+        if (typeof DB === 'undefined') return;
+        const m = await DB.getMeta(fileId).catch(() => null);
+        if (!m || m.coverBarsChecked) return;
+        const cropped = await _deLetterbox(blob);
+        await DB.setMeta(fileId, cropped
+          ? { coverBarsChecked: true, coverBlob: cropped }
+          : { coverBarsChecked: true }).catch(() => {});
+        if (!cropped) return;
+        const newUrl = URL.createObjectURL(cropped);
+        _objectUrls.add(newUrl);
+        const existing = _cache.get(fileId);
+        if (existing?.coverUrl?.startsWith('blob:')) _scheduleRevoke(existing.coverUrl);
+        _cache.delete(fileId);
+        _cache.set(fileId, { ...(existing || {}), coverUrl: newUrl });
+        _evictLRU();
+        document.dispatchEvent(new CustomEvent('savart:cover-recropped', {
+          detail: { fileId, url: newUrl },
+        }));
+      } catch (_) { /* nunca romper el flujo de covers */ }
+    })();
+  }
+
   /**
    * Inject a persisted cover blob into the in-memory cache.
    * Creates a fresh Object URL and caches it for this session.
@@ -514,6 +614,7 @@ const Meta = (() => {
    */
   function injectCover(fileId, blob) {
     if (!blob) return null;
+    _maybeRecropPersisted(fileId, blob); // v3.5.511 — async, no bloquea
     const existing = _cache.get(fileId);
     // FIX A1: solo reutilizar la URL cacheada si ya es un object URL (blob:)
     // vivo — o sea, el MISMO arte embebido ya inyectado. Antes, cualquier

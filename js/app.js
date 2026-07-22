@@ -4759,13 +4759,17 @@ const App = (() => {
       await Promise.all(withBlob.slice(i, i + FAST_BATCH).map(async ({ item, dbMeta }) => {
         try {
           Meta.revoke(item.id);                                    // clear stale blob: URL
-          const url = Meta.injectCover(item.id, dbMeta.coverBlob);
-          if (!url) return;
-          _updateHomeCardThumbnail(item.id, url, true);
-          _updateTopListThumb(item.id, url, true);
-          _updatePinnedItemCover(item.id, url, true);
-          _updateRowThumbnail(item.id, url, true);
-          Player.patchQueueItem?.(item.id, { thumbnailUrl: url });
+          // v3.5.511: respetar el orden canónico (manual > coverBlob > URL estable).
+          // Antes este fast path inyectaba el blob directo y pintaba ID3 aunque el
+          // item tuviera cover manual (URL) — cada superficie mostraba algo distinto.
+          const r = _resolveCoverPriority(item.id, dbMeta);
+          if (!r?.url) return;
+          // force solo cuando el canon dicta URL (pisa un ID3 pintado previamente)
+          _updateHomeCardThumbnail(item.id, r.url, r.isId3, !r.isId3);
+          _updateTopListThumb(item.id, r.url, r.isId3, !r.isId3);
+          _updatePinnedItemCover(item.id, r.url, r.isId3, !r.isId3);
+          _updateRowThumbnail(item.id, r.url, r.isId3, !r.isId3);
+          Player.patchQueueItem?.(item.id, { thumbnailUrl: r.url });
         } catch (_) {}
       }));
       await new Promise(r => setTimeout(r, 0)); // yield to keep UI responsive
@@ -12394,6 +12398,12 @@ const App = (() => {
       coverUrl:       null,   // wipe stale Last.fm / AudD external cover URLs
       normalGain:     null,   // force re-analysis on next play
       normalGainDb:   null,
+      // v3.5.511 — el reset es una nueva verdad (doctrina "una sola fuente"):
+      //   • resetAt: sin él, el merge de sync re-llenaba (fill-only) la URL
+      //     vieja desde Drive y "volvía a aparecer" tras unos segundos.
+      //   • skipAutoEnrich: veta que Last.fm/AudD/CAA re-escriban una URL.
+      resetAt:        Date.now(),
+      skipAutoEnrich: true,
     };
 
     // Direct put so null values literally overwrite stale data in IndexedDB.
@@ -12539,10 +12549,21 @@ const App = (() => {
           coverUrl:       null,   // wipe stale Last.fm / AudD external cover URLs
           normalGain:     null,   // force re-analysis — ID3 reset may change actual loudness
           normalGainDb:   null,
+          // v3.5.511 — mismas marcas que onSongResetId3: resetAt bloquea el
+          // re-llenado del merge de sync; skipAutoEnrich veta Last.fm/AudD/CAA.
+          resetAt:        Date.now(),
+          skipAutoEnrich: true,
         };
 
         // Direct put so null values literally overwrite stale data in IndexedDB.
         await DB.bulkWriteMeta([{ ...m, ...dbPatch, id: m.id }]).catch(() => {});
+
+        // Clear stale s_cover from Drive appProperties (mismo fix que el reset
+        // individual) — sin esto, _prefetchAndApplyFolderCovers lo re-aplicaba
+        // en la siguiente sesión y la URL "volvía a aparecer".
+        if (typeof Drive !== 'undefined' && Drive.setAppProperties) {
+          Drive.setAppProperties(m.id, { s_cover: null }).catch(() => {});
+        }
 
         // 5. Live-update text fields — always apply so stale values clear in live UI.
         _liveMetaUpdate([m.id], {
@@ -14985,6 +15006,32 @@ const App = (() => {
         Sync.pollNow?.()?.catch?.(() => {});
       }
       if (UI.getCurrentView() === 'home') _loadHomeData({ debounce: true });
+    });
+
+    // ── Cover recortado (de-letterbox, v3.5.511) ─────────────────────────────
+    // meta.js detectó y recortó franjas negras horneadas en un coverBlob
+    // persistido (MP3s convertidos de Soundrop) — repintar todas las
+    // superficies visibles con la versión limpia.
+    document.addEventListener('savart:cover-recropped', (e) => {
+      const { fileId, url } = e.detail || {};
+      if (!fileId || !url) return;
+      // Respetar el canon: si el resolutor dicta URL manual/externa para este
+      // item, NO pintar el ID3 recortado encima (regla: manual nunca se pisa).
+      DB.getMeta(fileId).then(m => {
+        const r = _resolveCoverPriority(fileId, m);
+        if (!r?.isId3) return;
+        _updateHomeCardThumbnail(fileId, url, true);
+        _updateTopListThumb(fileId, url, true);
+        _updatePinnedItemCover(fileId, url, true);
+        _updateRowThumbnail(fileId, url, true);
+        _updateSongRowThumb(fileId, url, true);
+        Player.patchQueueItem?.(fileId, { thumbnailUrl: url });
+        const _ct = Player.getCurrentTrack?.();
+        if (_ct?.id === fileId) {
+          document.querySelectorAll('.pexp-art img, #mini-player .mini-thumb img, #dmp-thumb-img')
+            .forEach(im => { im.src = url; im.style.display = ''; });
+        }
+      }).catch(() => {});
     });
 
     // Restore manual offline preference from previous session
