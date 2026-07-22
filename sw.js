@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.513';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.513 — tab Playlists: orden alfabético siempre (localeCompare es, sin distinción de mayúsculas/tildes, numérico)
+const APP_VERSION  = '3.5.514';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.514 — móvil: tabs de Biblioteca en pila vertical (icono 20px arriba, texto 10px abajo, chip contador en tercera línea) — los 5 tabs caben sin scroll horizontal
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
