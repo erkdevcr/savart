@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.507';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.507 — Fix sync de customSpeed: el merge receptor ahora aplica customSpeed (LWW por customSpeedAt, unpin incluido), embedBlocked y soundropSaved (se pusheaban pero nunca se aplicaban); unpin local borra de verdad (setMeta filtraba el null)
+const APP_VERSION  = '3.5.508';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.508 — Frescura del Home: pollNow() en visibilitychange (al volver a la app: poll inmediato + refresco del Home) y refresco same-device tras el commit del historial
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

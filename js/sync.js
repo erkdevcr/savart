@@ -2208,6 +2208,18 @@ const Sync = (() => {
     return { files: savartFiles, totalBytes };
   }
 
-  return { init, push, pushNow, pushHot, readHome, startLiveSync, stopLiveSync, getDbStats };
+  /**
+   * Poll inmediato — usado al volver la app/tab a primer plano (visibilitychange).
+   * Resetea el backoff y el contador de background para que el chequeo corra YA,
+   * sin esperar el próximo tick (hasta 30 s en background, minutos si Android
+   * congeló los timers).
+   */
+  function pollNow() {
+    _pollSkipUntil  = 0;
+    _pollHiddenTick = 0;
+    return _poll();
+  }
+
+  return { init, push, pushNow, pushHot, readHome, startLiveSync, stopLiveSync, getDbStats, pollNow };
 
 })();

@@ -1253,7 +1253,13 @@ const App = (() => {
         thumbnailUrl: bestThumb,           // may be blob:/id3 — db.js filters those out
         thumbnailLink: track.thumbnailLink || null, // stable Drive CDN URL as fallback
         folderId:     track.parents?.[0] || track.folderId || null,
-      }).then(() => Sync.push('history')).catch(() => {});
+      }).then(() => {
+        Sync.push('history');
+        // Refresco tras COMMIT del historial (es lo que alimenta "Canciones
+        // recientes" del Home) — colapsa con el debounce del addRecent en un
+        // solo render y garantiza que la canción recién tocada ya esté escrita.
+        if (UI.getCurrentView() === 'home') _loadHomeData({ debounce: true });
+      }).catch(() => {});
 
       // Persist display fields to metadata store so topPlayed can show them.
       // Only write non-empty values to avoid overwriting enriched fields with blanks.
@@ -14965,6 +14971,20 @@ const App = (() => {
         // Try to silently renew token if it expired while we were offline
         if (!Auth.isAuthenticated()) Auth.autoAttemptRenewal();
       }
+    });
+
+    // ── Resume al volver a primer plano ─────────────────────────────────────
+    // FIX (frescura del Home): en background el polling baja a 1/30 s y en
+    // Android los timers pueden congelarse por completo — al volver a la app
+    // no había NINGÚN disparo inmediato y los cambios de otros devices (ej.
+    // una canción recién reproducida) tardaban "minutos" en aparecer. Ahora:
+    // poll inmediato + refresco del Home si es la vista activa.
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden || _isOffline) return;
+      if (typeof Sync !== 'undefined' && Auth.isAuthenticated()) {
+        Sync.pollNow?.()?.catch?.(() => {});
+      }
+      if (UI.getCurrentView() === 'home') _loadHomeData({ debounce: true });
     });
 
     // Restore manual offline preference from previous session
