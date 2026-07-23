@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.526';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.526 — fix context menu pegado a la derecha: resetear style.right antes de medir (el right:px residual de una apertura anclada estiraba el menú a ~10000px de ancho y el clamp lo pegaba al borde)
+const APP_VERSION  = '3.5.527';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.527 — Thumb barra de progreso: siempre visible en todos los contextos, 33% más pequeño (11px)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
