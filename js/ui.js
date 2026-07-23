@@ -5080,16 +5080,9 @@ const UI = (() => {
     const hash  = [...(collection.name || '')].reduce((a, c) => a + c.charCodeAt(0), 0);
     const colBg = COL_COLORS[Math.abs(hash) % COL_COLORS.length];
 
-    const _localMosaicUrls = [];
-    { const seen = new Set();
-      for (const s of songs) {
-        if (_localMosaicUrls.length >= 4) break;
-        if (s.thumbnailUrl && !seen.has(s.thumbnailUrl)) {
-          seen.add(s.thumbnailUrl); _localMosaicUrls.push(s.thumbnailUrl);
-        }
-      }
-    }
-    const _detailCoverUrl = collection.manualCoverUrl || (_localMosaicUrls.length ? _localMosaicUrls[0] : null);
+    // v3.5.523/524: sin cover manual NO se usa el thumbnail de una canción al
+    // azar — el placeholder es el icono de COLECCIÓN (el mismo de la librería).
+    const _detailCoverUrl = collection.manualCoverUrl || null;
     let artHtml;
     if (_detailCoverUrl) {
       artHtml = `<img src="${escHtml(_detailCoverUrl)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)" onerror="this.style.display='none'">`;

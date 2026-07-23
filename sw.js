@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.522';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.522 — context menu: auto-anclaje al botón 3-dot, flip hacia arriba si no cabe abajo, max-height con scroll interno; dismiss por wheel/touchmove (el 'scroll' programático del render del Home cerraba el menú al primer tap)
+const APP_VERSION  = '3.5.524';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.524 — browse-collection-hdr: el placeholder sin cover manual es el icono de COLECCIÓN (el mismo de la librería), no el de carpeta
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

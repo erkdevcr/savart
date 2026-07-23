@@ -3472,7 +3472,9 @@ const App = (() => {
       UI.renderBrowseCollectionHeader({
         folderId,
         name:           earlyName,
-        manualCoverUrl: earlyThumb,
+        // v3.5.523: fase 1 sin cover — el manual real llega en fase 2 (DB);
+        // antes se pasaba un thumbnail de una canción al azar como "manual".
+        manualCoverUrl: null,
         mosaicUrls:     earlyMosaic,
         artistCount:    0,
         format:         null,
@@ -3599,7 +3601,9 @@ const App = (() => {
         const collection = {
           folderId,
           name:           savedCol.name     || folderRec?.name || earlyName,
-          manualCoverUrl: savedCol.coverUrl || blobUrl         || null,
+          // v3.5.523: SOLO el cover manual guardado — sin fallback a blob/thumb
+          // de una canción al azar; sin manual, el header pinta icono de carpeta.
+          manualCoverUrl: savedCol.coverUrl || null,
           mosaicUrls,
           artistCount:    artistSet.size,
           format:         computedFormat,
