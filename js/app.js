@@ -14273,20 +14273,46 @@ const App = (() => {
       }
     });
 
-    // Expanded player: progress seek
-    document.getElementById('pexp-progress-track')?.addEventListener('click', (e) => {
-      const rect = e.currentTarget.getBoundingClientRect();
-      const pct  = (e.clientX - rect.left) / rect.width;
-      Player.seekTo(pct * Player.getDuration());
-    });
-
-    // Expanded player: show thumb on hover
-    document.getElementById('pexp-progress-track')?.addEventListener('mouseenter', () => {
-      document.querySelector('.pexp-thumb')?.style && (document.querySelector('.pexp-thumb').style.opacity = '1');
-    });
-    document.getElementById('pexp-progress-track')?.addEventListener('mouseleave', () => {
-      document.querySelector('.pexp-thumb')?.style && (document.querySelector('.pexp-thumb').style.opacity = '0');
-    });
+    // Expanded player: seek con DRAG (v3.5.525) — Pointer Events cubren mouse
+    // y touch con una sola ruta. Tap/click simple = pointerdown+up en el mismo
+    // punto (mismo resultado que el click seek anterior). Durante el drag, el
+    // fill sigue al dedo/cursor (UI.previewSeek) y los ticks del player no
+    // pisan la barra (UI.setSeekDragging); al soltar se hace el seek real.
+    // La visibilidad del thumb es 100% CSS (:hover/:active + siempre en móvil)
+    // — se eliminaron los mouseenter/leave que dejaban opacity:0 inline tras
+    // un tap en touch y ocultaban el thumb para siempre.
+    {
+      const track = document.getElementById('pexp-progress-track');
+      if (track) {
+        const _pct = (ev) => {
+          const rect = track.getBoundingClientRect();
+          return Math.min(1, Math.max(0, (ev.clientX - rect.left) / rect.width));
+        };
+        let dragging = false;
+        track.addEventListener('pointerdown', (ev) => {
+          dragging = true;
+          UI.setSeekDragging(true);
+          try { track.setPointerCapture(ev.pointerId); } catch (_) {}
+          UI.previewSeek(_pct(ev), Player.getDuration());
+          ev.preventDefault();
+        });
+        track.addEventListener('pointermove', (ev) => {
+          if (!dragging) return;
+          UI.previewSeek(_pct(ev), Player.getDuration());
+        });
+        track.addEventListener('pointerup', (ev) => {
+          if (!dragging) return;
+          dragging = false;
+          const pct = _pct(ev);
+          UI.setSeekDragging(false);
+          Player.seekTo(pct * Player.getDuration());
+        });
+        track.addEventListener('pointercancel', () => {
+          dragging = false;
+          UI.setSeekDragging(false);
+        });
+      }
+    }
 
     // Expanded player: favorite
     document.getElementById('btn-pexp-fav')?.addEventListener('click', async () => {

@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.524';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.524 — browse-collection-hdr: el placeholder sin cover manual es el icono de COLECCIÓN (el mismo de la librería), no el de carpeta
+const APP_VERSION  = '3.5.525';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.525 — barra de progreso del pexp: thumb siempre visible en móvil (pointer coarse) y seek con DRAG vía Pointer Events en móvil y desktop (preview de tiempo durante el arrastre, seek real al soltar)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

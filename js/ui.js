@@ -1153,6 +1153,7 @@ const UI = (() => {
    * @param {number} duration    - seconds
    */
   function updateExpandedPlayerProgress(currentTime, duration) {
+    if (_seekDragging) return; // v3.5.525: el usuario arrastra — no pisar el preview
     const fill    = document.getElementById('pexp-progress-fill');
     const curEl   = document.getElementById('pexp-time-cur');
     const totEl   = document.getElementById('pexp-time-tot');
@@ -1162,6 +1163,25 @@ const UI = (() => {
     }
     if (curEl) curEl.textContent = formatTime(currentTime);
     if (totEl) totEl.textContent = formatTime(duration);
+  }
+
+  /* ── Seek con drag (v3.5.525) ────────────────────────────── */
+  let _seekDragging = false;
+
+  /** Activa/desactiva el modo drag del seek — mientras está activo, los ticks
+   *  del player no pisan la barra y el fill se mueve sin transición. */
+  function setSeekDragging(v) {
+    _seekDragging = !!v;
+    const fill = document.getElementById('pexp-progress-fill');
+    if (fill) fill.style.transition = _seekDragging ? 'none' : '';
+  }
+
+  /** Pinta la posición del drag (0..1) + tiempo previsualizado. */
+  function previewSeek(pct, duration) {
+    const fill = document.getElementById('pexp-progress-fill');
+    if (fill) fill.style.width = `${pct * 100}%`;
+    const curEl = document.getElementById('pexp-time-cur');
+    if (curEl && duration > 0) curEl.textContent = formatTime(pct * duration);
   }
 
   /**
@@ -5799,6 +5819,8 @@ const UI = (() => {
     isExpandedPlayerVisible,
     updateExpandedPlayer,
     updateExpandedPlayerProgress,
+    setSeekDragging,
+    previewSeek,
     // Queue panel
     showQueuePanel,
     isQueuePanelVisible,

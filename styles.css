@@ -3197,9 +3197,17 @@ img { display: block; }
   border-radius: 2px;
   position: relative;
   cursor: pointer;
+  /* v3.5.525: el drag del seek no debe scrollear la página en touch */
+  touch-action: none;
 }
 
-.pexp-progress-track:hover .pexp-thumb { opacity: 1; }
+.pexp-progress-track:hover .pexp-thumb,
+.pexp-progress-track:active .pexp-thumb { opacity: 1; }
+
+/* v3.5.525: en móvil / pantallas táctiles el thumb va SIEMPRE visible */
+@media (max-width: 767px), (pointer: coarse) {
+  .pexp-thumb { opacity: 1; }
+}
 
 .pexp-progress-fill {
   height: 100%;
