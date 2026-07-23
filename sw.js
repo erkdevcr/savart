@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.525';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.525 — barra de progreso del pexp: thumb siempre visible en móvil (pointer coarse) y seek con DRAG vía Pointer Events en móvil y desktop (preview de tiempo durante el arrastre, seek real al soltar)
+const APP_VERSION  = '3.5.526';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.526 — fix context menu pegado a la derecha: resetear style.right antes de medir (el right:px residual de una apertura anclada estiraba el menú a ~10000px de ancho y el clamp lo pegaba al borde)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

@@ -2625,9 +2625,14 @@ const UI = (() => {
       if (btn) options = { ...options, anchorRect: btn.getBoundingClientRect(), anchorGap: options.anchorGap ?? 4 };
     }
 
-    // Render off-screen first so we can measure real menu dimensions
+    // Render off-screen first so we can measure real menu dimensions.
+    // v3.5.526: CRÍTICO resetear right ANTES de medir — si quedó un right:px
+    // de una apertura anclada anterior, el menú se estira de left:-9999 hasta
+    // ese right → offsetWidth ≈ 10000 → el clamp pegaba TODOS los menús al
+    // borde de la ventana.
     menu.style.left       = '-9999px';
     menu.style.top        = '-9999px';
+    menu.style.right      = 'auto';
     menu.style.visibility = 'hidden';
     menu.classList.add('visible');
 
