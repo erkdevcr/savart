@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.519';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.519 — SD: "Cambiar nombre" en el menú contextual de carpetas del árbol Soundrop (modal propio ES/EN; rename por ID en Drive → no afecta rutas de los items; root protegido; actualiza breadcrumb/título/DB)
+const APP_VERSION  = '3.5.520';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.520 — SD rename actualiza el snapshot de pinned (name/displayName stale); SD delete limpia pinned + playlists de ids borrados (cards/filas fantasma) + push pinned/playlists
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

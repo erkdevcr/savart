@@ -14470,6 +14470,31 @@ const App = (() => {
             DB.deleteMeta(id).catch(() => {});
             DB.removeCachedBlob(id).catch(() => {});
           }
+          // Limpieza de pinned y playlists (v3.5.520): sin esto quedaban cards
+          // pineadas y filas de playlist apuntando a ids ya borrados (fantasmas).
+          try {
+            const idSet = new Set([item.id, ...descendantIds]);
+            const pinnedIds  = await DB.getState('pinned') || [];
+            const keep       = pinnedIds.filter(id => !idSet.has(id));
+            if (keep.length !== pinnedIds.length) {
+              const pinnedMeta = await DB.getState('pinnedMeta') || {};
+              idSet.forEach(id => delete pinnedMeta[id]);
+              await DB.setState('pinned', keep);
+              await DB.setState('pinnedMeta', pinnedMeta);
+              if (typeof Sync !== 'undefined') Sync.push('pinned');
+            }
+            let plChanged = false;
+            const pls = await DB.getPlaylists();
+            for (const pl of pls) {
+              const filtered = (pl.songIds || []).filter(id => !idSet.has(id));
+              if (filtered.length !== (pl.songIds || []).length) {
+                await DB.updatePlaylist(pl.id, { songIds: filtered });
+                plChanged = true;
+              }
+            }
+            if (plChanged && typeof Sync !== 'undefined') Sync.push('playlists');
+            if (UI.getCurrentView() === 'home') _loadHomeData({ debounce: true });
+          } catch (_) {}
           if (typeof Sync !== 'undefined') Sync.push('metadata');
           UI.showToast(UI.t('ctx_soundrop_deleted'));
           // Refresh browse to reflect the deletion
@@ -14555,6 +14580,19 @@ const App = (() => {
             const cur = _browseFolder || { id: _browseFolderId, name: '' };
             _openFolder(cur, false).catch(() => {});
           }
+          // Pinned del Home (v3.5.520): el pin guarda un SNAPSHOT con name/
+          // displayName — sin esto la card pineada mostraba el nombre viejo
+          // para siempre (funcionaba por ID, pero con label stale).
+          try {
+            const pinnedMeta = await DB.getState('pinnedMeta') || {};
+            if (pinnedMeta[item.id]) {
+              pinnedMeta[item.id].name        = newName;
+              pinnedMeta[item.id].displayName = newName;
+              await DB.setState('pinnedMeta', pinnedMeta);
+              if (typeof Sync !== 'undefined') Sync.push('pinned');
+              if (UI.getCurrentView() === 'home') _loadHomeData({ debounce: true });
+            }
+          } catch (_) {}
         } catch (err) {
           console.error('[App] Soundrop rename error:', err);
           UI.showToast(UI.t('sd_ren_error'), 'error');
