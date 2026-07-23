@@ -589,6 +589,24 @@ const Drive = (() => {
    * @param {string} [opts.removeParents] — old parent folder ID to remove
    * @returns {Promise<{id, name, parents}>}
    */
+  /* ── trashFile ──────────────────────────────────────────── */
+
+  /**
+   * Move a file or folder to Drive trash.
+   * Safer than permanent delete — user can recover from Drive trash.
+   * (Restaurada en v3.5.521 — se perdió en un refactor y TODOS los deletes
+   * de Soundrop tiraban TypeError "Drive.trashFile is not a function".)
+   * @param {string} fileId
+   */
+  async function trashFile(fileId) {
+    const url = `${CONFIG.API_BASE}/files/${encodeURIComponent(fileId)}?fields=id`;
+    await _fetch(url, {
+      method:  'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ trashed: true }),
+    });
+  }
+
   async function updateFileMeta(fileId, { name, addParents, removeParents } = {}) {
     const params = new URLSearchParams({ fields: 'id,name,parents' });
     if (addParents)    params.set('addParents',    addParents);
@@ -622,6 +640,7 @@ const Drive = (() => {
     findOrCreateFolder,
     uploadFile,
     updateFileMeta,
+    trashFile,
     AuthError,
     DriveError,
   };

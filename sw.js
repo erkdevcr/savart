@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.520';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.520 — SD rename actualiza el snapshot de pinned (name/displayName stale); SD delete limpia pinned + playlists de ids borrados (cards/filas fantasma) + push pinned/playlists
+const APP_VERSION  = '3.5.521';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.521 — restaurada Drive.trashFile (se perdió en un refactor → TODOS los deletes SD fallaban); sin auto-borrado de carpetas vacías (solo manual); delete tolera 404 (ya borrado en Drive)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

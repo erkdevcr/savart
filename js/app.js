@@ -5905,25 +5905,9 @@ const App = (() => {
       // Runs in background — no UI blocking, no MusicBrainz/Last.fm/AudD calls.
       _softScanFolder(folder.id, result.files).catch(() => {});
 
-      // If this is the Soundrop root, deep-clean empty subfolders in the background.
-      // Runs with a short delay so any in-flight Drive moves have time to propagate.
-      // Guard _soundropCleanPending prevents the cleanup from re-triggering itself:
-      // if the clean deletes folders and refreshes the view, the refresh must not
-      // schedule another clean (which would loop every ~3 s indefinitely).
-      if (folder.name?.trim().toLowerCase() === 'soundrop' && !_soundropCleanPending) {
-        _soundropCleanPending = true;
-        setTimeout(() => {
-          _deepCleanSoundropFolders(folder.id).then(anyDeleted => {
-            _soundropCleanPending = false;
-            // Only refresh if folders were actually deleted AND user is still here.
-            // The check is intentionally strict: do NOT refresh if the user navigated
-            // away — that would forcibly bring them back to the Soundrop root.
-            if (anyDeleted && _browseFolderId === folder.id) {
-              _openFolder(folder, false);
-            }
-          }).catch(() => { _soundropCleanPending = false; });
-        }, 2000);
-      }
+      // v3.5.521: se eliminó el deep-clean automático de subcarpetas vacías al
+      // abrir el root Soundrop — las carpetas ya NO se borran automáticamente,
+      // solo de forma manual (menú contextual → Eliminar).
 
       // Add to recents
       DB.addRecent({
@@ -12776,20 +12760,16 @@ const App = (() => {
 
     console.log(`[App] Soundrop reorganized: "${newName}" → ${artist || '(root)'}/${album || ''}`);
     UI.showToast(`📁 ${newName}`, 'success');
-
-    // Deep-clean after a short delay so Drive has time to propagate the move.
-    // Scans the whole Soundrop tree — catches both the folder just vacated AND
-    // any pre-existing empty folders from earlier reorganizations.
-    setTimeout(() => {
-      _deepCleanSoundropFolders(soundropRootId).catch(() => {});
-    }, 3000);
+    // v3.5.521: sin deep-clean automático — las carpetas vacías que deje la
+    // reorganización se borran solo manualmente (menú contextual → Eliminar).
   }
 
   /**
    * Scan the entire Soundrop folder tree and trash any empty subfolders.
    * Walks two levels deep (artist → album). Safe: never touches soundropRootId itself.
-   * Called after reorganization (with a delay) so Drive API propagation is complete.
-   * Non-fatal — all errors silently ignored.
+   * ⚠️ v3.5.521: YA NO SE LLAMA AUTOMÁTICAMENTE — decisión de Erick: las
+   * carpetas (vacías o no) solo se borran de forma MANUAL desde el menú
+   * contextual. Se conserva por si se quiere exponer como acción manual.
    * @param {string} soundropRootId
    */
   // Returns true if any folders were deleted (so the caller can decide to refresh).
@@ -14462,7 +14442,15 @@ const App = (() => {
 
       const doDelete = async () => {
         try {
-          await Drive.trashFile(item.id);
+          // 404 / "not found" = el archivo ya no existe en Drive (borrado desde
+          // otro device o desde Drive web) → continuar con la limpieza local
+          // en vez de mostrar error.
+          try {
+            await Drive.trashFile(item.id);
+          } catch (err) {
+            const msg = String(err?.message || err);
+            if (!/404|not\s?found/i.test(msg)) throw err;
+          }
           // Remove from local DB so it doesn't appear in Library / search
           await DB.deleteMeta(item.id).catch(() => {});
           await DB.removeCachedBlob(item.id).catch(() => {});
@@ -14684,8 +14672,8 @@ const App = (() => {
             const cur = _browseFolder || { id: _browseFolderId, name: '' };
             _openFolder(cur, false).catch(() => {});
           }
-          // Limpieza de carpetas vacías tras propagación del move en Drive
-          setTimeout(() => { _deepCleanSoundropFolders(rootId).catch(() => {}); }, 3000);
+          // v3.5.521: sin limpieza automática de carpetas vacías tras el move —
+          // el borrado de carpetas es solo manual.
         } catch (err) {
           console.error('[App] Soundrop move error:', err);
           UI.showToast(tt('sd_move_error', 'Error al mover'), 'error');
