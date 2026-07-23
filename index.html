@@ -19,10 +19,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&family=Baskervville:ital@0;1&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="styles.css?v=3.5.517">
+  <link rel="stylesheet" href="styles.css?v=3.5.519">
   <!-- Version global — fallback para Android donde el SW no se registra.
        IMPORTANTE: mantener sincronizada con APP_VERSION de sw.js en cada bump. -->
-  <script>window.SAVART_VERSION = '3.5.517';</script>
+  <script>window.SAVART_VERSION = '3.5.519';</script>
 </head>
 <body>
 
@@ -849,6 +849,26 @@
     </div>
   </div>
 
+  <!-- Soundrop rename modal: renombrar carpeta del árbol Soundrop (por ID — no afecta rutas) -->
+  <div id="sd-ren-modal" class="ds-modal" style="display:none">
+    <div class="ds-modal-backdrop" id="sd-ren-modal-backdrop"></div>
+    <div class="ds-modal-card ds-modal-card--sm">
+      <div class="ds-modal-header">
+        <span class="ds-modal-title" data-i18n="sd_ren_title">Cambiar nombre</span>
+        <button class="ds-modal-close" id="btn-sd-ren-close">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </div>
+      <div class="ds-modal-body" style="padding:14px">
+        <input id="sd-ren-input" class="ds-artist-url-modal-input" style="width:100%">
+      </div>
+      <div class="ds-modal-footer">
+        <button id="btn-sd-ren-cancel" class="btn-secondary" data-i18n="cancel_btn">Cancelar</button>
+        <button id="btn-sd-ren-save" class="btn-primary" data-i18n="sd_ren_save">Guardar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Collection edit modal (name + cover URL + apply-to-all) -->
   <div id="collection-edit-modal" class="ds-modal" style="display:none">
     <div class="ds-modal-backdrop" id="collection-edit-backdrop"></div>
@@ -1529,22 +1549,22 @@
 </script>
 
 <!-- Savart modules -->
-<script src="js/config.js?v=3.5.517"></script>
-<script src="js/auth.js?v=3.5.517"></script>
-<script src="js/drive.js?v=3.5.517"></script>
-<script src="js/db.js?v=3.5.517"></script>
-<script src="js/sync.js?v=3.5.517"></script>
-<script src="js/player.js?v=3.5.517"></script>
-<script src="js/meta.js?v=3.5.517"></script>
-<script src="js/lastfm.js?v=3.5.517"></script>
-<script src="js/audd.js?v=3.5.517"></script>
-<script src="js/musicbrainz.js?v=3.5.517"></script>
-<script src="js/discogs.js?v=3.5.517"></script>
-<script src="js/lyrics.js?v=3.5.517"></script>
-<script src="js/soundrop.js?v=3.5.517"></script>
-<script src="js/ui.js?v=3.5.517"></script>
-<script src="js/app.js?v=3.5.517"></script>
-<script src="js/bg.js?v=3.5.517"></script>
+<script src="js/config.js?v=3.5.519"></script>
+<script src="js/auth.js?v=3.5.519"></script>
+<script src="js/drive.js?v=3.5.519"></script>
+<script src="js/db.js?v=3.5.519"></script>
+<script src="js/sync.js?v=3.5.519"></script>
+<script src="js/player.js?v=3.5.519"></script>
+<script src="js/meta.js?v=3.5.519"></script>
+<script src="js/lastfm.js?v=3.5.519"></script>
+<script src="js/audd.js?v=3.5.519"></script>
+<script src="js/musicbrainz.js?v=3.5.519"></script>
+<script src="js/discogs.js?v=3.5.519"></script>
+<script src="js/lyrics.js?v=3.5.519"></script>
+<script src="js/soundrop.js?v=3.5.519"></script>
+<script src="js/ui.js?v=3.5.519"></script>
+<script src="js/app.js?v=3.5.519"></script>
+<script src="js/bg.js?v=3.5.519"></script>
 
 <!-- Inline: additional bindings that need the DOM -->
 <script>

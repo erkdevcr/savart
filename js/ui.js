@@ -421,6 +421,15 @@ const UI = (() => {
       sd_move_empty:              '(sin subcarpetas)',
       sd_move_create_q:           '¿Quieres crear la carpeta «{n}» dentro de la carpeta «{f}» y mover tu archivo?',
       sd_move_confirm_create:     'Crear y mover',
+      sd_del_title:               'Eliminar',
+      sd_del_folder_q:            '¿Eliminar la carpeta',
+      sd_del_folder_items:        'La carpeta contiene {x} items que también se eliminarán.',
+      ctx_soundrop_rename:        'Cambiar nombre',
+      sd_ren_title:               'Cambiar nombre',
+      sd_ren_ph:                  'Nuevo nombre…',
+      sd_ren_save:                'Guardar',
+      sd_ren_done:                'nombre actualizado',
+      sd_ren_error:               'Error al renombrar',
       // ── Soundrop blocked modal ─────────────────────────────
       sd_blocked_title:   'Canción bloqueada',
       sd_blocked_body:    'Para escucharla, conviértela y descárgala en tu Drive.',
@@ -824,6 +833,15 @@ const UI = (() => {
       sd_move_empty:              '(no subfolders)',
       sd_move_create_q:           'Create folder “{n}” inside “{f}” and move your file?',
       sd_move_confirm_create:     'Create & move',
+      sd_del_title:               'Delete',
+      sd_del_folder_q:            'Delete the folder',
+      sd_del_folder_items:        'The folder contains {x} items that will also be deleted.',
+      ctx_soundrop_rename:        'Rename',
+      sd_ren_title:               'Rename folder',
+      sd_ren_ph:                  'New name…',
+      sd_ren_save:                'Save',
+      sd_ren_done:                'name updated',
+      sd_ren_error:               'Rename failed',
       // ── Soundrop blocked modal ─────────────────────────────
       sd_blocked_title:   'Blocked song',
       sd_blocked_body:    'To play it, convert it and save it to your Drive.',
@@ -2349,10 +2367,14 @@ const UI = (() => {
         _addCtxDivider(menu);
         _addCtxItem(menu, _iconCollection, t('ctx_move_to_collections'), () => { App.onMoveToCollections?.(item); hideContextMenu(); });
       }
-      // Delete option — only for folders inside the Soundrop tree.
+      // Rename + Delete — only for folders inside the Soundrop tree.
       // Fallback to App.isBrowseSoundropCtx() for cases where _soundropCtx wasn't set.
       if (item._soundropCtx || (typeof App !== 'undefined' && App.isBrowseSoundropCtx?.())) {
         _addCtxDivider(menu);
+        // Renombrar (v3.5.519) — el root "Soundrop" no se renombra
+        if ((item.name || '').trim().toLowerCase() !== 'soundrop') {
+          _addCtxItem(menu, _iconEdit, t('ctx_soundrop_rename'), () => { hideContextMenu(); App.onSoundropRename?.(item); });
+        }
         _addCtxItem(menu, iconTrash(14), t('ctx_soundrop_delete'), () => { App.onSoundropDelete?.(item); hideContextMenu(); }, 'destructive');
       }
     }

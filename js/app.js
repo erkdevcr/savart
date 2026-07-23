@@ -14427,26 +14427,142 @@ const App = (() => {
     App.onSdDownload = (item) => _openSdSaveModal(item);
 
     // ── Soundrop delete (trash file/folder in Drive) ───────────
+    // v3.5.518: popup propio de confirmación (ES/EN, reusa #eq-del-modal).
+    // Carpetas: cuenta el contenido (2 niveles) y avisa "contiene X items que
+    // también se eliminarán"; si está vacía, solo pide confirmación. Limpia la
+    // DB local de todos los descendientes conocidos tras el borrado.
     App.onSoundropDelete = async (item) => {
-      const isFolder = item.isFolder || item.mimeType === 'application/vnd.google-apps.folder';
-      const label    = item.displayName || item.name || (isFolder ? 'carpeta' : 'canción');
-      if (!confirm(`${UI.t('ctx_soundrop_delete_confirm')} "${label}"?`)) return;
+      const isFolder = item.isFolder || item.type === 'folder'
+        || item.mimeType === 'application/vnd.google-apps.folder';
+      const label = item.displayName || item.name || (isFolder ? 'carpeta' : 'canción');
 
-      try {
-        await Drive.trashFile(item.id);
-        // Remove from local DB so it doesn't appear in Library / search
-        await DB.deleteMeta(item.id).catch(() => {});
-        await DB.removeCachedBlob(item.id).catch(() => {});
-        UI.showToast(UI.t('ctx_soundrop_deleted'));
-        // Refresh browse to reflect the deletion
-        if (_browseFolderId) {
-          const cur = _browseFolder || { id: _browseFolderId, name: '' };
-          _openFolder(cur, false).catch(() => {});
-        }
-      } catch (err) {
-        console.error('[App] Soundrop delete error:', err);
+      // Nunca permitir borrar el root Soundrop
+      if (isFolder && (item.name || '').trim().toLowerCase() === 'soundrop') {
         UI.showToast(UI.t('ctx_soundrop_delete_error'), 'error');
+        return;
       }
+
+      // Contar contenido de la carpeta (2 niveles) + recolectar ids para limpiar DB
+      let itemCount = 0;
+      const descendantIds = [];
+      if (isFolder) {
+        try {
+          const { folders, files } = await Drive.listFolderAll(item.id);
+          itemCount = folders.length + files.length;
+          descendantIds.push(...files.map(f => f.id), ...folders.map(f => f.id));
+          const subs = await Promise.all(
+            folders.map(f => Drive.listFolderAll(f.id).catch(() => ({ folders: [], files: [] })))
+          );
+          subs.forEach(s => {
+            itemCount += (s.folders?.length || 0) + (s.files?.length || 0);
+            descendantIds.push(...(s.files || []).map(f => f.id), ...(s.folders || []).map(f => f.id));
+          });
+        } catch (_) { /* si falla el conteo, se confirma sin el detalle */ }
+      }
+
+      const doDelete = async () => {
+        try {
+          await Drive.trashFile(item.id);
+          // Remove from local DB so it doesn't appear in Library / search
+          await DB.deleteMeta(item.id).catch(() => {});
+          await DB.removeCachedBlob(item.id).catch(() => {});
+          for (const id of descendantIds) {
+            DB.deleteMeta(id).catch(() => {});
+            DB.removeCachedBlob(id).catch(() => {});
+          }
+          if (typeof Sync !== 'undefined') Sync.push('metadata');
+          UI.showToast(UI.t('ctx_soundrop_deleted'));
+          // Refresh browse to reflect the deletion
+          if (_browseFolderId) {
+            const cur = _browseFolder || { id: _browseFolderId, name: '' };
+            _openFolder(cur, false).catch(() => {});
+          }
+        } catch (err) {
+          console.error('[App] Soundrop delete error:', err);
+          UI.showToast(UI.t('ctx_soundrop_delete_error'), 'error');
+        }
+      };
+
+      // Popup de confirmación (reusa el modal genérico #eq-del-modal)
+      const modal = document.getElementById('eq-del-modal');
+      if (!modal) {
+        if (confirm(`${UI.t('ctx_soundrop_delete_confirm')} "${label}"?`)) doDelete();
+        return;
+      }
+      const q = isFolder
+        ? `${UI.t('sd_del_folder_q') || '¿Eliminar la carpeta'} "${label}"?`
+        : `${UI.t('ctx_soundrop_delete_confirm')} "${label}"?`;
+      const extra = (isFolder && itemCount > 0)
+        ? '\n' + (UI.t('sd_del_folder_items') || 'La carpeta contiene {x} items que también se eliminarán.')
+            .replace('{x}', itemCount)
+        : '';
+      document.getElementById('eq-del-title').textContent = UI.t('sd_del_title') || 'Eliminar';
+      const msgEl = document.getElementById('eq-del-msg');
+      msgEl.style.whiteSpace = 'pre-line'; // el conteo va en su propia línea
+      msgEl.textContent = q + extra;
+      document.getElementById('btn-eq-del-cancel').textContent  = UI.t('cancel_btn')          || 'Cancelar';
+      document.getElementById('btn-eq-del-confirm').textContent = UI.t('ctx_soundrop_delete') || 'Eliminar';
+      const close = () => { modal.style.display = 'none'; };
+      // onclick (no addEventListener): el modal se reusa — evita acumular listeners
+      document.getElementById('btn-eq-del-close').onclick      = close;
+      document.getElementById('btn-eq-del-cancel').onclick     = close;
+      document.getElementById('eq-del-modal-backdrop').onclick = close;
+      document.getElementById('btn-eq-del-confirm').onclick = () => { close(); doDelete(); };
+      modal.style.display = '';
+    };
+
+    // ── Soundrop rename (v3.5.519) — renombrar carpeta del árbol Soundrop ──
+    // El rename en Drive es por ID: los hijos referencian al padre por ID, así
+    // que las rutas de los items NO se ven afectadas. Solo se actualiza el
+    // nombre en Drive + DB local + superficies visibles (breadcrumb/título).
+    App.onSoundropRename = async (item) => {
+      if (!item?.id) return;
+      // El root Soundrop no se renombra (la detección del árbol depende del nombre)
+      if ((item.name || '').trim().toLowerCase() === 'soundrop') {
+        UI.showToast(UI.t('sd_ren_error'), 'error');
+        return;
+      }
+      const modal = document.getElementById('sd-ren-modal');
+      if (!modal) return;
+      const input   = document.getElementById('sd-ren-input');
+      const btnSave = document.getElementById('btn-sd-ren-save');
+      input.value = item.name || '';
+      input.placeholder = UI.t('sd_ren_ph') || 'Nuevo nombre…';
+      btnSave.disabled = false;
+      modal.style.display = '';
+      setTimeout(() => { input.focus(); input.select(); }, 50);
+
+      const close = () => { modal.style.display = 'none'; };
+      // onclick (no addEventListener): el modal se reusa — evita acumular listeners
+      document.getElementById('btn-sd-ren-close').onclick      = close;
+      document.getElementById('btn-sd-ren-cancel').onclick     = close;
+      document.getElementById('sd-ren-modal-backdrop').onclick = close;
+
+      const save = async () => {
+        const newName = input.value.trim();
+        if (!newName || newName === item.name) { close(); return; }
+        btnSave.disabled = true;
+        try {
+          await Drive.updateFileMeta(item.id, { name: newName });
+          await DB.setMeta(item.id, { name: newName }).catch(() => {});
+          if (typeof Sync !== 'undefined') Sync.push('metadata');
+          close();
+          UI.showToast(`📁 "${newName}" — ${UI.t('sd_ren_done') || 'nombre actualizado'}`);
+          // Actualizar superficies: breadcrumb + carpeta abierta + refresh del browse
+          _breadcrumb.forEach(c => { if (c.id === item.id) c.name = newName; });
+          if (_browseFolder?.id === item.id) _browseFolder.name = newName;
+          if (_browseFolderId === item.id || _browseFolderId === (item.folderId || item.parents?.[0])) {
+            const cur = _browseFolder || { id: _browseFolderId, name: '' };
+            _openFolder(cur, false).catch(() => {});
+          }
+        } catch (err) {
+          console.error('[App] Soundrop rename error:', err);
+          UI.showToast(UI.t('sd_ren_error'), 'error');
+          btnSave.disabled = false;
+        }
+      };
+      btnSave.onclick = save;
+      input.onkeydown = (ev) => { if (ev.key === 'Enter') save(); };
     };
 
     // ── Soundrop move (v3.5.517) — explorador de carpetas del árbol Soundrop ──
