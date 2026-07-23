@@ -2597,6 +2597,14 @@ const UI = (() => {
     // Extra bottom clearance for Android gesture bar / iOS home indicator
     const safeBottom = margin + 16;
 
+    // v3.5.522: auto-anclaje — si el disparo vino de un botón 3-dot, anclar el
+    // menú al BOTÓN (no al cursor). Antes, con menús altos (canciones Soundrop
+    // tienen ~14 entradas) el clamp vertical empujaba el menú lejos del botón.
+    if (!options.anchorRect && e?.target?.closest) {
+      const btn = e.target.closest('.btn-more, .home-card-more, .pl-item-more');
+      if (btn) options = { ...options, anchorRect: btn.getBoundingClientRect(), anchorGap: options.anchorGap ?? 4 };
+    }
+
     // Render off-screen first so we can measure real menu dimensions
     menu.style.left       = '-9999px';
     menu.style.top        = '-9999px';
@@ -2607,6 +2615,19 @@ const UI = (() => {
     const mh = menu.offsetHeight || 200;
 
     menu.style.visibility = '';
+
+    // v3.5.522: colocación vertical con FLIP — si el menú no cabe hacia abajo,
+    // se abre hacia ARRIBA del ancla/cursor; solo si tampoco cabe arriba se
+    // clampa (y el max-height con scroll interno del CSS hace el resto).
+    const _placeY = (anchorTop, anchorBottom, gap) => {
+      let y = anchorBottom + gap;
+      if (y + mh > vh - safeBottom) {
+        const yAbove = anchorTop - gap - mh;
+        if (yAbove >= margin) return yAbove;
+        y = Math.min(y, vh - mh - safeBottom);
+      }
+      return Math.max(margin, y);
+    };
 
     if (options.anchorRect) {
       // Anchor mode: use CSS `right` so the menu's right edge locks to the
@@ -2625,20 +2646,17 @@ const UI = (() => {
       rightOffset = Math.max(margin, rightOffset);                   // no right overflow
       rightOffset = Math.min(rightOffset, lw - margin - mw);        // no left overflow
       rightOffset = Math.max(margin, rightOffset);                   // safety: if viewport < mw+2*margin
-      let y = ar.bottom + gap;
-      y = Math.min(y, vh - mh - safeBottom);
-      y = Math.max(margin, y);
+      const y = _placeY(ar.top, ar.bottom, gap);
       menu.style.right = `${rightOffset}px`;
       menu.style.left  = 'auto';
       menu.style.top   = `${y}px`;
     } else {
       let x = e.clientX || (e.touches?.[0]?.clientX || 0);
-      let y = e.clientY || (e.touches?.[0]?.clientY || 0);
+      let cy = e.clientY || (e.touches?.[0]?.clientY || 0);
       // Clamp so the menu never overflows the visible viewport
       x = Math.min(x, vw - mw - margin);
       x = Math.max(margin, x);
-      y = Math.min(y, vh - mh - safeBottom);
-      y = Math.max(margin, y);
+      const y = _placeY(cy, cy, 2);
       menu.style.right = 'auto';
       menu.style.left  = `${x}px`;
       menu.style.top   = `${y}px`;
@@ -2648,20 +2666,23 @@ const UI = (() => {
     // Use capture phase so stopPropagation() in child handlers doesn't prevent closing.
     // rAF defers to next frame so the click that opened the menu doesn't immediately
     // re-trigger hideContextMenu.
-    // Scroll → dismiss with a 300 ms delay to skip the spurious scroll event that
-    // _loadHomeData() can trigger right after login when it rewrites the DOM.
+    // v3.5.522: dismiss por WHEEL/TOUCHMOVE (scroll intencional del usuario) en
+    // vez de 'scroll' — el evento 'scroll' en capture también lo disparan los
+    // scrolls PROGRAMÁTICOS (p. ej. el render diferencial del Home restaurando
+    // el scrollLeft de sus secciones) y cerraba el menú al instante: el primer
+    // tap en el 3-dot del Home "no abría" (abría y se cerraba en el mismo frame).
     requestAnimationFrame(() => {
-      document.addEventListener('click', hideContextMenu, { once: true, capture: true });
-      setTimeout(() => {
-        document.addEventListener('scroll', hideContextMenu, { once: true, capture: true });
-      }, 300);
+      document.addEventListener('click',     hideContextMenu, { once: true, capture: true });
+      document.addEventListener('wheel',     hideContextMenu, { once: true, capture: true, passive: true });
+      document.addEventListener('touchmove', hideContextMenu, { once: true, capture: true, passive: true });
     });
   }
 
   function hideContextMenu() {
     document.getElementById('context-menu')?.classList.remove('visible');
-    document.removeEventListener('click',  hideContextMenu, { capture: true });
-    document.removeEventListener('scroll', hideContextMenu, { capture: true });
+    document.removeEventListener('click',     hideContextMenu, { capture: true });
+    document.removeEventListener('wheel',     hideContextMenu, { capture: true });
+    document.removeEventListener('touchmove', hideContextMenu, { capture: true });
   }
 
   /* ── Song edit modal ─────────────────────────────────────── */

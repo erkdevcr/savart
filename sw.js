@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.521';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.521 — restaurada Drive.trashFile (se perdió en un refactor → TODOS los deletes SD fallaban); sin auto-borrado de carpetas vacías (solo manual); delete tolera 404 (ya borrado en Drive)
+const APP_VERSION  = '3.5.522';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.522 — context menu: auto-anclaje al botón 3-dot, flip hacia arriba si no cabe abajo, max-height con scroll interno; dismiss por wheel/touchmove (el 'scroll' programático del render del Home cerraba el menú al primer tap)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

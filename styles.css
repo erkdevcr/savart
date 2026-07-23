@@ -4210,6 +4210,11 @@ body.queue-open #mini-player { z-index: 65; }
   z-index: 600;  /* above DS screen (500) and below DS modals (1100) */
   display: none;
   box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  /* v3.5.522: los menús largos (canciones Soundrop ~14 entradas) nunca deben
+     forzar una colocación lejana — se limita el alto y scrollea por dentro */
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 #context-menu.visible { display: block; }
