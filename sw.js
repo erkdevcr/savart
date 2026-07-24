@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.538';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.538 — fix: padding+margin en scroll container móvil para que zoom :active no se recorte
+const APP_VERSION  = '3.5.539';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.539 — tap en playlist card del home reproduce en móvil (hover:none → onPlaylistPlay)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

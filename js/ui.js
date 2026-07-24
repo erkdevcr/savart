@@ -1643,7 +1643,15 @@ const UI = (() => {
 
     card.addEventListener('click', (e) => {
       if (e.target.closest('.home-card-play-btn')) return;
-      if (typeof App !== 'undefined') App.onPlaylistHomeCardClick(pl);
+      if (typeof App !== 'undefined') {
+        // En móvil (touch) el tap reproduce directamente — no hay botón play visible.
+        // En desktop el click navega al detalle; el hover-play-btn es quien reproduce.
+        if (window.matchMedia('(hover: none)').matches) {
+          App.onPlaylistPlay(pl);
+        } else {
+          App.onPlaylistHomeCardClick(pl);
+        }
+      }
     });
 
     return card;
