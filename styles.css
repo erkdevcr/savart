@@ -1063,6 +1063,23 @@ img { display: block; }
 
 .home-card-more:hover { opacity: 1; background: rgba(50, 50, 66, 0.92); color: #fff; }
 
+/* ── Home card: play overlay — oculto por defecto en móvil ── */
+/* El botón se inyecta siempre en el DOM; display:none lo oculta en táctil.
+   El bloque hover:hover lo restaura con display:flex en desktop. */
+.home-card-play-btn { display: none; }
+
+/* ── Home card: tap zoom en móvil (hover:none = touch devices) ── */
+@media (hover: none) {
+  .home-section[data-section-type="recents"] .home-card,
+  .home-section[data-section-type="playlists"] .home-card {
+    transition: transform 0.12s ease;
+  }
+  .home-section[data-section-type="recents"] .home-card:active,
+  .home-section[data-section-type="playlists"] .home-card:active {
+    transform: scale(1.05);
+  }
+}
+
 /* ── Home card: desktop hover — grow + play overlay ──────── */
 /* Only for recents and playlists sections; only on devices with hover */
 @media (hover: hover) {
