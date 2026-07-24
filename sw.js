@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.529';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.529 — Hover en cards de home (desktop): escala 1.05 + botón play en recents y playlists; play en playlist reproduce directamente
+const APP_VERSION  = '3.5.530';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.530 — hover del Home: el scroller (overflow-x) recortaba la card crecida — padding 10px + margen negativo en los scrollers de recents/playlists (solo hover:hover)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

@@ -1066,6 +1066,16 @@ img { display: block; }
 /* ── Home card: desktop hover — grow + play overlay ──────── */
 /* Only for recents and playlists sections; only on devices with hover */
 @media (hover: hover) {
+  /* v3.5.527: el scroller (overflow-x:auto) también recorta en vertical —
+     padding interno + margen negativo equivalente le dan espacio a la card
+     crecida (scale 1.05 ≈ +5px por lado) sin mover el layout. */
+  .home-section[data-section-type="recents"] .home-cards-scroll,
+  .home-section[data-section-type="playlists"] .home-cards-scroll {
+    padding-top: 10px;
+    padding-bottom: 10px;
+    margin-top: -10px;
+    margin-bottom: -10px;
+  }
   .home-section[data-section-type="recents"] .home-card,
   .home-section[data-section-type="playlists"] .home-card {
     transition: transform 0.18s ease;
