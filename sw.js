@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.531';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.531 — fix doble zoom en hover cards home: elimina scale del círculo play
+const APP_VERSION  = '3.5.532';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.532 — play btn home cards: sin hover propio, solo aparece al hover de la card
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

@@ -1093,18 +1093,19 @@ img { display: block; }
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(0,0,0,0);
+    background: rgba(0,0,0,0.32);
     opacity: 0;
-    transition: opacity 0.18s, background 0.18s;
+    transition: opacity 0.18s;
     z-index: 3;
     border: none;
     cursor: pointer;
     border-radius: inherit;
     color: #fff;
+    pointer-events: none;
   }
   .home-card:hover .home-card-play-btn {
     opacity: 1;
-    background: rgba(0,0,0,0.32);
+    pointer-events: auto;
   }
   .home-card-play-btn .play-btn-circle {
     width: 38px;
@@ -1115,10 +1116,6 @@ img { display: block; }
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: background 0.15s, transform 0.15s;
-  }
-  .home-card-play-btn:hover .play-btn-circle {
-    background: rgba(255,255,255,0.28);
   }
 }
 
