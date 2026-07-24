@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.533';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.533 — hover scale en cards de librería (álbumes, artistas, colecciones); artistas sin fondo de hover
+const APP_VERSION  = '3.5.534';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.534 — elimina backdrop-filter blur del círculo play en home cards
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
