@@ -2626,10 +2626,12 @@ img { display: block; }
   cursor: pointer;
   padding: 12px 8px;
   border-radius: var(--radius-md);
-  transition: background 0.12s;
+  transition: transform 0.18s ease;
 }
-.lib-artist-card:hover  { background: var(--item-hover); }
 .lib-artist-card:active { background: var(--item-tap); transition: background 0s; }
+@media (hover: hover) {
+  .lib-artist-card:hover { transform: scale(1.05); }
+}
 .lib-artist-avatar-wrap {
   position: relative;
   flex-shrink: 0;
@@ -2730,6 +2732,18 @@ img { display: block; }
   width: 100%;
   height: auto;
   aspect-ratio: 1;
+}
+
+/* Desktop hover: scale up album/collection cards (no play button) */
+@media (hover: hover) {
+  .lib-album-grid .home-card {
+    transition: transform 0.18s ease;
+    will-change: transform;
+  }
+  .lib-album-grid .home-card:hover {
+    transform: scale(1.05);
+    z-index: 2;
+  }
 }
 
 /* Invisible sentinel used by IntersectionObserver for infinite scroll */
