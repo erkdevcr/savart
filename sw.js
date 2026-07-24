@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.530';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.530 — hover del Home: el scroller (overflow-x) recortaba la card crecida — padding 10px + margen negativo en los scrollers de recents/playlists (solo hover:hover)
+const APP_VERSION  = '3.5.531';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.531 — fix doble zoom en hover cards home: elimina scale del círculo play
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

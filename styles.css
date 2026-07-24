@@ -1119,7 +1119,6 @@ img { display: block; }
   }
   .home-card-play-btn:hover .play-btn-circle {
     background: rgba(255,255,255,0.28);
-    transform: scale(1.1);
   }
 }
 
