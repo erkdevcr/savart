@@ -12944,7 +12944,14 @@ const App = (() => {
   async function _getPlaylistSongs(pl) {
     const fullPl = await DB.getPlaylist(pl.id).catch(() => pl);
     const songIds = (fullPl || pl).songIds || [];
-    return songIds.map(id => _itemCache.get(id) || { id }).filter(Boolean);
+    return (await Promise.all(
+      songIds.map(async id => {
+        const cached = _itemCache.get(id);
+        if (cached) return cached;
+        const m = await DB.getMeta(id).catch(() => null);
+        return m ? { id, ...m } : null;
+      })
+    )).filter(Boolean);
   }
 
   async function onPlaylistPlay(pl) {
