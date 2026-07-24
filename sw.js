@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.535';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.535 — _prefetchLibCounts: carga contadores de todos los tabs al abrir la librería sin navegar a cada uno
+const APP_VERSION  = '3.5.536';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.536 — play-btn-circle azul (var(--accent)) con triángulo blanco, igual al player
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
