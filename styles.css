@@ -1070,6 +1070,15 @@ img { display: block; }
 
 /* ── Home card: tap zoom en móvil (hover:none = touch devices) ── */
 @media (hover: none) {
+  /* Igual que en desktop: padding+margen negativo para que la card crecida
+     no sea recortada por el overflow-x:auto del scroll container. */
+  .home-section[data-section-type="recents"] .home-cards-scroll,
+  .home-section[data-section-type="playlists"] .home-cards-scroll {
+    padding-top: 10px;
+    padding-bottom: 10px;
+    margin-top: -10px;
+    margin-bottom: -10px;
+  }
   .home-section[data-section-type="recents"] .home-card,
   .home-section[data-section-type="playlists"] .home-card {
     transition: transform 0.12s ease;
