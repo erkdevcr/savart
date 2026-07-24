@@ -6815,6 +6815,9 @@ const App = (() => {
     if (_albumSortWrap) _albumSortWrap.style.display = tab === 'albums' ? '' : 'none';
     _closeLibAlbumSortDropdown();
 
+    // Pre-fetch counts for all other tabs so chips show immediately
+    _prefetchLibCounts(tab).catch(() => {});
+
     // Update placeholder
     UI.setLibSearchPlaceholder(LIB_TAB_PLACEHOLDERS[tab] || 'Buscar…');
 
@@ -11588,6 +11591,50 @@ const App = (() => {
     const el = document.getElementById(`lib-count-${tab}`);
     if (!el) return;
     el.textContent = count > 0 ? count : '';
+  }
+
+  /**
+   * Pre-fetch counts for all library tabs from a single lightweight DB read.
+   * Called whenever the library opens so chips show numbers immediately
+   * without having to navigate to each tab.
+   * @param {string} skipTab — the currently active tab (its loader will set the count itself)
+   */
+  async function _prefetchLibCounts(skipTab) {
+    try {
+      const [all, playlists, collections] = await Promise.all([
+        DB.getAllMetaLight(),
+        DB.getPlaylists().catch(() => []),
+        DB.getAllCollections().catch(() => []),
+      ]);
+
+      // Artists: unique primary artist names
+      if (skipTab !== 'artists') {
+        const artistKeys = new Set();
+        all.forEach(m => {
+          const name = (m.artist || '').split(';')[0].trim().toLowerCase();
+          if (name) artistKeys.add(name);
+        });
+        _setLibTabCount('artists', artistKeys.size);
+      }
+
+      // Favorites
+      if (skipTab !== 'favorites') {
+        _setLibTabCount('fav', all.filter(m => m.starred).length);
+      }
+
+      // Playlists
+      if (skipTab !== 'playlists') {
+        _setLibTabCount('playlists', playlists.length);
+      }
+
+      // Collections
+      if (skipTab !== 'collections') {
+        _setLibTabCount('collections', collections.length);
+      }
+
+    } catch (err) {
+      // Non-critical — counts just stay empty if this fails
+    }
   }
 
   /**

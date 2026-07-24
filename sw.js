@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.534';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.534 — elimina backdrop-filter blur del círculo play en home cards
+const APP_VERSION  = '3.5.535';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.535 — _prefetchLibCounts: carga contadores de todos los tabs al abrir la librería sin navegar a cada uno
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
