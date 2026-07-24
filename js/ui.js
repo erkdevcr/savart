@@ -1588,6 +1588,9 @@ const UI = (() => {
             : `<div class="folder-icon-placeholder" style="color:var(--text-disabled)">${iconMusicNote(28)}</div>`
         }
         ${_sdChipHtml(item)}
+        <button class="home-card-play-btn" aria-label="Reproducir" tabindex="-1">
+          <div class="play-btn-circle">${iconPlay(17)}</div>
+        </button>
       </div>
       <button class="home-card-more" aria-label="Más opciones">${iconDots(14)}</button>
       <div class="home-card-name">${escHtml(item.displayName || item.name || '—')}</div>
@@ -1599,8 +1602,14 @@ const UI = (() => {
       showContextMenu(e, isFolder ? 'home_folder' : 'home_song', item);
     });
 
+    card.querySelector('.home-card-play-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (typeof App !== 'undefined') App.onHomeCardClick(item);
+    });
+
     card.addEventListener('click', (e) => {
       if (e.target.closest('.home-card-more')) return;
+      if (e.target.closest('.home-card-play-btn')) return;
       if (typeof App !== 'undefined') App.onHomeCardClick(item);
     });
 
@@ -1619,12 +1628,21 @@ const UI = (() => {
     card.innerHTML = `
       <div class="home-card-art home-card-art--mosaic">
         ${_buildPlaylistMosaic(covers, pl.name)}
+        <button class="home-card-play-btn" aria-label="Reproducir playlist" tabindex="-1">
+          <div class="play-btn-circle">${iconPlay(17)}</div>
+        </button>
       </div>
       <div class="home-card-name">${escHtml(pl.name || '—')}</div>
       <div class="home-card-sub">${count} ${count === 1 ? 'canción' : 'canciones'}</div>
     `;
 
-    card.addEventListener('click', () => {
+    card.querySelector('.home-card-play-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (typeof App !== 'undefined') App.onPlaylistPlay(pl);
+    });
+
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('.home-card-play-btn')) return;
       if (typeof App !== 'undefined') App.onPlaylistHomeCardClick(pl);
     });
 

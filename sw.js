@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.528';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.528 — Filtro de orden en tab Álbumes: botón junto a la search bar, ordena por nombre de álbum o artista (ignorando acentos/puntuación)
+const APP_VERSION  = '3.5.529';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.529 — Hover en cards de home (desktop): escala 1.05 + botón play en recents y playlists; play en playlist reproduce directamente
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

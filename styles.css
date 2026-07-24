@@ -1063,6 +1063,56 @@ img { display: block; }
 
 .home-card-more:hover { opacity: 1; background: rgba(50, 50, 66, 0.92); color: #fff; }
 
+/* ── Home card: desktop hover — grow + play overlay ──────── */
+/* Only for recents and playlists sections; only on devices with hover */
+@media (hover: hover) {
+  .home-section[data-section-type="recents"] .home-card,
+  .home-section[data-section-type="playlists"] .home-card {
+    transition: transform 0.18s ease;
+    will-change: transform;
+  }
+  .home-section[data-section-type="recents"] .home-card:hover,
+  .home-section[data-section-type="playlists"] .home-card:hover {
+    transform: scale(1.05);
+    z-index: 2;
+  }
+  /* Play overlay button — lives inside .home-card-art */
+  .home-card-play-btn {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0);
+    opacity: 0;
+    transition: opacity 0.18s, background 0.18s;
+    z-index: 3;
+    border: none;
+    cursor: pointer;
+    border-radius: inherit;
+    color: #fff;
+  }
+  .home-card:hover .home-card-play-btn {
+    opacity: 1;
+    background: rgba(0,0,0,0.32);
+  }
+  .home-card-play-btn .play-btn-circle {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.14);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s, transform 0.15s;
+  }
+  .home-card-play-btn:hover .play-btn-circle {
+    background: rgba(255,255,255,0.28);
+    transform: scale(1.1);
+  }
+}
+
 /* ── Browse (Examinar) ───────────────────────────────────── */
 
 /* Sticky header that replaces the generic .screen-header */
