@@ -1092,11 +1092,15 @@ const App = (() => {
     if (_radioModeActive && !_radioInFlight && total > 0) {
       const remaining = total - index - 1;
       if (remaining <= 2) {
-        if (_radioArtists.length > 1) {
-          _triggerRadioForArtists(_radioArtists, null).catch(() => {});
-        } else if (_radioArtist) {
-          _triggerRadio(_radioArtist, null).catch(() => {});
-        }
+        // v3.5.540: diferido — la pista que está arrancando (fast-start /
+        // preload) tiene prioridad de red sobre las búsquedas de radio.
+        _deferRadioUntilPlaying(() => {
+          if (_radioArtists.length > 1) {
+            _triggerRadioForArtists(_radioArtists, null).catch(() => {});
+          } else if (_radioArtist) {
+            _triggerRadio(_radioArtist, null).catch(() => {});
+          }
+        });
       }
     }
 
@@ -1386,11 +1390,15 @@ const App = (() => {
     if (_radioModeActive && !_radioInFlight) {
       const remaining = queue.length - index - 1;
       if (remaining <= 2) {
-        if (_radioArtists.length > 1) {
-          _triggerRadioForArtists(_radioArtists, null).catch(() => {});
-        } else if (_radioArtist) {
-          _triggerRadio(_radioArtist, null).catch(() => {});
-        }
+        // v3.5.540: diferido — la pista que está arrancando (fast-start /
+        // preload) tiene prioridad de red sobre las búsquedas de radio.
+        _deferRadioUntilPlaying(() => {
+          if (_radioArtists.length > 1) {
+            _triggerRadioForArtists(_radioArtists, null).catch(() => {});
+          } else if (_radioArtist) {
+            _triggerRadio(_radioArtist, null).catch(() => {});
+          }
+        });
       }
     }
 
@@ -1795,11 +1803,35 @@ const App = (() => {
     _radioArtists   = artists;
     _radioTriggered = true; // prevent _onBlobReady double-trigger
 
-    if (artists.length > 1) {
-      await _triggerRadioForArtists(artists, null).catch(() => {});
-    } else {
-      await _triggerRadio(artists[0], null).catch(() => {});
-    }
+    // v3.5.540: fast-start SIEMPRE antes que radio — diferir la búsqueda de
+    // candidatos hasta que la reproducción ya arrancó (o 4 s máx).
+    _deferRadioUntilPlaying(() => {
+      if (artists.length > 1) {
+        _triggerRadioForArtists(artists, null).catch(() => {});
+      } else {
+        _triggerRadio(artists[0], null).catch(() => {});
+      }
+    });
+  }
+
+  /* v3.5.540: fast-start antes que radio — las búsquedas de candidatos
+     (Drive.searchFiles por artista, lecturas masivas de DB) competían por red
+     y CPU con la descarga fast-start de la canción actual y retrasaban el
+     arranque. Este helper difiere el trigger de radio hasta que el player ya
+     está reproduciendo (>0.3 s de audio) o hasta 4 s como red de seguridad. */
+  let _radioDeferPending = false;
+  function _deferRadioUntilPlaying(fn, maxWaitMs = 4000) {
+    if (_radioDeferPending) return; // ya hay un trigger en espera — no duplicar
+    _radioDeferPending = true;
+    const t0 = Date.now();
+    const iv = setInterval(() => {
+      const started = Player.isPlaying?.() && (Player.getCurrentTime?.() || 0) > 0.3;
+      if (started || (Date.now() - t0) >= maxWaitMs) {
+        clearInterval(iv);
+        _radioDeferPending = false;
+        setTimeout(() => fn(), 250); // respiro corto tras el arranque
+      }
+    }, 200);
   }
 
   /**
@@ -2684,7 +2716,10 @@ const App = (() => {
     // In force mode, ID3 pre-pass has already set correct context so MB gets accurate input.
     // ID3 (Pass 4) only fills fields MB left empty. AudD (Pass 7) fills what ID3 also missed.
     // Sequential: 1 req/sec rate limit.
-    if (typeof MusicBrainz !== 'undefined') {
+    // v3.5.540: SOLO en force (rescan explícito) — en el soft-scan/apertura normal
+    // del browse MusicBrainz NO debe actuar (decisión de Erick: el flujo normal es
+    // ID3-only; MB queda para el rescan manual, que es fuente de verdad).
+    if (force && typeof MusicBrainz !== 'undefined') {
       const mbQueue = [];
       for (const file of files) {
         try {
@@ -2966,6 +3001,9 @@ const App = (() => {
     // ── Pass 7: AudD.io audio fingerprinting ──────────────────────────────────
     // Last resort: identifies songs with no metadata at all from their audio content.
     // Limited per folder open to conserve daily quota (CONFIG.AUDD_MAX_PER_FOLDER).
+    // v3.5.540: SOLO en force (rescan explícito) — el soft-scan/apertura normal del
+    // browse no debe gastar cuota de AudD ni descargar 1MB por canción sin cover.
+    if (!force) return;
     if (typeof Audd === 'undefined') return;
     if (_browseRescanAbort || _albumRescanAbort || _libRescanAbort) return; // abort check
     const auddCandidates = files.filter(file => !_rowHasCover(file.id));
