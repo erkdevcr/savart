@@ -3699,6 +3699,47 @@ const App = (() => {
     }
   }
 
+  /* ── Album sort helpers ──────────────────────────────────── */
+
+  /** Returns the comparator for _libAlbumSortMode, ignoring accents/punctuation. */
+  function _albumCmp() {
+    const opts = { sensitivity: 'base', ignorePunctuation: true };
+    if (_libAlbumSortMode === 'artist') {
+      return (a, b) => {
+        const ac = (a.artist || '').localeCompare(b.artist || '', undefined, opts);
+        return ac !== 0 ? ac : (a.name || '').localeCompare(b.name || '', undefined, opts);
+      };
+    }
+    return (a, b) => (a.name || '').localeCompare(b.name || '', undefined, opts);
+  }
+
+  function _updateLibAlbumSortUI() {
+    const label = document.getElementById('lib-album-sort-label');
+    if (label) label.textContent = UI.t(_libAlbumSortMode === 'artist' ? 'sort_artist' : 'sort_album');
+    document.querySelectorAll('.lib-album-sort-option').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.mode === _libAlbumSortMode);
+    });
+  }
+
+  function _toggleLibAlbumSortDropdown(e) {
+    e.stopPropagation();
+    const dd      = document.getElementById('lib-album-sort-dropdown');
+    const chevron = document.getElementById('lib-album-sort-chevron');
+    if (!dd) return;
+    _libAlbumSortOpen = !_libAlbumSortOpen;
+    dd.style.display = _libAlbumSortOpen ? 'block' : 'none';
+    if (chevron) chevron.style.transform = _libAlbumSortOpen ? 'rotate(180deg)' : '';
+    _updateLibAlbumSortUI();
+  }
+
+  function _closeLibAlbumSortDropdown() {
+    const dd      = document.getElementById('lib-album-sort-dropdown');
+    const chevron = document.getElementById('lib-album-sort-chevron');
+    if (dd) dd.style.display = 'none';
+    if (chevron) chevron.style.transform = '';
+    _libAlbumSortOpen = false;
+  }
+
   /**
    * Collect visible album folder IDs from the current search results,
    * warn if any songs have manual edits, confirm, then run the rescan.
@@ -6670,7 +6711,9 @@ const App = (() => {
   /** Invalidate suggestions cache (call after bulk metadata writes). */
   function _invalidateSuggestionsCache() { _metaSuggestionsCache = null; }
 
-  let _currentLibTab  = 'albums'; // persists tab across sync refreshes
+  let _currentLibTab      = 'albums'; // persists tab across sync refreshes
+  let _libAlbumSortMode   = 'name';   // 'name' | 'artist' — sort mode for albums tab
+  let _libAlbumSortOpen   = false;
   let _libInDetail    = false;       // true while showing an artist/album drill-down
   let _libDetailRestoreFn = null;    // restores detail view when user nav Home → Library
   let _libScrollBeforeDetail = 0;    // .lib-detail scrollTop saved before drill-down
@@ -6739,6 +6782,10 @@ const App = (() => {
   function _setLibSearchBarVisible(visible) {
     const wrap = document.querySelector('.lib-search-wrap');
     if (wrap) wrap.style.display = visible ? '' : 'none';
+    // Album sort button: visible only when search bar is shown AND we're on albums tab
+    const asw = document.getElementById('lib-album-sort-wrap');
+    if (asw) asw.style.display = (visible && _currentLibTab === 'albums') ? '' : 'none';
+    if (!visible) _closeLibAlbumSortDropdown();
   }
 
   function _setLibTab(tab, skipLoad = false) {
@@ -6762,6 +6809,11 @@ const App = (() => {
     // Persist search text across tab switches — loaders re-apply it automatically.
     // Sync rescan button state — keeps it visible if a scan is currently running.
     _syncLibRescanBtn();
+
+    // Show album sort button only on albums tab
+    const _albumSortWrap = document.getElementById('lib-album-sort-wrap');
+    if (_albumSortWrap) _albumSortWrap.style.display = tab === 'albums' ? '' : 'none';
+    _closeLibAlbumSortDropdown();
 
     // Update placeholder
     UI.setLibSearchPlaceholder(LIB_TAB_PLACEHOLDERS[tab] || 'Buscar…');
@@ -11981,7 +12033,7 @@ const App = (() => {
           return { name, artist, artists, songCount, coverUrl, year, format,
             folderId: f.folderId, rescannedAt, hasManual: f.hasManual, blobId };
         })
-        .sort((a, b) => a.name.localeCompare(b.name));
+        .sort(_albumCmp());
 
       _libAllAlbums = albums;
       _renderAlbumPage(true);
@@ -15921,6 +15973,24 @@ const App = (() => {
 
     // Library: batch rescan visible album search results
     document.getElementById('btn-lib-rescan')?.addEventListener('click', onLibRescan);
+
+    // Library: album sort dropdown
+    document.getElementById('btn-lib-album-sort')?.addEventListener('click', _toggleLibAlbumSortDropdown);
+    document.getElementById('lib-album-sort-dropdown')?.addEventListener('click', (e) => {
+      const btn = e.target.closest('.lib-album-sort-option');
+      if (!btn) return;
+      const mode = btn.dataset.mode;
+      _closeLibAlbumSortDropdown();
+      if (mode === _libAlbumSortMode) return;
+      _libAlbumSortMode = mode;
+      _updateLibAlbumSortUI();
+      // Re-sort in-memory without re-fetching DB
+      _libAllAlbums.sort(_albumCmp());
+      _renderAlbumPage(true);
+    });
+    document.addEventListener('click', (e) => {
+      if (_libAlbumSortOpen && !e.target.closest('#lib-album-sort-wrap')) _closeLibAlbumSortDropdown();
+    });
 
     // Refresh cache bar when settings is opened
     document.querySelectorAll('[data-nav="settings"]').forEach(el => {

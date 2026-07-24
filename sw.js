@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.527';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.527 — Thumb barra de progreso: siempre visible en todos los contextos, 33% más pequeño (11px)
+const APP_VERSION  = '3.5.528';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.528 — Filtro de orden en tab Álbumes: botón junto a la search bar, ordena por nombre de álbum o artista (ignorando acentos/puntuación)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

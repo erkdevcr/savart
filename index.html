@@ -19,10 +19,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&family=Baskervville:ital@0;1&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="styles.css?v=3.5.527">
+  <link rel="stylesheet" href="styles.css?v=3.5.528">
   <!-- Version global — fallback para Android donde el SW no se registra.
        IMPORTANTE: mantener sincronizada con APP_VERSION de sw.js en cada bump. -->
-  <script>window.SAVART_VERSION = '3.5.527';</script>
+  <script>window.SAVART_VERSION = '3.5.528';</script>
 </head>
 <body>
 
@@ -298,6 +298,24 @@
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" id="lib-rescan-icon"><path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-8 3.58-8 8s3.58 8 8 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
               <span data-i18n="rescan_btn">Rescan</span>
             </button>
+            <!-- Album sort button: only shown when albums tab is active -->
+            <div id="lib-album-sort-wrap" style="position:relative; display:none; flex-shrink:0">
+              <button id="btn-lib-album-sort" class="btn-sort-toggle" aria-label="Ordenar álbumes">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg>
+                <span id="lib-album-sort-label" data-i18n="sort_album">Álbum</span>
+                <svg id="lib-album-sort-chevron" width="10" height="10" viewBox="0 0 24 24" fill="currentColor" style="transition:transform 0.2s"><path d="M7 10l5 5 5-5z"/></svg>
+              </button>
+              <div id="lib-album-sort-dropdown" class="sort-dropdown" style="display:none">
+                <button class="sort-option lib-album-sort-option" data-mode="name">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg>
+                  <span data-i18n="sort_album">Álbum</span>
+                </button>
+                <button class="sort-option lib-album-sort-option" data-mode="artist">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+                  <span data-i18n="sort_artist">Artista</span>
+                </button>
+              </div>
+            </div>
           </div>
           <div id="lib-detail-content"></div>
         </div>
@@ -1549,22 +1567,22 @@
 </script>
 
 <!-- Savart modules -->
-<script src="js/config.js?v=3.5.527"></script>
-<script src="js/auth.js?v=3.5.527"></script>
-<script src="js/drive.js?v=3.5.527"></script>
-<script src="js/db.js?v=3.5.527"></script>
-<script src="js/sync.js?v=3.5.527"></script>
-<script src="js/player.js?v=3.5.527"></script>
-<script src="js/meta.js?v=3.5.527"></script>
-<script src="js/lastfm.js?v=3.5.527"></script>
-<script src="js/audd.js?v=3.5.527"></script>
-<script src="js/musicbrainz.js?v=3.5.527"></script>
-<script src="js/discogs.js?v=3.5.527"></script>
-<script src="js/lyrics.js?v=3.5.527"></script>
-<script src="js/soundrop.js?v=3.5.527"></script>
-<script src="js/ui.js?v=3.5.527"></script>
-<script src="js/app.js?v=3.5.527"></script>
-<script src="js/bg.js?v=3.5.527"></script>
+<script src="js/config.js?v=3.5.528"></script>
+<script src="js/auth.js?v=3.5.528"></script>
+<script src="js/drive.js?v=3.5.528"></script>
+<script src="js/db.js?v=3.5.528"></script>
+<script src="js/sync.js?v=3.5.528"></script>
+<script src="js/player.js?v=3.5.528"></script>
+<script src="js/meta.js?v=3.5.528"></script>
+<script src="js/lastfm.js?v=3.5.528"></script>
+<script src="js/audd.js?v=3.5.528"></script>
+<script src="js/musicbrainz.js?v=3.5.528"></script>
+<script src="js/discogs.js?v=3.5.528"></script>
+<script src="js/lyrics.js?v=3.5.528"></script>
+<script src="js/soundrop.js?v=3.5.528"></script>
+<script src="js/ui.js?v=3.5.528"></script>
+<script src="js/app.js?v=3.5.528"></script>
+<script src="js/bg.js?v=3.5.528"></script>
 
 <!-- Inline: additional bindings that need the DOM -->
 <script>
