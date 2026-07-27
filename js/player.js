@@ -1581,57 +1581,61 @@ const Player = (() => {
     }
   }
 
-  /** Draw the static waveform — symmetric (±) from center, played/unplayed split. */
+  /** Draw the waveform as a single continuous seismograph-style line. */
   function _redrawWaveform() {
     if (!_spectrumCanvas || !_spectrumCtx2d) return;
     _resizeSpectrum();
 
-    const ctx  = _spectrumCtx2d;
-    const W    = _spectrumCanvas.clientWidth;
-    const H    = _spectrumCanvas.clientHeight;
-    const CY   = H / 2; // center line
+    const ctx = _spectrumCtx2d;
+    const W   = _spectrumCanvas.clientWidth;
+    const H   = _spectrumCanvas.clientHeight;
+    const CY  = H / 2;
 
     ctx.clearRect(0, 0, W, H);
 
-    const numBars = 80;
-    const gap     = 1;
-    const barW    = Math.max(1, (W - gap * (numBars - 1)) / numBars);
-    const dur     = _audio?.duration || 0;
-    const pct     = (dur > 0 && _audio) ? Math.min(1, _audio.currentTime / dur) : 0;
-    const pivot   = Math.floor(pct * numBars);
+    const N    = _waveformData ? _waveformData.length : 200;
+    const step = W / (N - 1);
+    const dur  = _audio?.duration || 0;
+    const pct  = (dur > 0 && _audio) ? Math.min(1, _audio.currentTime / dur) : 0;
+    const px   = pct * W; // playhead X
 
-    for (let i = 0; i < numBars; i++) {
-      const amp   = _waveformData ? _waveformData[i] : 0.05;
-      const halfH = Math.max(1.5, amp * (H * 0.46)); // half-height — symmetric ± from center
-      const x     = i * (barW + gap);
-      const y1    = CY - halfH;
-      const y2    = CY + halfH;
-      const played = _waveformData && (i <= pivot);
-
-      // Vertical gradient: dark blue at tips → bright white/cyan at center
-      const grad = ctx.createLinearGradient(0, y1, 0, y2);
-      if (_waveformData) {
-        if (played) {
-          grad.addColorStop(0,    'rgba(20,  80, 180, 0.55)');
-          grad.addColorStop(0.30, 'rgba(80, 180, 255, 0.88)');
-          grad.addColorStop(0.50, 'rgba(210, 238, 255, 1.00)');
-          grad.addColorStop(0.70, 'rgba(80, 180, 255, 0.88)');
-          grad.addColorStop(1,    'rgba(20,  80, 180, 0.55)');
-        } else {
-          grad.addColorStop(0,    'rgba(15,  50, 130, 0.30)');
-          grad.addColorStop(0.50, 'rgba(50, 110, 210, 0.42)');
-          grad.addColorStop(1,    'rgba(15,  50, 130, 0.30)');
-        }
-      } else {
-        // Placeholder while decoding
-        grad.addColorStop(0,    'rgba(15,  50, 130, 0.18)');
-        grad.addColorStop(0.50, 'rgba(50, 110, 210, 0.26)');
-        grad.addColorStop(1,    'rgba(15,  50, 130, 0.18)');
-      }
-
-      ctx.fillStyle = grad;
-      ctx.fillRect(x, y1, barW, y2 - y1);
+    // Build Y positions — use real signed data or flat placeholder
+    const yPts = new Float32Array(N);
+    for (let i = 0; i < N; i++) {
+      const v = _waveformData
+        ? _waveformData[i]
+        : Math.sin(i * Math.PI * 0.31) * 0.05; // subtle flat placeholder
+      yPts[i] = CY - v * H * 0.44;
     }
+
+    function drawSegment(x0, x1, color, lw) {
+      ctx.save();
+      ctx.beginPath(); ctx.rect(x0, 0, x1 - x0, H); ctx.clip();
+      ctx.beginPath();
+      ctx.moveTo(0, yPts[0]);
+      for (let i = 1; i < N - 1; i++) {
+        const mx = (i * step + (i + 1) * step) / 2;
+        const my = (yPts[i] + yPts[i + 1]) / 2;
+        ctx.quadraticCurveTo(i * step, yPts[i], mx, my);
+      }
+      ctx.lineTo((N - 1) * step, yPts[N - 1]);
+      ctx.strokeStyle = color;
+      ctx.lineWidth   = lw;
+      ctx.lineJoin    = 'round';
+      ctx.lineCap     = 'round';
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // Unplayed — dim
+    drawSegment(px, W, 'rgba(55, 100, 190, 0.30)', 1.2);
+    // Played — brighter
+    drawSegment(0, px, 'rgba(110, 170, 240, 0.72)', 1.4);
+
+    // Playhead vertical line
+    ctx.strokeStyle = 'rgba(255,255,255,0.50)';
+    ctx.lineWidth   = 1.5;
+    ctx.beginPath(); ctx.moveTo(px, 4); ctx.lineTo(px, H - 4); ctx.stroke();
   }
 
   /** RAF loop — redraws on every frame while expanded player is open. */
@@ -1660,20 +1664,23 @@ const Player = (() => {
       if (_waveformItemId !== itemId) return;
 
       const samples = audioBuf.getChannelData(0); // Use left channel
-      const N       = 80;
+      const N       = 200; // Higher resolution for smooth seismograph line
       const block   = Math.floor(samples.length / N);
       const data    = new Float32Array(N);
 
+      // Store signed peak per block — preserves the actual waveform shape
       for (let i = 0; i < N; i++) {
-        let sum = 0;
+        let peak = 0;
         const end = (i + 1) * block;
-        for (let j = i * block; j < end; j++) sum += samples[j] * samples[j];
-        data[i] = Math.sqrt(sum / block); // RMS
+        for (let j = i * block; j < end; j++) {
+          if (Math.abs(samples[j]) > Math.abs(peak)) peak = samples[j];
+        }
+        data[i] = peak; // Signed: -1 to +1
       }
 
-      // Normalize to 0–1
+      // Normalize by absolute max
       let max = 0;
-      for (let i = 0; i < N; i++) if (data[i] > max) max = data[i];
+      for (let i = 0; i < N; i++) if (Math.abs(data[i]) > max) max = Math.abs(data[i]);
       if (max > 0) for (let i = 0; i < N; i++) data[i] /= max;
 
       _waveformData = data;

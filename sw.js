@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.544';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.544 — waveform simétrico ±centro, gradiente azul oscuro→blanco/cyan, 80 barras
+const APP_VERSION  = '3.5.546';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.546 — waveform sismógrafo: línea continua firmada (signed peak), N=200, suave y tenue
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
