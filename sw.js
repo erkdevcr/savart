@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.543';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.543 — waveform estático de toda la pista (RMS por bar, decodeAudioData) reemplaza espectro en tiempo real
+const APP_VERSION  = '3.5.544';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.544 — waveform simétrico ±centro, gradiente azul oscuro→blanco/cyan, 80 barras
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

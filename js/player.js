@@ -1581,53 +1581,56 @@ const Player = (() => {
     }
   }
 
-  /** Draw the static waveform with played/unplayed split at current position. */
+  /** Draw the static waveform — symmetric (±) from center, played/unplayed split. */
   function _redrawWaveform() {
     if (!_spectrumCanvas || !_spectrumCtx2d) return;
     _resizeSpectrum();
 
-    const ctx = _spectrumCtx2d;
-    const W   = _spectrumCanvas.clientWidth;
-    const H   = _spectrumCanvas.clientHeight;
+    const ctx  = _spectrumCtx2d;
+    const W    = _spectrumCanvas.clientWidth;
+    const H    = _spectrumCanvas.clientHeight;
+    const CY   = H / 2; // center line
 
     ctx.clearRect(0, 0, W, H);
 
-    const numBars = 54;
-    const gap     = 2;
+    const numBars = 80;
+    const gap     = 1;
     const barW    = Math.max(1, (W - gap * (numBars - 1)) / numBars);
     const dur     = _audio?.duration || 0;
     const pct     = (dur > 0 && _audio) ? Math.min(1, _audio.currentTime / dur) : 0;
-    const pivot   = Math.floor(pct * numBars); // bars <= pivot are "played"
+    const pivot   = Math.floor(pct * numBars);
 
     for (let i = 0; i < numBars; i++) {
-      // Height: use waveform data if available, else minimal placeholder
-      const amp  = _waveformData ? _waveformData[i] : 0.08;
-      const barH = Math.max(2, amp * H * 0.92);
-      const x    = i * (barW + gap);
-      const y    = H - barH;
-      const played = (i <= pivot);
+      const amp   = _waveformData ? _waveformData[i] : 0.05;
+      const halfH = Math.max(1.5, amp * (H * 0.46)); // half-height — symmetric ± from center
+      const x     = i * (barW + gap);
+      const y1    = CY - halfH;
+      const y2    = CY + halfH;
+      const played = _waveformData && (i <= pivot);
 
+      // Vertical gradient: dark blue at tips → bright white/cyan at center
+      const grad = ctx.createLinearGradient(0, y1, 0, y2);
       if (_waveformData) {
-        // Played: bright cyan; unplayed: dim blue
-        ctx.fillStyle = played
-          ? 'rgba(0, 210, 255, 0.92)'
-          : 'rgba(80, 150, 255, 0.30)';
+        if (played) {
+          grad.addColorStop(0,    'rgba(20,  80, 180, 0.55)');
+          grad.addColorStop(0.30, 'rgba(80, 180, 255, 0.88)');
+          grad.addColorStop(0.50, 'rgba(210, 238, 255, 1.00)');
+          grad.addColorStop(0.70, 'rgba(80, 180, 255, 0.88)');
+          grad.addColorStop(1,    'rgba(20,  80, 180, 0.55)');
+        } else {
+          grad.addColorStop(0,    'rgba(15,  50, 130, 0.30)');
+          grad.addColorStop(0.50, 'rgba(50, 110, 210, 0.42)');
+          grad.addColorStop(1,    'rgba(15,  50, 130, 0.30)');
+        }
       } else {
-        // No data yet — uniform dim placeholder
-        ctx.fillStyle = 'rgba(80, 150, 255, 0.20)';
+        // Placeholder while decoding
+        grad.addColorStop(0,    'rgba(15,  50, 130, 0.18)');
+        grad.addColorStop(0.50, 'rgba(50, 110, 210, 0.26)');
+        grad.addColorStop(1,    'rgba(15,  50, 130, 0.18)');
       }
 
-      const r = Math.min(2, barW / 2);
-      ctx.beginPath();
-      ctx.moveTo(x + r, y);
-      ctx.lineTo(x + barW - r, y);
-      ctx.arcTo(x + barW, y, x + barW, y + r, r);
-      ctx.lineTo(x + barW, H);
-      ctx.lineTo(x, H);
-      ctx.lineTo(x, y + r);
-      ctx.arcTo(x, y, x + r, y, r);
-      ctx.closePath();
-      ctx.fill();
+      ctx.fillStyle = grad;
+      ctx.fillRect(x, y1, barW, y2 - y1);
     }
   }
 
@@ -1657,7 +1660,7 @@ const Player = (() => {
       if (_waveformItemId !== itemId) return;
 
       const samples = audioBuf.getChannelData(0); // Use left channel
-      const N       = 54;
+      const N       = 80;
       const block   = Math.floor(samples.length / N);
       const data    = new Float32Array(N);
 
