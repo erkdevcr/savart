@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.540';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.540 — soft-scan/apertura normal del browse: MusicBrainz y AudD ya NO actúan (solo en rescan force); radio diferida hasta que la reproducción arranca (fast-start primero, +25 después)
+const APP_VERSION  = '3.5.541';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.541 — espectrograma de frecuencias (AnalyserNode) bajo barra de tiempo en player expandido
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

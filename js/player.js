@@ -37,6 +37,14 @@ const Player = (() => {
   let _compressorNode  = null;   // DynamicsCompressorNode — live gain limiter (post-EQ)
   let _liveGainEnabled = false;  // whether live gain limiter is active
 
+  // Spectrum visualizer
+  let _analyserNode   = null;    // AnalyserNode — tapped after gainNode
+  let _spectrumCanvas = null;    // <canvas> element
+  let _spectrumCtx2d  = null;    // CanvasRenderingContext2D
+  let _spectrumRaf    = 0;       // requestAnimationFrame handle
+  let _spectrumActive = false;   // true while the expanded player is open
+  let _spectrumData   = null;    // Uint8Array — reused each frame
+
   let _queue        = [];        // DriveItem[]
   let _queueIndex   = -1;        // current track index
   let _shuffle      = false;
@@ -500,11 +508,19 @@ const Player = (() => {
     }
     _eqNodes[_eqNodes.length - 1].connect(_compressorNode);
     _compressorNode.connect(_gainNode);
+
+    // Spectrum analyser — tapped after gainNode (post-volume, post-EQ)
+    _analyserNode = _audioCtx.createAnalyser();
+    _analyserNode.fftSize = 256;              // 128 frequency bins
+    _analyserNode.smoothingTimeConstant = 0.82; // smooth decay
+    _spectrumData = new Uint8Array(_analyserNode.frequencyBinCount);
+
+    _gainNode.connect(_analyserNode);
     if (_pannerNode) {
-      _gainNode.connect(_pannerNode);
+      _analyserNode.connect(_pannerNode);
       _pannerNode.connect(_audioCtx.destination);
     } else {
-      _gainNode.connect(_audioCtx.destination);
+      _analyserNode.connect(_audioCtx.destination);
     }
 
     _audioCtx.resume();
@@ -1536,6 +1552,97 @@ const Player = (() => {
   }
 
   /* ── Expose ─────────────────────────────────────────────── */
+  /* ── Spectrum visualizer ────────────────────────────────────── */
+
+  function _resizeSpectrum() {
+    if (!_spectrumCanvas || !_spectrumCtx2d) return;
+    const dpr  = window.devicePixelRatio || 1;
+    const cssW = _spectrumCanvas.clientWidth;
+    const cssH = _spectrumCanvas.clientHeight;
+    const pw   = Math.round(cssW * dpr);
+    const ph   = Math.round(cssH * dpr);
+    if (_spectrumCanvas.width !== pw || _spectrumCanvas.height !== ph) {
+      _spectrumCanvas.width  = pw;
+      _spectrumCanvas.height = ph;
+      _spectrumCtx2d.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+  }
+
+  function _drawSpectrum() {
+    if (!_spectrumActive || !_spectrumCanvas || !_spectrumCtx2d) return;
+    _spectrumRaf = requestAnimationFrame(_drawSpectrum);
+
+    _resizeSpectrum();
+
+    const ctx = _spectrumCtx2d;
+    const W   = _spectrumCanvas.clientWidth;
+    const H   = _spectrumCanvas.clientHeight;
+
+    ctx.clearRect(0, 0, W, H);
+
+    // Soundrop tracks don't pass through WebAudio — nothing to show
+    if (!_analyserNode || _sdActive) return;
+
+    _analyserNode.getByteFrequencyData(_spectrumData);
+
+    const numBars  = 54;
+    const gap      = 2;
+    const barW     = Math.max(1, (W - gap * (numBars - 1)) / numBars);
+    // Use first 60% of bins — most musical content lives there
+    const binRange = Math.floor(_spectrumData.length * 0.6);
+    const step     = binRange / numBars;
+
+    for (let i = 0; i < numBars; i++) {
+      // Average the bins that map to this bar
+      let sum = 0, cnt = 0;
+      const b0 = Math.floor(i * step);
+      const b1 = Math.floor((i + 1) * step);
+      for (let b = b0; b < b1 && b < _spectrumData.length; b++) { sum += _spectrumData[b]; cnt++; }
+      const avg  = cnt ? sum / cnt : 0;
+      const barH = Math.max(2, (avg / 255) * H * 0.95);
+      const x    = i * (barW + gap);
+      const y    = H - barH;
+
+      // Cyan-to-blue gradient per bar
+      const grad = ctx.createLinearGradient(0, y, 0, H);
+      grad.addColorStop(0,   'rgba(0, 210, 255, 0.95)');
+      grad.addColorStop(0.5, 'rgba(20, 140, 255, 0.85)');
+      grad.addColorStop(1,   'rgba(30,  80, 200, 0.65)');
+      ctx.fillStyle = grad;
+
+      // Bar with rounded top corners
+      const r = Math.min(2, barW / 2);
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.lineTo(x + barW - r, y);
+      ctx.arcTo(x + barW, y, x + barW, y + r, r);
+      ctx.lineTo(x + barW, H);
+      ctx.lineTo(x, H);
+      ctx.lineTo(x, y + r);
+      ctx.arcTo(x, y, x + r, y, r);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+
+  function startSpectrum(canvas) {
+    if (!canvas) return;
+    _spectrumCanvas = canvas;
+    _spectrumCtx2d  = canvas.getContext('2d');
+    _spectrumActive = true;
+    cancelAnimationFrame(_spectrumRaf);
+    _drawSpectrum();
+  }
+
+  function stopSpectrum() {
+    _spectrumActive = false;
+    cancelAnimationFrame(_spectrumRaf);
+    _spectrumRaf = 0;
+    if (_spectrumCtx2d && _spectrumCanvas) {
+      _spectrumCtx2d.clearRect(0, 0, _spectrumCanvas.clientWidth, _spectrumCanvas.clientHeight);
+    }
+  }
+
   return {
     init,
     updateMediaSessionArtwork,
@@ -1587,5 +1694,8 @@ const Player = (() => {
     getDuration,
     getCurrentTrack,
     patchQueueItem,
+    // Spectrum
+    startSpectrum,
+    stopSpectrum,
   };
 })();
