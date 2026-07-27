@@ -251,9 +251,6 @@ const App = (() => {
       onSdBlocked:     _showSdBlockedModal, // YT bloqueó el embedding y no hay MP3 en cache → popup
     });
 
-    // 4b. Spectrum visualizer (desktop only — mobile starts on player open)
-    UI.initSpectrum();
-
     // 5. Init auth
     Auth.init({
       onReady:    _onTokenReady,

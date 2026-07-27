@@ -1031,15 +1031,9 @@ const UI = (() => {
       ep.offsetHeight; // eslint-disable-line no-unused-expressions
       // 3. Add .visible → CSS transition fires: translateY(100%) → translateY(0)
       ep.classList.add('visible');
-      // 4. Start spectrum — rAF gives canvas time to be laid out and sized
-      requestAnimationFrame(() => {
-        const canvas = document.getElementById('pexp-spectrum');
-        if (canvas && typeof Player !== 'undefined') Player.startSpectrum(canvas);
-      });
     } else {
       // 1. Remove .visible → CSS transition fires: translateY(0) → translateY(100%)
       ep.classList.remove('visible');
-      if (typeof Player !== 'undefined') Player.stopSpectrum();
       // 2. After the slide-down completes, hide from layout so it can't be tabbed to
       const onEnd = () => {
         if (!ep.classList.contains('visible')) {
@@ -1048,14 +1042,6 @@ const UI = (() => {
       };
       ep.addEventListener('transitionend', onEnd, { once: true });
     }
-  }
-
-  /** Called once on boot — starts the spectrum loop on desktop (always visible).
-   *  On mobile the loop is managed by setExpandedPlayerVisible. */
-  function initSpectrum() {
-    if (!_isDesktop()) return;
-    const canvas = document.getElementById('pexp-spectrum');
-    if (canvas && typeof Player !== 'undefined') Player.startSpectrum(canvas);
   }
 
   function isExpandedPlayerVisible() {
@@ -5866,7 +5852,6 @@ const UI = (() => {
     // Expanded player
     setExpandedPlayerVisible,
     isExpandedPlayerVisible,
-    initSpectrum,
     updateExpandedPlayer,
     updateExpandedPlayerProgress,
     setSeekDragging,

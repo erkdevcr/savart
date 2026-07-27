@@ -37,14 +37,6 @@ const Player = (() => {
   let _compressorNode  = null;   // DynamicsCompressorNode — live gain limiter (post-EQ)
   let _liveGainEnabled = false;  // whether live gain limiter is active
 
-  // Waveform visualizer (static analysis of full track)
-  let _analyserNode    = null;   // AnalyserNode — in-graph pass-through (kept for compatibility)
-  let _spectrumCanvas  = null;   // <canvas> element
-  let _spectrumCtx2d   = null;   // CanvasRenderingContext2D
-  let _spectrumRaf     = 0;      // requestAnimationFrame handle
-  let _spectrumActive  = false;  // true while the expanded player is open
-  let _waveformData    = null;   // Float32Array — normalized amplitude per bar (null = loading/unavailable)
-  let _waveformItemId  = null;   // item.id for which _waveformData was computed
 
   let _queue        = [];        // DriveItem[]
   let _queueIndex   = -1;        // current track index
@@ -510,18 +502,11 @@ const Player = (() => {
     _eqNodes[_eqNodes.length - 1].connect(_compressorNode);
     _compressorNode.connect(_gainNode);
 
-    // Spectrum analyser — tapped after gainNode (post-volume, post-EQ)
-    _analyserNode = _audioCtx.createAnalyser();
-    _analyserNode.fftSize = 256;              // 128 frequency bins
-    _analyserNode.smoothingTimeConstant = 0.82; // smooth decay
-    _spectrumData = new Uint8Array(_analyserNode.frequencyBinCount);
-
-    _gainNode.connect(_analyserNode);
     if (_pannerNode) {
-      _analyserNode.connect(_pannerNode);
+      _gainNode.connect(_pannerNode);
       _pannerNode.connect(_audioCtx.destination);
     } else {
-      _analyserNode.connect(_audioCtx.destination);
+      _gainNode.connect(_audioCtx.destination);
     }
 
     _audioCtx.resume();
@@ -1008,10 +993,6 @@ const Player = (() => {
     }
     _fastStartActive = false;
 
-    // Clear waveform from previous track — new data will arrive via _generateWaveform
-    _waveformData   = null;
-    _waveformItemId = null;
-
     // *** RACE-CONDITION FIX: create the session controller HERE — before any
     // awaits — so that the *next* _playCurrentTrack() call can abort this one
     // via _activeDownloadCtrl even while we are still inside a DB lookup or
@@ -1041,7 +1022,6 @@ const Player = (() => {
       // file ID and must be played through the normal Drive download path.
       if (item.isSoundrop && (item.id || '').startsWith('sd_')) {
         _sdActive = true;
-        _waveformData = null; // No blob available for Soundrop — canvas stays blank
 
         // Tag this play attempt so stale YT callbacks from a previous load are ignored
         const mySession = ++_sdPlaySession;
@@ -1205,9 +1185,6 @@ const Player = (() => {
         try { _onBlobReady(item, blob); } catch (e) { console.warn('[Player] onBlobReady error:', e); }
       }
 
-      // Waveform: non-fast-start path — blob IS the complete file
-      if (!_fastStartActive) _generateWaveform(item.id, blob);
-
       // Release previous audio: clear src FIRST so Chrome's media engine drops its
       // internal decoded PCM buffer, THEN revoke the object URL so the GC can free
       // the underlying blob data. Without src='', Chrome holds decoded audio in the
@@ -1343,8 +1320,6 @@ const Player = (() => {
       // Notify that the full file is now available (e.g. for accurate loudness analysis).
       // Only fire if this track is still the one playing.
       if (_queue[_queueIndex]?.id === item.id) {
-        // Waveform: fast-start path — fullBlob is now the complete file
-        _generateWaveform(item.id, fullBlob);
         if (_onFullBlobReady) {
           try { _onFullBlobReady(item, fullBlob); } catch (e) { console.warn('[Player] onFullBlobReady error:', e); }
         }
@@ -1565,148 +1540,6 @@ const Player = (() => {
   }
 
   /* ── Expose ─────────────────────────────────────────────── */
-  /* ── Waveform visualizer (static — full-track analysis) ─────── */
-
-  function _resizeSpectrum() {
-    if (!_spectrumCanvas || !_spectrumCtx2d) return;
-    const dpr  = window.devicePixelRatio || 1;
-    const cssW = _spectrumCanvas.clientWidth;
-    const cssH = _spectrumCanvas.clientHeight;
-    const pw   = Math.round(cssW * dpr);
-    const ph   = Math.round(cssH * dpr);
-    if (_spectrumCanvas.width !== pw || _spectrumCanvas.height !== ph) {
-      _spectrumCanvas.width  = pw;
-      _spectrumCanvas.height = ph;
-      _spectrumCtx2d.setTransform(dpr, 0, 0, dpr, 0, 0);
-    }
-  }
-
-  /** Draw the waveform as a single continuous seismograph-style line. */
-  function _redrawWaveform() {
-    if (!_spectrumCanvas || !_spectrumCtx2d) return;
-    _resizeSpectrum();
-
-    const ctx = _spectrumCtx2d;
-    const W   = _spectrumCanvas.clientWidth;
-    const H   = _spectrumCanvas.clientHeight;
-    const CY  = H / 2;
-
-    ctx.clearRect(0, 0, W, H);
-
-    const N    = _waveformData ? _waveformData.length : 200;
-    const step = W / (N - 1);
-    const dur  = _audio?.duration || 0;
-    const pct  = (dur > 0 && _audio) ? Math.min(1, _audio.currentTime / dur) : 0;
-    const px   = pct * W; // playhead X
-
-    // Build Y positions — use real signed data or flat placeholder
-    const yPts = new Float32Array(N);
-    for (let i = 0; i < N; i++) {
-      const v = _waveformData
-        ? _waveformData[i]
-        : Math.sin(i * Math.PI * 0.31) * 0.05; // subtle flat placeholder
-      yPts[i] = CY - v * H * 0.44;
-    }
-
-    function drawSegment(x0, x1, color, lw) {
-      ctx.save();
-      ctx.beginPath(); ctx.rect(x0, 0, x1 - x0, H); ctx.clip();
-      ctx.beginPath();
-      ctx.moveTo(0, yPts[0]);
-      for (let i = 1; i < N - 1; i++) {
-        const mx = (i * step + (i + 1) * step) / 2;
-        const my = (yPts[i] + yPts[i + 1]) / 2;
-        ctx.quadraticCurveTo(i * step, yPts[i], mx, my);
-      }
-      ctx.lineTo((N - 1) * step, yPts[N - 1]);
-      ctx.strokeStyle = color;
-      ctx.lineWidth   = lw;
-      ctx.lineJoin    = 'round';
-      ctx.lineCap     = 'round';
-      ctx.stroke();
-      ctx.restore();
-    }
-
-    // Unplayed — dim
-    drawSegment(px, W, 'rgba(55, 100, 190, 0.30)', 1.2);
-    // Played — brighter
-    drawSegment(0, px, 'rgba(110, 170, 240, 0.72)', 1.4);
-
-    // Playhead vertical line
-    ctx.strokeStyle = 'rgba(255,255,255,0.50)';
-    ctx.lineWidth   = 1.5;
-    ctx.beginPath(); ctx.moveTo(px, 4); ctx.lineTo(px, H - 4); ctx.stroke();
-  }
-
-  /** RAF loop — redraws on every frame while expanded player is open. */
-  function _waveformLoop() {
-    if (!_spectrumActive || !_spectrumCanvas) return;
-    _spectrumRaf = requestAnimationFrame(_waveformLoop);
-    _redrawWaveform();
-  }
-
-  /** Decode the full blob and extract per-bar RMS amplitude. */
-  async function _generateWaveform(itemId, blob) {
-    if (!blob) return;
-    if (_waveformItemId === itemId) return;        // Already computed for this track
-    if (blob.size > 60 * 1024 * 1024) return;      // Skip files > 60 MB (decode too expensive)
-    _waveformItemId = itemId;
-    _waveformData   = null;                        // Clear while computing
-
-    try {
-      const arrayBuf  = await blob.arrayBuffer();
-      // Re-use _audioCtx if available; otherwise create a temporary one for decoding
-      const tmpCtx    = _audioCtx || new (window.AudioContext || window.webkitAudioContext)();
-      const audioBuf  = await tmpCtx.decodeAudioData(arrayBuf);
-      if (!_audioCtx) tmpCtx.close();
-
-      // Bail if the track changed while we were decoding
-      if (_waveformItemId !== itemId) return;
-
-      const samples = audioBuf.getChannelData(0); // Use left channel
-      const N       = 200; // Higher resolution for smooth seismograph line
-      const block   = Math.floor(samples.length / N);
-      const data    = new Float32Array(N);
-
-      // Store signed peak per block — preserves the actual waveform shape
-      for (let i = 0; i < N; i++) {
-        let peak = 0;
-        const end = (i + 1) * block;
-        for (let j = i * block; j < end; j++) {
-          if (Math.abs(samples[j]) > Math.abs(peak)) peak = samples[j];
-        }
-        data[i] = peak; // Signed: -1 to +1
-      }
-
-      // Normalize by absolute max
-      let max = 0;
-      for (let i = 0; i < N; i++) if (Math.abs(data[i]) > max) max = Math.abs(data[i]);
-      if (max > 0) for (let i = 0; i < N; i++) data[i] /= max;
-
-      _waveformData = data;
-      _redrawWaveform(); // Immediate repaint now that data is ready
-    } catch (e) {
-      console.warn('[Player] Waveform decode failed:', e);
-    }
-  }
-
-  function startSpectrum(canvas) {
-    if (!canvas) return;
-    _spectrumCanvas = canvas;
-    _spectrumCtx2d  = canvas.getContext('2d');
-    _spectrumActive = true;
-    cancelAnimationFrame(_spectrumRaf);
-    _waveformLoop();
-  }
-
-  function stopSpectrum() {
-    _spectrumActive = false;
-    cancelAnimationFrame(_spectrumRaf);
-    _spectrumRaf = 0;
-    if (_spectrumCtx2d && _spectrumCanvas) {
-      _spectrumCtx2d.clearRect(0, 0, _spectrumCanvas.clientWidth, _spectrumCanvas.clientHeight);
-    }
-  }
 
   return {
     init,
@@ -1759,8 +1592,5 @@ const Player = (() => {
     getDuration,
     getCurrentTrack,
     patchQueueItem,
-    // Spectrum
-    startSpectrum,
-    stopSpectrum,
   };
 })();
