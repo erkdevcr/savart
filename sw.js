@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.542';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.542 — barra de progreso y tiempos superpuestos sobre el espectrograma (pexp-spectrum-wrap)
+const APP_VERSION  = '3.5.543';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.543 — waveform estático de toda la pista (RMS por bar, decodeAudioData) reemplaza espectro en tiempo real
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

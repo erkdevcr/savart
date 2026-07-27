@@ -37,13 +37,14 @@ const Player = (() => {
   let _compressorNode  = null;   // DynamicsCompressorNode — live gain limiter (post-EQ)
   let _liveGainEnabled = false;  // whether live gain limiter is active
 
-  // Spectrum visualizer
-  let _analyserNode   = null;    // AnalyserNode — tapped after gainNode
-  let _spectrumCanvas = null;    // <canvas> element
-  let _spectrumCtx2d  = null;    // CanvasRenderingContext2D
-  let _spectrumRaf    = 0;       // requestAnimationFrame handle
-  let _spectrumActive = false;   // true while the expanded player is open
-  let _spectrumData   = null;    // Uint8Array — reused each frame
+  // Waveform visualizer (static analysis of full track)
+  let _analyserNode    = null;   // AnalyserNode — in-graph pass-through (kept for compatibility)
+  let _spectrumCanvas  = null;   // <canvas> element
+  let _spectrumCtx2d   = null;   // CanvasRenderingContext2D
+  let _spectrumRaf     = 0;      // requestAnimationFrame handle
+  let _spectrumActive  = false;  // true while the expanded player is open
+  let _waveformData    = null;   // Float32Array — normalized amplitude per bar (null = loading/unavailable)
+  let _waveformItemId  = null;   // item.id for which _waveformData was computed
 
   let _queue        = [];        // DriveItem[]
   let _queueIndex   = -1;        // current track index
@@ -1007,6 +1008,10 @@ const Player = (() => {
     }
     _fastStartActive = false;
 
+    // Clear waveform from previous track — new data will arrive via _generateWaveform
+    _waveformData   = null;
+    _waveformItemId = null;
+
     // *** RACE-CONDITION FIX: create the session controller HERE — before any
     // awaits — so that the *next* _playCurrentTrack() call can abort this one
     // via _activeDownloadCtrl even while we are still inside a DB lookup or
@@ -1036,6 +1041,7 @@ const Player = (() => {
       // file ID and must be played through the normal Drive download path.
       if (item.isSoundrop && (item.id || '').startsWith('sd_')) {
         _sdActive = true;
+        _waveformData = null; // No blob available for Soundrop — canvas stays blank
 
         // Tag this play attempt so stale YT callbacks from a previous load are ignored
         const mySession = ++_sdPlaySession;
@@ -1199,6 +1205,9 @@ const Player = (() => {
         try { _onBlobReady(item, blob); } catch (e) { console.warn('[Player] onBlobReady error:', e); }
       }
 
+      // Waveform: non-fast-start path — blob IS the complete file
+      if (!_fastStartActive) _generateWaveform(item.id, blob);
+
       // Release previous audio: clear src FIRST so Chrome's media engine drops its
       // internal decoded PCM buffer, THEN revoke the object URL so the GC can free
       // the underlying blob data. Without src='', Chrome holds decoded audio in the
@@ -1333,8 +1342,12 @@ const Player = (() => {
 
       // Notify that the full file is now available (e.g. for accurate loudness analysis).
       // Only fire if this track is still the one playing.
-      if (_queue[_queueIndex]?.id === item.id && _onFullBlobReady) {
-        try { _onFullBlobReady(item, fullBlob); } catch (e) { console.warn('[Player] onFullBlobReady error:', e); }
+      if (_queue[_queueIndex]?.id === item.id) {
+        // Waveform: fast-start path — fullBlob is now the complete file
+        _generateWaveform(item.id, fullBlob);
+        if (_onFullBlobReady) {
+          try { _onFullBlobReady(item, fullBlob); } catch (e) { console.warn('[Player] onFullBlobReady error:', e); }
+        }
       }
 
       // Only swap if this track is still the one playing
@@ -1552,7 +1565,7 @@ const Player = (() => {
   }
 
   /* ── Expose ─────────────────────────────────────────────── */
-  /* ── Spectrum visualizer ────────────────────────────────────── */
+  /* ── Waveform visualizer (static — full-track analysis) ─────── */
 
   function _resizeSpectrum() {
     if (!_spectrumCanvas || !_spectrumCtx2d) return;
@@ -1568,10 +1581,9 @@ const Player = (() => {
     }
   }
 
-  function _drawSpectrum() {
-    if (!_spectrumActive || !_spectrumCanvas || !_spectrumCtx2d) return;
-    _spectrumRaf = requestAnimationFrame(_drawSpectrum);
-
+  /** Draw the static waveform with played/unplayed split at current position. */
+  function _redrawWaveform() {
+    if (!_spectrumCanvas || !_spectrumCtx2d) return;
     _resizeSpectrum();
 
     const ctx = _spectrumCtx2d;
@@ -1580,37 +1592,31 @@ const Player = (() => {
 
     ctx.clearRect(0, 0, W, H);
 
-    // Soundrop tracks don't pass through WebAudio — nothing to show
-    if (!_analyserNode || _sdActive) return;
-
-    _analyserNode.getByteFrequencyData(_spectrumData);
-
-    const numBars  = 54;
-    const gap      = 2;
-    const barW     = Math.max(1, (W - gap * (numBars - 1)) / numBars);
-    // Use first 60% of bins — most musical content lives there
-    const binRange = Math.floor(_spectrumData.length * 0.6);
-    const step     = binRange / numBars;
+    const numBars = 54;
+    const gap     = 2;
+    const barW    = Math.max(1, (W - gap * (numBars - 1)) / numBars);
+    const dur     = _audio?.duration || 0;
+    const pct     = (dur > 0 && _audio) ? Math.min(1, _audio.currentTime / dur) : 0;
+    const pivot   = Math.floor(pct * numBars); // bars <= pivot are "played"
 
     for (let i = 0; i < numBars; i++) {
-      // Average the bins that map to this bar
-      let sum = 0, cnt = 0;
-      const b0 = Math.floor(i * step);
-      const b1 = Math.floor((i + 1) * step);
-      for (let b = b0; b < b1 && b < _spectrumData.length; b++) { sum += _spectrumData[b]; cnt++; }
-      const avg  = cnt ? sum / cnt : 0;
-      const barH = Math.max(2, (avg / 255) * H * 0.95);
+      // Height: use waveform data if available, else minimal placeholder
+      const amp  = _waveformData ? _waveformData[i] : 0.08;
+      const barH = Math.max(2, amp * H * 0.92);
       const x    = i * (barW + gap);
       const y    = H - barH;
+      const played = (i <= pivot);
 
-      // Cyan-to-blue gradient per bar
-      const grad = ctx.createLinearGradient(0, y, 0, H);
-      grad.addColorStop(0,   'rgba(0, 210, 255, 0.95)');
-      grad.addColorStop(0.5, 'rgba(20, 140, 255, 0.85)');
-      grad.addColorStop(1,   'rgba(30,  80, 200, 0.65)');
-      ctx.fillStyle = grad;
+      if (_waveformData) {
+        // Played: bright cyan; unplayed: dim blue
+        ctx.fillStyle = played
+          ? 'rgba(0, 210, 255, 0.92)'
+          : 'rgba(80, 150, 255, 0.30)';
+      } else {
+        // No data yet — uniform dim placeholder
+        ctx.fillStyle = 'rgba(80, 150, 255, 0.20)';
+      }
 
-      // Bar with rounded top corners
       const r = Math.min(2, barW / 2);
       ctx.beginPath();
       ctx.moveTo(x + r, y);
@@ -1625,13 +1631,62 @@ const Player = (() => {
     }
   }
 
+  /** RAF loop — redraws on every frame while expanded player is open. */
+  function _waveformLoop() {
+    if (!_spectrumActive || !_spectrumCanvas) return;
+    _spectrumRaf = requestAnimationFrame(_waveformLoop);
+    _redrawWaveform();
+  }
+
+  /** Decode the full blob and extract per-bar RMS amplitude. */
+  async function _generateWaveform(itemId, blob) {
+    if (!blob) return;
+    if (_waveformItemId === itemId) return;        // Already computed for this track
+    if (blob.size > 60 * 1024 * 1024) return;      // Skip files > 60 MB (decode too expensive)
+    _waveformItemId = itemId;
+    _waveformData   = null;                        // Clear while computing
+
+    try {
+      const arrayBuf  = await blob.arrayBuffer();
+      // Re-use _audioCtx if available; otherwise create a temporary one for decoding
+      const tmpCtx    = _audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+      const audioBuf  = await tmpCtx.decodeAudioData(arrayBuf);
+      if (!_audioCtx) tmpCtx.close();
+
+      // Bail if the track changed while we were decoding
+      if (_waveformItemId !== itemId) return;
+
+      const samples = audioBuf.getChannelData(0); // Use left channel
+      const N       = 54;
+      const block   = Math.floor(samples.length / N);
+      const data    = new Float32Array(N);
+
+      for (let i = 0; i < N; i++) {
+        let sum = 0;
+        const end = (i + 1) * block;
+        for (let j = i * block; j < end; j++) sum += samples[j] * samples[j];
+        data[i] = Math.sqrt(sum / block); // RMS
+      }
+
+      // Normalize to 0–1
+      let max = 0;
+      for (let i = 0; i < N; i++) if (data[i] > max) max = data[i];
+      if (max > 0) for (let i = 0; i < N; i++) data[i] /= max;
+
+      _waveformData = data;
+      _redrawWaveform(); // Immediate repaint now that data is ready
+    } catch (e) {
+      console.warn('[Player] Waveform decode failed:', e);
+    }
+  }
+
   function startSpectrum(canvas) {
     if (!canvas) return;
     _spectrumCanvas = canvas;
     _spectrumCtx2d  = canvas.getContext('2d');
     _spectrumActive = true;
     cancelAnimationFrame(_spectrumRaf);
-    _drawSpectrum();
+    _waveformLoop();
   }
 
   function stopSpectrum() {
