@@ -5338,6 +5338,15 @@ body.queue-open #mini-player { z-index: 65; }
     display: contents;
   }
 
+  /* v3.5.555: orden propio en móvil (independiente de las columnas desktop):
+     Library → Appearance → Storage → Clear home → Normalizer → Cuenta/caché */
+  #sec-library     { order: 1; }
+  #sec-appearance  { order: 2; }
+  #sec-storage     { order: 3; }
+  #sec-clearhome   { order: 4; }
+  #sec-normalizer  { order: 5; }
+  .settings-danger { order: 6; }
+
   /* Each section = its own card */
   .settings-section {
     background: var(--bg-elevated);
@@ -6584,14 +6593,14 @@ body.queue-open #mini-player { z-index: 65; }
   border: 1px solid rgba(255,255,255,0.18);
 }
 .theme-picker-list {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 4px);
+  /* v3.5.554: fixed — con absolute, el scroller de Settings recortaba la
+     lista dentro del card. app.js la coloca desde el rect del botón. */
+  position: fixed;
   background: var(--bg-elevated);
   border: 1px solid var(--bg-hover);
   border-radius: var(--radius-md);
   padding: 4px 0;
-  z-index: 60;
+  z-index: 650; /* sobre cualquier card/scroller de Settings */
   min-width: 175px;
   box-shadow: 0 8px 32px rgba(0,0,0,0.5);
 }

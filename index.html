@@ -19,10 +19,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&family=Baskervville:ital@0;1&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="styles.css?v=3.5.553">
+  <link rel="stylesheet" href="styles.css?v=3.5.555">
   <!-- Version global — fallback para Android donde el SW no se registra.
        IMPORTANTE: mantener sincronizada con APP_VERSION de sw.js en cada bump. -->
-  <script>window.SAVART_VERSION = '3.5.553';</script>
+  <script>window.SAVART_VERSION = '3.5.555';</script>
   <!-- Tema (v3.5.552): aplicar ANTES del primer paint para evitar flash del tema default -->
   <script>try{var _th=localStorage.getItem('savart_theme');if(_th&&_th!=='blue')document.documentElement.dataset.theme=_th;}catch(e){}</script>
 </head>
@@ -346,7 +346,7 @@
         <div class="settings-col">
 
           <!-- BIBLIOTECA -->
-          <div class="settings-section">
+          <div class="settings-section" id="sec-library">
             <div class="settings-section-title" data-i18n="settings_library">Biblioteca</div>
 
             <div class="settings-row" id="settings-root-folder-row">
@@ -384,6 +384,47 @@
           </div><!-- /Biblioteca -->
 
 
+          <!-- LIMPIAR HOME -->
+          <div class="settings-section" id="sec-clearhome">
+            <div class="settings-section-title" data-i18n="settings_clear_home">Limpiar home</div>
+            <p class="settings-section-desc" data-i18n="settings_clear_home_desc">Borra datos de uso del home. No afecta tus archivos en Drive.</p>
+
+            <div class="clear-home-checks">
+              <label class="clear-home-item">
+                <input type="checkbox" class="clear-home-cb" data-store="recents">
+                <span data-i18n="recents">Recientes</span>
+              </label>
+              <label class="clear-home-item">
+                <input type="checkbox" class="clear-home-cb" data-store="playcounts">
+                <span data-i18n="top_played">Más reproducidas</span>
+              </label>
+              <label class="clear-home-item">
+                <input type="checkbox" class="clear-home-cb" data-store="pinned">
+                <span data-i18n="pinned">Fijadas</span>
+              </label>
+              <label class="clear-home-item">
+                <input type="checkbox" class="clear-home-cb" data-store="history">
+                <span data-i18n="history">Historial</span>
+              </label>
+              <label class="clear-home-item">
+                <input type="checkbox" class="clear-home-cb" data-store="playlists">
+                <span data-i18n="playlists">Playlists</span>
+              </label>
+              <label class="clear-home-item">
+                <input type="checkbox" class="clear-home-cb" data-store="starred">
+                <span data-i18n="lib_favorites">Favoritos</span>
+              </label>
+            </div>
+
+            <div class="settings-row" style="padding-top:4px">
+              <button id="btn-clear-home" class="btn-sort-toggle btn-warning" disabled>
+                <svg id="btn-clear-home-icon" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+                <span data-i18n="settings_clear_selected">Limpiar seleccionados</span>
+              </button>
+            </div>
+            <p class="clear-home-hint" id="clear-home-hint" style="display:none" data-i18n="settings_clear_hint">Esto puede tomar unos cuantos segundos</p>
+          </div><!-- /Limpiar home -->
+
           <!-- CUENTA / LOGOUT / CLEAR CACHE -->
           <div class="settings-danger">
             <div class="settings-row">
@@ -416,7 +457,7 @@
         <div class="settings-col">
 
           <!-- APARIENCIA -->
-          <div class="settings-section">
+          <div class="settings-section" id="sec-appearance">
             <div class="settings-section-title" data-i18n="settings_appearance">Apariencia</div>
 
             <div class="settings-row">
@@ -458,7 +499,7 @@
           </div><!-- /Apariencia -->
 
           <!-- ALMACENAMIENTO -->
-          <div class="settings-section">
+          <div class="settings-section" id="sec-storage">
             <div class="settings-section-title" data-i18n="settings_storage">Almacenamiento</div>
 
             <div class="settings-row settings-row-complex">
@@ -497,49 +538,8 @@
 
           </div><!-- /Almacenamiento -->
 
-          <!-- LIMPIAR HOME -->
-          <div class="settings-section">
-            <div class="settings-section-title" data-i18n="settings_clear_home">Limpiar home</div>
-            <p class="settings-section-desc" data-i18n="settings_clear_home_desc">Borra datos de uso del home. No afecta tus archivos en Drive.</p>
-
-            <div class="clear-home-checks">
-              <label class="clear-home-item">
-                <input type="checkbox" class="clear-home-cb" data-store="recents">
-                <span data-i18n="recents">Recientes</span>
-              </label>
-              <label class="clear-home-item">
-                <input type="checkbox" class="clear-home-cb" data-store="playcounts">
-                <span data-i18n="top_played">Más reproducidas</span>
-              </label>
-              <label class="clear-home-item">
-                <input type="checkbox" class="clear-home-cb" data-store="pinned">
-                <span data-i18n="pinned">Fijadas</span>
-              </label>
-              <label class="clear-home-item">
-                <input type="checkbox" class="clear-home-cb" data-store="history">
-                <span data-i18n="history">Historial</span>
-              </label>
-              <label class="clear-home-item">
-                <input type="checkbox" class="clear-home-cb" data-store="playlists">
-                <span data-i18n="playlists">Playlists</span>
-              </label>
-              <label class="clear-home-item">
-                <input type="checkbox" class="clear-home-cb" data-store="starred">
-                <span data-i18n="lib_favorites">Favoritos</span>
-              </label>
-            </div>
-
-            <div class="settings-row" style="padding-top:4px">
-              <button id="btn-clear-home" class="btn-sort-toggle btn-warning" disabled>
-                <svg id="btn-clear-home-icon" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
-                <span data-i18n="settings_clear_selected">Limpiar seleccionados</span>
-              </button>
-            </div>
-            <p class="clear-home-hint" id="clear-home-hint" style="display:none" data-i18n="settings_clear_hint">Esto puede tomar unos cuantos segundos</p>
-          </div><!-- /Limpiar home -->
-
           <!-- ── Normalizer ──────────────────────────── -->
-          <div class="settings-section">
+          <div class="settings-section" id="sec-normalizer">
             <div class="settings-section-title">Normalizer</div>
             <p class="settings-section-desc" data-i18n="settings_normalizer_desc">Borra los gains guardados de todas las canciones. Cada canción será re-analizada la próxima vez que se reproduzca.</p>
             <div class="settings-row" style="border-bottom:none; padding-top:4px">
@@ -1584,22 +1584,22 @@
 </script>
 
 <!-- Savart modules -->
-<script src="js/config.js?v=3.5.553"></script>
-<script src="js/auth.js?v=3.5.553"></script>
-<script src="js/drive.js?v=3.5.553"></script>
-<script src="js/db.js?v=3.5.553"></script>
-<script src="js/sync.js?v=3.5.553"></script>
-<script src="js/player.js?v=3.5.553"></script>
-<script src="js/meta.js?v=3.5.553"></script>
-<script src="js/lastfm.js?v=3.5.553"></script>
-<script src="js/audd.js?v=3.5.553"></script>
-<script src="js/musicbrainz.js?v=3.5.553"></script>
-<script src="js/discogs.js?v=3.5.553"></script>
-<script src="js/lyrics.js?v=3.5.553"></script>
-<script src="js/soundrop.js?v=3.5.553"></script>
-<script src="js/ui.js?v=3.5.553"></script>
-<script src="js/app.js?v=3.5.553"></script>
-<script src="js/bg.js?v=3.5.553"></script>
+<script src="js/config.js?v=3.5.555"></script>
+<script src="js/auth.js?v=3.5.555"></script>
+<script src="js/drive.js?v=3.5.555"></script>
+<script src="js/db.js?v=3.5.555"></script>
+<script src="js/sync.js?v=3.5.555"></script>
+<script src="js/player.js?v=3.5.555"></script>
+<script src="js/meta.js?v=3.5.555"></script>
+<script src="js/lastfm.js?v=3.5.555"></script>
+<script src="js/audd.js?v=3.5.555"></script>
+<script src="js/musicbrainz.js?v=3.5.555"></script>
+<script src="js/discogs.js?v=3.5.555"></script>
+<script src="js/lyrics.js?v=3.5.555"></script>
+<script src="js/soundrop.js?v=3.5.555"></script>
+<script src="js/ui.js?v=3.5.555"></script>
+<script src="js/app.js?v=3.5.555"></script>
+<script src="js/bg.js?v=3.5.555"></script>
 
 <!-- Inline: additional bindings that need the DOM -->
 <script>

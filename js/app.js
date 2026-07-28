@@ -1019,10 +1019,27 @@ const App = (() => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       const opening = list.style.display === 'none';
-      if (opening) rebuild(); // se reconstruye al abrir → respeta el idioma actual
-      list.style.display = opening ? '' : 'none';
+      if (!opening) { list.style.display = 'none'; return; }
+      rebuild(); // se reconstruye al abrir → respeta el idioma actual
+      // v3.5.554: la lista es position:fixed (el scroller de Settings la
+      // recortaba) — colocarla desde el rect del botón, con flip si no cabe.
+      list.style.visibility = 'hidden';
+      list.style.display = '';
+      const r  = btn.getBoundingClientRect();
+      const lw = list.offsetWidth  || 175;
+      const lh = list.offsetHeight || 200;
+      let x = Math.min(r.right - lw, window.innerWidth - lw - 8);
+      x = Math.max(8, x);
+      let y = r.bottom + 4;
+      if (y + lh > window.innerHeight - 8) y = Math.max(8, r.top - lh - 4);
+      list.style.left = `${x}px`;
+      list.style.top  = `${y}px`;
+      list.style.visibility = '';
     });
     document.addEventListener('click', () => { list.style.display = 'none'; });
+    // fixed no sigue el scroll — cerrar al scrollear/gesticular
+    document.addEventListener('wheel',     () => { list.style.display = 'none'; }, { passive: true });
+    document.addEventListener('touchmove', () => { list.style.display = 'none'; }, { passive: true });
     // Nombre del tema en el botón: refrescar también al cambiar de idioma
     document.querySelectorAll('.lang-btn').forEach(b =>
       b.addEventListener('click', () => setTimeout(() => _updateThemePickerUI(_getTheme()), 60)));
