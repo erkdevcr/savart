@@ -3470,6 +3470,9 @@ const App = (() => {
     if (!hdr) return;
     hdr.innerHTML = '';
     if (!curType || !folderId) return;
+    // Root folder never shows a header — belt-and-suspenders guard in case the
+    // _isRootFolder check in _openFolder missed (e.g. ID format mismatch).
+    if (folderId === _rootFolderId) return;
 
     /* ── Phase 1: render immediately with Drive-API data ─────────────────
        folder.name and the Drive thumbnailLinks are available right away —
