@@ -19,10 +19,12 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&family=Baskervville:ital@0;1&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="styles.css?v=3.5.551">
+  <link rel="stylesheet" href="styles.css?v=3.5.552">
   <!-- Version global — fallback para Android donde el SW no se registra.
        IMPORTANTE: mantener sincronizada con APP_VERSION de sw.js en cada bump. -->
-  <script>window.SAVART_VERSION = '3.5.551';</script>
+  <script>window.SAVART_VERSION = '3.5.552';</script>
+  <!-- Tema (v3.5.552): aplicar ANTES del primer paint para evitar flash del tema default -->
+  <script>try{var _th=localStorage.getItem('savart_theme');if(_th&&_th!=='blue')document.documentElement.dataset.theme=_th;}catch(e){}</script>
 </head>
 <body>
 
@@ -424,6 +426,21 @@
               <div class="lang-toggle">
                 <button class="lang-btn" data-lang="es">ES</button>
                 <button class="lang-btn" data-lang="en">EN</button>
+              </div>
+            </div>
+
+            <!-- Tema de la aplicación (v3.5.552) -->
+            <div class="settings-row">
+              <div>
+                <div class="settings-row-label" data-i18n="settings_theme">Tema de la aplicación</div>
+              </div>
+              <div class="theme-picker" id="theme-picker">
+                <button class="theme-picker-btn" id="theme-picker-btn">
+                  <span class="theme-swatch" id="theme-picker-swatch" style="background:#4A88F5"></span>
+                  <span id="theme-picker-name">Azul Savart</span>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>
+                </button>
+                <div class="theme-picker-list" id="theme-picker-list" style="display:none"></div>
               </div>
             </div>
 
@@ -1567,22 +1584,22 @@
 </script>
 
 <!-- Savart modules -->
-<script src="js/config.js?v=3.5.551"></script>
-<script src="js/auth.js?v=3.5.551"></script>
-<script src="js/drive.js?v=3.5.551"></script>
-<script src="js/db.js?v=3.5.551"></script>
-<script src="js/sync.js?v=3.5.551"></script>
-<script src="js/player.js?v=3.5.551"></script>
-<script src="js/meta.js?v=3.5.551"></script>
-<script src="js/lastfm.js?v=3.5.551"></script>
-<script src="js/audd.js?v=3.5.551"></script>
-<script src="js/musicbrainz.js?v=3.5.551"></script>
-<script src="js/discogs.js?v=3.5.551"></script>
-<script src="js/lyrics.js?v=3.5.551"></script>
-<script src="js/soundrop.js?v=3.5.551"></script>
-<script src="js/ui.js?v=3.5.551"></script>
-<script src="js/app.js?v=3.5.551"></script>
-<script src="js/bg.js?v=3.5.551"></script>
+<script src="js/config.js?v=3.5.552"></script>
+<script src="js/auth.js?v=3.5.552"></script>
+<script src="js/drive.js?v=3.5.552"></script>
+<script src="js/db.js?v=3.5.552"></script>
+<script src="js/sync.js?v=3.5.552"></script>
+<script src="js/player.js?v=3.5.552"></script>
+<script src="js/meta.js?v=3.5.552"></script>
+<script src="js/lastfm.js?v=3.5.552"></script>
+<script src="js/audd.js?v=3.5.552"></script>
+<script src="js/musicbrainz.js?v=3.5.552"></script>
+<script src="js/discogs.js?v=3.5.552"></script>
+<script src="js/lyrics.js?v=3.5.552"></script>
+<script src="js/soundrop.js?v=3.5.552"></script>
+<script src="js/ui.js?v=3.5.552"></script>
+<script src="js/app.js?v=3.5.552"></script>
+<script src="js/bg.js?v=3.5.552"></script>
 
 <!-- Inline: additional bindings that need the DOM -->
 <script>

@@ -12,6 +12,11 @@
   --bg-card:      #242430;
   --bg-hover:     #2E2E3C;
 
+  /* Themes (v3.5.552) — carpetas del browse + puntos del fondo (tripleta rgb
+     para el canvas de bg.js). El resto de temas redefine todo más abajo. */
+  --folder-color: #5B84C4;
+  --dot-color:    80,150,255;
+
   /* Item interactions — blue-tinted hover + tap flash */
   --item-hover:   rgba(74,136,245,0.08);
   --item-tap:     rgba(74,136,245,0.20);
@@ -47,6 +52,92 @@
   --mini-player-h:  70px;    /* mobile */
   --player-bar-h:   72px;    /* desktop (kept for EQ overlay positioning) */
   --mini-margin:    8px;
+}
+
+/* ── Themes (v3.5.552) ────────────────────────────────────────
+   6 temas seleccionables en Settings → Apariencia. El default (Azul Savart)
+   vive en :root; cada tema redefine la paleta completa. Se activan con
+   data-theme en <html> (aplicado ANTES del primer paint por el inline script
+   de index.html para evitar flash). --dot-color es tripleta rgb para bg.js. */
+html[data-theme="purple"] {
+  --bg-base:      #0D0C12;
+  --bg-surface:   #14121B;
+  --bg-elevated:  #1C1926;
+  --bg-card:      #262133;
+  --bg-hover:     #322B44;
+  --item-hover:   rgba(155,109,246,0.08);
+  --item-tap:     rgba(155,109,246,0.20);
+  --accent:       #9B6DF6;
+  --accent-soft:  #2B1D4E;
+  --text-primary:   #F2F0F6;
+  --text-secondary: #A6A0BC;
+  --text-muted:     #756F8C;
+  --folder-color: #A78BDB;
+  --dot-color:    160,109,255;
+}
+html[data-theme="green"] {
+  --bg-base:      #0A0F0D;
+  --bg-surface:   #101816;
+  --bg-elevated:  #17211E;
+  --bg-card:      #1F2C28;
+  --bg-hover:     #2A3B35;
+  --item-hover:   rgba(52,211,153,0.08);
+  --item-tap:     rgba(52,211,153,0.20);
+  --accent:       #34D399;
+  --accent-soft:  #0E3B2C;
+  --text-primary:   #EFF4F2;
+  --text-secondary: #9BB4AC;
+  --text-muted:     #6C8880;
+  --folder-color: #6FBFA4;
+  --dot-color:    62,207,142;
+}
+html[data-theme="amber"] {
+  --bg-base:      #100D0A;
+  --bg-surface:   #181310;
+  --bg-elevated:  #211B16;
+  --bg-card:      #2C231C;
+  --bg-hover:     #3B2F24;
+  --item-hover:   rgba(245,166,35,0.08);
+  --item-tap:     rgba(245,166,35,0.20);
+  --accent:       #F5A623;
+  --accent-soft:  #4A3007;
+  --text-primary:   #F5F1EC;
+  --text-secondary: #BCAE9C;
+  --text-muted:     #8C7F70;
+  --folder-color: #D8B173;
+  --dot-color:    255,179,71;
+}
+html[data-theme="crimson"] {
+  --bg-base:      #120C0E;
+  --bg-surface:   #1A1114;
+  --bg-elevated:  #241820;
+  --bg-card:      #2F1F26;
+  --bg-hover:     #402A34;
+  --item-hover:   rgba(242,92,110,0.08);
+  --item-tap:     rgba(242,92,110,0.20);
+  --accent:       #F25C6E;
+  --accent-soft:  #48151D;
+  --text-primary:   #F6F0F2;
+  --text-secondary: #BCA0A8;
+  --text-muted:     #8C7078;
+  --folder-color: #D88793;
+  --dot-color:    255,107,129;
+}
+html[data-theme="cyan"] {
+  --bg-base:      #0A0E11;
+  --bg-surface:   #101820;
+  --bg-elevated:  #16212B;
+  --bg-card:      #1E2C38;
+  --bg-hover:     #283A48;
+  --item-hover:   rgba(56,196,224,0.08);
+  --item-tap:     rgba(56,196,224,0.20);
+  --accent:       #38C4E0;
+  --accent-soft:  #0C3542;
+  --text-primary:   #EEF4F6;
+  --text-secondary: #9EB5BE;
+  --text-muted:     #6E858E;
+  --folder-color: #7BB8CB;
+  --dot-color:    69,212,240;
 }
 
 /* ── Reset ────────────────────────────────────────────────── */
@@ -1166,7 +1257,7 @@ img { display: block; }
 }
 
 .browse-folder-icon {
-  color: var(--accent);
+  color: var(--folder-color); /* v3.5.552: themeable */
   flex-shrink: 0;
 }
 
@@ -1264,7 +1355,8 @@ img { display: block; }
   width: 42px;
   height: 42px;
   border-radius: var(--radius-md);
-  background: #2A3D6A;
+  /* v3.5.552: themeable — fondo derivado del color de carpeta del tema */
+  background: color-mix(in srgb, var(--folder-color) 26%, var(--bg-surface));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1274,7 +1366,7 @@ img { display: block; }
 .folder-icon svg {
   width: 22px;
   height: 22px;
-  color: var(--accent);
+  color: var(--folder-color); /* v3.5.552: themeable */
 }
 
 .folder-rescan-dot {
@@ -6468,6 +6560,54 @@ body.queue-open #mini-player { z-index: 65; }
 }
 
 /* ── Settings select (cache limit, etc.) ────────────────── */
+/* ── Theme picker (v3.5.552) — dropdown con swatch de color ── */
+.theme-picker { position: relative; }
+.theme-picker-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border: 1px solid var(--bg-hover);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.theme-picker-btn svg { color: var(--text-muted); flex-shrink: 0; }
+.theme-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  border: 1px solid rgba(255,255,255,0.18);
+}
+.theme-picker-list {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  background: var(--bg-elevated);
+  border: 1px solid var(--bg-hover);
+  border-radius: var(--radius-md);
+  padding: 4px 0;
+  z-index: 60;
+  min-width: 175px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+}
+.theme-picker-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  text-align: left;
+}
+.theme-picker-item:hover  { background: var(--bg-hover); color: var(--text-primary); }
+.theme-picker-item.active { color: var(--accent); }
+
 .settings-select {
   background: var(--bg-elevated);
   color: var(--text-primary);

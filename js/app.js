@@ -209,6 +209,10 @@ const App = (() => {
     const savedZoom = localStorage.getItem('savart_uizoom') || 'm';
     _applyUiZoom(savedZoom);
 
+    // Theme picker (v3.5.552) — el tema ya fue aplicado por el inline script
+    // de index.html antes del primer paint; aquí solo se inicializa el picker.
+    _initThemePicker();
+
     // 3. Root folder — resolve from DB (synced) first, fall back to localStorage,
     // then default to Drive root so the app works for ANY Google account.
     // DB.getState('settings').rootFolderId is written by sync after pulling from Drive.
@@ -957,6 +961,72 @@ const App = (() => {
       b.classList.toggle('active', b.dataset.size === size);
     });
     localStorage.setItem('savart_uizoom', size);
+  }
+
+  /* ── Themes (v3.5.552) ──────────────────────────────────────
+     6 paletas definidas en styles.css (html[data-theme=…]). 'blue' = default
+     (:root, sin atributo). El inline script de index.html aplica el tema
+     guardado ANTES del primer paint; aquí vive el picker de Settings.
+     'savart:theme-changed' avisa a bg.js para re-leer --dot-color. */
+  const _THEMES = [
+    { id: 'blue',    nameKey: 'theme_blue',    accent: '#4A88F5' },
+    { id: 'purple',  nameKey: 'theme_purple',  accent: '#9B6DF6' },
+    { id: 'green',   nameKey: 'theme_green',   accent: '#34D399' },
+    { id: 'amber',   nameKey: 'theme_amber',   accent: '#F5A623' },
+    { id: 'crimson', nameKey: 'theme_crimson', accent: '#F25C6E' },
+    { id: 'cyan',    nameKey: 'theme_cyan',    accent: '#38C4E0' },
+  ];
+
+  function _getTheme() {
+    try { return localStorage.getItem('savart_theme') || 'blue'; } catch (_) { return 'blue'; }
+  }
+
+  function _applyTheme(id) {
+    if (!id || id === 'blue') delete document.documentElement.dataset.theme;
+    else document.documentElement.dataset.theme = id;
+    try { localStorage.setItem('savart_theme', id); } catch (_) {}
+    document.dispatchEvent(new CustomEvent('savart:theme-changed'));
+    _updateThemePickerUI(id);
+  }
+
+  function _updateThemePickerUI(id) {
+    const t  = _THEMES.find(x => x.id === id) || _THEMES[0];
+    const sw = document.getElementById('theme-picker-swatch');
+    const nm = document.getElementById('theme-picker-name');
+    if (sw) sw.style.background = t.accent;
+    if (nm) nm.textContent = UI.t(t.nameKey) || t.id;
+  }
+
+  function _initThemePicker() {
+    const btn  = document.getElementById('theme-picker-btn');
+    const list = document.getElementById('theme-picker-list');
+    if (!btn || !list) return;
+    const rebuild = () => {
+      const cur = _getTheme();
+      list.innerHTML = '';
+      _THEMES.forEach(t => {
+        const row = document.createElement('button');
+        row.className = 'theme-picker-item' + (t.id === cur ? ' active' : '');
+        row.innerHTML = `<span class="theme-swatch" style="background:${t.accent}"></span><span>${UI.t(t.nameKey) || t.id}</span>`;
+        row.addEventListener('click', (e) => {
+          e.stopPropagation();
+          _applyTheme(t.id);
+          list.style.display = 'none';
+        });
+        list.appendChild(row);
+      });
+    };
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const opening = list.style.display === 'none';
+      if (opening) rebuild(); // se reconstruye al abrir → respeta el idioma actual
+      list.style.display = opening ? '' : 'none';
+    });
+    document.addEventListener('click', () => { list.style.display = 'none'; });
+    // Nombre del tema en el botón: refrescar también al cambiar de idioma
+    document.querySelectorAll('.lang-btn').forEach(b =>
+      b.addEventListener('click', () => setTimeout(() => _updateThemePickerUI(_getTheme()), 60)));
+    _updateThemePickerUI(_getTheme());
   }
 
   /* ── Soundrop: modal de canción bloqueada ─────────────────

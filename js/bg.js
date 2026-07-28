@@ -23,6 +23,19 @@
   const DOT_R   = 0.9;
   const SPEED   = 0.0625; // base cycles/s — 16 s per full cycle
 
+  /* v3.5.552 (themes): el color de los puntos viene del theme activo vía la
+     variable CSS --dot-color (tripleta "r,g,b"). Se lee al boot y se re-lee
+     cuando app.js dispara 'savart:theme-changed' al cambiar de tema. */
+  let _dotRGB = '80,150,255';
+  function _readDotColor() {
+    try {
+      const v = getComputedStyle(document.documentElement).getPropertyValue('--dot-color').trim();
+      if (v) _dotRGB = v;
+    } catch (_) {}
+  }
+  _readDotColor();
+  document.addEventListener('savart:theme-changed', _readDotColor);
+
   const blobs = [
     { bx:0.20, by:0.20, r:0.20, ax:0.25, ay:0.22, px:0.00, py:1.00, sp:1.00, ax2:0.10, ay2:0.08, px2:0.50, py2:1.30 },
     { bx:0.75, by:0.15, r:0.18, ax:0.22, ay:0.18, px:1.20, py:0.30, sp:1.37, ax2:0.08, ay2:0.10, px2:2.10, py2:0.70 },
@@ -120,7 +133,7 @@
       r2: (blobs[i].r * maxDim) ** 2,
     }));
 
-    ctx.fillStyle = 'rgb(80,150,255)';
+    ctx.fillStyle = `rgb(${_dotRGB})`;
     for (let c = 0; c < gCols; c++) {
       const x = gX[c];
       for (let r = 0; r < gRows; r++) {
