@@ -60,10 +60,6 @@
    data-theme en <html> (aplicado ANTES del primer paint por el inline script
    de index.html para evitar flash). --dot-color es tripleta rgb para bg.js. */
 html[data-theme="purple"] {
-  --bg-base:      #0D0C12;
-  --bg-surface:   #14121B;
-  --bg-elevated:  #1C1926;
-  --bg-card:      #262133;
   --bg-hover:     #322B44;
   --item-hover:   rgba(155,109,246,0.08);
   --item-tap:     rgba(155,109,246,0.20);
@@ -76,10 +72,6 @@ html[data-theme="purple"] {
   --dot-color:    160,109,255;
 }
 html[data-theme="green"] {
-  --bg-base:      #0A0F0D;
-  --bg-surface:   #101816;
-  --bg-elevated:  #17211E;
-  --bg-card:      #1F2C28;
   --bg-hover:     #2A3B35;
   --item-hover:   rgba(52,211,153,0.08);
   --item-tap:     rgba(52,211,153,0.20);
@@ -92,10 +84,6 @@ html[data-theme="green"] {
   --dot-color:    62,207,142;
 }
 html[data-theme="amber"] {
-  --bg-base:      #100D0A;
-  --bg-surface:   #181310;
-  --bg-elevated:  #211B16;
-  --bg-card:      #2C231C;
   --bg-hover:     #3B2F24;
   --item-hover:   rgba(245,166,35,0.08);
   --item-tap:     rgba(245,166,35,0.20);
@@ -108,10 +96,6 @@ html[data-theme="amber"] {
   --dot-color:    255,179,71;
 }
 html[data-theme="crimson"] {
-  --bg-base:      #120C0E;
-  --bg-surface:   #1A1114;
-  --bg-elevated:  #241820;
-  --bg-card:      #2F1F26;
   --bg-hover:     #402A34;
   --item-hover:   rgba(242,92,110,0.08);
   --item-tap:     rgba(242,92,110,0.20);
@@ -124,10 +108,6 @@ html[data-theme="crimson"] {
   --dot-color:    255,107,129;
 }
 html[data-theme="cyan"] {
-  --bg-base:      #0A0E11;
-  --bg-surface:   #101820;
-  --bg-elevated:  #16212B;
-  --bg-card:      #1E2C38;
   --bg-hover:     #283A48;
   --item-hover:   rgba(56,196,224,0.08);
   --item-tap:     rgba(56,196,224,0.20);
