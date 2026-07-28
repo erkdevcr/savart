@@ -66,8 +66,6 @@ html[data-theme="purple"] {
   --accent:       #9B6DF6;
   --accent-soft:  #2B1D4E;
   --text-primary:   #F2F0F6;
-  --text-secondary: #A6A0BC;
-  --text-muted:     #756F8C;
   --folder-color: #A78BDB;
   --dot-color:    160,109,255;
 }
@@ -78,8 +76,6 @@ html[data-theme="green"] {
   --accent:       #34D399;
   --accent-soft:  #0E3B2C;
   --text-primary:   #EFF4F2;
-  --text-secondary: #9BB4AC;
-  --text-muted:     #6C8880;
   --folder-color: #6FBFA4;
   --dot-color:    62,207,142;
 }
@@ -90,8 +86,6 @@ html[data-theme="amber"] {
   --accent:       #F5A623;
   --accent-soft:  #4A3007;
   --text-primary:   #F5F1EC;
-  --text-secondary: #BCAE9C;
-  --text-muted:     #8C7F70;
   --folder-color: #D8B173;
   --dot-color:    255,179,71;
 }
@@ -102,8 +96,6 @@ html[data-theme="crimson"] {
   --accent:       #F25C6E;
   --accent-soft:  #48151D;
   --text-primary:   #F6F0F2;
-  --text-secondary: #BCA0A8;
-  --text-muted:     #8C7078;
   --folder-color: #D88793;
   --dot-color:    255,107,129;
 }
@@ -114,8 +106,6 @@ html[data-theme="cyan"] {
   --accent:       #38C4E0;
   --accent-soft:  #0C3542;
   --text-primary:   #EEF4F6;
-  --text-secondary: #9EB5BE;
-  --text-muted:     #6E858E;
   --folder-color: #7BB8CB;
   --dot-color:    69,212,240;
 }
@@ -446,7 +436,7 @@ img { display: block; }
   color: #fff !important;
   border-radius: var(--radius-circle);
 }
-#mini-player .btn-play-mini:hover { background: #5a96ff; }
+#mini-player .btn-play-mini:hover { background: color-mix(in srgb, var(--accent) 85%, #fff); } /* v3.5.558: themeable */
 
 /* Progress bar (anchored to bottom of mini-player) */
 #mini-player .mini-progress {
@@ -3471,13 +3461,14 @@ img { display: block; }
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 6px 24px rgba(74,136,245,0.45);
+  /* v3.5.558: glow derivado del acento del tema (antes azul hardcoded) */
+  box-shadow: 0 6px 24px color-mix(in srgb, var(--accent) 45%, transparent);
   transition: transform 0.1s, box-shadow 0.1s;
 }
 
 .pexp-play-btn:active {
   transform: scale(0.95);
-  box-shadow: 0 3px 12px rgba(74,136,245,0.3);
+  box-shadow: 0 3px 12px color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
 /* Desktop volume slider — hidden on mobile */
@@ -3889,7 +3880,7 @@ img { display: block; }
   color: #fff !important;
   border-radius: var(--radius-circle);
 }
-.dmp-btn-play:hover { background: #5a96ff !important; }
+.dmp-btn-play:hover { background: color-mix(in srgb, var(--accent) 85%, #fff) !important; } /* v3.5.558: themeable */
 
 /* Mobile: raise mini-player above queue overlay */
 body.queue-open #mini-player { z-index: 65; }
@@ -5849,7 +5840,7 @@ body.queue-open #mini-player { z-index: 65; }
   color: #fff !important;
   border-radius: var(--radius-circle);
 }
-.btn-play-mini-desk:hover { background: #5a96ff; }
+.btn-play-mini-desk:hover { background: color-mix(in srgb, var(--accent) 85%, #fff); } /* v3.5.558: themeable */
 
 /* Volume control in mini-player */
 .mini-volume {
