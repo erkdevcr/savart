@@ -1600,7 +1600,8 @@ const App = (() => {
         }));
 
       // ── Step 1: Drive full-text search by artist name ─────────
-      const results = await Drive.searchFiles(artist);
+      // v3.5.550: candidatos de radio restringidos al root elegido en Settings
+      const results = await _filterSearchToRoot(await Drive.searchFiles(artist));
 
       // Build the blocked set.
       // Initial trigger (triggerItemId != null): block current queue + prior radio adds
@@ -1908,7 +1909,8 @@ const App = (() => {
       for (const artist of artists) {
         try {
           const _normA   = _normStr(artist);
-          const results  = await Drive.searchFiles(artist);
+          // v3.5.550: candidatos de radio restringidos al root elegido en Settings
+          const results  = await _filterSearchToRoot(await Drive.searchFiles(artist));
           const _isCachedFor = f => {
             const meta = (typeof Meta !== 'undefined') ? Meta.getCached(f.id) : null;
             const a    = meta?.artist || _itemCache.get(f.id)?.artist || f.artist || null;
@@ -6700,7 +6702,11 @@ const App = (() => {
 
     // ── Drive search branch ───────────────────────────────────
     try {
-      const raw = await Drive.searchFiles(term, _rootFolderId);
+      // v3.5.550: la búsqueda queda RESTRINGIDA al root elegido en Settings.
+      // Drive API busca en todo el Drive (no soporta subárbol recursivo) —
+      // _filterSearchToRoot descarta todo lo que no cuelgue del root.
+      const rawAll = await Drive.searchFiles(term, _rootFolderId);
+      const raw    = await _filterSearchToRoot(rawAll);
       // Fuzzy-score + sort — drops unrelated results from word-expansion queries
       const result = _fuzzyRank(term, raw);
       // Cache all items for queue resolution
@@ -6722,6 +6728,58 @@ const App = (() => {
       if (err.name === 'AuthError') { UI.showTokenBanner(); return; }
       container.innerHTML = `<div class="empty-state"><p>${UI.t('search_error')}</p></div>`;
     }
+  }
+
+  /* ── Búsqueda restringida al root elegido (v3.5.550) ─────────
+     Drive API no permite búsqueda recursiva por subárbol ('in parents' solo
+     cubre hijos directos), así que searchFiles busca en TODO Drive y aquí se
+     filtra: un item pertenece si su cadena de padres alcanza _rootFolderId.
+     Padres vía DB local (rápido) con fallback a Drive.getFileInfo (se persiste
+     en DB para la próxima). Caché de veredictos keyed por root+folder — las
+     canciones comparten carpetas, así que tras el primer item de cada carpeta
+     el resto es O(1). Con root = 'root' (todo Drive) no se filtra nada. */
+  const _rootSubtreeCache = new Map(); // `${rootId}:${folderId}` → boolean
+
+  async function _isInRootSubtree(startId, maxDepth = 15) {
+    if (!_rootFolderId || _rootFolderId === 'root') return true;
+    if (!startId) return false;
+    const key = (id) => `${_rootFolderId}:${id}`;
+    const walked = [];
+    let cur = startId;
+    for (let d = 0; d < maxDepth && cur; d++) {
+      if (cur === _rootFolderId) break; // alcanzado el root elegido
+      const cached = _rootSubtreeCache.get(key(cur));
+      if (cached !== undefined) {
+        walked.forEach(id => _rootSubtreeCache.set(key(id), cached));
+        return cached;
+      }
+      walked.push(cur);
+      const m = await DB.getMeta(cur).catch(() => null);
+      let parent = m?.folderId || null;
+      if (!parent && typeof Drive !== 'undefined') {
+        const info = await Drive.getFileInfo(cur).catch(() => null);
+        parent = info?.parents?.[0] || null;
+        if (parent) DB.setMeta(cur, { id: cur, ...(info?.name && !m?.name ? { name: info.name } : {}), folderId: parent }).catch(() => {});
+      }
+      cur = parent;
+    }
+    const found = cur === _rootFolderId;
+    walked.forEach(id => _rootSubtreeCache.set(key(id), found));
+    return found;
+  }
+
+  /** Filtra un resultado de Drive.searchFiles al subárbol del root elegido. */
+  async function _filterSearchToRoot(result) {
+    if (!_rootFolderId || _rootFolderId === 'root') return result;
+    const folders = [];
+    for (const f of (result?.folders || [])) {
+      if (f.id === _rootFolderId || await _isInRootSubtree(f.parents?.[0] || null)) folders.push(f);
+    }
+    const files = [];
+    for (const f of (result?.files || [])) {
+      if (await _isInRootSubtree(f.parents?.[0] || null)) files.push(f);
+    }
+    return { ...result, folders, files };
   }
 
   /* ── Library ─────────────────────────────────────────────── */
