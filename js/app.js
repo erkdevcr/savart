@@ -6082,6 +6082,10 @@ const App = (() => {
     // separate view, so getCurrentView() still returns 'browse' during search).
     const fromSearch = !!(document.getElementById('search-input')?.value?.trim());
     if (UI.getCurrentView() !== 'browse' || fromSearch) _breadcrumb = [];
+    // Exit search mode when entering a folder from search results: removes
+    // the search-active class (which hides .item-list and #browse-entity-header
+    // via CSS) and resets inline display styles set by _toggleBrowseSearch.
+    if (fromSearch) window._exitBrowseSearch?.();
     _openFolder(folder);
   }
 
