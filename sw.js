@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.548';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.548 — exit search mode al navegar a carpeta desde resultados
+const APP_VERSION  = '3.5.549';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.549 — blur cover de fondo en entity headers (browse + librería)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

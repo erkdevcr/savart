@@ -3812,6 +3812,19 @@ const UI = (() => {
    * @param {Object}   artist       - { name, albumCount }
    * @param {Object[]} albums       - [{ name, songCount, coverUrls[] }]
    */
+
+  /**
+   * Inject a blurred cover background into a .lib-detail-entity element.
+   * No-op if coverUrl is falsy, 'id3', or 'none'.
+   */
+  function _injectEntityBg(entity, coverUrl) {
+    if (!coverUrl || coverUrl === 'id3' || coverUrl === 'none') return;
+    const bg = document.createElement('div');
+    bg.className = 'entity-bg-blur';
+    bg.style.backgroundImage = `url(${JSON.stringify(coverUrl)})`;
+    entity.prepend(bg);
+  }
+
   function renderLibraryArtistDetail(artist, albums) {
     const container = document.getElementById('lib-detail-content');
     if (!container) return;
@@ -3979,6 +3992,8 @@ const UI = (() => {
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
       </button>
       <button class="album-entity-close-btn" title="Cerrar" aria-label="Cerrar edición">✕</button>`;
+
+    _injectEntityBg(entity, album.coverUrl);
 
     // ── Edit panel (initially hidden) ──
     const editPanel = document.createElement('div');
@@ -4653,6 +4668,8 @@ const UI = (() => {
       </button>
       <button class="album-entity-close-btn" title="Cerrar" aria-label="Cerrar edición">✕</button>`;
 
+    _injectEntityBg(entity, collection.manualCoverUrl || collection.mosaicUrls?.[0] || null);
+
     // ── Inline edit panel (same pattern as album detail) ──
     const editPanel = document.createElement('div');
     editPanel.className = 'album-edit-panel'; // reuses album panel CSS
@@ -4923,6 +4940,8 @@ const UI = (() => {
       </button>
       <button class="album-entity-close-btn" title="Cerrar" aria-label="Cerrar edición">✕</button>`;
 
+    _injectEntityBg(entity, album.coverUrl);
+
     const editPanel = document.createElement('div');
     editPanel.className = 'album-edit-panel';
     editPanel.innerHTML = `
@@ -5162,6 +5181,8 @@ const UI = (() => {
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
       </button>
       <button class="album-entity-close-btn" title="Cerrar" aria-label="Cerrar edición">✕</button>`;
+
+    _injectEntityBg(entity, collection.manualCoverUrl || collection.mosaicUrls?.[0] || null);
 
     const editPanel = document.createElement('div');
     editPanel.className = 'album-edit-panel';

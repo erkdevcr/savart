@@ -2356,6 +2356,24 @@ img { display: block; }
   gap: 10px;
   padding: 10px 14px 14px;
   border-bottom: 1px solid var(--bg-hover);
+  position: relative;
+  overflow: hidden;
+}
+/* Blurred cover art stretched as background — only present when cover exists */
+.entity-bg-blur {
+  position: absolute;
+  inset: -14px; /* overflow to hide blur-edge artifacts */
+  background-size: cover;
+  background-position: center;
+  filter: blur(22px);
+  opacity: 0.28;
+  pointer-events: none;
+  z-index: 0;
+}
+/* Keep all direct children above the blur layer */
+.lib-detail-entity > *:not(.entity-bg-blur) {
+  position: relative;
+  z-index: 1;
 }
 .lib-detail-entity-info {
   flex: 1;
