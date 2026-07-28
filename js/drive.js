@@ -234,7 +234,13 @@ const Drive = (() => {
     return { folders, files };
   }
 
-  async function searchFiles(term, rootId = null) {
+  /**
+   * @param {Function|null} [onPartial] — v3.5.553: callback opcional que recibe
+   *   el resultado de la query PRINCIPAL (término exacto, mixed) apenas llega,
+   *   sin esperar a las queries de expansión (variantes de acento / palabras).
+   *   Permite pintar resultados de inmediato; el set completo llega en el return.
+   */
+  async function searchFiles(term, rootId = null, onPartial = null) {
     const normalized = _normalizeTerm(term);
 
     // Build deduplicated set of terms to search.
@@ -243,7 +249,8 @@ const Drive = (() => {
     // 100+ songs occupy the first page of the mixed query.
     const querySet = new Set();
     const safe = s => s.replace(/'/g, "\\'");
-    querySet.add(safe(term.trim()));
+    const primaryTerm = safe(term.trim());
+    querySet.add(primaryTerm);
     querySet.add(safe(normalized));
     // Single-accent variants so "reggaeton" finds "reggaetón" folders/files
     for (const w of normalized.split(/\s+/)) {
@@ -255,9 +262,13 @@ const Drive = (() => {
 
     const terms = [...querySet];
 
-    // Fire mixed queries + dedicated folder queries in parallel
+    // Fire mixed queries + dedicated folder queries in parallel.
+    // La query principal va primero y alimenta onPartial (primer pintado).
+    const primaryQ = _driveSearchQuery(primaryTerm, 'mixed');
+    if (onPartial) primaryQ.then(r => { try { onPartial(r); } catch (_) {} }).catch(() => {});
     const allQueries = [
-      ...terms.map(q => _driveSearchQuery(q, 'mixed')),
+      primaryQ,
+      ...terms.filter(q => q !== primaryTerm).map(q => _driveSearchQuery(q, 'mixed')),
       ...terms.map(q => _driveSearchQuery(q, 'folders')),
     ];
     const settled = await Promise.allSettled(allQueries);

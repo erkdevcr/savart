@@ -6778,8 +6778,26 @@ const App = (() => {
       // v3.5.550: la búsqueda queda RESTRINGIDA al root elegido en Settings.
       // Drive API busca en todo el Drive (no soporta subárbol recursivo) —
       // _filterSearchToRoot descarta todo lo que no cuelgue del root.
-      const rawAll = await Drive.searchFiles(term, _rootFolderId);
-      const raw    = await _filterSearchToRoot(rawAll);
+      // v3.5.553: PRIMER PINTADO PROGRESIVO — la query principal (término
+      // exacto) se pinta apenas responde, sin esperar a las ~8-20 queries de
+      // expansión (variantes de acento / palabras sueltas / folders-only).
+      const _seq = ++_searchSeq;
+      const rawAll = await Drive.searchFiles(term, _rootFolderId, async (partial) => {
+        try {
+          if (_seq !== _searchSeq) return;          // búsqueda más nueva en curso
+          const p = await _filterSearchToRoot(partial);
+          if (_seq !== _searchSeq) return;
+          const quick = _fuzzyRank(term, p);
+          if (!quick.files?.length && !quick.folders?.length) return; // nada útil aún
+          [...(quick.folders || []), ...(quick.files || [])].forEach(item => _cacheItem(item));
+          _lastSearchFiles = quick.files || [];
+          UI.renderSearchResults(quick, filter);
+          UI.setActiveSongRow(Player.getCurrentTrack()?.id ?? null);
+        } catch (_) {}
+      });
+      if (_seq !== _searchSeq) return; // llegó tarde — otra búsqueda ya pintó
+      const raw = await _filterSearchToRoot(rawAll);
+      if (_seq !== _searchSeq) return;
       // Fuzzy-score + sort — drops unrelated results from word-expansion queries
       const result = _fuzzyRank(term, raw);
       // Cache all items for queue resolution
@@ -6841,18 +6859,37 @@ const App = (() => {
     return found;
   }
 
-  /** Filtra un resultado de Drive.searchFiles al subárbol del root elegido. */
+  // v3.5.553: contador de secuencia — descarta renders de búsquedas obsoletas
+  let _searchSeq = 0;
+
+  /* v3.5.553: memo de verificaciones EN VUELO — dos items de la misma carpeta
+     comparten la misma promesa en vez de caminar la cadena dos veces. */
+  const _subtreePending = new Map(); // `${rootId}:${folderId}` → Promise<boolean>
+  function _isInRootSubtreeMemo(startId) {
+    if (!_rootFolderId || _rootFolderId === 'root') return Promise.resolve(true);
+    if (!startId) return Promise.resolve(false);
+    const key = `${_rootFolderId}:${startId}`;
+    const cached = _rootSubtreeCache.get(key);
+    if (cached !== undefined) return Promise.resolve(cached);
+    let p = _subtreePending.get(key);
+    if (!p) {
+      p = _isInRootSubtree(startId).finally(() => _subtreePending.delete(key));
+      _subtreePending.set(key, p);
+    }
+    return p;
+  }
+
+  /** Filtra un resultado de Drive.searchFiles al subárbol del root elegido.
+   *  v3.5.553: checks EN PARALELO (antes secuencial — en frío tardaba segundos). */
   async function _filterSearchToRoot(result) {
     if (!_rootFolderId || _rootFolderId === 'root') return result;
-    const folders = [];
-    for (const f of (result?.folders || [])) {
-      if (f.id === _rootFolderId || await _isInRootSubtree(f.parents?.[0] || null)) folders.push(f);
-    }
-    const files = [];
-    for (const f of (result?.files || [])) {
-      if (await _isInRootSubtree(f.parents?.[0] || null)) files.push(f);
-    }
-    return { ...result, folders, files };
+    const [folderKeep, fileKeep] = await Promise.all([
+      Promise.all((result?.folders || []).map(async f =>
+        (f.id === _rootFolderId || await _isInRootSubtreeMemo(f.parents?.[0] || null)) ? f : null)),
+      Promise.all((result?.files || []).map(async f =>
+        (await _isInRootSubtreeMemo(f.parents?.[0] || null)) ? f : null)),
+    ]);
+    return { ...result, folders: folderKeep.filter(Boolean), files: fileKeep.filter(Boolean) };
   }
 
   /* ── Library ─────────────────────────────────────────────── */
