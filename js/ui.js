@@ -1665,11 +1665,13 @@ const UI = (() => {
     const covers = pl.resolvedCovers || [];
     const count  = pl.songIds ? pl.songIds.length : 0;
 
+    const _iconList = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z"/></svg>`;
+
     card.innerHTML = `
       <div class="home-card-art home-card-art--mosaic">
         ${_buildPlaylistMosaic(covers, pl.name)}
-        <button class="home-card-play-btn" aria-label="Reproducir playlist" tabindex="-1">
-          <div class="play-btn-circle">${iconPlay(17)}</div>
+        <button class="home-card-play-btn" aria-label="Abrir playlist" tabindex="-1">
+          <div class="play-btn-circle">${_iconList}</div>
         </button>
       </div>
       <div class="home-card-name">${escHtml(pl.name || '—')}</div>
@@ -1678,20 +1680,12 @@ const UI = (() => {
 
     card.querySelector('.home-card-play-btn').addEventListener('click', (e) => {
       e.stopPropagation();
-      if (typeof App !== 'undefined') App.onPlaylistPlay(pl);
+      if (typeof App !== 'undefined') App.onPlaylistHomeCardClick(pl);
     });
 
     card.addEventListener('click', (e) => {
       if (e.target.closest('.home-card-play-btn')) return;
-      if (typeof App !== 'undefined') {
-        // En móvil (touch) el tap reproduce directamente — no hay botón play visible.
-        // En desktop el click navega al detalle; el hover-play-btn es quien reproduce.
-        if (window.matchMedia('(hover: none)').matches) {
-          App.onPlaylistPlay(pl);
-        } else {
-          App.onPlaylistHomeCardClick(pl);
-        }
-      }
+      if (typeof App !== 'undefined') App.onPlaylistHomeCardClick(pl);
     });
 
     return card;
