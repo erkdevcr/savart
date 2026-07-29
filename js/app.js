@@ -5812,6 +5812,9 @@ const App = (() => {
   /** Play all songs in a playlist immediately (called from playlist detail header button). */
   function onPlaylistDetailPlay(songs) {
     if (!songs || songs.length === 0) return;
+    // Stamp lastPlayedAt only on actual playback
+    const plId = songs[0]?._playlistId;
+    if (plId) DB.updatePlaylist(plId, { lastPlayedAt: Date.now() }).catch(() => {});
     _resetRadio();
     songs.forEach(s => _cacheItem(s));
     Player.setQueue(songs, 0);
@@ -13223,8 +13226,7 @@ const App = (() => {
       // Load full playlist from DB to get fresh songIds
       const fullPl = await DB.getPlaylist(pl.id).catch(() => pl);
       const songIds = (fullPl || pl).songIds || [];
-      // Stamp last-played timestamp so the home screen keeps recent playlists first
-      if (pl.id) DB.updatePlaylist(pl.id, { lastPlayedAt: Date.now() }).catch(() => {});
+      // lastPlayedAt se estampa solo cuando se REPRODUCE, no al navegar (ver onPlaylistPlay / onPlaylistDetailPlay)
       if (songIds.length === 0) {
         UI.renderPlaylistDetail([], pl.name, fullPl || pl);
         UI.setActiveSongRow(Player.getCurrentTrack()?.id ?? null);
@@ -13296,6 +13298,8 @@ const App = (() => {
     try {
       const songs = await _getPlaylistSongs(pl);
       if (songs.length === 0) { UI.showToast(UI.t('toast_playlist_empty'), 'error'); return; }
+      // Stamp lastPlayedAt only on actual playback
+      if (pl.id) DB.updatePlaylist(pl.id, { lastPlayedAt: Date.now() }).catch(() => {});
       _resetRadio();
       songs.forEach(s => _cacheItem(s));
       Player.setQueue(songs, 0);

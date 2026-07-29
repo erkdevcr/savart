@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.576';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.576 — elimina botón Duplicar del lib-detail-header de playlists YT
+const APP_VERSION  = '3.5.577';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.577 — lastPlayedAt solo al reproducir, no al navegar una playlist
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
