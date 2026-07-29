@@ -1855,30 +1855,34 @@ img { display: block; }
 }
 
 /* Chip SD con candado — píldora de DOS tonos: 2/3 naranja ("SD") + 1/3 blanco (candado).
-   overflow:hidden + border-radius explícito garantizan que el segmento blanco
-   quede integrado en la píldora sin parecer un rect flotante. */
+   Clave: el outer container es TRANSPARENTE — el naranja vive solo en sd-chip-txt, no
+   en el outer. Así el segmento blanco no puede tener "filtraciones" naranja arriba/abajo
+   aunque overflow:hidden no recorte perfectamente en WebView. */
 .sd-thumb-chip--locked {
   display: inline-flex;
   align-items: stretch;
-  padding: 0;              /* el padding vive en cada segmento */
-  overflow: hidden;        /* clips los hijos al border-radius de la píldora */
-  border-radius: 3px;      /* explícito — herencia no siempre activa el clip */
+  padding: 0;
+  overflow: hidden;
+  border-radius: 3px;
+  background: transparent; /* naranja en sd-chip-txt, no aquí */
 }
 .sd-thumb-chip--locked .sd-chip-txt {
   display: flex;
   align-items: center;
   flex: 2;
   justify-content: center;
-  padding: 1px 4px;        /* idéntico al chip normal */
-  line-height: 1.4;        /* explícito — evita herencia rota en flex */
+  padding: 1px 4px;
+  line-height: 1.4;
+  background: #f97316;     /* naranja explícito en el segmento SD */
   border-radius: 3px 0 0 3px;
 }
 .sd-thumb-chip--locked .sd-chip-lock-seg {
   display: flex;
   align-items: center;
   justify-content: center;
+  align-self: stretch;     /* fuerza relleno total del alto del contenedor */
   flex: 1;
-  padding: 1px 3px;        /* igual padding vertical que sd-chip-txt → misma altura */
+  padding: 0 3px;          /* sin padding vertical — el alto lo dicta align-self: stretch */
   background: #ffffff;
   color: #1a1a1a;
   border-radius: 0 3px 3px 0;
@@ -1932,12 +1936,12 @@ img { display: block; }
 }
 .home-card-art .sd-thumb-chip--locked .sd-chip-txt {
   border-radius: 4px 0 0 4px;
-  padding: 2px 5px;        /* igualamos al home-card chip normal */
+  padding: 2px 5px;
   font-size: 12px;
 }
 .home-card-art .sd-thumb-chip--locked .sd-chip-lock-seg {
   border-radius: 0 4px 4px 0;
-  padding: 2px 3px;        /* home-card chip usa padding: 2px 5px → igualamos vertical */
+  padding: 0 4px;          /* sin padding vertical — align-self:stretch dicta el alto */
 }
 
 /* Expanded player art chip — 2.5× the base size */

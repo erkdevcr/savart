@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.584';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.584 — chip check en player para soundropSaved/sdCached; modal re-descarga
+const APP_VERSION  = '3.5.585';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.585 — chip SD-lock: fondo naranja en sd-chip-txt, align-self:stretch en lock-seg → sin zona naranja visible
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
