@@ -264,6 +264,14 @@ const App = (() => {
       onRenewed:  _onTokenRenewed,
     });
 
+    // 5b. Init YouTube auth (independent of Drive; reads refresh token from localStorage)
+    if (typeof YTAuth !== 'undefined') {
+      YTAuth.init({
+        onLogin:  () => { if (typeof YTPlaylists !== 'undefined') YTPlaylists.start(); },
+        onLogout: () => { if (typeof YTPlaylists !== 'undefined') YTPlaylists.stop(); },
+      });
+    }
+
     // 6. Bind static UI events
     _bindEvents();
 
@@ -517,6 +525,12 @@ const App = (() => {
     UI.showView('home');
     _restoreHomeCacheSync(); // Paint localStorage snapshot instantly (zero DB round-trips)
     _loadHomeData();         // Then overwrite with fresh DB data (stale-while-revalidate)
+
+    // Start YT playlist auto-sync if the user already connected their YT account
+    if (typeof YTAuth !== 'undefined' && YTAuth.isAuthenticated() && typeof YTPlaylists !== 'undefined') {
+      YTPlaylists.start();
+    }
+
     // Fetch real user info and update Settings panel.
     // Also detects account switches: if a different user logs in, wipe all
     // user-specific local state so the previous user's data doesn't bleed through.
@@ -6504,22 +6518,34 @@ const App = (() => {
       if (!playlistId) return;
       const playlists = await DB.getPlaylists();
       const pl = playlists.find(p => p.id === playlistId);
-      if (item._isAlbum && item._album) {
+      if (item._ytSongIds) {
+        // YT playlist copy: bulk-insert by ID (no Drive metadata needed)
+        const target = await DB.getPlaylist(playlistId);
+        const existingSet = new Set(target?.songIds || []);
+        const newIds = item._ytSongIds.filter(id => !existingSet.has(id));
+        if (newIds.length > 0) {
+          await DB.updatePlaylist(playlistId, { songIds: [...(target?.songIds || []), ...newIds] });
+        }
+        UI.showToast(`${item._ytSongIds.length} ${UI.t('songs').toLowerCase()} → "${pl?.name || 'playlist'}"`);
+        Sync.push('playlists');
+      } else if (item._isAlbum && item._album) {
         const songs = await _resolveAlbumSongs(item._album);
         await _bulkAddSongsToPlaylist(playlistId, songs);
         UI.showToast(`${songs.length} ${UI.t('songs').toLowerCase()} → "${pl?.name || 'playlist'}"`);
+        Sync.push('playlists');
       } else if (item._isFolder && item._folderId) {
         const { files } = await Drive.listFolderAll(item._folderId);
         const playable = files.filter(f => f.isPlayable);
         if (playable.length === 0) { UI.showToast(UI.t('toast_no_playable'), 'error'); return; }
         await _bulkAddSongsToPlaylist(playlistId, playable);
         UI.showToast(`${playable.length} ${UI.t('songs').toLowerCase()} → "${pl?.name || 'playlist'}"`);
+        Sync.push('playlists');
       } else {
         await DB.addToPlaylist(playlistId, item.id);
         await _saveItemMeta(item);
         UI.showToast(`${UI.t('toast_added_to_pl')} "${pl?.name || 'playlist'}"`);
+        Sync.push('playlists');
       }
-      Sync.push('playlists');
     } catch (err) {
       UI.showToast(UI.t('toast_pl_add_error'), 'error');
     }
@@ -6534,7 +6560,10 @@ const App = (() => {
   async function onCreateAndAddPlaylist(item, name) {
     try {
       const pl = await DB.createPlaylist(name);
-      if (item._isAlbum && item._album) {
+      if (item._ytSongIds) {
+        await DB.updatePlaylist(pl.id, { songIds: [...item._ytSongIds] });
+        UI.showToast(`"${name}" — ${UI.t('toast_pl_created')} (${item._ytSongIds.length} ${UI.t('songs').toLowerCase()})`);
+      } else if (item._isAlbum && item._album) {
         const songs = await _resolveAlbumSongs(item._album);
         await _bulkAddSongsToPlaylist(pl.id, songs);
         UI.showToast(`"${name}" — ${UI.t('toast_pl_created')} (${songs.length} ${UI.t('songs').toLowerCase()})`);
@@ -13197,7 +13226,7 @@ const App = (() => {
       // Stamp last-played timestamp so the home screen keeps recent playlists first
       if (pl.id) DB.updatePlaylist(pl.id, { lastPlayedAt: Date.now() }).catch(() => {});
       if (songIds.length === 0) {
-        UI.renderPlaylistDetail([], pl.name);
+        UI.renderPlaylistDetail([], pl.name, fullPl || pl);
         UI.setActiveSongRow(Player.getCurrentTrack()?.id ?? null);
         if (!document.getElementById('lib-pl-two-col')) {
           _libInDetail        = true;
@@ -13216,7 +13245,7 @@ const App = (() => {
           return { id, ...m, thumbnailUrl, _playlistId: (fullPl || pl).id };
         })
       )).filter(Boolean);
-      UI.renderPlaylistDetail(songs, pl.name);
+      UI.renderPlaylistDetail(songs, pl.name, fullPl || pl);
       UI.setActiveSongRow(Player.getCurrentTrack()?.id ?? null);
       // Single-pane mode (mobile): detail takes over the content area — mark as
       // drill-down so nav Home → Library restores this playlist view.
@@ -14036,6 +14065,156 @@ const App = (() => {
   function onLogout() {
     if (confirm(UI.t('confirm_logout'))) {
       Auth.logout();
+    }
+  }
+
+  /* ── YouTube Settings ─────────────────────────────────────── */
+
+  function _initYTSettings() {
+    function _updateYTUI() {
+      const isAuth = typeof YTAuth !== 'undefined' && YTAuth.isAuthenticated();
+      const disconnEl = document.getElementById('yt-auth-disconnected');
+      const connEl    = document.getElementById('yt-auth-connected');
+      if (disconnEl) disconnEl.style.display = isAuth ? 'none' : '';
+      if (connEl)    connEl.style.display    = isAuth ? ''     : 'none';
+      if (isAuth) {
+        const user    = (typeof YTAuth !== 'undefined' && YTAuth.getUser?.()) || {};
+        const nameEl  = document.getElementById('yt-account-name');
+        const emailEl = document.getElementById('yt-account-email');
+        const avatarEl = document.getElementById('yt-account-avatar');
+        if (nameEl)  nameEl.textContent  = user.name  || '—';
+        if (emailEl) emailEl.textContent = user.email || '—';
+        if (avatarEl) {
+          avatarEl.src = user.picture || '';
+          avatarEl.style.display = user.picture ? '' : 'none';
+        }
+      }
+    }
+
+    _updateYTUI();
+
+    document.getElementById('btn-yt-login')?.addEventListener('click', async () => {
+      if (typeof YTAuth === 'undefined') return;
+      try {
+        await YTAuth.login();
+        if (typeof YTPlaylists !== 'undefined') YTPlaylists.start();
+        _updateYTUI();
+        UI.showToast(UI.t('settings_yt_connect') + ' ✓', 'success');
+      } catch (err) {
+        const msg = err?.message || '';
+        if (msg !== 'popup_closed' && msg !== 'access_denied') {
+          UI.showToast('Error al conectar YouTube', 'error');
+        }
+      }
+    });
+
+    document.getElementById('btn-yt-logout')?.addEventListener('click', () => {
+      if (typeof YTAuth === 'undefined') return;
+      const modal    = document.getElementById('eq-del-modal');
+      const titleEl  = document.getElementById('eq-del-title');
+      const msgEl    = document.getElementById('eq-del-msg');
+      const confirmEl = document.getElementById('btn-eq-del-confirm');
+      const cancelEl  = document.getElementById('btn-eq-del-cancel');
+
+      if (!modal) {
+        // Fallback: logout and keep playlists
+        if (typeof YTPlaylists !== 'undefined') YTPlaylists.stop();
+        YTAuth.logout();
+        _updateYTUI();
+        return;
+      }
+
+      if (titleEl)   titleEl.textContent  = UI.t('settings_yt_logout_keep');
+      if (msgEl)     msgEl.textContent    = '';
+      if (confirmEl) {
+        confirmEl.textContent        = UI.t('settings_yt_delete');
+        confirmEl.style.background   = 'var(--error, #e53935)';
+        confirmEl.style.border       = 'none';
+      }
+      if (cancelEl)  cancelEl.textContent = UI.t('settings_yt_keep');
+      modal.style.display = 'flex';
+
+      const _closeModal = () => { modal.style.display = 'none'; };
+
+      const onKeep = () => {
+        _closeModal();
+        if (typeof YTPlaylists !== 'undefined') YTPlaylists.stop();
+        YTAuth.logout();
+        _updateYTUI();
+      };
+
+      const onDelete = async () => {
+        _closeModal();
+        try {
+          const allPls = await DB.getPlaylists().catch(() => []);
+          for (const pl of allPls) {
+            if (pl.isYouTube) await DB.deletePlaylist(pl.id).catch(() => {});
+          }
+          Sync.push('playlists');
+          if (UI.getCurrentView() === 'library') _setLibTab(_currentLibTab || 'playlists');
+        } catch (_) {}
+        if (typeof YTPlaylists !== 'undefined') YTPlaylists.stop();
+        YTAuth.logout();
+        _updateYTUI();
+      };
+
+      document.getElementById('btn-eq-del-confirm')?.addEventListener('click', onDelete,   { once: true });
+      document.getElementById('btn-eq-del-cancel')?.addEventListener('click',  onKeep,    { once: true });
+      document.getElementById('btn-eq-del-close')?.addEventListener('click',   onKeep,    { once: true });
+      document.getElementById('eq-del-modal-backdrop')?.addEventListener('click', onKeep, { once: true });
+    });
+
+    document.getElementById('btn-yt-sync')?.addEventListener('click', async () => {
+      if (typeof YTPlaylists === 'undefined') return;
+      const btn = document.getElementById('btn-yt-sync');
+      if (btn) btn.disabled = true;
+      try {
+        await YTPlaylists.sync();
+        UI.showToast('✓', 'success');
+        if (UI.getCurrentView() === 'library') _setLibTab(_currentLibTab || 'playlists');
+      } catch (_) {
+        UI.showToast('Error al sincronizar', 'error');
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    });
+  }
+
+  /* ── YouTube Playlist actions ─────────────────────────────── */
+
+  /**
+   * Duplicates a YT playlist as a regular editable Savart playlist.
+   */
+  async function onDuplicatePlaylist(pl) {
+    try {
+      const name  = (pl.name || 'Playlist') + ' (copia)';
+      const newPl = await DB.createPlaylist(name);
+      await DB.updatePlaylist(newPl.id, { songIds: [...(pl.songIds || [])] });
+      Sync.push('playlists');
+      _loadPlaylists();
+      if (UI.getCurrentView() === 'library') _setLibTab(_currentLibTab || 'playlists');
+      UI.showToast(`"${name}" — ${UI.t('toast_pl_created')}`, 'success');
+    } catch (_) {
+      UI.showToast(UI.t('toast_pl_create_error'), 'error');
+    }
+  }
+
+  /**
+   * Opens the playlist picker to copy all songs of a YT playlist into another.
+   */
+  async function onCopyYTPlaylistTo(pl) {
+    try {
+      const playlists = await DB.getPlaylists();
+      // Synthetic item: carries the songIds so onAddToPlaylist / onCreateAndAddPlaylist
+      // can bulk-insert them (see _ytSongIds branch in each handler).
+      const syntheticItem = { _ytSongIds: pl.songIds || [], name: pl.name };
+      UI.showPlaylistPicker(
+        { clientX: window.innerWidth / 2, clientY: window.innerHeight / 2 },
+        syntheticItem,
+        playlists,
+      );
+    } catch (_) {
+      UI.showToast(UI.t('toast_pl_load_error'), 'error');
     }
   }
 
@@ -15665,6 +15844,9 @@ const App = (() => {
 
     // (Deep scan auto-open is handled in _onTokenReady after auth completes)
 
+    // ── YouTube Settings ──────────────────────────────────────────────
+    _initYTSettings();
+
     // Settings logout
     document.getElementById('btn-logout')?.addEventListener('click', onLogout);
 
@@ -16404,6 +16586,8 @@ const App = (() => {
     onRenamePlaylist,
     onDeletePlaylist,
     onRemoveFromPlaylist,
+    onDuplicatePlaylist,
+    onCopyYTPlaylistTo,
     // Library batch rescan
     onLibRescan,
     // Deep Scan

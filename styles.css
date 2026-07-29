@@ -1842,6 +1842,23 @@ img { display: block; }
   color: #1a1a1a;          /* candado oscuro sobre blanco */
 }
 
+/* Chip YouTube en covers de playlist — rojo con triángulo play blanco */
+.yt-pl-chip {
+  position: absolute;
+  bottom: 5px;
+  right: 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  background: #FF0000;
+  pointer-events: none;
+  z-index: 2;
+}
+.lib-pl-thumb { position: relative; }
+
 /* Chip SD — ya descargado (Drive o caché local): naranja con checkmark blanco */
 .sd-thumb-chip--saved {
   display: inline-flex;
@@ -5326,6 +5343,7 @@ body.queue-open #mini-player { z-index: 65; }
   #sec-clearhome   { order: 4; }
   #sec-normalizer  { order: 5; }
   .settings-danger { order: 6; }
+  #sec-youtube     { order: 7; }
 
   /* Each section = its own card */
   .settings-section {

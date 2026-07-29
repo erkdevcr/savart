@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.562';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.562 — SD load no detiene audio previo: pausa al onPlay, restaura en error; abortSdLoad en popup cancelar
+const APP_VERSION  = '3.5.563';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.563 — YouTube Playlists: yt-auth.js + yt-playlists.js; Settings sección YT; duplicar/copiar playlist; auto-sync 30min
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
@@ -36,6 +36,8 @@ const SHELL_FILES = [
   `${BASE}/js/discogs.js`,
   `${BASE}/js/lyrics.js`,
   `${BASE}/js/soundrop.js`,
+  `${BASE}/js/yt-auth.js`,
+  `${BASE}/js/yt-playlists.js`,
   `${BASE}/js/ui.js`,
   `${BASE}/js/app.js`,
   `${BASE}/js/bg.js`,

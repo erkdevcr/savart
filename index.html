@@ -19,10 +19,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&family=Baskervville:ital@0;1&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="styles.css?v=3.5.562">
+  <link rel="stylesheet" href="styles.css?v=3.5.563">
   <!-- Version global — fallback para Android donde el SW no se registra.
        IMPORTANTE: mantener sincronizada con APP_VERSION de sw.js en cada bump. -->
-  <script>window.SAVART_VERSION = '3.5.562';</script>
+  <script>window.SAVART_VERSION = '3.5.563';</script>
   <!-- Tema (v3.5.552): aplicar ANTES del primer paint para evitar flash del tema default -->
   <script>try{var _th=localStorage.getItem('savart_theme');if(_th&&_th!=='blue')document.documentElement.dataset.theme=_th;}catch(e){}</script>
 </head>
@@ -451,6 +451,38 @@
               <button id="btn-clear-cache" data-i18n="settings_clear_cache" style="color:var(--error);font-size:14px;background:none;border:none;cursor:pointer;padding:0">Borrar caché</button>
             </div>
           </div><!-- /.settings-danger -->
+
+          <!-- YouTube account -->
+          <div class="settings-section" id="sec-youtube">
+            <div class="settings-section-title" data-i18n="settings_youtube">YouTube</div>
+            <p class="settings-section-desc" data-i18n="settings_youtube_desc">Conecta tu cuenta de YouTube para importar tus playlists. Puede ser una cuenta distinta a la de Drive.</p>
+
+            <!-- Not connected state -->
+            <div id="yt-auth-disconnected">
+              <div class="settings-row" style="border-bottom:none">
+                <div class="settings-row-label" data-i18n="settings_yt_not_connected">No conectado</div>
+                <button id="btn-yt-login" style="background:var(--accent);color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:13px;font-weight:600;cursor:pointer" data-i18n="settings_yt_connect">Conectar</button>
+              </div>
+            </div>
+
+            <!-- Connected state (hidden until authenticated) -->
+            <div id="yt-auth-connected" style="display:none">
+              <div class="settings-row">
+                <div style="display:flex;align-items:center;gap:12px">
+                  <img id="yt-account-avatar" src="" alt="" width="32" height="32" style="border-radius:50%;display:none">
+                  <div>
+                    <div class="settings-row-label" id="yt-account-name">—</div>
+                    <div class="settings-row-cat" id="yt-account-email">—</div>
+                  </div>
+                </div>
+                <button id="btn-yt-logout" style="color:var(--error);font-size:14px;font-weight:500;background:none;border:none;cursor:pointer;padding:0" data-i18n="settings_yt_disconnect">Desconectar</button>
+              </div>
+              <div class="settings-row" style="border-bottom:none">
+                <div class="settings-row-label" data-i18n="settings_yt_sync_now">Sincronizar ahora</div>
+                <button id="btn-yt-sync" style="background:none;border:1px solid var(--accent);color:var(--accent);border-radius:8px;padding:5px 12px;font-size:13px;font-weight:500;cursor:pointer" data-i18n="settings_yt_sync_btn">Sincronizar</button>
+              </div>
+            </div>
+          </div><!-- /#sec-youtube -->
 
         </div><!-- /.settings-col (col 1) -->
 
@@ -1585,22 +1617,24 @@
 </script>
 
 <!-- Savart modules -->
-<script src="js/config.js?v=3.5.562"></script>
-<script src="js/auth.js?v=3.5.562"></script>
-<script src="js/drive.js?v=3.5.562"></script>
-<script src="js/db.js?v=3.5.562"></script>
-<script src="js/sync.js?v=3.5.562"></script>
-<script src="js/player.js?v=3.5.562"></script>
-<script src="js/meta.js?v=3.5.562"></script>
-<script src="js/lastfm.js?v=3.5.562"></script>
-<script src="js/audd.js?v=3.5.562"></script>
-<script src="js/musicbrainz.js?v=3.5.562"></script>
-<script src="js/discogs.js?v=3.5.562"></script>
-<script src="js/lyrics.js?v=3.5.562"></script>
-<script src="js/soundrop.js?v=3.5.562"></script>
-<script src="js/ui.js?v=3.5.562"></script>
-<script src="js/app.js?v=3.5.562"></script>
-<script src="js/bg.js?v=3.5.562"></script>
+<script src="js/config.js?v=3.5.563"></script>
+<script src="js/auth.js?v=3.5.563"></script>
+<script src="js/drive.js?v=3.5.563"></script>
+<script src="js/db.js?v=3.5.563"></script>
+<script src="js/sync.js?v=3.5.563"></script>
+<script src="js/player.js?v=3.5.563"></script>
+<script src="js/meta.js?v=3.5.563"></script>
+<script src="js/lastfm.js?v=3.5.563"></script>
+<script src="js/audd.js?v=3.5.563"></script>
+<script src="js/musicbrainz.js?v=3.5.563"></script>
+<script src="js/discogs.js?v=3.5.563"></script>
+<script src="js/lyrics.js?v=3.5.563"></script>
+<script src="js/soundrop.js?v=3.5.563"></script>
+<script src="js/yt-auth.js?v=3.5.563"></script>
+<script src="js/yt-playlists.js?v=3.5.563"></script>
+<script src="js/ui.js?v=3.5.563"></script>
+<script src="js/app.js?v=3.5.563"></script>
+<script src="js/bg.js?v=3.5.563"></script>
 
 <!-- Inline: additional bindings that need the DOM -->
 <script>

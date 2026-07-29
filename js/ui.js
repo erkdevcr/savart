@@ -81,6 +81,8 @@ const UI = (() => {
       ctx_remove_top_played: 'Quitar de más reproducidas',
       ctx_rename:         'Renombrar',
       ctx_delete:         'Eliminar',
+      ctx_pl_duplicate:   'Duplicar playlist',
+      ctx_pl_copy_to:     'Copiar canciones a…',
       ctx_remove_history: 'Borrar del historial',
       ctx_mark_fav:       'Marcar favorita',
       // ── Queue actions ──────────────────────────────────────
@@ -155,9 +157,19 @@ const UI = (() => {
       settings_db_status_desc: 'Archivos sincronizados en Drive',
       settings_db_view:        'Ver',
       db_total:                'Total',
-      settings_account:     'Cuenta y caché',
-      settings_appearance:  'Apariencia',
-      settings_language:    'Idioma',
+      settings_account:       'Cuenta y caché',
+      settings_youtube:       'YouTube',
+      settings_youtube_desc:  'Conecta tu cuenta de YouTube para importar tus playlists.',
+      settings_yt_not_connected: 'No conectado',
+      settings_yt_connect:    'Conectar',
+      settings_yt_disconnect: 'Desconectar',
+      settings_yt_sync_now:   'Sincronizar ahora',
+      settings_yt_sync_btn:   'Sincronizar',
+      settings_yt_logout_keep:'¿Conservar las playlists de YouTube?',
+      settings_yt_keep:       'Conservar',
+      settings_yt_delete:     'Eliminar',
+      settings_appearance:    'Apariencia',
+      settings_language:      'Idioma',
       settings_theme:       'Tema de la aplicación',
       theme_blue:           'Azul Savart',
       theme_purple:         'Púrpura Nébula',
@@ -503,6 +515,8 @@ const UI = (() => {
       ctx_remove_top_played: 'Remove from most played',
       ctx_rename:         'Rename',
       ctx_delete:         'Delete',
+      ctx_pl_duplicate:   'Duplicate playlist',
+      ctx_pl_copy_to:     'Copy songs to…',
       ctx_remove_history: 'Remove from history',
       ctx_mark_fav:       'Mark as favorite',
       // ── Queue actions ──────────────────────────────────────
@@ -577,9 +591,19 @@ const UI = (() => {
       settings_db_status_desc: 'Synced files in Drive',
       settings_db_view:        'View',
       db_total:                'Total',
-      settings_account:     'Account & cache',
-      settings_appearance:  'Appearance',
-      settings_language:    'Language',
+      settings_account:       'Account & cache',
+      settings_youtube:       'YouTube',
+      settings_youtube_desc:  'Connect your YouTube account to import your playlists.',
+      settings_yt_not_connected: 'Not connected',
+      settings_yt_connect:    'Connect',
+      settings_yt_disconnect: 'Disconnect',
+      settings_yt_sync_now:   'Sync now',
+      settings_yt_sync_btn:   'Sync',
+      settings_yt_logout_keep:'Keep your YouTube playlists?',
+      settings_yt_keep:       'Keep',
+      settings_yt_delete:     'Delete',
+      settings_appearance:    'Appearance',
+      settings_language:      'Language',
       settings_theme:       'App theme',
       theme_blue:           'Savart Blue',
       theme_purple:         'Nebula Purple',
@@ -2554,13 +2578,19 @@ const UI = (() => {
     }
 
     if (type === 'playlist') {
-      _addCtxItem(menu, iconPlay(14),  t('ctx_play'),     () => { App.onPlaylistPlay?.(item);        hideContextMenu(); });
+      _addCtxItem(menu, iconPlay(14),  t('ctx_play'),        () => { App.onPlaylistPlay?.(item);           hideContextMenu(); });
       _addCtxDivider(menu);
-      _addCtxItem(menu, _iconNext,     t('play_next'),    () => { App.onPlaylistQueue?.(item,'next'); hideContextMenu(); });
-      _addCtxItem(menu, _iconQueue,    t('play_after'),   () => { App.onPlaylistQueue?.(item,'end');  hideContextMenu(); });
+      _addCtxItem(menu, _iconNext,     t('play_next'),       () => { App.onPlaylistQueue?.(item,'next');    hideContextMenu(); });
+      _addCtxItem(menu, _iconQueue,    t('play_after'),      () => { App.onPlaylistQueue?.(item,'end');     hideContextMenu(); });
       _addCtxDivider(menu);
-      _addCtxItem(menu, _iconEdit,     t('ctx_rename'),   () => { hideContextMenu(); App.onRenamePlaylist?.(item); });
-      _addCtxItem(menu, iconTrash(14), t('ctx_delete'),   () => { hideContextMenu(); App.onDeletePlaylist?.(item); });
+      if (item.isYouTube) {
+        // YT playlists: read-only — no rename/delete, but can duplicate or copy songs
+        _addCtxItem(menu, _iconEdit,      t('ctx_pl_duplicate'),   () => { hideContextMenu(); App.onDuplicatePlaylist?.(item); });
+        _addCtxItem(menu, iconPlus(14),   t('ctx_pl_copy_to'),     () => { hideContextMenu(); App.onCopyYTPlaylistTo?.(item); });
+      } else {
+        _addCtxItem(menu, _iconEdit,     t('ctx_rename'),   () => { hideContextMenu(); App.onRenamePlaylist?.(item); });
+        _addCtxItem(menu, iconTrash(14), t('ctx_delete'),   () => { hideContextMenu(); App.onDeletePlaylist?.(item); });
+      }
     }
 
     // ── Recents home cards ───────────────────────────────────────
@@ -3568,7 +3598,7 @@ const UI = (() => {
    * @param {Object[]} songs  - array of metadata objects with .id
    * @param {string}   name   - playlist name for the header
    */
-  function renderPlaylistDetail(songs, name) {
+  function renderPlaylistDetail(songs, name, pl = null) {
     // Two-col mode: populate right pane. Mobile/fallback: use full content area.
     const detailPane = document.getElementById('lib-pl-detail-pane');
     const twoCol     = document.getElementById('lib-pl-two-col');
@@ -3610,7 +3640,10 @@ const UI = (() => {
     // Header
     const header = document.createElement('div');
     header.className = 'lib-detail-header';
-    const plIcon = `<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zm13-4v8l5-4-5-4z"/></svg>`;
+    const isYT   = !!pl?.isYouTube;
+    const plIcon = isYT
+      ? `<svg width="15" height="15" viewBox="0 0 24 24" fill="#FF0000"><path d="M21.8 8s-.2-1.4-.8-2c-.8-.8-1.6-.8-2-.9C16.8 5 12 5 12 5s-4.8 0-7 .1c-.4.1-1.2.1-2 .9-.6.6-.8 2-.8 2S2 9.6 2 11.2v1.5c0 1.6.2 3.2.2 3.2s.2 1.4.8 2c.8.8 1.8.8 2.2.8C6.6 19 12 19 12 19s4.8 0 7-.2c.4-.1 1.2-.1 2-.9.6-.6.8-2 .8-2s.2-1.6.2-3.2v-1.5C22 9.6 21.8 8 21.8 8zM10 14.5v-5l5.5 2.5-5.5 2.5z"/></svg>`
+      : `<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zm13-4v8l5-4-5-4z"/></svg>`;
     header.innerHTML = `${plIcon} ${escHtml(name)} <span class="lib-detail-count">${songs.length}</span>`;
 
     // "Reproducir" play-all button — only shown when playlist is non-empty
@@ -3622,6 +3655,18 @@ const UI = (() => {
         if (typeof App !== 'undefined') App.onPlaylistDetailPlay(songs);
       });
       header.appendChild(playBtn);
+    }
+
+    // YT-only: "Duplicar" button to create a local editable copy
+    if (isYT && pl) {
+      const dupBtn = document.createElement('button');
+      dupBtn.className = 'pl-detail-play-btn';
+      dupBtn.style.cssText = 'background:transparent;border:1px solid var(--accent);color:var(--accent);margin-left:6px';
+      dupBtn.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg> <span>${t('ctx_pl_duplicate')}</span>`;
+      dupBtn.addEventListener('click', () => {
+        if (typeof App !== 'undefined') App.onDuplicatePlaylist?.(pl);
+      });
+      header.appendChild(dupBtn);
     }
 
     container.appendChild(header);
@@ -5412,9 +5457,12 @@ const UI = (() => {
       const thumbHtml = _buildMosaicThumb(pl.coverUrls || [], pl.name);
       const songCount = pl.songIds?.length || 0;
       const songNoun  = songCount === 1 ? t('lbl_song') : t('lbl_songs');
+      const ytChip    = pl.isYouTube
+        ? `<span class="yt-pl-chip" title="Playlist de YouTube"><svg width="9" height="9" viewBox="0 0 24 24" fill="white"><path d="M8 5v14l11-7z"/></svg></span>`
+        : '';
 
       item.innerHTML = `
-        <div class="lib-pl-thumb">${thumbHtml}</div>
+        <div class="lib-pl-thumb">${thumbHtml}${ytChip}</div>
         <div class="lib-pl-info">
           <div class="lib-pl-name">${escHtml(pl.name)}</div>
           <div class="lib-pl-meta">${songCount} ${songNoun}</div>
