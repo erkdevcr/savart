@@ -19,10 +19,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&family=Baskervville:ital@0;1&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="styles.css?v=3.5.588">
+  <link rel="stylesheet" href="styles.css?v=3.5.589">
   <!-- Version global — fallback para Android donde el SW no se registra.
        IMPORTANTE: mantener sincronizada con APP_VERSION de sw.js en cada bump. -->
-  <script>window.SAVART_VERSION = '3.5.588';</script>
+  <script>window.SAVART_VERSION = '3.5.589';</script>
   <!-- Tema (v3.5.552): aplicar ANTES del primer paint para evitar flash del tema default -->
   <script>try{var _th=localStorage.getItem('savart_theme');if(_th&&_th!=='blue')document.documentElement.dataset.theme=_th;}catch(e){}</script>
 </head>
@@ -459,9 +459,17 @@
 
             <!-- Not connected state -->
             <div id="yt-auth-disconnected">
-              <div class="settings-row" style="border-bottom:none">
+              <!-- Linked on another device (shown only when sync has a linked account) -->
+              <div id="yt-linked-elsewhere" style="display:none">
+                <div class="settings-row">
+                  <div class="settings-row-label" id="yt-linked-elsewhere-msg" style="font-size:12px;color:var(--text-secondary);flex:1;padding-right:8px"></div>
+                  <button id="btn-yt-login" style="background:var(--accent);color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:13px;font-weight:600;cursor:pointer;flex-shrink:0" data-i18n="settings_yt_connect">Conectar</button>
+                </div>
+              </div>
+              <!-- Normal not-connected row (hidden when linked elsewhere) -->
+              <div id="yt-not-connected-row" class="settings-row" style="border-bottom:none">
                 <div class="settings-row-label" data-i18n="settings_yt_not_connected">No conectado</div>
-                <button id="btn-yt-login" style="background:var(--accent);color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:13px;font-weight:600;cursor:pointer" data-i18n="settings_yt_connect">Conectar</button>
+                <button id="btn-yt-login-plain" style="background:var(--accent);color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:13px;font-weight:600;cursor:pointer" data-i18n="settings_yt_connect">Conectar</button>
               </div>
             </div>
 
@@ -477,9 +485,13 @@
                 </div>
                 <button id="btn-yt-logout" style="color:var(--error);font-size:14px;font-weight:500;background:none;border:none;cursor:pointer;padding:0" data-i18n="settings_yt_disconnect">Desconectar</button>
               </div>
-              <div class="settings-row" style="border-bottom:none">
+              <div class="settings-row">
                 <div class="settings-row-label" data-i18n="settings_yt_sync_now">Sincronizar ahora</div>
                 <button id="btn-yt-sync" style="background:none;border:1px solid var(--accent);color:var(--accent);border-radius:8px;padding:5px 12px;font-size:13px;font-weight:500;cursor:pointer" data-i18n="settings_yt_sync_btn">Sincronizar</button>
+              </div>
+              <div class="settings-row" style="border-bottom:none">
+                <div class="settings-row-label" data-i18n="yt_change_account">Conectar otra cuenta</div>
+                <button id="btn-yt-change" style="background:none;border:1px solid var(--text-secondary);color:var(--text-secondary);border-radius:8px;padding:5px 12px;font-size:13px;font-weight:500;cursor:pointer" data-i18n="yt_change_account">Conectar otra cuenta</button>
               </div>
             </div>
           </div><!-- /#sec-youtube -->
@@ -1646,24 +1658,24 @@
 </script>
 
 <!-- Savart modules -->
-<script src="js/config.js?v=3.5.588"></script>
-<script src="js/auth.js?v=3.5.588"></script>
-<script src="js/drive.js?v=3.5.588"></script>
-<script src="js/db.js?v=3.5.588"></script>
-<script src="js/sync.js?v=3.5.588"></script>
-<script src="js/player.js?v=3.5.588"></script>
-<script src="js/meta.js?v=3.5.588"></script>
-<script src="js/lastfm.js?v=3.5.588"></script>
-<script src="js/audd.js?v=3.5.588"></script>
-<script src="js/musicbrainz.js?v=3.5.588"></script>
-<script src="js/discogs.js?v=3.5.588"></script>
-<script src="js/lyrics.js?v=3.5.588"></script>
-<script src="js/soundrop.js?v=3.5.588"></script>
-<script src="js/yt-auth.js?v=3.5.588"></script>
-<script src="js/yt-playlists.js?v=3.5.588"></script>
-<script src="js/ui.js?v=3.5.588"></script>
-<script src="js/app.js?v=3.5.588"></script>
-<script src="js/bg.js?v=3.5.588"></script>
+<script src="js/config.js?v=3.5.589"></script>
+<script src="js/auth.js?v=3.5.589"></script>
+<script src="js/drive.js?v=3.5.589"></script>
+<script src="js/db.js?v=3.5.589"></script>
+<script src="js/sync.js?v=3.5.589"></script>
+<script src="js/player.js?v=3.5.589"></script>
+<script src="js/meta.js?v=3.5.589"></script>
+<script src="js/lastfm.js?v=3.5.589"></script>
+<script src="js/audd.js?v=3.5.589"></script>
+<script src="js/musicbrainz.js?v=3.5.589"></script>
+<script src="js/discogs.js?v=3.5.589"></script>
+<script src="js/lyrics.js?v=3.5.589"></script>
+<script src="js/soundrop.js?v=3.5.589"></script>
+<script src="js/yt-auth.js?v=3.5.589"></script>
+<script src="js/yt-playlists.js?v=3.5.589"></script>
+<script src="js/ui.js?v=3.5.589"></script>
+<script src="js/app.js?v=3.5.589"></script>
+<script src="js/bg.js?v=3.5.589"></script>
 
 <!-- Inline: additional bindings that need the DOM -->
 <script>

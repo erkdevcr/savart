@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.588';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.587 — SD→Drive: la metadata del modal (título/artista/álbum/año + cover de-letterboxed) se escribe DIRECTO en el ID3 del MP3 antes de subirlo (Meta.writeId3, escritor ID3v2.3 propio, UTF-16); el cache local guarda el blob tagueado (idéntico al de Drive); fail-open si el tagging falla
+const APP_VERSION  = '3.5.589';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.589 — YT cuenta vinculada: card de Settings muestra cuenta vinculada en todos los dispositivos; "Conectar otra cuenta" con modal de advertencia; forced-logout cross-device vía savart_yt.json (sync); archivos descargados se conservan
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

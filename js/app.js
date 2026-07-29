@@ -14163,15 +14163,89 @@ const App = (() => {
           avatarEl.src = user.picture || '';
           avatarEl.style.display = user.picture ? '' : 'none';
         }
+      } else {
+        // Disconnected: show linked-elsewhere section when another device has a linked account
+        DB.getState('yt_sync').then(d => {
+          const elsewhereDiv = document.getElementById('yt-linked-elsewhere');
+          const normalRow    = document.getElementById('yt-not-connected-row');
+          const msgEl        = document.getElementById('yt-linked-elsewhere-msg');
+          const linked       = d?.accountEmail || '';
+          if (elsewhereDiv) elsewhereDiv.style.display = linked ? '' : 'none';
+          if (normalRow)    normalRow.style.display    = linked ? 'none' : '';
+          if (msgEl && linked) msgEl.textContent = UI.t('yt_linked_elsewhere').replace('%s', linked);
+        }).catch(() => {});
       }
     }
 
     _updateYTUI();
+    // Re-render when sync delivers YT account changes from another device
+    document.addEventListener('savart:yt-sync-updated', _updateYTUI, { passive: true });
 
-    document.getElementById('btn-yt-login')?.addEventListener('click', async () => {
+    // Forced logout dispatched by sync._applyRemote when another device requested account change
+    document.addEventListener('savart:yt-forced-logout', async (e) => {
+      if (typeof YTPlaylists !== 'undefined') YTPlaylists.stop();
+      if (typeof YTAuth !== 'undefined' && YTAuth.isAuthenticated()) YTAuth.logout();
+      try {
+        const allPls = await DB.getPlaylists().catch(() => []);
+        for (const pl of allPls) {
+          if (pl.isYouTube) await DB.deletePlaylist(pl.id).catch(() => {});
+        }
+        Sync.push('playlists');
+        if (UI.getCurrentView() === 'library') _setLibTab(_currentLibTab || 'playlists');
+      } catch (_) {}
+      // Mark handled so next poll doesn't re-fire this event
+      const ytSync = (await DB.getState('yt_sync').catch(() => null)) || {};
+      await DB.setState('yt_sync', { ...ytSync, forcedLogoutHandledAt: e.detail?.at || Date.now() });
+      _updateYTUI();
+      UI.showToast(UI.t('yt_forced_logout_toast'), 'info');
+    }, { passive: true });
+
+    // Helper: show change-account warning modal, then call onConfirm if accepted
+    function _showYTChangeWarning(linkedEmail, onConfirm) {
+      const modal     = document.getElementById('eq-del-modal');
+      const titleEl   = document.getElementById('eq-del-title');
+      const msgEl     = document.getElementById('eq-del-msg');
+      const confirmEl = document.getElementById('btn-eq-del-confirm');
+      const cancelEl  = document.getElementById('btn-eq-del-cancel');
+      if (!modal) { onConfirm(); return; }
+
+      if (titleEl) titleEl.textContent = UI.t('yt_change_title');
+      if (msgEl) {
+        msgEl.style.whiteSpace = 'pre-line';
+        msgEl.textContent = (linkedEmail
+          ? UI.t('yt_linked_here').replace('%s', linkedEmail) + '\n\n'
+          : '') + UI.t('yt_change_msg');
+      }
+      if (confirmEl) {
+        confirmEl.textContent      = UI.t('yt_change_confirm');
+        confirmEl.style.background = 'var(--accent)';
+        confirmEl.style.border     = 'none';
+      }
+      if (cancelEl) cancelEl.textContent = UI.t('cancel') || 'Cancelar';
+      modal.style.display = 'flex';
+
+      const close = () => { modal.style.display = 'none'; };
+      document.getElementById('btn-eq-del-confirm')?.addEventListener('click', () => { close(); onConfirm(); }, { once: true });
+      document.getElementById('btn-eq-del-cancel')?.addEventListener('click',  close, { once: true });
+      document.getElementById('btn-eq-del-close')?.addEventListener('click',   close, { once: true });
+      document.getElementById('eq-del-modal-backdrop')?.addEventListener('click', close, { once: true });
+    }
+
+    // Helper: do the YT login and store account info in sync
+    async function _doYTLogin() {
       if (typeof YTAuth === 'undefined') return;
       try {
         await YTAuth.login();
+        const user = YTAuth.getUser?.() || {};
+        const now  = Date.now();
+        await DB.setState('yt_sync', {
+          accountEmail:          user.email || '',
+          accountName:           user.name  || '',
+          updatedAt:             now,
+          forcedLogout:          null,
+          forcedLogoutHandledAt: now,
+        });
+        Sync.push('yt');
         if (typeof YTPlaylists !== 'undefined') YTPlaylists.start();
         _updateYTUI();
         UI.showToast(UI.t('settings_yt_connect') + ' ✓', 'success');
@@ -14181,6 +14255,67 @@ const App = (() => {
           UI.showToast('Error al conectar YouTube', 'error');
         }
       }
+    }
+
+    // Helper: clear local YT playlists + write forced-logout to sync + local logout
+    async function _clearYTDataAndRequestLogout() {
+      const flAt = Date.now();
+      try {
+        const allPls = await DB.getPlaylists().catch(() => []);
+        for (const pl of allPls) {
+          if (pl.isYouTube) await DB.deletePlaylist(pl.id).catch(() => {});
+        }
+        Sync.push('playlists');
+        if (UI.getCurrentView() === 'library') _setLibTab(_currentLibTab || 'playlists');
+      } catch (_) {}
+      if (typeof YTPlaylists !== 'undefined') YTPlaylists.stop();
+      if (typeof YTAuth !== 'undefined' && YTAuth.isAuthenticated()) YTAuth.logout();
+      // Write forced-logout; mark as handled on THIS device to avoid self-trigger on next poll
+      await DB.setState('yt_sync', {
+        accountEmail:          null,
+        accountName:           null,
+        updatedAt:             flAt,
+        forcedLogout:          { at: flAt, requestedBy: 'this' },
+        forcedLogoutHandledAt: flAt,
+      });
+      Sync.push('yt');
+      _updateYTUI();
+    }
+
+    // btn-yt-login (inside #yt-linked-elsewhere — another device has a linked account)
+    document.getElementById('btn-yt-login')?.addEventListener('click', async () => {
+      const d = (await DB.getState('yt_sync').catch(() => null)) || {};
+      if (d.accountEmail) {
+        _showYTChangeWarning(d.accountEmail, async () => {
+          await _clearYTDataAndRequestLogout();
+          await _doYTLogin();
+        });
+      } else {
+        await _doYTLogin();
+      }
+    });
+
+    // btn-yt-login-plain (normal not-connected row)
+    document.getElementById('btn-yt-login-plain')?.addEventListener('click', async () => {
+      const d = (await DB.getState('yt_sync').catch(() => null)) || {};
+      if (d.accountEmail) {
+        _showYTChangeWarning(d.accountEmail, async () => {
+          await _clearYTDataAndRequestLogout();
+          await _doYTLogin();
+        });
+      } else {
+        await _doYTLogin();
+      }
+    });
+
+    // btn-yt-change (connected state — switch to another account)
+    document.getElementById('btn-yt-change')?.addEventListener('click', async () => {
+      const user  = (typeof YTAuth !== 'undefined' && YTAuth.getUser?.()) || {};
+      const email = user.email || (await DB.getState('yt_sync').catch(() => null))?.accountEmail || '';
+      _showYTChangeWarning(email, async () => {
+        await _clearYTDataAndRequestLogout();
+        await _doYTLogin();
+      });
     });
 
     document.getElementById('btn-yt-logout')?.addEventListener('click', () => {
@@ -14192,7 +14327,6 @@ const App = (() => {
       const cancelEl  = document.getElementById('btn-eq-del-cancel');
 
       if (!modal) {
-        // Fallback: logout and keep playlists
         if (typeof YTPlaylists !== 'undefined') YTPlaylists.stop();
         YTAuth.logout();
         _updateYTUI();
@@ -14200,7 +14334,7 @@ const App = (() => {
       }
 
       if (titleEl)   titleEl.textContent  = UI.t('settings_yt_logout_keep');
-      if (msgEl)     msgEl.textContent    = '';
+      if (msgEl)   { msgEl.textContent = ''; msgEl.style.whiteSpace = ''; }
       if (confirmEl) {
         confirmEl.textContent        = UI.t('settings_yt_delete');
         confirmEl.style.background   = 'var(--error, #e53935)';
@@ -14215,6 +14349,11 @@ const App = (() => {
         _closeModal();
         if (typeof YTPlaylists !== 'undefined') YTPlaylists.stop();
         YTAuth.logout();
+        // Clear yt_sync account info so other devices stop showing it as linked
+        DB.getState('yt_sync').then(d => {
+          DB.setState('yt_sync', { ...d, accountEmail: null, accountName: null, updatedAt: Date.now() });
+          Sync.push('yt');
+        }).catch(() => {});
         _updateYTUI();
       };
 
@@ -14230,6 +14369,9 @@ const App = (() => {
         } catch (_) {}
         if (typeof YTPlaylists !== 'undefined') YTPlaylists.stop();
         YTAuth.logout();
+        const d = (await DB.getState('yt_sync').catch(() => null)) || {};
+        await DB.setState('yt_sync', { ...d, accountEmail: null, accountName: null, updatedAt: Date.now() });
+        Sync.push('yt');
         _updateYTUI();
       };
 

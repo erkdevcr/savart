@@ -47,6 +47,7 @@ const Sync = (() => {
     collections: 'savart_collections.json', // collection overrides: name, coverUrl, forceType
     hot:         'savart_hot.json',   // delta: only the most recent rescan batch (~5–50 songs)
     home:        'savart_home.json',  // home snapshot — read at boot via readHome(), not merged in init()
+    yt:          'savart_yt.json',    // YT account info + forced-logout flag (cross-device)
   };
 
   // Types that should not be pushed or merged during init().
@@ -980,6 +981,39 @@ const Sync = (() => {
         }
         break;
       }
+
+      case 'yt': {
+        // YT account info + forced-logout cross-device signal.
+        if (!data || typeof data !== 'object') break;
+        const current  = (await DB.getState('yt_sync')) || {};
+        const remoteTs = data.updatedAt || 0;
+        const localTs  = current.updatedAt || 0;
+
+        // Forced-logout: dispatch event if this is a new request we haven't handled yet.
+        const remoteFL = data.forcedLogout;
+        if (remoteFL?.at && remoteFL.at > (current.forcedLogoutHandledAt || 0)) {
+          if (typeof document !== 'undefined') {
+            document.dispatchEvent(new CustomEvent('savart:yt-forced-logout', {
+              detail: { at: remoteFL.at, requestedBy: remoteFL.requestedBy }
+            }));
+          }
+        }
+
+        // LWW: only overwrite account info if remote is newer.
+        if (remoteTs > localTs) {
+          await DB.setState('yt_sync', {
+            ...current,
+            accountEmail:  data.accountEmail  || null,
+            accountName:   data.accountName   || null,
+            updatedAt:     data.updatedAt,
+            forcedLogout:  data.forcedLogout  || null,
+          });
+          if (typeof document !== 'undefined') {
+            document.dispatchEvent(new CustomEvent('savart:yt-sync-updated'));
+          }
+        }
+        break;
+      }
     }
   }
 
@@ -1405,6 +1439,19 @@ const Sync = (() => {
     console.log('[Sync] Pushed home snapshot');
   }
 
+  async function _pushYT() {
+    const d = (await DB.getState('yt_sync')) || {};
+    if (!d.accountEmail && !d.forcedLogout) return false;
+    const payload = {
+      accountEmail:  d.accountEmail  || null,
+      accountName:   d.accountName   || null,
+      updatedAt:     d.updatedAt     || Date.now(),
+      forcedLogout:  d.forcedLogout  || null,
+    };
+    if (!(await _writeIfChanged('yt', FILENAMES.yt, payload))) return false;
+    console.log('[Sync] Pushed YT account info');
+  }
+
   const _pushFns = {
     favorites:   _pushFavorites,
     playlists:   _pushPlaylists,
@@ -1417,6 +1464,7 @@ const Sync = (() => {
     collections: _pushCollections,
     hot:         () => Promise.resolve(), // no-op — hot is pushed only via pushHot(), not init
     home:        _pushHome,
+    yt:          _pushYT,
   };
 
   /* ── Live polling ────────────────────────────────────────── */
