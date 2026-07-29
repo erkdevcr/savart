@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.579';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.579 — chips SD/SD-lock/check en ítems de playlist
+const APP_VERSION  = '3.5.580';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.580 — fix chip SD-lock: border-radius directo en segmentos para evitar rect blanco
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
