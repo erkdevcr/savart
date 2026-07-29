@@ -28,7 +28,7 @@ const Soundrop = (() => {
       q: term,
       type: 'video',
       videoCategoryId: '10', // Music
-      maxResults: '20',
+      maxResults: '50',
       key: YT_KEY,
     });
     const searchRes = await fetch(`${YT_SEARCH}?${searchParams}`);
