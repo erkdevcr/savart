@@ -16880,6 +16880,7 @@ const App = (() => {
     _loadAlbums,
     _setLibTab,
     _libGoBack,
+    _libClearLastPlaylistDetail: () => { _libPlLastDetailPl = null; },
     _onNewPlaylist,
     onArtistClick,
     onAlbumClick,

@@ -3683,6 +3683,8 @@ const UI = (() => {
         document.querySelectorAll('#lib-pl-list-pane .lib-pl-item').forEach(el => el.classList.remove('active'));
         // Restore list scroll position
         if (_libDetailEl) requestAnimationFrame(() => { _libDetailEl.scrollTop = _savedListScroll; });
+        // Clear last-detail so returning from another tab shows the list, not the detail
+        if (typeof App !== 'undefined') App._libClearLastPlaylistDetail?.();
       } else {
         if (typeof App !== 'undefined') App._libGoBack?.('playlists');
       }
