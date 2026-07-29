@@ -7033,6 +7033,7 @@ const App = (() => {
   let _libInDetail    = false;       // true while showing an artist/album drill-down
   let _libDetailRestoreFn = null;    // restores detail view when user nav Home → Library
   let _libScrollBeforeDetail = 0;    // .lib-detail scrollTop saved before drill-down
+  let _libPlListScroll = 0;          // #lib-pl-list-pane scrollTop — persists across tab switches
   // [STALE-FIX] true = library render is behind IDB (sync completed while user wasn't on Library).
   // Set true on boot and whenever metadata sync finishes off-tab. Cleared on next Library visit.
   // To revert: remove this line + the 3 _libStale references below.
@@ -7105,6 +7106,11 @@ const App = (() => {
   }
 
   function _setLibTab(tab, skipLoad = false) {
+    // Save playlist left-pane scroll before leaving the tab
+    if (_currentLibTab === 'playlists' && tab !== 'playlists') {
+      const lp = document.getElementById('lib-pl-list-pane');
+      if (lp) _libPlListScroll = lp.scrollTop;
+    }
     _currentLibTab = tab;
     _libInDetail        = false; // leaving any drill-down view
     _libDetailRestoreFn = null;  // explicit tab switch — no restore needed
@@ -7229,9 +7235,11 @@ const App = (() => {
         }
         return { ...pl, songCount: songIds.length, coverUrls };
       }));
-      // If a playlist detail is already open (e.g. navigated from a pinned card),
-      // don't overwrite the detail pane — just update the count badge.
-      if (_libInDetail && _currentLibTab === 'playlists') {
+      // If a playlist detail is already open AND the list pane already exists,
+      // don't overwrite it — just update count and covers.
+      // (If the pane doesn't exist yet, e.g. first load from home card, fall through
+      // to renderPlaylists so lib-pl-list-pane gets created before the detail opens.)
+      if (_libInDetail && _currentLibTab === 'playlists' && document.getElementById('lib-pl-list-pane')) {
         _setLibTabCount('playlists', enriched.length);
         _prefetchPlaylistCovers(enriched).catch(() => {});
         return;
@@ -7239,6 +7247,13 @@ const App = (() => {
       UI.renderPlaylists(enriched);
       _setLibTabCount('playlists', enriched.length);
       _domFilterLibItems();
+      // Restore left-pane scroll (persisted across tab switches)
+      if (_libPlListScroll) {
+        requestAnimationFrame(() => {
+          const lp = document.getElementById('lib-pl-list-pane');
+          if (lp) lp.scrollTop = _libPlListScroll;
+        });
+      }
       // Background: resolve covers for playlists that still have none
       // (happens when songs were never played — no coverBlob in DB yet)
       _prefetchPlaylistCovers(enriched).catch(() => {});
@@ -13287,6 +13302,11 @@ const App = (() => {
       )).filter(Boolean);
       UI.renderPlaylistDetail(songs, pl.name, fullPl || pl);
       UI.setActiveSongRow(Player.getCurrentTrack()?.id ?? null);
+      // Scroll left pane so the active playlist item is visible
+      requestAnimationFrame(() => {
+        const active = document.querySelector('#lib-pl-list-pane .lib-pl-item.active');
+        active?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      });
       // Single-pane mode (mobile): detail takes over the content area — mark as
       // drill-down so nav Home → Library restores this playlist view.
       if (!document.getElementById('lib-pl-two-col')) {
