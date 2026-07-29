@@ -2213,8 +2213,13 @@ const UI = (() => {
     return `<span class="sd-thumb-chip sd-thumb-chip--locked"><span class="sd-chip-txt">SD</span><span class="sd-chip-lock-seg">${_sdChipLockSvg()}</span></span>`;
   }
 
+  function _sdChipCheckHtml() {
+    return `<span class="sd-thumb-chip sd-thumb-chip--saved" title="Ya en tu Drive"><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>`;
+  }
+
   function _sdChipHtml(item) {
     if (!item?.isSoundrop) return '';
+    if (item.sdCached) return _sdChipCheckHtml();
     return item.embedBlocked ? _sdChipLockedHtml() : `<span class="sd-thumb-chip">SD</span>`;
   }
 

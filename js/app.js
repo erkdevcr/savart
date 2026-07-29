@@ -6733,6 +6733,14 @@ const App = (() => {
           const m = await DB.getMeta(t.id).catch(() => null);
           if (m?.embedBlocked) t.embedBlocked = true;
         }));
+        // Marcar pistas ya descargadas: (1) guardadas en Drive (soundropSaved + videoId)
+        // o (2) cacheadas localmente vía fallback de reproducción (blob bajo sd_<videoId>).
+        const _sdAllMeta = await DB.getAllMetaLight().catch(() => []);
+        const _sdSavedVids = new Set(_sdAllMeta.filter(m => m.soundropSaved && m.videoId).map(m => m.videoId));
+        await Promise.all(sdTracks.map(async t => {
+          if (_sdSavedVids.has(t.videoId)) { t.sdCached = true; return; }
+          if (await DB.isCached(t.id).catch(() => false)) t.sdCached = true;
+        }));
         sdTracks.forEach(t => _cacheItem(t));
         _lastSearchFiles = sdTracks;
         _cachedSdResults = { soundrop: sdTracks };
@@ -15250,6 +15258,7 @@ const App = (() => {
           thumbnailUrl: track.thumbnailUrl || undefined,
           manualAt:     Date.now(),
           soundropSaved: true,  // marks this as a Soundrop-saved file eligible for auto-reorganize
+          videoId:      track.videoId || undefined, // reverse-lookup: detect duplicates in SD search results
         });
 
         // Write folder hierarchy to DB so _isInSoundropFolder can walk it locally

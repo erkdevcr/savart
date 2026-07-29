@@ -1842,6 +1842,15 @@ img { display: block; }
   color: #1a1a1a;          /* candado oscuro sobre blanco */
 }
 
+/* Chip SD — ya descargado (Drive o caché local): naranja con checkmark blanco */
+.sd-thumb-chip--saved {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 3px;
+  line-height: 0;
+}
+
 /* Progreso de conversión/guardado en el modal SD — naranja (color de marca SD) */
 .sd-save-status {
   margin: 10px 2px 0;
