@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.567';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.567 — yt-auth.js: _withScopePatch monkey-patches window.open para forzar solo YT_SCOPE antes del popup
+const APP_VERSION  = '3.5.568';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.568 — lib-search-wrap z-index 2→10 (fix chip YT encima del search bar al hacer scroll)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

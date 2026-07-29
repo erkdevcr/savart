@@ -2296,7 +2296,7 @@ img { display: block; }
 .lib-search-wrap {
   position: sticky;
   top: 0;
-  z-index: 2;
+  z-index: 10;
   background: var(--bg-base);
   display: flex;
   align-items: center;
