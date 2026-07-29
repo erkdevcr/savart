@@ -13241,8 +13241,14 @@ const App = (() => {
           if (!m) return null;
           // Resolve cover via the same chain used by favorites: DB coverBlob → Meta cache
           const thumbnailUrl = await _resolveCoverUrl(id, m.thumbnailUrl);
+          // Safety net for SD tracks: always reconstruct isSoundrop + videoId from the
+          // id prefix if missing in DB (same logic as _loadHomeData).  Without this,
+          // songs whose DB record lacks these fields play as Drive tracks and fail.
+          const isSd    = m.isSoundrop || (id || '').startsWith('sd_');
+          const videoId = m.videoId    || (isSd ? (id || '').slice(3) : null);
           // _playlistId lets the context menu offer "Remove from playlist"
-          return { id, ...m, thumbnailUrl, _playlistId: (fullPl || pl).id };
+          return { id, ...m, thumbnailUrl, _playlistId: (fullPl || pl).id,
+                   isSoundrop: isSd || false, videoId: videoId || null };
         })
       )).filter(Boolean);
       UI.renderPlaylistDetail(songs, pl.name, fullPl || pl);

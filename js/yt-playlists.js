@@ -100,19 +100,19 @@ const YTPlaylists = (() => {
         const sdId = `sd_${videoId}`;
         songIds.push(sdId);
 
-        // Store minimal metadata so the player can display title + cover.
-        // Don't overwrite richer metadata that may already exist (e.g. from a search).
+        // Always ensure isSoundrop + videoId are in DB — these are critical for
+        // playback.  Only skip displayName/artist/thumb if richer metadata already
+        // exists (e.g. from a Soundrop search or a previous play).
         const existingMeta = await DB.getMeta(sdId).catch(() => null);
-        if (!existingMeta?.displayName) {
-          const thumb = _bestThumb(item.snippet?.thumbnails);
-          await DB.setMeta(sdId, {
-            displayName:  title,
-            artist:       item.snippet?.videoOwnerChannelTitle || '',
-            thumbnailUrl: thumb,
-            isSoundrop:   true,
-            videoId,
-          }).catch(() => {});
-        }
+        const extraFields  = existingMeta?.displayName
+          ? {}   // keep richer existing display data
+          : { displayName: title, artist: item.snippet?.videoOwnerChannelTitle || '',
+              thumbnailUrl: _bestThumb(item.snippet?.thumbnails) };
+        await DB.setMeta(sdId, {
+          isSoundrop: true,
+          videoId,
+          ...extraFields,
+        }).catch(() => {});
       }
       pageToken = data.nextPageToken;
     } while (pageToken);
