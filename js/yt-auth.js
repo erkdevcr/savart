@@ -69,7 +69,7 @@ const YTAuth = (() => {
         callback: async (resp) => {
           if (resp.error) { reject(new Error(resp.error)); return; }
           _saveToken(resp);
-          _fetchUserInfo(resp.access_token).catch(() => {});
+          await _fetchUserInfo(resp.access_token).catch(() => {});
           if (_onLogin) _onLogin();
           resolve();
         },

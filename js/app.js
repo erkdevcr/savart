@@ -14084,6 +14084,8 @@ const App = (() => {
       // EQ is now a floating overlay — no longer built/reset on settings nav.
       // _loadCustomPresets keeps the saved-preset list up to date if new ones were added.
       _loadCustomPresets();
+      // Refresh the YT account card every time Settings is opened
+      document.dispatchEvent(new CustomEvent('savart:yt-sync-updated'));
     }
     if (viewId === 'browse') {
       const searchInp = document.getElementById('search-input');

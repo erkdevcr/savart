@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.590';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.590 — YT Settings: quita descripción del card; estado conectado muestra "Tu app Savart está vinculada a la cuenta de YouTube de xxx"; botón "Conectar otra cuenta" sin etiqueta de texto
+const APP_VERSION  = '3.5.591';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.591 — YT fix: await _fetchUserInfo antes de resolver login (getUser() ya tiene email); _updateYTUI se dispara al abrir Settings vía savart:yt-sync-updated
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
