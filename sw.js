@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.564';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.564 — yt-auth.js: initTokenClient en vez de initCodeClient (fix "scopes cannot be requested together")
+const APP_VERSION  = '3.5.565';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.565 — yt-auth.js: include_granted_scopes:false en ambos initTokenClient (fix scope merging con drive.file)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

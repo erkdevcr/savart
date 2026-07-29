@@ -64,8 +64,9 @@ const YTAuth = (() => {
     if (typeof google === 'undefined') return Promise.reject(new Error('GIS not loaded'));
     return new Promise((resolve, reject) => {
       const client = google.accounts.oauth2.initTokenClient({
-        client_id:  CONFIG.CLIENT_ID,
-        scope:      YT_SCOPE,
+        client_id:              CONFIG.CLIENT_ID,
+        scope:                  YT_SCOPE,
+        include_granted_scopes: false,  // ← NO mezclar con drive.file ya autorizado
         callback:   async (resp) => {
           if (resp.error) { reject(new Error(resp.error)); return; }
           _saveToken(resp);
@@ -97,8 +98,9 @@ const YTAuth = (() => {
     if (typeof google === 'undefined') return Promise.reject(new Error('GIS not loaded'));
     return new Promise((resolve, reject) => {
       const client = google.accounts.oauth2.initTokenClient({
-        client_id:  CONFIG.CLIENT_ID,
-        scope:      YT_SCOPE,
+        client_id:              CONFIG.CLIENT_ID,
+        scope:                  YT_SCOPE,
+        include_granted_scopes: false,  // ← NO mezclar con drive.file
         callback:   (resp) => {
           if (resp.error) {
             // Acceso revocado o error → logout silencioso
