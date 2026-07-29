@@ -1,21 +1,23 @@
 /* ============================================================
    Savart — YouTube Auth  (implicit / token flow)
 
-   Google no permite pedir youtube.readonly + drive.file en el
-   mismo authorization-code request (Error 400: invalid_request).
-   Solución: usar initTokenClient (implicit flow) — flujo distinto
-   que no mezcla scopes con el cliente de Drive.
+   Problema: GIS añade drive.file al scope de YouTube (include_
+   granted_scopes:true por defecto) y Google rechaza la combinación
+   con Error 400. include_granted_scopes:false en la config de GIS
+   no es suficiente — GIS construye la URL del popup con los scopes
+   ya fusionados antes de abrir la ventana.
 
-   Trade-off: no hay refresh token del lado del servidor.
-   La renovación se hace con prompt:'' (silenciosa si el usuario
-   ya dio consent). Si el usuario revoca el acceso, se hace logout.
+   Solución: _withScopePatch() parcha window.open temporalmente.
+   Cuando GIS abre el popup OAuth, la URL ya lleva ambos scopes;
+   el patch la reescribe con SOLO YT_SCOPE antes de que el popup
+   llegue a Google. Sin cambios en Google Cloud Console.
    ============================================================ */
 
 const YTAuth = (() => {
 
   const YT_SCOPE  = 'https://www.googleapis.com/auth/youtube.readonly';
   const LS_ACCESS = 'savart_yt_access_token';
-  const LS_MARKER = 'savart_yt_authed';   // '1' cuando autenticado; reemplaza LS_REFRESH
+  const LS_MARKER = 'savart_yt_authed';   // '1' cuando autenticado
   const LS_EXPIRY = 'savart_yt_expiry';
   const LS_USER   = 'savart_yt_user';     // JSON { name, email, picture }
 
@@ -37,7 +39,6 @@ const YTAuth = (() => {
 
   /* ── Public API ───────────────────────────────────────── */
 
-  /** True si el usuario conectó su cuenta de YT en esta sesión o en una anterior. */
   function isAuthenticated() {
     return localStorage.getItem(LS_MARKER) === '1';
   }
@@ -47,10 +48,7 @@ const YTAuth = (() => {
     catch (_) { return null; }
   }
 
-  /**
-   * Devuelve un access token válido.
-   * Si expiró, intenta renovación silenciosa (sin popup).
-   */
+  /** Devuelve un access token válido; renueva silenciosamente si expiró. */
   async function getToken() {
     if (_accessToken && Date.now() < _expiresAt - 60_000) return _accessToken;
     return _refreshSilent();
@@ -58,16 +56,17 @@ const YTAuth = (() => {
 
   /**
    * Abre el selector de cuenta de Google (popup) para autorizar YouTube.
-   * Usa initTokenClient — flujo separado del de Drive, no mezcla scopes.
+   * Usa _withScopePatch para que el popup solo lleve youtube.readonly.
    */
   function login() {
     if (typeof google === 'undefined') return Promise.reject(new Error('GIS not loaded'));
+    const clientId = CONFIG?.YT_CLIENT_ID || CONFIG.CLIENT_ID;
     return new Promise((resolve, reject) => {
       const client = google.accounts.oauth2.initTokenClient({
-        client_id:              CONFIG.CLIENT_ID,
+        client_id:              clientId,
         scope:                  YT_SCOPE,
-        include_granted_scopes: false,  // ← NO mezclar con drive.file ya autorizado
-        callback:   async (resp) => {
+        include_granted_scopes: false,
+        callback: async (resp) => {
           if (resp.error) { reject(new Error(resp.error)); return; }
           _saveToken(resp);
           _fetchUserInfo(resp.access_token).catch(() => {});
@@ -76,8 +75,7 @@ const YTAuth = (() => {
         },
         error_callback: (e) => reject(new Error(e?.type || 'auth_error')),
       });
-      // prompt:'select_account' fuerza la pantalla de elección de cuenta
-      client.requestAccessToken({ prompt: 'select_account' });
+      _withScopePatch(() => client.requestAccessToken({ prompt: 'select_account' }));
     });
   }
 
@@ -87,23 +85,64 @@ const YTAuth = (() => {
     if (_onLogout) _onLogout();
   }
 
+  /* ── Scope patch ──────────────────────────────────────── */
+
+  /**
+   * Parcha window.open UNA sola vez antes de llamar a action().
+   * Cuando GIS abre el popup OAuth, reescribe el scope en la URL
+   * para que solo lleve YT_SCOPE (elimina drive.file y fuerza
+   * include_granted_scopes=false antes de que llegue a Google).
+   */
+  function _withScopePatch(action) {
+    const origOpen = window.open.bind(window);
+    let restored = false;
+
+    const restore = () => {
+      if (!restored) { restored = true; window.open = origOpen; }
+    };
+    // Safety net: restaura aunque GIS nunca llame a window.open
+    const safety = setTimeout(restore, 8000);
+
+    window.open = function patchedOpen(url, name, features) {
+      restore();            // restaurar antes de abrir (re-entrant safe)
+      clearTimeout(safety);
+      if (typeof url === 'string' && url.includes('accounts.google.com/o/oauth2')) {
+        try {
+          const u = new URL(url);
+          u.searchParams.set('scope', YT_SCOPE);
+          u.searchParams.set('include_granted_scopes', 'false');
+          return origOpen(u.toString(), name, features);
+        } catch (_) { /* URL parse error — abre sin modificar */ }
+      }
+      return origOpen(url, name, features);
+    };
+
+    try {
+      action();
+    } catch (e) {
+      restore();
+      clearTimeout(safety);
+      throw e;
+    }
+  }
+
   /* ── Internal ─────────────────────────────────────────── */
 
   /**
-   * Renovación silenciosa: prompt:'' no abre popup si el usuario ya dio consent.
-   * Si falla (revocó acceso, sesión expirada, etc.) → logout silencioso.
+   * Renovación silenciosa: prompt:'' no abre selector de cuentas
+   * si el usuario ya dio consent. También usa el scope patch.
    */
   function _refreshSilent() {
     if (!isAuthenticated()) return Promise.reject(new Error('Not authenticated'));
     if (typeof google === 'undefined') return Promise.reject(new Error('GIS not loaded'));
+    const clientId = CONFIG?.YT_CLIENT_ID || CONFIG.CLIENT_ID;
     return new Promise((resolve, reject) => {
       const client = google.accounts.oauth2.initTokenClient({
-        client_id:              CONFIG.CLIENT_ID,
+        client_id:              clientId,
         scope:                  YT_SCOPE,
-        include_granted_scopes: false,  // ← NO mezclar con drive.file
-        callback:   (resp) => {
+        include_granted_scopes: false,
+        callback: (resp) => {
           if (resp.error) {
-            // Acceso revocado o error → logout silencioso
             _clearTokens();
             if (_onLogout) _onLogout();
             reject(new Error(resp.error));
@@ -118,7 +157,7 @@ const YTAuth = (() => {
           reject(new Error(e?.type || 'refresh_error'));
         },
       });
-      client.requestAccessToken({ prompt: '' }); // silencioso
+      _withScopePatch(() => client.requestAccessToken({ prompt: '' }));
     });
   }
 
@@ -159,8 +198,7 @@ const YTAuth = (() => {
     localStorage.removeItem(LS_MARKER);
     localStorage.removeItem(LS_EXPIRY);
     localStorage.removeItem(LS_USER);
-    // Compat: limpiar también la clave vieja si existía
-    localStorage.removeItem('savart_yt_refresh_token');
+    localStorage.removeItem('savart_yt_refresh_token'); // compat versiones anteriores
   }
 
   return { init, isAuthenticated, getToken, getUser, login, logout };

@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.565';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.565 — yt-auth.js: include_granted_scopes:false en ambos initTokenClient (fix scope merging con drive.file)
+const APP_VERSION  = '3.5.567';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.567 — yt-auth.js: _withScopePatch monkey-patches window.open para forzar solo YT_SCOPE antes del popup
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

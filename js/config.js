@@ -12,6 +12,12 @@ const CONFIG = {
   // Get this from: console.cloud.google.com → APIs & Services → Credentials
   CLIENT_ID: '409671846168-u60nj8ib48se183sarosn0sicu8g4vvb.apps.googleusercontent.com',
 
+  // Client ID separado para YouTube (no puede compartir cliente con Drive — Google rechaza
+  // la combinación youtube.readonly + drive.file en el mismo OAuth client/sesión).
+  // Crear en: console.cloud.google.com → Credentials → Create OAuth 2.0 Client ID (Web)
+  // con los mismos Authorized JavaScript origins. Dejar vacío deshabilita la feature YT.
+  YT_CLIENT_ID: '',
+
   // Scopes: email+profile = user info | drive.readonly = read music | drive.appdata = sync
   // drive.file = write appProperties to files opened by the app (cross-device metadata sync)
   SCOPES: 'email profile https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/drive.file',
