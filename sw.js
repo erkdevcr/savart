@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.575';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.575 — sticky header playlists: mobile espeja desktop para que #lib-pl-detail-pane sea el scroll container
+const APP_VERSION  = '3.5.576';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.576 — elimina botón Duplicar del lib-detail-header de playlists YT
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

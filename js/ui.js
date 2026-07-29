@@ -3660,17 +3660,6 @@ const UI = (() => {
       header.appendChild(playBtn);
     }
 
-    // YT-only: "Duplicar" button to create a local editable copy
-    if (isYT && pl) {
-      const dupBtn = document.createElement('button');
-      dupBtn.className = 'pl-detail-play-btn';
-      dupBtn.style.cssText = 'background:transparent;border:1px solid var(--accent);color:var(--accent);margin-left:6px';
-      dupBtn.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg> <span>${t('ctx_pl_duplicate')}</span>`;
-      dupBtn.addEventListener('click', () => {
-        if (typeof App !== 'undefined') App.onDuplicatePlaylist?.(pl);
-      });
-      header.appendChild(dupBtn);
-    }
 
     stickyWrap.appendChild(header);
     container.appendChild(stickyWrap);
