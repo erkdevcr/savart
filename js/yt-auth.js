@@ -1,25 +1,29 @@
 /* ============================================================
-   Savart — YouTube Auth
-   OAuth separado de Drive: el usuario puede conectar una cuenta
-   de Google distinta solo para YouTube.
-   Reutiliza los endpoints /exchange y /refresh del worker de Drive
-   (mismo client_id / client_secret, distinto scope).
+   Savart — YouTube Auth  (implicit / token flow)
+
+   Google no permite pedir youtube.readonly + drive.file en el
+   mismo authorization-code request (Error 400: invalid_request).
+   Solución: usar initTokenClient (implicit flow) — flujo distinto
+   que no mezcla scopes con el cliente de Drive.
+
+   Trade-off: no hay refresh token del lado del servidor.
+   La renovación se hace con prompt:'' (silenciosa si el usuario
+   ya dio consent). Si el usuario revoca el acceso, se hace logout.
    ============================================================ */
 
 const YTAuth = (() => {
 
-  const YT_SCOPE   = 'https://www.googleapis.com/auth/youtube.readonly';
-  const LS_ACCESS  = 'savart_yt_access_token';
-  const LS_REFRESH = 'savart_yt_refresh_token';
-  const LS_EXPIRY  = 'savart_yt_expiry';
-  const LS_USER    = 'savart_yt_user';   // JSON { name, email, picture }
+  const YT_SCOPE  = 'https://www.googleapis.com/auth/youtube.readonly';
+  const LS_ACCESS = 'savart_yt_access_token';
+  const LS_MARKER = 'savart_yt_authed';   // '1' cuando autenticado; reemplaza LS_REFRESH
+  const LS_EXPIRY = 'savart_yt_expiry';
+  const LS_USER   = 'savart_yt_user';     // JSON { name, email, picture }
 
-  let _accessToken = null;
-  let _expiresAt   = 0;
-  let _renewTimer  = null;
-  let _codeClient  = null;
-  let _onLogin     = null;
-  let _onLogout    = null;
+  let _accessToken  = null;
+  let _expiresAt    = 0;
+  let _renewTimer   = null;
+  let _onLogin      = null;
+  let _onLogout     = null;
 
   /* ── Init ─────────────────────────────────────────────── */
 
@@ -33,8 +37,9 @@ const YTAuth = (() => {
 
   /* ── Public API ───────────────────────────────────────── */
 
+  /** True si el usuario conectó su cuenta de YT en esta sesión o en una anterior. */
   function isAuthenticated() {
-    return !!localStorage.getItem(LS_REFRESH);
+    return localStorage.getItem(LS_MARKER) === '1';
   }
 
   function getUser() {
@@ -43,44 +48,35 @@ const YTAuth = (() => {
   }
 
   /**
-   * Returns a valid access token, refreshing silently if needed.
+   * Devuelve un access token válido.
+   * Si expiró, intenta renovación silenciosa (sin popup).
    */
   async function getToken() {
     if (_accessToken && Date.now() < _expiresAt - 60_000) return _accessToken;
-    return _refresh();
+    return _refreshSilent();
   }
 
   /**
-   * Opens the Google OAuth popup scoped to YouTube.
-   * The user can pick any Google account — different from their Drive account.
+   * Abre el selector de cuenta de Google (popup) para autorizar YouTube.
+   * Usa initTokenClient — flujo separado del de Drive, no mezcla scopes.
    */
-  async function login() {
-    const workerUrl = CONFIG?.AUTH_WORKER_URL;
-    if (!workerUrl) throw new Error('No AUTH_WORKER_URL configured');
-    if (typeof google === 'undefined') throw new Error('GIS not loaded');
-
+  function login() {
+    if (typeof google === 'undefined') return Promise.reject(new Error('GIS not loaded'));
     return new Promise((resolve, reject) => {
-      // Always create a fresh code client so the user can pick any account.
-      _codeClient = google.accounts.oauth2.initCodeClient({
-        client_id: CONFIG.CLIENT_ID,
-        scope:     YT_SCOPE,
-        ux_mode:   'popup',
-        callback: async (resp) => {
-          if (resp.error || !resp.code) {
-            reject(new Error(resp.error || 'no_code'));
-            return;
-          }
-          try {
-            await _exchangeCode(resp.code, workerUrl);
-            if (_onLogin) _onLogin();
-            resolve();
-          } catch (e) {
-            reject(e);
-          }
+      const client = google.accounts.oauth2.initTokenClient({
+        client_id:  CONFIG.CLIENT_ID,
+        scope:      YT_SCOPE,
+        callback:   async (resp) => {
+          if (resp.error) { reject(new Error(resp.error)); return; }
+          _saveToken(resp);
+          _fetchUserInfo(resp.access_token).catch(() => {});
+          if (_onLogin) _onLogin();
+          resolve();
         },
         error_callback: (e) => reject(new Error(e?.type || 'auth_error')),
       });
-      _codeClient.requestCode();
+      // prompt:'select_account' fuerza la pantalla de elección de cuenta
+      client.requestAccessToken({ prompt: 'select_account' });
     });
   }
 
@@ -92,52 +88,44 @@ const YTAuth = (() => {
 
   /* ── Internal ─────────────────────────────────────────── */
 
-  async function _exchangeCode(code, workerUrl) {
-    const res = await fetch(`${workerUrl}/exchange`, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ code, redirect_uri: 'postmessage' }),
+  /**
+   * Renovación silenciosa: prompt:'' no abre popup si el usuario ya dio consent.
+   * Si falla (revocó acceso, sesión expirada, etc.) → logout silencioso.
+   */
+  function _refreshSilent() {
+    if (!isAuthenticated()) return Promise.reject(new Error('Not authenticated'));
+    if (typeof google === 'undefined') return Promise.reject(new Error('GIS not loaded'));
+    return new Promise((resolve, reject) => {
+      const client = google.accounts.oauth2.initTokenClient({
+        client_id:  CONFIG.CLIENT_ID,
+        scope:      YT_SCOPE,
+        callback:   (resp) => {
+          if (resp.error) {
+            // Acceso revocado o error → logout silencioso
+            _clearTokens();
+            if (_onLogout) _onLogout();
+            reject(new Error(resp.error));
+            return;
+          }
+          _saveToken(resp);
+          resolve(_accessToken);
+        },
+        error_callback: (e) => {
+          _clearTokens();
+          if (_onLogout) _onLogout();
+          reject(new Error(e?.type || 'refresh_error'));
+        },
+      });
+      client.requestAccessToken({ prompt: '' }); // silencioso
     });
-    const data = await res.json().catch(() => ({}));
-    if (data.error) throw new Error(data.error);
-    _saveTokens(data);
-    _fetchUserInfo(data.access_token).catch(() => {});
   }
 
-  async function _refresh() {
-    const rt = localStorage.getItem(LS_REFRESH);
-    if (!rt) throw new Error('No YT refresh token');
-    const workerUrl = CONFIG?.AUTH_WORKER_URL;
-    if (!workerUrl) throw new Error('No AUTH_WORKER_URL');
-
-    const res = await fetch(`${workerUrl}/refresh`, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ refresh_token: rt }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (data.error) {
-      if (data.error === 'invalid_grant') {
-        // Expired — silent logout
-        _clearTokens();
-        if (_onLogout) _onLogout();
-      }
-      throw new Error(data.error);
-    }
-    _accessToken = data.access_token;
-    _expiresAt   = Date.now() + (data.expires_in || 3600) * 1000;
+  function _saveToken(resp) {
+    _accessToken = resp.access_token;
+    _expiresAt   = Date.now() + (resp.expires_in || 3600) * 1000;
     localStorage.setItem(LS_ACCESS, _accessToken);
     localStorage.setItem(LS_EXPIRY, String(_expiresAt));
-    _scheduleRenewal();
-    return _accessToken;
-  }
-
-  function _saveTokens(data) {
-    _accessToken = data.access_token;
-    _expiresAt   = Date.now() + (data.expires_in || 3600) * 1000;
-    localStorage.setItem(LS_ACCESS, _accessToken);
-    localStorage.setItem(LS_EXPIRY, String(_expiresAt));
-    if (data.refresh_token) localStorage.setItem(LS_REFRESH, data.refresh_token);
+    localStorage.setItem(LS_MARKER, '1');
     _scheduleRenewal();
   }
 
@@ -157,18 +145,20 @@ const YTAuth = (() => {
 
   function _scheduleRenewal() {
     if (_renewTimer) clearTimeout(_renewTimer);
-    if (!localStorage.getItem(LS_REFRESH)) return;
-    const delay = _expiresAt - Date.now() - 5 * 60_000; // 5 min before expiry
-    if (delay > 0) _renewTimer = setTimeout(() => _refresh().catch(() => {}), delay);
+    if (!isAuthenticated()) return;
+    const delay = _expiresAt - Date.now() - 5 * 60_000; // 5 min antes de expirar
+    if (delay > 0) _renewTimer = setTimeout(() => _refreshSilent().catch(() => {}), delay);
   }
 
   function _clearTokens() {
     _accessToken = null;
     _expiresAt   = 0;
     localStorage.removeItem(LS_ACCESS);
-    localStorage.removeItem(LS_REFRESH);
+    localStorage.removeItem(LS_MARKER);
     localStorage.removeItem(LS_EXPIRY);
     localStorage.removeItem(LS_USER);
+    // Compat: limpiar también la clave vieja si existía
+    localStorage.removeItem('savart_yt_refresh_token');
   }
 
   return { init, isAuthenticated, getToken, getUser, login, logout };

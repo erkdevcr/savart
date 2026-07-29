@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.563';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.563 — YouTube Playlists: yt-auth.js + yt-playlists.js; Settings sección YT; duplicar/copiar playlist; auto-sync 30min
+const APP_VERSION  = '3.5.564';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.564 — yt-auth.js: initTokenClient en vez de initCodeClient (fix "scopes cannot be requested together")
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
