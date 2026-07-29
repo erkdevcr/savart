@@ -3641,7 +3641,10 @@ const UI = (() => {
         if (typeof App !== 'undefined') App._libGoBack?.('playlists');
       }
     });
-    container.appendChild(backRow);
+    // Sticky wrapper: back button + playlist header move together on mobile
+    const stickyWrap = document.createElement('div');
+    stickyWrap.className = 'lib-pl-sticky-hdr';
+    stickyWrap.appendChild(backRow);
 
     // Header
     const header = document.createElement('div');
@@ -3675,7 +3678,8 @@ const UI = (() => {
       header.appendChild(dupBtn);
     }
 
-    container.appendChild(header);
+    stickyWrap.appendChild(header);
+    container.appendChild(stickyWrap);
 
     if (songs.length === 0) {
       const [line1, line2] = t('lib_playlist_empty').split('\n');

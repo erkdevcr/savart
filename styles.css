@@ -8242,8 +8242,8 @@ body.queue-open #mini-player { z-index: 65; }
   /* Hide list when detail is visible */
   #lib-pl-two-col.detail-open #lib-pl-list-pane { display: none; }
 
-  /* Back button sticky so it stays visible while scrolling songs */
-  .lib-pl-back {
+  /* Back button + playlist header sticky together while scrolling songs */
+  .lib-pl-sticky-hdr {
     position: sticky;
     top: 0;
     z-index: 5;
