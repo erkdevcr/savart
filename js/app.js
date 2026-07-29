@@ -1078,11 +1078,43 @@ const App = (() => {
     if (label)    label.textContent = UI.t('sd_blocked_convert');
     if (statusEl) { statusEl.textContent = ''; statusEl.style.display = 'none'; }
     modal.style.display = '';
+    _startSdBlockedTimer();
   }
 
   function _closeSdBlockedModal() {
     const modal = document.getElementById('sd-blocked-modal');
-    if (modal) { modal.style.display = 'none'; modal._sdItem = null; }
+    if (modal) {
+      modal.style.display = 'none';
+      modal._sdItem = null;
+      if (modal._timerInterval) { clearInterval(modal._timerInterval); modal._timerInterval = null; }
+    }
+  }
+
+  function _startSdBlockedTimer() {
+    const modal      = document.getElementById('sd-blocked-modal');
+    const ring       = document.getElementById('sd-blocked-timer-ring');
+    const countEl    = document.getElementById('sd-blocked-timer-count');
+    if (!modal || !ring || !countEl) return;
+    // Clear any existing timer
+    if (modal._timerInterval) { clearInterval(modal._timerInterval); modal._timerInterval = null; }
+    const DURATION   = 5;          // seconds
+    const r          = 11;         // must match r attr in HTML
+    const circ       = 2 * Math.PI * r;
+    ring.style.strokeDasharray  = circ;
+    ring.style.strokeDashoffset = 0;
+    ring.style.transition       = 'none';
+    countEl.textContent = DURATION;
+    let remaining = DURATION;
+    modal._timerInterval = setInterval(() => {
+      remaining -= 1;
+      countEl.textContent = Math.max(0, remaining);
+      ring.style.transition = 'stroke-dashoffset 1s linear';
+      ring.style.strokeDashoffset = circ * (1 - remaining / DURATION);
+      if (remaining <= 0) {
+        _closeSdBlockedModal();
+        Player.next?.();
+      }
+    }, 1000);
   }
 
   function _onTokenExpiring() {
@@ -15412,9 +15444,9 @@ const App = (() => {
     });
 
     // SD blocked modal: YT deshabilitó el embedding → convertir + guardar + reproducir
-    document.getElementById('btn-sd-blocked-close')?.addEventListener('click',  () => { _closeSdBlockedModal(); Player.abortSdLoad?.(); });
-    document.getElementById('btn-sd-blocked-cancel')?.addEventListener('click', () => { _closeSdBlockedModal(); Player.abortSdLoad?.(); });
-    document.getElementById('sd-blocked-modal-backdrop')?.addEventListener('click', () => { _closeSdBlockedModal(); Player.abortSdLoad?.(); });
+    document.getElementById('btn-sd-blocked-close')?.addEventListener('click',  () => { _closeSdBlockedModal(); Player.next?.(); });
+    document.getElementById('btn-sd-blocked-cancel')?.addEventListener('click', () => { _closeSdBlockedModal(); Player.next?.(); });
+    document.getElementById('sd-blocked-modal-backdrop')?.addEventListener('click', () => { _closeSdBlockedModal(); Player.next?.(); });
     document.getElementById('btn-sd-blocked-convert')?.addEventListener('click', () => {
       const modal = document.getElementById('sd-blocked-modal');
       const track = modal?._sdItem;

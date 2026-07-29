@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.577';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.577 — lastPlayedAt solo al reproducir, no al navegar una playlist
+const APP_VERSION  = '3.5.578';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.578 — blocked track modal: auto-skip + 5s countdown timer en botón cancelar
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
