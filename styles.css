@@ -8233,8 +8233,6 @@ body.queue-open #mini-player { z-index: 65; }
   }
 
   #lib-pl-detail-pane {
-    height: auto;
-    overflow-y: visible;
     display: none; /* hidden until .open is added */
   }
   #lib-pl-detail-pane.open { display: block; }
@@ -8242,13 +8240,32 @@ body.queue-open #mini-player { z-index: 65; }
   /* Hide list when detail is visible */
   #lib-pl-two-col.detail-open #lib-pl-list-pane { display: none; }
 
-  /* Back button + playlist header sticky together while scrolling songs */
-  .lib-pl-sticky-hdr {
-    position: sticky;
-    top: 0;
-    z-index: 5;
-    background: var(--bg-base);
+  /* When the detail is open: espejear el layout de desktop para que
+     #lib-pl-detail-pane sea el scroll container — así sticky funciona. */
+  .lib-detail:has(#lib-pl-two-col.detail-open) {
+    overflow: hidden;
   }
+  .lib-detail:has(#lib-pl-two-col.detail-open) > #lib-detail-content {
+    height: 100%;
+    padding-bottom: 0;
+  }
+  #lib-pl-two-col.detail-open {
+    height: 100%;
+  }
+  #lib-pl-detail-pane.open {
+    height: 100%;
+    overflow-y: auto;
+    padding-bottom: 80px;
+  }
+}
+
+/* Sticky: back row + nombre de playlist — funciona en ambos (mobile y desktop)
+   porque en los dos casos #lib-pl-detail-pane es el scroll container. */
+.lib-pl-sticky-hdr {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--bg-base);
 }
 
 /* ── Artist avatar: −15 % on desktop  (v1.6.66) ─────────── */
