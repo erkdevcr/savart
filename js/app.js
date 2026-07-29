@@ -7238,11 +7238,8 @@ const App = (() => {
         }
         return { ...pl, songCount: songIds.length, coverUrls };
       }));
-      // If a playlist detail is already open AND the list pane already exists,
-      // don't overwrite it — just update count and covers.
-      // (If the pane doesn't exist yet, e.g. first load from home card, fall through
-      // to renderPlaylists so lib-pl-list-pane gets created before the detail opens.)
-      if (_libInDetail && _currentLibTab === 'playlists' && document.getElementById('lib-pl-list-pane')) {
+      // If a playlist detail is already open, don't overwrite it — just update count and covers.
+      if (_libInDetail && _currentLibTab === 'playlists') {
         _setLibTabCount('playlists', enriched.length);
         _prefetchPlaylistCovers(enriched).catch(() => {});
         return;

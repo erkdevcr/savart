@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.585';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.585 — chip SD-lock: fondo naranja en sd-chip-txt, align-self:stretch en lock-seg → sin zona naranja visible
+const APP_VERSION  = '3.5.586';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.586 — fix race condition: revert guard _loadPlaylists → early-return siempre que _libInDetail=true
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
