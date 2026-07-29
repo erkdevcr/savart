@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.586';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.586 — fix race condition: revert guard _loadPlaylists → early-return siempre que _libInDetail=true
+const APP_VERSION  = '3.5.587';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.587 — SD→Drive: la metadata del modal (título/artista/álbum/año + cover de-letterboxed) se escribe DIRECTO en el ID3 del MP3 antes de subirlo (Meta.writeId3, escritor ID3v2.3 propio, UTF-16); el cache local guarda el blob tagueado (idéntico al de Drive); fail-open si el tagging falla
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

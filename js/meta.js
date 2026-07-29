@@ -682,6 +682,97 @@ const Meta = (() => {
     _evictLRU();
   }
 
+  /* ── ID3v2.3 writer (v3.5.587) ────────────────────────────
+     Contraparte del parser: escribe title/artist/album/year (+APIC opcional)
+     DIRECTO en el archivo. Reemplaza el tag ID3v2 existente (si hay) por uno
+     nuevo y devuelve un Blob nuevo con el audio intacto. Usado por el guardado
+     Soundrop→Drive: el MP3 viaja con su metadata real — portable a cualquier
+     reproductor, sobrevive resets de la DB y coincide con lo que el soft-scan
+     leerá después (doctrina: el ID3 es la fuente de verdad). */
+  async function writeId3(blob, { title, artist, album, year, coverBlob } = {}) {
+    const buf = new Uint8Array(await blob.arrayBuffer());
+
+    // 1. Medir el tag ID3v2 existente para SALTARLO (se reemplaza completo)
+    let audioStart = 0;
+    if (buf.length > 10 && buf[0] === 0x49 && buf[1] === 0x44 && buf[2] === 0x33) {
+      const size = ((buf[6] & 0x7F) << 21) | ((buf[7] & 0x7F) << 14)
+                 | ((buf[8] & 0x7F) << 7)  |  (buf[9] & 0x7F);
+      const footer = (buf[5] & 0x10) ? 10 : 0;
+      const start  = 10 + size + footer;
+      if (start > 0 && start < buf.length) audioStart = start;
+    }
+
+    // 2. Construir frames
+    const frames = [];
+    const _utf16 = (s) => {
+      const out = new Uint8Array(2 + s.length * 2);
+      out[0] = 0xFF; out[1] = 0xFE; // BOM (UTF-16LE)
+      for (let i = 0; i < s.length; i++) {
+        const c = s.charCodeAt(i);
+        out[2 + i * 2] = c & 0xFF;
+        out[3 + i * 2] = c >> 8;
+      }
+      return out;
+    };
+    const _textFrame = (id, value) => {
+      const v = (value == null ? '' : String(value)).trim();
+      if (!v) return;
+      const txt = _utf16(v);
+      const payload = new Uint8Array(1 + txt.length);
+      payload[0] = 1; // encoding: UTF-16 con BOM (soporta tildes/ñ/unicode)
+      payload.set(txt, 1);
+      frames.push({ id, payload });
+    };
+    _textFrame('TIT2', title);
+    _textFrame('TPE1', artist);
+    _textFrame('TALB', album);
+    _textFrame('TYER', year);
+
+    if (coverBlob && coverBlob.size > 0) {
+      try {
+        const img  = new Uint8Array(await coverBlob.arrayBuffer());
+        const mime = new TextEncoder().encode(coverBlob.type || 'image/jpeg');
+        // encoding(1) + mime + \0 + pictureType(3=front) + desc \0 + imagen
+        const payload = new Uint8Array(1 + mime.length + 1 + 1 + 1 + img.length);
+        let o = 0;
+        payload[o++] = 0;                    // encoding latin1 (descripción vacía)
+        payload.set(mime, o); o += mime.length;
+        payload[o++] = 0;                    // fin del mime
+        payload[o++] = 3;                    // picture type: front cover
+        payload[o++] = 0;                    // descripción vacía (terminador)
+        payload.set(img, o);
+        frames.push({ id: 'APIC', payload });
+      } catch (_) { /* cover opcional — sin él el tag sigue siendo válido */ }
+    }
+
+    if (!frames.length) return blob; // nada que escribir → original intacto
+
+    // 3. Serializar: header ID3v2.3 + frames (size big-endian, flags 0)
+    let framesLen = 0;
+    frames.forEach(f => { framesLen += 10 + f.payload.length; });
+    const tag = new Uint8Array(10 + framesLen);
+    tag[0] = 0x49; tag[1] = 0x44; tag[2] = 0x33; // 'ID3'
+    tag[3] = 3; tag[4] = 0; tag[5] = 0;          // v2.3.0, sin flags
+    tag[6] = (framesLen >> 21) & 0x7F;           // tamaño synchsafe
+    tag[7] = (framesLen >> 14) & 0x7F;
+    tag[8] = (framesLen >> 7)  & 0x7F;
+    tag[9] = framesLen & 0x7F;
+    let off = 10;
+    for (const f of frames) {
+      for (let i = 0; i < 4; i++) tag[off + i] = f.id.charCodeAt(i);
+      const n = f.payload.length;
+      tag[off + 4] = (n >>> 24) & 0xFF;          // v2.3: size normal (no synchsafe)
+      tag[off + 5] = (n >>> 16) & 0xFF;
+      tag[off + 6] = (n >>> 8)  & 0xFF;
+      tag[off + 7] = n & 0xFF;
+      tag[off + 8] = 0; tag[off + 9] = 0;        // flags
+      tag.set(f.payload, off + 10);
+      off += 10 + n;
+    }
+
+    return new Blob([tag, buf.subarray(audioStart)], { type: blob.type || 'audio/mpeg' });
+  }
+
   /* ── Expose ─────────────────────────────────────────────── */
-  return { parse, getCached, patchCached, forcePatch, revoke, injectCover };
+  return { parse, getCached, patchCached, forcePatch, revoke, injectCover, writeId3 };
 })();

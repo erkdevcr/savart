@@ -15545,15 +15545,47 @@ const App = (() => {
         // 1. Download blob via Worker proxy (handles CORS for Android WebView)
         const blob = await Soundrop.fetchBlob(track.videoId, onStatus);
         try { onStatus?.('saving'); } catch (_) {}
+
+        // 1b. (v3.5.587) Escribir la metadata del modal DIRECTO en el ID3 del
+        // archivo ANTES de subirlo: título/artista/álbum/año + el cover que ya
+        // trae el MP3 del conversor (Meta.parse lo extrae y lo devuelve
+        // de-letterboxed). El MP3 viaja con su verdad — portable, sobrevive
+        // resets de la DB y el soft-scan leerá exactamente estos datos.
+        // Fail-open: si el tagging falla, se sube el blob original intacto.
+        let uploadBlob = blob;
+        if (typeof Meta !== 'undefined' && Meta.writeId3) {
+          try {
+            let coverBlob = null;
+            const _tmpId = `sdtag_${track.videoId}`;
+            try {
+              const parsed = await Meta.parse(_tmpId, blob, true).catch(() => null);
+              coverBlob = parsed?.coverBlob || null;
+            } finally {
+              Meta.revoke?.(_tmpId); // id temporal — no dejar entrada en el cache
+            }
+            uploadBlob = await Meta.writeId3(blob, {
+              title:  meta.title,
+              artist: meta.artist,
+              album:  meta.album,
+              year:   meta.year,
+              coverBlob,
+            });
+          } catch (e) {
+            console.warn('[App] ID3 write failed — subiendo blob original:', e?.message);
+            uploadBlob = blob;
+          }
+        }
+
         // 2. Upload to Drive "Soundrop" folder
-        const { fileId: driveId, folderId: driveFolderId, filename, folderHierarchy } = await Soundrop.saveToDrive(blob, meta, _rootFolderId);
+        const { fileId: driveId, folderId: driveFolderId, filename, folderHierarchy } = await Soundrop.saveToDrive(uploadBlob, meta, _rootFolderId);
 
         // 3. Cache the blob locally so it plays immediately from IndexedDB
         //    without re-downloading from Drive. Same mimeType logic as saveToDrive.
-        const _blobMime = (blob.type && blob.type !== 'application/octet-stream')
-          ? blob.type.split(';')[0].trim()
+        //    Se cachea el blob TAGUEADO — idéntico byte a byte al archivo en Drive.
+        const _blobMime = (uploadBlob.type && uploadBlob.type !== 'application/octet-stream')
+          ? uploadBlob.type.split(';')[0].trim()
           : 'audio/mpeg';
-        DB.setCachedBlob(driveId, blob, _blobMime).catch(err =>
+        DB.setCachedBlob(driveId, uploadBlob, _blobMime).catch(err =>
           console.warn('[App] SD local cache write failed (non-fatal):', err)
         );
         // El mismo blob quedó cacheado bajo sd_<videoId> por el fallback de
