@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.572';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.572 — mobile playlists: header sticky (back + nombre) al hacer scroll
+const APP_VERSION  = '3.5.573';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.573 — fix YT playlists desde home: safety net sd_ en _getPlaylistSongs
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

@@ -13283,7 +13283,11 @@ const App = (() => {
         const cached = _itemCache.get(id);
         if (cached) return cached;
         const m = await DB.getMeta(id).catch(() => null);
-        return m ? { id, ...m } : null;
+        if (!m) return null;
+        // Safety net: reconstruct isSoundrop + videoId from sd_ prefix if missing in DB
+        const isSd    = m.isSoundrop || (id || '').startsWith('sd_');
+        const videoId = m.videoId    || (isSd ? (id || '').slice(3) : null);
+        return { id, ...m, isSoundrop: isSd || false, videoId: videoId || null };
       })
     )).filter(Boolean);
   }
