@@ -3691,6 +3691,7 @@ const UI = (() => {
         <div class="song-thumb">
           <div class="thumb-placeholder">${iconMusicNote(20)}</div>
           ${song.thumbnailUrl ? `<img src="${escHtml(song.thumbnailUrl)}" alt="" onerror="this.style.display='none'">` : ''}
+          ${_sdChipHtml(song)}
           <div class="eq-bars">
             <div class="eq-bar"></div>
             <div class="eq-bar"></div>
