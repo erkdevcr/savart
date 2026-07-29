@@ -3613,9 +3613,13 @@ const UI = (() => {
       });
     }
 
-    // Mobile: slide detail into view
+    // Mobile: slide detail into view — save list scroll position first
+    const _libDetailEl     = twoCol ? document.querySelector('.lib-detail') : null;
+    const _savedListScroll = _libDetailEl ? _libDetailEl.scrollTop : 0;
     if (twoCol)     twoCol.classList.add('detail-open');
     if (detailPane) detailPane.classList.add('open');
+    // Scroll to top of detail pane
+    if (_libDetailEl) requestAnimationFrame(() => { _libDetailEl.scrollTop = 0; });
 
     // Back button — hidden on desktop via CSS (.lib-pl-back), shown on mobile
     const backRow = document.createElement('div');
@@ -3631,6 +3635,8 @@ const UI = (() => {
         twoCol.classList.remove('detail-open');
         detailPane?.classList.remove('open');
         document.querySelectorAll('#lib-pl-list-pane .lib-pl-item').forEach(el => el.classList.remove('active'));
+        // Restore list scroll position
+        if (_libDetailEl) requestAnimationFrame(() => { _libDetailEl.scrollTop = _savedListScroll; });
       } else {
         if (typeof App !== 'undefined') App._libGoBack?.('playlists');
       }

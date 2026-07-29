@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.568';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.568 — lib-search-wrap z-index 2→10 (fix chip YT encima del search bar al hacer scroll)
+const APP_VERSION  = '3.5.570';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.570 — mobile playlists: sticky back btn + restaurar scroll al volver
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

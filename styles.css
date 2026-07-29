@@ -8148,6 +8148,26 @@ body.queue-open #mini-player { z-index: 65; }
    Library: Playlists two-column layout  (v1.6.65)
    ══════════════════════════════════════════════════════════ */
 
+/*
+ * Desktop: cuando el two-col está visible, .lib-detail deja de ser el
+ * scroll container. #lib-detail-content ocupa el 100% de .lib-detail
+ * (sin padding-bottom), y las dos columnas scrollean independientemente.
+ * Cada columna tiene su propio padding-bottom para el mini-player.
+ */
+@media (min-width: 768px) {
+  .lib-detail:has(#lib-pl-two-col) {
+    overflow: hidden;
+  }
+  .lib-detail:has(#lib-pl-two-col) > #lib-detail-content {
+    height: 100%;
+    padding-bottom: 0;
+  }
+  .lib-detail:has(#lib-pl-two-col) #lib-pl-list-pane,
+  .lib-detail:has(#lib-pl-two-col) #lib-pl-detail-pane {
+    padding-bottom: 80px;
+  }
+}
+
 /* Wrapper fills the full detail area as a two-column flex */
 #lib-pl-two-col {
   display: flex;
@@ -8221,6 +8241,14 @@ body.queue-open #mini-player { z-index: 65; }
 
   /* Hide list when detail is visible */
   #lib-pl-two-col.detail-open #lib-pl-list-pane { display: none; }
+
+  /* Back button sticky so it stays visible while scrolling songs */
+  .lib-pl-back {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: var(--bg-base);
+  }
 }
 
 /* ── Artist avatar: −15 % on desktop  (v1.6.66) ─────────── */
