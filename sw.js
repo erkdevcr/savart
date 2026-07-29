@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.592';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.592 — Mensajes YT vinculada: device B con instrucción de login; device A solo muestra la cuenta
+const APP_VERSION  = '3.5.594';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.594 — _libPlLastDetailPl: restaura el detalle de playlist al volver al tab desde otro tab de librería
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

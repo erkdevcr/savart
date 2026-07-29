@@ -7037,6 +7037,7 @@ const App = (() => {
   let _libDetailRestoreFn = null;    // restores detail view when user nav Home → Library
   let _libScrollBeforeDetail = 0;    // .lib-detail scrollTop saved before drill-down
   let _libPlListScroll = 0;          // #lib-pl-list-pane scrollTop — persists across tab switches
+  let _libPlLastDetailPl = null;     // last playlist detail opened; restored on tab-switch return
   // [STALE-FIX] true = library render is behind IDB (sync completed while user wasn't on Library).
   // Set true on boot and whenever metadata sync finishes off-tab. Cleared on next Library visit.
   // To revert: remove this line + the 3 _libStale references below.
@@ -7190,7 +7191,10 @@ const App = (() => {
       const savedScroll = _libScrollBeforeDetail;
       _loadCollections().then(() => _restoreLibScroll(savedScroll)).catch(() => {});
     }
-    if (tab === 'playlists')   _loadPlaylists();
+    if (tab === 'playlists') {
+      _libPlLastDetailPl = null; // user explicitly pressed Back — don't restore on return
+      _loadPlaylists();
+    }
   }
 
   /** Filter visible items in #lib-detail-content by search text. */
@@ -7228,7 +7232,9 @@ const App = (() => {
 
       // If a playlist detail is already open, avoid overwriting the detail pane.
       if (_libInDetail && _currentLibTab === 'playlists') {
-        const minimal = playlists.map(pl => ({ ...pl, songCount: (pl.songIds || []).length, coverUrls: [] }));
+        // Keep existing coverUrls from DB (don't force [] — YT playlists have their
+        // thumbnail stored, and _prefetchPlaylistCovers will fill user playlists up to 4).
+        const minimal = playlists.map(pl => ({ ...pl, songCount: (pl.songIds || []).length }));
         _setLibTabCount('playlists', minimal.length);
         // If the two-col structure doesn't exist yet (e.g. arriving from a home card click),
         // render it NOW with minimal data so onPlaylistClick finds #lib-pl-detail-pane and
@@ -7266,6 +7272,11 @@ const App = (() => {
       // Background: resolve covers for playlists that still have none
       // (happens when songs were never played — no coverBlob in DB yet)
       _prefetchPlaylistCovers(enriched).catch(() => {});
+      // Restore last playlist detail if the user returned from another tab
+      // (not set on first visit, cleared when user explicitly presses Back)
+      if (_libPlLastDetailPl) {
+        onPlaylistClick(_libPlLastDetailPl).catch(() => {});
+      }
     } catch (err) {
       console.error('[App] Load playlists error:', err);
     }
@@ -7283,28 +7294,29 @@ const App = (() => {
     if (typeof Meta === 'undefined') return;
 
     for (const pl of playlists) {
-      // Already has a cover — skip
-      if ((pl.coverUrls || []).length > 0) continue;
+      const existing = (pl.coverUrls || []).length;
+      if (existing >= 4) continue; // already has a full mosaic
+      const needed  = 4 - existing;
 
-      const songIds = (pl.songIds || []).slice(0, 5); // try first 5 songs
-      let found = false;
+      // Try enough songs to collect `needed` covers (×3 budget for songs without art)
+      const songIds = (pl.songIds || []).slice(0, Math.min(needed * 3 + 2, 12));
+      let added = 0;
 
       for (const sid of songIds) {
-        if (found) break;
+        if (added >= needed) break;
         try {
           // Pass 1: persisted coverBlob (no network, instant)
           const dbMeta = await DB.getMeta(sid).catch(() => null);
           if (dbMeta?.coverBlob) {
             const url = Meta.injectCover(sid, dbMeta.coverBlob);
-            if (url) { UI.updatePlaylistSidebarCover(pl.id, url); found = true; break; }
+            if (url) { UI.updatePlaylistSidebarCover(pl.id, url); added++; continue; }
           }
           // Pass 1b: URL externa estable ya persistida — usarla sin red
           if (_isStableCoverUrl(dbMeta?.thumbnailUrl)) {
             UI.updatePlaylistSidebarCover(pl.id, dbMeta.thumbnailUrl);
-            found = true; break;
+            added++; continue;
           }
           // Fix I4b: ya soft-escaneada y sin arte encontrado — no re-descargar
-          // 1MB en CADA render del sidebar; el resultado no va a cambiar.
           if (dbMeta?.softScannedAt) continue;
 
           // Pass 2: try cached audio blob first, then range request
@@ -7316,7 +7328,7 @@ const App = (() => {
 
           const meta = await Meta.parse(sid, blob);
           if (!meta) continue;
-          // Write full enrichment (not just coverBlob) — benefits all home surfaces
+          // Write full enrichment — benefits all home surfaces
           const sm = await DB.getMeta(sid).catch(() => null);
           if (!((sm?.manualAt || 0) > 0)) {
             const patch = { softScannedAt: Date.now() };
@@ -7331,11 +7343,8 @@ const App = (() => {
             DB.setMeta(sid, { id: sid, ...patch }).catch(() => {});
           }
           if (meta.coverUrl) {
-            // FIX: antes llamaba _updatePlaylistSidebarCover (inexistente) — el
-            // ReferenceError era tragado por el catch y la portada nunca se pintaba,
-            // re-descargando 1 MB por canción en cada carga.
             UI.updatePlaylistSidebarCover(pl.id, meta.coverUrl);
-            found = true;
+            added++;
           }
         } catch (_) { /* non-fatal */ }
       }
@@ -13286,6 +13295,7 @@ const App = (() => {
       if (songIds.length === 0) {
         UI.renderPlaylistDetail([], pl.name, fullPl || pl);
         UI.setActiveSongRow(Player.getCurrentTrack()?.id ?? null);
+        _libPlLastDetailPl = fullPl || pl; // remember for tab-switch restore
         if (!document.getElementById('lib-pl-two-col')) {
           _libInDetail        = true;
           _libDetailRestoreFn = () => onPlaylistClick(fullPl || pl);
@@ -13311,6 +13321,7 @@ const App = (() => {
       )).filter(Boolean);
       UI.renderPlaylistDetail(songs, pl.name, fullPl || pl);
       UI.setActiveSongRow(Player.getCurrentTrack()?.id ?? null);
+      _libPlLastDetailPl = fullPl || pl; // remember for tab-switch restore
       // Scroll left pane so the active playlist item is visible
       requestAnimationFrame(() => {
         const active = document.querySelector('#lib-pl-list-pane .lib-pl-item.active');
