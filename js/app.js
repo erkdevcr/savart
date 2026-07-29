@@ -14155,10 +14155,12 @@ const App = (() => {
       if (isAuth) {
         const user    = (typeof YTAuth !== 'undefined' && YTAuth.getUser?.()) || {};
         const nameEl  = document.getElementById('yt-account-name');
-        const emailEl = document.getElementById('yt-account-email');
+        const msgEl   = document.getElementById('yt-linked-here-msg');
         const avatarEl = document.getElementById('yt-account-avatar');
-        if (nameEl)  nameEl.textContent  = user.name  || '—';
-        if (emailEl) emailEl.textContent = user.email || '—';
+        if (nameEl) nameEl.textContent = user.name || '—';
+        if (msgEl)  msgEl.textContent  = user.email
+          ? UI.t('yt_linked_here').replace('%s', user.email)
+          : '';
         if (avatarEl) {
           avatarEl.src = user.picture || '';
           avatarEl.style.display = user.picture ? '' : 'none';

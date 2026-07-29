@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.589';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.589 — YT cuenta vinculada: card de Settings muestra cuenta vinculada en todos los dispositivos; "Conectar otra cuenta" con modal de advertencia; forced-logout cross-device vía savart_yt.json (sync); archivos descargados se conservan
+const APP_VERSION  = '3.5.590';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.590 — YT Settings: quita descripción del card; estado conectado muestra "Tu app Savart está vinculada a la cuenta de YouTube de xxx"; botón "Conectar otra cuenta" sin etiqueta de texto
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
