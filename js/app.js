@@ -26,6 +26,7 @@ const App = (() => {
   const _browseScrollMap = new Map(); // folderId → scrollTop, restored on Back
   let _soundropCleanPending = false; // guard: prevents the Soundrop cleanup from looping
   let _browseSoundropCtx   = false;  // true when browse is showing content inside the Soundrop tree
+  const _sdSavedVideoIds   = new Set(); // videoIds of SD tracks already saved to Drive (kept fresh)
 
   /* ── Offline mode ────────────────────────────────────────── */
   let _isOffline       = false;  // true = app is in offline mode (auto or manual)
@@ -6818,6 +6819,8 @@ const App = (() => {
         // o (2) cacheadas localmente vía fallback de reproducción (blob bajo sd_<videoId>).
         const _sdAllMeta = await DB.getAllMetaLight().catch(() => []);
         const _sdSavedVids = new Set(_sdAllMeta.filter(m => m.soundropSaved && m.videoId).map(m => m.videoId));
+        // Keep module-level set fresh for re-download check
+        _sdSavedVids.forEach(id => _sdSavedVideoIds.add(id));
         await Promise.all(sdTracks.map(async t => {
           if (_sdSavedVids.has(t.videoId)) { t.sdCached = true; return; }
           if (await DB.isCached(t.id).catch(() => false)) t.sdCached = true;
@@ -14998,6 +15001,11 @@ const App = (() => {
     function _openSdSaveModal(item, playAfterSave = false) {
       const track = item || Player.getCurrentTrack();
       if (!track?.isSoundrop) return;
+      // If already saved to Drive, show re-download confirmation first
+      if (track.sdCached || _sdSavedVideoIds.has(track.videoId)) {
+        _showSdRedownloadModal(track, playAfterSave);
+        return;
+      }
       document.getElementById('sd-save-modal')._sdItem = track; // save handler reads this
       document.getElementById('sd-save-title').value  = track.displayName || track.name || '';
       document.getElementById('sd-save-artist').value = track.artist || '';
@@ -15038,6 +15046,58 @@ const App = (() => {
     }
     // Expose for context menu
     App.onSdDownload = (item) => _openSdSaveModal(item);
+
+    // ── Re-download warning modal ──────────────────────────────
+    function _showSdRedownloadModal(track, playAfterSave = false) {
+      const modal = document.getElementById('sd-redownload-modal');
+      if (!modal) { _openSdSaveModalDirect(track, playAfterSave); return; }
+      modal._sdItem       = track;
+      modal._playAfterSave = playAfterSave;
+      document.getElementById('sd-redownload-title').textContent  = UI.t('sd_redownload_title');
+      document.getElementById('sd-redownload-msg').textContent    = UI.t('sd_redownload_msg');
+      document.getElementById('btn-sd-redownload-confirm').textContent = UI.t('sd_redownload_confirm');
+      modal.style.display = '';
+    }
+    function _closeSdRedownloadModal() {
+      const modal = document.getElementById('sd-redownload-modal');
+      if (modal) { modal.style.display = 'none'; modal._sdItem = null; }
+    }
+    // Helper: open save modal skipping the already-saved check (user confirmed re-download)
+    function _openSdSaveModalDirect(track, playAfterSave = false) {
+      if (!track?.isSoundrop) return;
+      document.getElementById('sd-save-modal')._sdItem = track;
+      document.getElementById('sd-save-title').value  = track.displayName || track.name || '';
+      document.getElementById('sd-save-artist').value = track.artist || '';
+      document.getElementById('sd-save-album').value  = track.album  || '';
+      document.getElementById('sd-save-year').value   = track.year   || '';
+      document.getElementById('sd-modal-save-label').textContent = UI.t('ctx_sd_download') || 'Guardar';
+      document.getElementById('btn-sd-modal-save').disabled = false;
+      const statusEl = document.getElementById('sd-save-status');
+      if (statusEl) { statusEl.textContent = ''; statusEl.style.display = 'none'; }
+      const modal = document.getElementById('sd-save-modal');
+      modal._playAfterSave = playAfterSave;
+      modal.style.display = '';
+      if (window.innerWidth <= 767 && window.visualViewport) {
+        modal.style.top = ''; modal.style.height = '';
+        requestAnimationFrame(() => {
+          _sdModalAdjustViewport();
+          if (!_sdModalVvListener) {
+            _sdModalVvListener = () => _sdModalAdjustViewport();
+            window.visualViewport.addEventListener('resize', _sdModalVvListener);
+          }
+        });
+      }
+    }
+    document.getElementById('btn-sd-redownload-close')?.addEventListener('click',   () => _closeSdRedownloadModal());
+    document.getElementById('btn-sd-redownload-cancel')?.addEventListener('click',  () => _closeSdRedownloadModal());
+    document.getElementById('sd-redownload-backdrop')?.addEventListener('click',    () => _closeSdRedownloadModal());
+    document.getElementById('btn-sd-redownload-confirm')?.addEventListener('click', () => {
+      const modal = document.getElementById('sd-redownload-modal');
+      const track = modal?._sdItem;
+      const play  = modal?._playAfterSave;
+      _closeSdRedownloadModal();
+      if (track) _openSdSaveModalDirect(track, play);
+    });
 
     // ── Soundrop delete (trash file/folder in Drive) ───────────
     // v3.5.518: popup propio de confirmación (ES/EN, reusa #eq-del-modal).
@@ -15522,6 +15582,8 @@ const App = (() => {
           soundropSaved: true,  // marks this as a Soundrop-saved file eligible for auto-reorganize
           videoId:      track.videoId || undefined, // reverse-lookup: detect duplicates in SD search results
         });
+        // Keep the module-level set fresh so re-download check works immediately
+        if (track.videoId) _sdSavedVideoIds.add(track.videoId);
 
         // Write folder hierarchy to DB so _isInSoundropFolder can walk it locally
         // without Drive API calls on future edits.

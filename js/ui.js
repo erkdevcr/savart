@@ -456,6 +456,10 @@ const UI = (() => {
       sd_blocked_title:   'Canción bloqueada',
       sd_blocked_body:    'Para escucharla, conviértela y descárgala en tu Drive.',
       sd_blocked_convert: 'Convertir y guardar',
+      // ── Re-download warning ────────────────────────────────
+      sd_redownload_title:   'Ya está en tu Drive',
+      sd_redownload_msg:     'Esta canción ya fue descargada. ¿Volver a descargar?',
+      sd_redownload_confirm: 'Volver a descargar',
     },
     en: {
       // ── Navigation ─────────────────────────────────────────
@@ -890,6 +894,10 @@ const UI = (() => {
       sd_blocked_title:   'Blocked song',
       sd_blocked_body:    'To play it, convert it and save it to your Drive.',
       sd_blocked_convert: 'Convert and save',
+      // ── Re-download warning ────────────────────────────────
+      sd_redownload_title:   'Already in your Drive',
+      sd_redownload_msg:     'This song was already downloaded. Download again?',
+      sd_redownload_confirm: 'Download again',
     },
   };
 
@@ -1008,7 +1016,7 @@ const UI = (() => {
 
     // Show/hide SD chip on mini-player cover art
     const miniSdChip = document.getElementById('mini-sd-chip');
-    if (miniSdChip) miniSdChip.style.display = track?.isSoundrop ? '' : 'none';
+    if (miniSdChip) _applyPlayerSdChip(miniSdChip, track);
 
     // Sync desk micro player
     _updateDeskMicroPlayer(track, isPlaying);
@@ -1045,7 +1053,7 @@ const UI = (() => {
 
     // Show/hide SD chip on desk micro-player cover
     const dmpSdChip = document.getElementById('dmp-sd-chip');
-    if (dmpSdChip) dmpSdChip.style.display = track?.isSoundrop ? '' : 'none';
+    if (dmpSdChip) _applyPlayerSdChip(dmpSdChip, track);
   }
 
   /* ── Expanded player ────────────────────────────────────── */
@@ -1173,12 +1181,19 @@ const UI = (() => {
     const artWrap = document.getElementById('pexp-art');
     if (artWrap) {
       let sdChip = artWrap.querySelector('.sd-thumb-chip--exp');
-      if (track?.isSoundrop) {
+      const _showExp = track?.isSoundrop || track?.soundropSaved;
+      if (_showExp) {
         if (!sdChip) {
           sdChip = document.createElement('span');
-          sdChip.className = 'sd-thumb-chip sd-thumb-chip--exp';
-          sdChip.textContent = 'SD';
           artWrap.appendChild(sdChip);
+        }
+        sdChip.className = 'sd-thumb-chip sd-thumb-chip--exp';
+        const _isCheck = (track?.isSoundrop && track?.sdCached) || track?.soundropSaved;
+        if (_isCheck) {
+          sdChip.classList.add('sd-thumb-chip--saved');
+          sdChip.innerHTML = `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+        } else {
+          sdChip.textContent = 'SD';
         }
         sdChip.style.display = '';
       } else if (sdChip) {
@@ -2236,9 +2251,32 @@ const UI = (() => {
   }
 
   function _sdChipHtml(item) {
-    if (!item?.isSoundrop) return '';
+    if (!item?.isSoundrop) {
+      // Drive track saved from Soundrop: mostrar check naranja
+      return item?.soundropSaved ? _sdChipCheckHtml() : '';
+    }
     if (item.sdCached) return _sdChipCheckHtml();
     return item.embedBlocked ? _sdChipLockedHtml() : `<span class="sd-thumb-chip">SD</span>`;
+  }
+
+  /**
+   * Mutates an existing static chip element (mini/dmp player) to reflect the
+   * correct SD state for the current track — avoids replacing the element (which
+   * would lose its ID reference).
+   */
+  function _applyPlayerSdChip(el, track) {
+    const isSd    = track?.isSoundrop;
+    const isSaved = track?.soundropSaved && !isSd;
+    const isCheck = (isSd && track?.sdCached) || isSaved;
+    if (!isSd && !isSaved) { el.style.display = 'none'; return; }
+    el.style.display = '';
+    if (isCheck) {
+      el.className = 'sd-thumb-chip sd-thumb-chip--saved';
+      el.innerHTML = `<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+    } else {
+      el.className = 'sd-thumb-chip';
+      el.textContent = 'SD';
+    }
   }
 
   /**
