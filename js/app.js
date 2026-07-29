@@ -253,6 +253,7 @@ const App = (() => {
       onBeforePlay:    _preScanBeforePlay,  // blocks audio until soft scan completes
       onDurationReady: _onDurationReady,    // fires on loadedmetadata with accurate duration
       onSdBlocked:     _showSdBlockedModal, // YT bloqueó el embedding y no hay MP3 en cache → popup
+      onSdAborted:     _onSdAborted,        // SD load cancelled/failed → restore previous Drive track
     });
 
     // 5. Init auth
@@ -1500,6 +1501,22 @@ const App = (() => {
     if (type === 'auth') {
       UI.showTokenBanner();
     }
+  }
+
+  /**
+   * Called by Player when an SD track load is abandoned and the previous Drive
+   * track is restored. Updates the UI back to the restored track.
+   * @param {Object|null} prevItem — the Drive item that is now playing again
+   */
+  function _onSdAborted(prevItem) {
+    _cancelLoadingSpinner();
+    if (!prevItem) return;
+    const enriched = _enrichTrack(prevItem);
+    const isPlaying = Player.isPlaying();
+    UI.updateMiniPlayer(enriched, isPlaying);
+    UI.updateExpandedPlayer(enriched, isPlaying);
+    UI.setActiveSongRow(prevItem.id);
+    document.title = `${enriched.displayName} — Savart`;
   }
 
   /* ── Metadata / cover art ────────────────────────────────── */
@@ -15202,9 +15219,9 @@ const App = (() => {
     });
 
     // SD blocked modal: YT deshabilitó el embedding → convertir + guardar + reproducir
-    document.getElementById('btn-sd-blocked-close')?.addEventListener('click',  () => _closeSdBlockedModal());
-    document.getElementById('btn-sd-blocked-cancel')?.addEventListener('click', () => _closeSdBlockedModal());
-    document.getElementById('sd-blocked-modal-backdrop')?.addEventListener('click', () => _closeSdBlockedModal());
+    document.getElementById('btn-sd-blocked-close')?.addEventListener('click',  () => { _closeSdBlockedModal(); Player.abortSdLoad?.(); });
+    document.getElementById('btn-sd-blocked-cancel')?.addEventListener('click', () => { _closeSdBlockedModal(); Player.abortSdLoad?.(); });
+    document.getElementById('sd-blocked-modal-backdrop')?.addEventListener('click', () => { _closeSdBlockedModal(); Player.abortSdLoad?.(); });
     document.getElementById('btn-sd-blocked-convert')?.addEventListener('click', () => {
       const modal = document.getElementById('sd-blocked-modal');
       const track = modal?._sdItem;

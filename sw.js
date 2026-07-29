@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.561';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.561 — Soundrop search maxResults 20→50
+const APP_VERSION  = '3.5.562';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.562 — SD load no detiene audio previo: pausa al onPlay, restaura en error; abortSdLoad en popup cancelar
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

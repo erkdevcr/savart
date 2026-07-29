@@ -77,6 +77,11 @@ const Player = (() => {
   let _onBeforePlay     = null;  // async (driveItem) => void — awaited before blob fetch (e.g. soft scan)
   let _onDurationReady  = null;  // (driveItem, durationSec) => void — fires on loadedmetadata with real duration
   let _onSdBlocked      = null;  // (sdItem) => void — YT bloqueó el embedding y no hay MP3 en cache: app muestra popup "Convertir y guardar"
+  let _onSdAborted      = null;  // (prevItem) => void — SD load failed/cancelled, previous track restored
+
+  // Restore state: set when jumping to an SD track while a Drive track is playing.
+  // Allows restoring the previous audio if the SD track fails to load.
+  let _preSdRestore     = null;  // { queueIndex: number } | null
 
   /* ── Web Audio comment ─────────────────────────────────── */
   /*
@@ -91,7 +96,7 @@ const Player = (() => {
    * Call once on app startup.
    * @param {Object} callbacks
    */
-  function init({ onTrackChange, onPlayPause, onProgress, onQueueChange, onError, onBlobReady, onFullBlobReady, onBeforePlay, onDurationReady, onPreloadComplete, onSdBlocked } = {}) {
+  function init({ onTrackChange, onPlayPause, onProgress, onQueueChange, onError, onBlobReady, onFullBlobReady, onBeforePlay, onDurationReady, onPreloadComplete, onSdBlocked, onSdAborted } = {}) {
     _onTrackChange    = onTrackChange    || (() => {});
     _onPlayPause      = onPlayPause      || (() => {});
     _onProgress       = onProgress       || (() => {});
@@ -103,6 +108,7 @@ const Player = (() => {
     _onDurationReady   = onDurationReady   || null;
     _onPreloadComplete = onPreloadComplete || null;
     _onSdBlocked       = onSdBlocked       || null;
+    _onSdAborted       = onSdAborted       || null;
 
     _audio = new Audio();
     _audio.preload    = 'auto';
@@ -718,6 +724,17 @@ const Player = (() => {
    */
   function jumpTo(index) {
     if (index < 0 || index >= _queue.length) return;
+    const newItem = _queue[index];
+    const isNewSD = !!(newItem?.isSoundrop && (newItem.id || '').startsWith('sd_'));
+    if (isNewSD && !_sdActive && _audio?.src && !_audio.paused) {
+      // Drive/cache track is playing — save its queue position so we can
+      // restore if the SD track fails to load.
+      _preSdRestore = { queueIndex: _queueIndex };
+    } else if (!isNewSD) {
+      // Jumping to a non-SD track: clear any pending restore (it's no longer relevant).
+      _preSdRestore = null;
+    }
+    // SD → SD jump: keep existing _preSdRestore (points back to the original Drive track).
     _queueIndex = index;
     _onQueueChange([..._queue], _queueIndex);
     _playCurrentTrack();
@@ -942,7 +959,11 @@ const Player = (() => {
       if (mySession !== _sdPlaySession) return true;
       if (_queue[_queueIndex]?.id !== item.id) return true;
 
-      // Reproducir el blob por el camino normal (audio element + WebAudio)
+      // Reproducir el blob por el camino normal (audio element + WebAudio).
+      // Pause the Drive element first — it may still be playing if the SD track
+      // was loading in the background (new "keep playing" behavior).
+      if (!_audio.paused) _audio.pause();
+      _preSdRestore = null; // blob is taking over; no restore needed
       _sdActive = false;
       try { Soundrop.yt.stop(); } catch (_) {}
 
@@ -973,6 +994,30 @@ const Player = (() => {
       console.warn('[Player] SD fallback falló:', err?.message || err);
       return false;
     }
+  }
+
+  /**
+   * Restore the Drive track that was playing before an SD load attempt.
+   * Called when the SD track fails to start and the user should keep hearing
+   * what they were listening to.
+   * @returns {boolean} true if a restore was performed, false if nothing to restore.
+   */
+  function _doSdRestore() {
+    const restore = _preSdRestore;
+    if (!restore) return false;
+    _preSdRestore = null;
+    _sdActive = false;
+    try { Soundrop.yt.stop(); } catch (_) {}
+    _queueIndex = restore.queueIndex;
+    const prevItem = _queue[_queueIndex];
+    _onQueueChange([..._queue], _queueIndex);
+    // Resume the Drive audio element — it was never paused, so this is usually a no-op;
+    // but if something paused it in the interim (e.g. _onSdBlocked path), it replays.
+    _audio.play().catch(() => {});
+    if (_onSdAborted) {
+      try { _onSdAborted(prevItem); } catch (_) {}
+    }
+    return true;
   }
 
   // _sdRetry=true means this is an automatic second attempt after a Soundrop cold-start
@@ -1026,8 +1071,11 @@ const Player = (() => {
         // Tag this play attempt so stale YT callbacks from a previous load are ignored
         const mySession = ++_sdPlaySession;
 
-        // Pause Drive element so only one source is heard
-        _audio.pause();
+        // NOTE: intentionally NOT pausing _audio here.
+        // If a Drive track was playing, it keeps going while the YT iframe loads.
+        // _audio.pause() is deferred to onPlay (when YT actually starts) or to
+        // _sdFallbackToBlob (when the MP3 blob is ready). If all paths fail, the
+        // Drive track is restored automatically via _doSdRestore().
 
         _keepAliveStart();
         _msSetMetadata(item);
@@ -1040,6 +1088,9 @@ const Player = (() => {
         Soundrop.yt.load(item.videoId, {
           onPlay: (dur) => {
             if (mySession !== _sdPlaySession) return;
+            // YT started — now stop the Drive audio and clear the restore state.
+            if (!_audio.paused) _audio.pause();
+            _preSdRestore = null;
             _onPlayPause(true);
             _msSetPlaybackState('playing');
             if (dur && _onDurationReady) {
@@ -1086,16 +1137,18 @@ const Player = (() => {
             if (okCache) return;
             // 2) Popup "Convertir y guardar": la conversión gasta cuota, así que
             //    la decide el usuario. El flujo guarda en Drive y reproduce.
+            //    El audio Drive sigue sonando mientras el popup está abierto.
+            //    Si el usuario cancela, app.js llama Player.abortSdLoad() para restaurar.
             if (_onSdBlocked) {
-              _msSetPlaybackState('paused');
-              _onPlayPause?.(false);
               try { _onSdBlocked(item); } catch (_) {}
               return;
             }
             // 3) Sin popup registrado: conversión automática (comportamiento previo)
             const ok = await _sdFallbackToBlob(item, mySession);
             if (ok) return;
+            // All paths exhausted — show error toast and restore previous audio if possible.
             _onError({ type: 'download', message: 'toast_download_error', item });
+            if (_doSdRestore()) return; // restored Drive track → done
             setTimeout(() => {
               if (_queue[_queueIndex]?.id === item.id) next();
             }, 1500);
@@ -1592,5 +1645,7 @@ const Player = (() => {
     getDuration,
     getCurrentTrack,
     patchQueueItem,
+    // SD restore: cancel an in-progress SD load and resume the previous Drive track
+    abortSdLoad: _doSdRestore,
   };
 })();
