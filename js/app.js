@@ -7225,6 +7225,21 @@ const App = (() => {
       // v3.5.513: orden alfabético SIEMPRE (insensible a mayúsculas y tildes)
       playlists.sort((a, b) =>
         (a.name || '').localeCompare(b.name || '', 'es', { sensitivity: 'base', numeric: true }));
+
+      // If a playlist detail is already open, avoid overwriting the detail pane.
+      if (_libInDetail && _currentLibTab === 'playlists') {
+        const minimal = playlists.map(pl => ({ ...pl, songCount: (pl.songIds || []).length, coverUrls: [] }));
+        _setLibTabCount('playlists', minimal.length);
+        // If the two-col structure doesn't exist yet (e.g. arriving from a home card click),
+        // render it NOW with minimal data so onPlaylistClick finds #lib-pl-detail-pane and
+        // opens in desktop two-column mode instead of falling back to single-column.
+        if (!document.getElementById('lib-pl-two-col')) {
+          UI.renderPlaylists(minimal);
+        }
+        _prefetchPlaylistCovers(minimal).catch(() => {});
+        return;
+      }
+
       const enriched = await Promise.all(playlists.map(async pl => {
         const songIds = pl.songIds || [];
         const coverUrls = [];
@@ -7238,12 +7253,6 @@ const App = (() => {
         }
         return { ...pl, songCount: songIds.length, coverUrls };
       }));
-      // If a playlist detail is already open, don't overwrite it — just update count and covers.
-      if (_libInDetail && _currentLibTab === 'playlists') {
-        _setLibTabCount('playlists', enriched.length);
-        _prefetchPlaylistCovers(enriched).catch(() => {});
-        return;
-      }
       UI.renderPlaylists(enriched);
       _setLibTabCount('playlists', enriched.length);
       _domFilterLibItems();
