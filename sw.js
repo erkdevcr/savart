@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.594';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.594 — _libPlLastDetailPl: restaura el detalle de playlist al volver al tab desde otro tab de librería
+const APP_VERSION  = '3.5.595';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.595 — animación slide móvil para playlist list↔detail (CSS transform translateX 280ms)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
