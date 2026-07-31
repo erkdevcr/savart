@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.596';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.596 — _buildMosaicThumb: grid-template-rows:1fr 1fr (celdas sin imagen ya no colapsan); updatePlaylistSidebarCover: preserva yt-pl-chip al redibujar mosaico
+const APP_VERSION  = '3.5.597';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.597 — _prefetchPlaylistCovers: Phase 1 paralela (Promise.all) → covers aparecen en ~30ms en vez de ~300ms; persiste URLs estables a DB.updatePlaylist → guard-path las usa en el próximo cold start
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

@@ -7293,33 +7293,68 @@ const App = (() => {
   async function _prefetchPlaylistCovers(playlists) {
     if (typeof Meta === 'undefined') return;
 
-    for (const pl of playlists) {
+    // ── Phase 1: parallel quick resolution — no network ──────────────────────
+    // All playlists are resolved simultaneously (Promise.all) so covers for every
+    // playlist appear in ~30 ms instead of sequentially (~300 ms for 10 playlists).
+    // Only sources available instantly in DB: coverBlob and stable external URLs.
+    // Stable URLs found here are also persisted to DB so the guard-path `minimal`
+    // on the NEXT cold start already has them and renders covers without any scan.
+    await Promise.all(playlists.map(async pl => {
       const existing = (pl.coverUrls || []).length;
-      if (existing >= 4) continue; // already has a full mosaic
+      if (existing >= 4) return;
       const needed  = 4 - existing;
-
-      // Try enough songs to collect `needed` covers (×3 budget for songs without art)
       const songIds = (pl.songIds || []).slice(0, Math.min(needed * 3 + 2, 12));
       let added = 0;
+      let newStableCount = 0;
+      const stableUrls = [...(pl.coverUrls || []).filter(u => _isStableCoverUrl(u))];
 
       for (const sid of songIds) {
         if (added >= needed) break;
         try {
-          // Pass 1: persisted coverBlob (no network, instant)
           const dbMeta = await DB.getMeta(sid).catch(() => null);
+          // Pass 1: coverBlob already in DB → blob: URL (instant, no network)
           if (dbMeta?.coverBlob) {
             const url = Meta.injectCover(sid, dbMeta.coverBlob);
             if (url) { UI.updatePlaylistSidebarCover(pl.id, url); added++; continue; }
           }
-          // Pass 1b: URL externa estable ya persistida — usarla sin red
+          // Pass 1b: stable external URL already persisted (e.g. ytimg for sd_ songs)
           if (_isStableCoverUrl(dbMeta?.thumbnailUrl)) {
             UI.updatePlaylistSidebarCover(pl.id, dbMeta.thumbnailUrl);
+            stableUrls.push(dbMeta.thumbnailUrl);
+            newStableCount++;
             added++; continue;
           }
-          // Fix I4b: ya soft-escaneada y sin arte encontrado — no re-descargar
+        } catch (_) { /* non-fatal */ }
+      }
+
+      // Persist stable URLs → guard-path minimal renders them on next cold start
+      if (newStableCount > 0) {
+        DB.updatePlaylist(pl.id, { coverUrls: stableUrls.slice(0, 4) }).catch(() => {});
+      }
+    }));
+
+    // ── Phase 2: sequential soft-scan for playlists still missing covers ──────
+    // Network I/O — sequential to avoid competing with audio playback bandwidth.
+    for (const pl of playlists) {
+      const item = document.querySelector(`.lib-pl-item[data-pl-id="${CSS.escape(pl.id)}"]`);
+      let currentCovers = [];
+      try { currentCovers = JSON.parse(item?.dataset.coverUrls || '[]'); } catch (_) {}
+      if (currentCovers.length >= 4) continue;
+
+      const songIds = (pl.songIds || []).slice(0, 12);
+
+      for (const sid of songIds) {
+        if (!item) break; // playlist removed from DOM — user navigated away
+        try { currentCovers = JSON.parse(item.dataset.coverUrls || '[]'); } catch (_) {}
+        if (currentCovers.length >= 4) break;
+
+        try {
+          const dbMeta = await DB.getMeta(sid).catch(() => null);
+          // Skip songs already handled by Phase 1 or soft-scanned before (no cover found)
+          if (dbMeta?.coverBlob || _isStableCoverUrl(dbMeta?.thumbnailUrl)) continue;
           if (dbMeta?.softScannedAt) continue;
 
-          // Pass 2: try cached audio blob first, then range request
+          // Pass 2: try cached audio blob first, then Drive range request
           let blob = await DB.getCachedBlob(sid).catch(() => null);
           if (!blob && Auth.isAuthenticated()) {
             blob = await Drive.downloadFileHead(sid, 1024 * 1024).catch(() => null);
@@ -7344,7 +7379,6 @@ const App = (() => {
           }
           if (meta.coverUrl) {
             UI.updatePlaylistSidebarCover(pl.id, meta.coverUrl);
-            added++;
           }
         } catch (_) { /* non-fatal */ }
       }
