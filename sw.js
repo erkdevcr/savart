@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.595';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.595 — animación slide móvil para playlist list↔detail (CSS transform translateX 280ms)
+const APP_VERSION  = '3.5.596';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.596 — _buildMosaicThumb: grid-template-rows:1fr 1fr (celdas sin imagen ya no colapsan); updatePlaylistSidebarCover: preserva yt-pl-chip al redibujar mosaico
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

@@ -5545,7 +5545,7 @@ const UI = (() => {
       const img = url ? `<img src="${url}" style="width:100%;height:100%;object-fit:cover;display:block">` : '';
       return `<div style="flex:1;background:${bg}">${img}</div>`;
     });
-    return `<div style="display:grid;grid-template-columns:1fr 1fr;width:100%;height:100%">${cells.join('')}</div>`;
+    return `<div style="display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;width:100%;height:100%">${cells.join('')}</div>`;
   }
 
   /**
@@ -5570,7 +5570,9 @@ const UI = (() => {
       item.dataset.coverUrls = JSON.stringify(covers);
     }
     const name = item.dataset.plName || '';
-    thumb.innerHTML = _buildMosaicThumb(covers, name);
+    // Preserve non-mosaic overlays (e.g. .yt-pl-chip) — innerHTML replaces everything
+    const chipHtml = thumb.querySelector('.yt-pl-chip')?.outerHTML || '';
+    thumb.innerHTML = _buildMosaicThumb(covers, name) + chipHtml;
   }
 
   /**
