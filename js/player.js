@@ -25,6 +25,7 @@ const Player = (() => {
   let _sdPlaySession = 0;        // incremented on each SD play attempt
   let _sdLockedPause = false;    // true when YT auto-paused due to screen lock (not user action)
   let _sdUserPausing = false;    // true when pause() was called by the user (distinguishes from YT auto-pause)
+  let _pausedByInterruption = false; // true when OS paused audio (phone call) — triggers auto-resume on focus return
   let _audioCtx     = null;      // AudioContext
   let _sourceNode   = null;      // MediaElementAudioSourceNode for _audio
   let _gainNode     = null;      // GainNode (master volume)
@@ -122,6 +123,12 @@ const Player = (() => {
     _audio.addEventListener('pause', () => {
       _onPlayPause(false);
       _msSetPlaybackState('paused');
+      // Detect OS-initiated pause (phone call / audio focus loss) — not from our
+      // pause() call (_sdUserPausing flag) and not a natural track end.
+      // We'll auto-resume once audio focus is returned.
+      if (!_sdUserPausing && !_audio.ended) {
+        _pausedByInterruption = true;
+      }
     });
     _audio.addEventListener('ended',   _handleEnded);
     _audio.addEventListener('error',   _handleAudioError);
@@ -161,6 +168,13 @@ const Player = (() => {
         // Resume AudioContext for Drive tracks (may have been suspended).
         if (_audioCtx?.state === 'suspended') {
           _audioCtx.resume().catch(() => {});
+        }
+        // Auto-resume Drive track if a phone call interrupted playback.
+        // Delay 600 ms: give Android time to complete the audio routing handoff
+        // (Bluetooth profile switch back from SCO to A2DP takes ~300-500 ms).
+        if (_pausedByInterruption && !_sdActive && _audio?.paused) {
+          _pausedByInterruption = false;
+          setTimeout(() => play().catch(() => {}), 600);
         }
         // Resume Soundrop if YT auto-paused during screen lock.
         if (_sdLockedPause && _sdActive) {
@@ -450,6 +464,15 @@ const Player = (() => {
     if (_audioCtx) return;
 
     _audioCtx     = new (window.AudioContext || window.webkitAudioContext)();
+    // When the OS returns audio focus (call ended, notification dismissed),
+    // the AudioContext transitions suspended→running. Use this to auto-resume
+    // Drive tracks that were interrupted while the tab stayed in the foreground.
+    _audioCtx.onstatechange = () => {
+      if (_audioCtx.state === 'running' && _pausedByInterruption && !_sdActive && _audio?.paused) {
+        _pausedByInterruption = false;
+        setTimeout(() => play().catch(() => {}), 400);
+      }
+    };
     _sourceNode   = _audioCtx.createMediaElementSource(_audio);
     _gainNode     = _audioCtx.createGain();
     _gainNode.gain.value = _volume;
@@ -647,6 +670,12 @@ const Player = (() => {
   async function play() {
     if (!_audio) return;
     if (!_sdActive) _initAudioGraph();
+    // AudioContext may be suspended after a phone call or OS audio interruption.
+    // Resuming here (before play()) ensures audio flows through the Web Audio graph.
+    // This also re-enables Bluetooth device controls that rely on active audio output.
+    if (_audioCtx?.state === 'suspended') {
+      await _audioCtx.resume().catch(() => {});
+    }
     _keepAliveStart();
     await _getAudio().play().catch(_handleAudioError);
   }
@@ -655,6 +684,7 @@ const Player = (() => {
    * Pause.
    */
   function pause() {
+    _pausedByInterruption = false; // user chose to pause — don't auto-resume after call
     _sdLockedPause = false; // user-initiated pause — cancel any pending screen-lock resume
     _sdUserPausing = true;  // signal onPause: this came from the user, not YT auto-pause
     _keepAliveStop();
