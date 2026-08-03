@@ -6307,6 +6307,7 @@ body.queue-open #mini-player { z-index: 65; }
   transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 .eq-save-btn:hover { background: var(--bg-hover); color: var(--text-primary); border-color: transparent; }
+#btn-eq-group { margin-left: auto; }
 .eq-save-btn.active { color: var(--accent); border-color: var(--accent); }
 .eq-save-btn.active:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); border-color: var(--accent); }
 
