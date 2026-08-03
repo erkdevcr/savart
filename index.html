@@ -19,10 +19,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&family=Baskervville:ital@0;1&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="styles.css?v=3.5.599">
+  <link rel="stylesheet" href="styles.css?v=3.5.600">
   <!-- Version global — fallback para Android donde el SW no se registra.
        IMPORTANTE: mantener sincronizada con APP_VERSION de sw.js en cada bump. -->
-  <script>window.SAVART_VERSION = '3.5.599';</script>
+  <script>window.SAVART_VERSION = '3.5.600';</script>
   <!-- Tema (v3.5.552): aplicar ANTES del primer paint para evitar flash del tema default -->
   <script>try{var _th=localStorage.getItem('savart_theme');if(_th&&_th!=='blue')document.documentElement.dataset.theme=_th;}catch(e){}</script>
 </head>
@@ -1613,6 +1613,10 @@
           <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
           <span data-i18n="eq_save_current">Guardar actual</span>
         </button>
+        <button id="btn-eq-group" class="eq-save-btn" aria-pressed="false">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/></svg>
+          <span data-i18n="eq_group_bars">Agrupar barras</span>
+        </button>
       </div>
       <!-- Full-width toggle bar: line ── V ── line -->
       <button class="eq-presets-toggle" id="eq-presets-toggle" aria-expanded="false" aria-label="Mis presets">
@@ -1656,24 +1660,24 @@
 </script>
 
 <!-- Savart modules -->
-<script src="js/config.js?v=3.5.599"></script>
-<script src="js/auth.js?v=3.5.599"></script>
-<script src="js/drive.js?v=3.5.599"></script>
-<script src="js/db.js?v=3.5.599"></script>
-<script src="js/sync.js?v=3.5.599"></script>
-<script src="js/player.js?v=3.5.599"></script>
-<script src="js/meta.js?v=3.5.599"></script>
-<script src="js/lastfm.js?v=3.5.599"></script>
-<script src="js/audd.js?v=3.5.599"></script>
-<script src="js/musicbrainz.js?v=3.5.599"></script>
-<script src="js/discogs.js?v=3.5.599"></script>
-<script src="js/lyrics.js?v=3.5.599"></script>
-<script src="js/soundrop.js?v=3.5.599"></script>
-<script src="js/yt-auth.js?v=3.5.599"></script>
-<script src="js/yt-playlists.js?v=3.5.599"></script>
-<script src="js/ui.js?v=3.5.599"></script>
-<script src="js/app.js?v=3.5.599"></script>
-<script src="js/bg.js?v=3.5.599"></script>
+<script src="js/config.js?v=3.5.600"></script>
+<script src="js/auth.js?v=3.5.600"></script>
+<script src="js/drive.js?v=3.5.600"></script>
+<script src="js/db.js?v=3.5.600"></script>
+<script src="js/sync.js?v=3.5.600"></script>
+<script src="js/player.js?v=3.5.600"></script>
+<script src="js/meta.js?v=3.5.600"></script>
+<script src="js/lastfm.js?v=3.5.600"></script>
+<script src="js/audd.js?v=3.5.600"></script>
+<script src="js/musicbrainz.js?v=3.5.600"></script>
+<script src="js/discogs.js?v=3.5.600"></script>
+<script src="js/lyrics.js?v=3.5.600"></script>
+<script src="js/soundrop.js?v=3.5.600"></script>
+<script src="js/yt-auth.js?v=3.5.600"></script>
+<script src="js/yt-playlists.js?v=3.5.600"></script>
+<script src="js/ui.js?v=3.5.600"></script>
+<script src="js/app.js?v=3.5.600"></script>
+<script src="js/bg.js?v=3.5.600"></script>
 
 <!-- Inline: additional bindings that need the DOM -->
 <script>

@@ -6286,6 +6286,9 @@ body.queue-open #mini-player { z-index: 65; }
 .eq-save-row {
   flex-shrink: 0;
   padding: 10px 16px 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 /* Understated save button — like rescan/sort-toggle */
@@ -6304,6 +6307,8 @@ body.queue-open #mini-player { z-index: 65; }
   transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 .eq-save-btn:hover { background: var(--bg-hover); color: var(--text-primary); border-color: transparent; }
+.eq-save-btn.active { color: var(--accent); border-color: var(--accent); }
+.eq-save-btn.active:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); border-color: var(--accent); }
 
 /* Full-width toggle bar with centered V chevron */
 .eq-presets-toggle {

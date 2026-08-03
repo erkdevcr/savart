@@ -14634,6 +14634,7 @@ const App = (() => {
   let _currentPreset    = 'flat';
   let _customPresets    = [];  // loaded from DB
   let _eqBypassedGains  = null; // real gains stored while EQ is toggled off (module-scope so it survives between event handlers)
+  let _eqGroupBars      = false; // true when all bands move together (same delta) on any drag
 
   function _buildEQSliders() {
     const container = document.getElementById('eq-sliders');
@@ -14657,8 +14658,24 @@ const App = (() => {
 
       band.querySelector('input').addEventListener('input', (e) => {
         const gain = parseInt(e.target.value, 10);
-        Player.setEQBand(i, gain);
-        document.getElementById(`eq-val-${i}`).textContent = gain > 0 ? `+${gain}` : `${gain}`;
+        if (_eqGroupBars) {
+          // Welded mode: apply the same delta to every band simultaneously
+          const prevGains = Player.getEQGains();
+          const delta     = gain - prevGains[i];
+          const newGains  = prevGains.map((g, j) =>
+            j === i ? gain : Math.max(-12, Math.min(12, g + delta))
+          );
+          Player.setEQGains(newGains);
+          newGains.forEach((g, j) => {
+            const sl  = document.getElementById(`eq-slider-${j}`);
+            const val = document.getElementById(`eq-val-${j}`);
+            if (sl)  sl.value = g;
+            if (val) val.textContent = g > 0 ? `+${g}` : `${g}`;
+          });
+        } else {
+          Player.setEQBand(i, gain);
+          document.getElementById(`eq-val-${i}`).textContent = gain > 0 ? `+${gain}` : `${gain}`;
+        }
         _currentPreset = null;
         document.querySelectorAll('.eq-preset-chip').forEach(c => c.classList.remove('active'));
         _updateEQPresetLabel();
@@ -16570,6 +16587,14 @@ const App = (() => {
     // EQ factory preset chips
     document.querySelectorAll('.eq-preset-chip').forEach(chip => {
       chip.addEventListener('click', () => _applyEQPreset(chip.dataset.preset));
+    });
+
+    // EQ group bars toggle — all bands move by the same delta when any bar is dragged
+    document.getElementById('btn-eq-group')?.addEventListener('click', () => {
+      _eqGroupBars = !_eqGroupBars;
+      const btn = document.getElementById('btn-eq-group');
+      btn?.classList.toggle('active', _eqGroupBars);
+      btn?.setAttribute('aria-pressed', String(_eqGroupBars));
     });
 
     // EQ save custom preset

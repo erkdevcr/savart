@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.599';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.599 — player.js: _onBlobReady diferida 2 s tras play() — blob.arrayBuffer()+ID3+createImageBitmap ya no bloquean el main thread en la fase de buffering → sin micro-pausa al segundo 2-3
+const APP_VERSION  = '3.5.600';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.600 — EQ: botón "Agrupar barras" (Group bars) — toggle welded-drag: todas las bandas se mueven con el mismo delta; azul activo / gris inactivo; misma estética que Save Current
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
