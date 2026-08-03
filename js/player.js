@@ -1263,11 +1263,6 @@ const Player = (() => {
         return;
       }
 
-      // Notify blob is ready (used for ID3 metadata extraction)
-      if (_onBlobReady) {
-        try { _onBlobReady(item, blob); } catch (e) { console.warn('[Player] onBlobReady error:', e); }
-      }
-
       // Release previous audio: clear src FIRST so Chrome's media engine drops its
       // internal decoded PCM buffer, THEN revoke the object URL so the GC can free
       // the underlying blob data. Without src='', Chrome holds decoded audio in the
@@ -1344,6 +1339,23 @@ const Player = (() => {
 
       // Fast-start: kick off background full-download now that audio is playing
       if (useFastStart) _finishFastStartDownload(item);
+
+      // ID3 metadata extraction — deferred 2 s after playback starts.
+      // blob.arrayBuffer() + ID3 parsing + createImageBitmap (cover decode) are
+      // heavy main-thread operations that, when run immediately, block the audio
+      // pipeline during its critical buffering phase and cause an audible micro-pause
+      // at ~2-3 s into every track. By 2 s the engine has enough decoded frames
+      // buffered to survive any main-thread work without stuttering.
+      if (_onBlobReady) {
+        const _metaItem = item;
+        const _metaBlob = blob;
+        const _metaId   = item.id;
+        setTimeout(() => {
+          if (_queue[_queueIndex]?.id !== _metaId) return; // user switched tracks
+          try { _onBlobReady(_metaItem, _metaBlob); }
+          catch (e) { console.warn('[Player] onBlobReady error:', e); }
+        }, 2000);
+      }
 
     } catch (err) {
       if (_activeDownloadCtrl === myCtrl) _activeDownloadCtrl = null;

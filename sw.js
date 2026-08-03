@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.598';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.598 — player.js: auto-resume tras llamada telefónica (_pausedByInterruption); play() resume AudioContext suspendido antes de play → botón Bluetooth funciona tras llamada
+const APP_VERSION  = '3.5.599';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.599 — player.js: _onBlobReady diferida 2 s tras play() — blob.arrayBuffer()+ID3+createImageBitmap ya no bloquean el main thread en la fase de buffering → sin micro-pausa al segundo 2-3
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
