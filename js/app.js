@@ -5753,8 +5753,11 @@ const App = (() => {
       // Fix M6: solo URLs ESTABLES (las googleusercontent caducan en horas y
       // dejaban mosaicos rotos al día siguiente)
       const _isUsableExt = u => _isStableCoverUrl(u);
+      // Solo mostrar playlists que hayan sido reproducidas (lastPlayedAt > 0).
+      // updatedAt se estampa al crear/editar — sin este filtro aparecen playlists
+      // nunca reproducidas y el home muestra recents incorrectos.
       const enrichedPlaylists = await Promise.all(
-        rawPlaylists.slice(0, 12).map(async pl => {
+        rawPlaylists.filter(pl => (pl.lastPlayedAt || 0) > 0).slice(0, 12).map(async pl => {
           const covers = [];
           const seen   = new Set();
           for (const sid of (pl.songIds || []).slice(0, 24)) {
