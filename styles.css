@@ -1736,6 +1736,20 @@ img { display: block; }
 
 .search-bar input::placeholder { color: var(--text-muted); }
 
+/* "Here" toggle inside the browse search bar */
+.search-here-btn {
+  flex-shrink: 0;
+  padding: 3px 8px;
+  font-size: 11px;
+  line-height: 1.4;
+  border-radius: var(--radius-sm);
+}
+.search-here-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+  pointer-events: none;
+}
+
 /* Clear (✕) button inside the search bar */
 .browse-search-clear {
   background: none;

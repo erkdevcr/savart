@@ -113,6 +113,7 @@ const UI = (() => {
       browse_back: 'Atrás',
       // ── Search ─────────────────────────────────────────────
       search_placeholder: 'Canciones, carpetas…',
+      search_here: 'Aquí',
       // ── Session / auth ─────────────────────────────────────
       login_tagline_1:  'Tu música de Google Drive,',
       login_tagline_2:  'donde quieras.',
@@ -559,6 +560,7 @@ const UI = (() => {
       browse_back: 'Back',
       // ── Search ─────────────────────────────────────────────
       search_placeholder: 'Songs, folders…',
+      search_here: 'Here',
       // ── Session / auth ─────────────────────────────────────
       login_tagline_1:  'Your Google Drive music,',
       login_tagline_2:  'anywhere.',

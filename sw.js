@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.604';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.604 — fix: covers Drive (thumbnailLink) ya no se re-pintan al reabrir carpeta tras reset (skipAutoEnrich)
+const APP_VERSION  = '3.5.605';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.605 — search "Aquí": toggle en search bar para buscar solo en la carpeta abierta
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

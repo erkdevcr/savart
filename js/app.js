@@ -6118,6 +6118,7 @@ const App = (() => {
       // Track current browse folder for rescan and for the title-row 3-dot menu
       _browseFolderId = folder.id;
       _browseFiles    = result.files;
+      _updateSearchHereBtn();
       // Keep a full folder object so the browse title 3-dot menu can pass the right
       // folderType (album / collection / null) to showContextMenu — same data as a subfolder row.
       // isFolder (v3.5.515): sin este flag, onShowPlaylistPicker no tagueaba el item
@@ -6214,6 +6215,7 @@ const App = (() => {
     _browseFolderId = folder.id;
     _browseFiles    = files;
     _browseFolder   = { id: folder.id, name: folder.name, isFolder: true, type: 'folder', folderType: null };
+    _updateSearchHereBtn();
     // Hide back button when at root; show it when inside a subfolder
     { const _bb = document.getElementById('btn-browse-back'); if (_bb) _bb.style.display = folder.id === _rootFolderId ? 'none' : ''; }
     _updateBrowseLegend(folder.id);
@@ -6806,6 +6808,12 @@ const App = (() => {
     const activeChip = document.querySelector('[data-filter].active');
     const filter = activeChip?.dataset.filter || 'all';
 
+    // "Aquí" toggle: buscar solo dentro de la carpeta abierta
+    const searchHereActive = !!(
+      document.getElementById('btn-search-here')?.classList.contains('active') &&
+      _browseFolderId && _browseFolderId !== _rootFolderId
+    );
+
     container.innerHTML = `<div class="empty-state"><p>${UI.t('searching')}</p></div>`;
     UI.updateSearchChipCounts(null); // clear counts while loading
     // Hide play-results button while searching
@@ -6854,7 +6862,10 @@ const App = (() => {
         const all      = await DB.getAllMetaLight().catch(() => []);
         const matched  = all.filter(m => {
           const haystack = [m.name, m.displayName, m.artist, m.album].filter(Boolean).map(norm).join(' ');
-          return haystack.includes(normTerm);
+          if (!haystack.includes(normTerm)) return false;
+          // "Aquí": filtrar por carpeta abierta (offline usa folderId en DB)
+          if (searchHereActive && m.folderId !== _browseFolderId) return false;
+          return true;
         });
         const files = matched.map(m => ({
           id:          m.id,
@@ -6903,7 +6914,9 @@ const App = (() => {
       const rawAll = await Drive.searchFiles(term, _rootFolderId, async (partial) => {
         try {
           if (_seq !== _searchSeq) return;          // búsqueda más nueva en curso
-          const p = await _filterSearchToRoot(partial);
+          let p = await _filterSearchToRoot(partial);
+          if (_seq !== _searchSeq) return;
+          if (searchHereActive) p = await _filterSearchToFolder(p, _browseFolderId);
           if (_seq !== _searchSeq) return;
           const quick = _fuzzyRank(term, p);
           if (!quick.files?.length && !quick.folders?.length) return; // nada útil aún
@@ -6914,7 +6927,9 @@ const App = (() => {
         } catch (_) {}
       });
       if (_seq !== _searchSeq) return; // llegó tarde — otra búsqueda ya pintó
-      const raw = await _filterSearchToRoot(rawAll);
+      let raw = await _filterSearchToRoot(rawAll);
+      if (_seq !== _searchSeq) return;
+      if (searchHereActive) raw = await _filterSearchToFolder(raw, _browseFolderId);
       if (_seq !== _searchSeq) return;
       // Fuzzy-score + sort — drops unrelated results from word-expansion queries
       const result = _fuzzyRank(term, raw);
@@ -7008,6 +7023,57 @@ const App = (() => {
         (await _isInRootSubtreeMemo(f.parents?.[0] || null)) ? f : null)),
     ]);
     return { ...result, folders: folderKeep.filter(Boolean), files: fileKeep.filter(Boolean) };
+  }
+
+  /** Filtra un resultado de Drive.searchFiles al subárbol de una carpeta específica.
+   *  Usado por el modo "Aquí" — restringe resultados a la carpeta abierta y sus hijos.
+   *  Walk de padres vía DB (fast) sin Drive API calls — depth máx 12. */
+  async function _filterSearchToFolder(result, folderId) {
+    if (!folderId) return result;
+    // Cache de veredictos por folderId para esta llamada
+    const _cache = new Map();
+    async function _inSubtree(startId) {
+      if (!startId) return false;
+      if (startId === folderId) return true;
+      if (_cache.has(startId)) return _cache.get(startId);
+      const walked = [];
+      let cur = startId;
+      for (let d = 0; d < 12 && cur; d++) {
+        if (cur === folderId) break;
+        if (cur === _rootFolderId || cur === 'root') { cur = null; break; }
+        const hit = _cache.get(cur);
+        if (hit !== undefined) { walked.forEach(id => _cache.set(id, hit)); return hit; }
+        walked.push(cur);
+        const m = await DB.getMeta(cur).catch(() => null);
+        cur = m?.folderId || null;
+      }
+      const found = cur === folderId;
+      walked.forEach(id => _cache.set(id, found));
+      return found;
+    }
+    const [folderKeep, fileKeep] = await Promise.all([
+      Promise.all((result?.folders || []).map(async f => {
+        const p = f.parents?.[0] || null;
+        return (f.id === folderId || p === folderId || await _inSubtree(p)) ? f : null;
+      })),
+      Promise.all((result?.files || []).map(async f => {
+        const p = f.parents?.[0] || null;
+        return (p === folderId || await _inSubtree(p)) ? f : null;
+      })),
+    ]);
+    return { ...result, folders: folderKeep.filter(Boolean), files: fileKeep.filter(Boolean) };
+  }
+
+  /** Actualiza el estado del botón "Aquí" según si hay una carpeta abierta. */
+  function _updateSearchHereBtn() {
+    const btn = document.getElementById('btn-search-here');
+    if (!btn) return;
+    const hasFolder = !!_browseFolderId && _browseFolderId !== _rootFolderId;
+    btn.disabled = !hasFolder;
+    if (!hasFolder && btn.classList.contains('active')) {
+      btn.classList.remove('active');
+      btn.setAttribute('aria-pressed', 'false');
+    }
   }
 
   /* ── Library ─────────────────────────────────────────────── */
