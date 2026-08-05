@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.602';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.602 — home playlists: filter(lastPlayedAt>0) — solo aparecen playlists realmente reproducidas, no las solo creadas/editadas — EQ: btn-eq-group alineado a la derecha (margin-left:auto) — EQ: botón "Agrupar barras" (Group bars) — toggle welded-drag: todas las bandas se mueven con el mismo delta; azul activo / gris inactivo; misma estética que Save Current
+const APP_VERSION  = '3.5.603';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.603 — lyrics: overlay desktop centrado + botones A−/A+ en móvil y desktop para cambiar font size
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

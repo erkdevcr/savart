@@ -2576,7 +2576,7 @@ const App = (() => {
         const lyricsTitle = meta.title || item.displayName;
         Lyrics.fetch(meta.artist, lyricsTitle).catch(() => {});
         const expanded = document.getElementById('player-expanded');
-        if (expanded?.classList.contains('showing-lyrics') &&
+        if ((expanded?.classList.contains('showing-lyrics') || _isLyricsOverlayOpen()) &&
             Player.getCurrentTrack()?.id === item.id) {
           _loadLyricsForCurrentTrack();
         }
@@ -13545,28 +13545,68 @@ const App = (() => {
    * track. Lyrics are prefetched after all recognition passes, so
    * most of the time the result is already in cache.
    */
+  // ── Lyrics font size ─────────────────────────────────────────────────────
+  const LYRICS_FONT_MIN = 10;
+  const LYRICS_FONT_MAX = 26;
+  let _lyricsFontSize = parseInt(localStorage.getItem('savart_lyrics_font') || '14', 10);
+
+  function _applyLyricsFontSize() {
+    const sz = `${_lyricsFontSize}px`;
+    const el1 = document.getElementById('lyrics-content');
+    const el2 = document.getElementById('lyrics-content-overlay');
+    if (el1) el1.style.fontSize = sz;
+    if (el2) el2.style.fontSize = sz;
+  }
+
+  function _setLyricsFontSize(delta) {
+    _lyricsFontSize = Math.max(LYRICS_FONT_MIN, Math.min(LYRICS_FONT_MAX, _lyricsFontSize + delta));
+    localStorage.setItem('savart_lyrics_font', String(_lyricsFontSize));
+    _applyLyricsFontSize();
+  }
+
+  // ── Desktop: is the lyrics overlay currently open? ───────────────────────
+  function _isLyricsOverlayOpen() {
+    return document.getElementById('overlay-lyrics')?.classList.contains('visible');
+  }
+
   function _openLyricsView() {
-    const expanded = document.getElementById('player-expanded');
-    if (!expanded) return;
-    expanded.classList.remove('showing-queue');
-    expanded.classList.add('showing-lyrics');
+    if (window.innerWidth >= 768) {
+      // Desktop: centered overlay (like EQ), player column stays untouched
+      document.getElementById('overlay-lyrics')?.classList.add('visible');
+    } else {
+      // Mobile: slide up inside expanded player (existing behaviour)
+      const expanded = document.getElementById('player-expanded');
+      if (!expanded) return;
+      expanded.classList.remove('showing-queue');
+      expanded.classList.add('showing-lyrics');
+    }
+    _applyLyricsFontSize();
     _loadLyricsForCurrentTrack();
   }
 
   function _closeLyricsView() {
-    const expanded = document.getElementById('player-expanded');
-    if (!expanded) return;
-    expanded.classList.add('hiding-lyrics');
-    const lyricsView = expanded.querySelector('.pexp-lyrics-view');
-    const finish = () => expanded.classList.remove('showing-lyrics', 'hiding-lyrics');
-    if (lyricsView) {
-      lyricsView.addEventListener('animationend', finish, { once: true });
+    if (window.innerWidth >= 768) {
+      // Desktop: hide overlay
+      document.getElementById('overlay-lyrics')?.classList.remove('visible');
+    } else {
+      // Mobile: slide-down animation
+      const expanded = document.getElementById('player-expanded');
+      if (!expanded) return;
+      expanded.classList.add('hiding-lyrics');
+      const lyricsView = expanded.querySelector('.pexp-lyrics-view');
+      const finish = () => expanded.classList.remove('showing-lyrics', 'hiding-lyrics');
+      if (lyricsView) {
+        lyricsView.addEventListener('animationend', finish, { once: true });
+      }
+      setTimeout(finish, 350); // fallback if animationend doesn't fire
     }
-    setTimeout(finish, 350); // fallback if animationend doesn't fire
   }
 
   async function _loadLyricsForCurrentTrack() {
-    const lyricsContent = document.getElementById('lyrics-content');
+    // Desktop uses #lyrics-content-overlay inside #overlay-lyrics; mobile uses #lyrics-content
+    const lyricsContent = window.innerWidth >= 768
+      ? document.getElementById('lyrics-content-overlay')
+      : document.getElementById('lyrics-content');
     if (!lyricsContent) return;
 
     const track = Player.getCurrentTrack();
@@ -15942,6 +15982,14 @@ const App = (() => {
     // Lyrics panel: open/close
     document.getElementById('btn-pexp-lyrics')?.addEventListener('click', _openLyricsView);
     document.getElementById('btn-lyrics-back')?.addEventListener('click', _closeLyricsView);
+    // Lyrics desktop overlay: close + font size
+    document.getElementById('btn-lyrics-overlay-back')?.addEventListener('click', _closeLyricsView);
+    document.getElementById('lyrics-overlay-backdrop')?.addEventListener('click', _closeLyricsView);
+    document.getElementById('btn-lyrics-overlay-minus')?.addEventListener('click', () => _setLyricsFontSize(-1));
+    document.getElementById('btn-lyrics-overlay-plus')?.addEventListener('click',  () => _setLyricsFontSize(+1));
+    // Lyrics mobile font size
+    document.getElementById('btn-lyrics-font-minus')?.addEventListener('click', () => _setLyricsFontSize(-1));
+    document.getElementById('btn-lyrics-font-plus')?.addEventListener('click',  () => _setLyricsFontSize(+1));
 
     // Mini-player desktop: Cola button → open queue panel
     document.getElementById('btn-mini-queue')?.addEventListener('click', (e) => {
