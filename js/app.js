@@ -6035,6 +6035,12 @@ const App = (() => {
             if (!f.thumbnailUrl && m.thumbnailUrl && m.thumbnailUrl !== 'id3') {
               f.thumbnailUrl = m.thumbnailUrl;
             }
+            // Fix: item reseteado a virgen — la URL de Drive que viene en
+            // f.thumbnailUrl (de _normalizeItem: raw.thumbnailLink) no debe
+            // pintarse en el render inicial. Sin esto la re-entrada a la carpeta
+            // restauraba el cover con la thumbnailLink volátil de Drive aunque
+            // el DB estuviese limpio (skipAutoEnrich:true + thumbnailUrl:null).
+            if (m.skipAutoEnrich) f.thumbnailUrl = null;
             // Prefer exact DB value
             if (m.durationSec > 0) f.durationSec = m.durationSec;
           }

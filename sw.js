@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.603';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.603 — lyrics: overlay desktop centrado + botones A−/A+ en móvil y desktop para cambiar font size
+const APP_VERSION  = '3.5.604';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.604 — fix: covers Drive (thumbnailLink) ya no se re-pintan al reabrir carpeta tras reset (skipAutoEnrich)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
