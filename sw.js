@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.606';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.606 — Recent playlists del Home: navegar ya no las pinta/reordena (getPlaylists ordena SOLO por lastPlayedAt; updatedAt queda de desempate — el prefetch de coverUrls lo bumpeaba al navegar); play a un ITEM dentro de la playlist también estampa lastPlayedAt (tercer disparador)
+const APP_VERSION  = '3.5.607';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.607 — Lyrics overlay desktop: fondo negro 90% full-width sobre screen-home, sin card, slide desde abajo
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

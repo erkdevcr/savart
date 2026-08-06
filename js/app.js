@@ -16062,7 +16062,6 @@ const App = (() => {
     document.getElementById('btn-lyrics-back')?.addEventListener('click', _closeLyricsView);
     // Lyrics desktop overlay: close + font size
     document.getElementById('btn-lyrics-overlay-back')?.addEventListener('click', _closeLyricsView);
-    document.getElementById('lyrics-overlay-backdrop')?.addEventListener('click', _closeLyricsView);
     document.getElementById('btn-lyrics-overlay-minus')?.addEventListener('click', () => _setLyricsFontSize(-1));
     document.getElementById('btn-lyrics-overlay-plus')?.addEventListener('click',  () => _setLyricsFontSize(+1));
     // Lyrics mobile font size

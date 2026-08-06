@@ -3856,43 +3856,33 @@ img { display: block; }
 .lyrics-font-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
 
 /* ── Lyrics desktop overlay ───────────────────────────────── */
-#overlay-lyrics {
-  position: fixed;
-  inset: 0;
-  z-index: 90;
-  display: none;
-  align-items: center;
-  justify-content: center;
-  padding: 48px 20px;
-  box-sizing: border-box;
-}
-#overlay-lyrics.visible { display: flex; }
+/* Mobile: hidden — lyrics live inside #player-expanded */
+#overlay-lyrics { display: none; }
 
-/* Mobile: overlay is never used — lyrics live inside #player-expanded */
-@media (max-width: 767px) {
-  #overlay-lyrics { display: none !important; }
-}
-
-.lyrics-overlay-backdrop {
-  position: absolute;
-  inset: 0;
-  background: rgba(0,0,0,0.55);
-  cursor: pointer;
-}
-
-#lyrics-overlay-card {
-  position: relative;
-  z-index: 1;
-  width: 100%;
-  max-width: 520px;
-  height: min(640px, calc(100vh - 96px));
-  background: var(--bg-elevated);
-  border-radius: var(--radius-lg);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  box-shadow: 0 16px 48px rgba(0,0,0,0.5);
-  animation: sheetUp 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+@media (min-width: 768px) {
+  #overlay-lyrics {
+    position: fixed;
+    left: var(--sidebar-w);
+    right: var(--now-playing-w);
+    top: 0;
+    bottom: 0;
+    z-index: 90;
+    display: flex;
+    flex-direction: column;
+    background: rgba(0, 0, 0, 0.9);
+    overflow: hidden;
+    /* Off-screen by default; slide up on .visible */
+    visibility: hidden;
+    transform: translateY(100%);
+    transition: transform 0.32s cubic-bezier(0.32, 0.72, 0, 1),
+                visibility 0s linear 0.32s;
+  }
+  #overlay-lyrics.visible {
+    visibility: visible;
+    transform: translateY(0);
+    transition: transform 0.32s cubic-bezier(0.32, 0.72, 0, 1),
+                visibility 0s linear;
+  }
 }
 
 .lyrics-content {
