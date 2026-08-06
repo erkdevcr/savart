@@ -6358,6 +6358,12 @@ const App = (() => {
       // Album / collection detail: queue = whole content in order,
       // then radio appends +25 per unique artist.
       _resetRadio();
+      // v3.5.606: reproducir un ITEM dentro de una playlist también la marca
+      // como reproducida (tercer disparador de Recent playlists, junto al botón
+      // Reproducir del detalle y al play del menú contextual). Los songs de
+      // playlist llevan _playlistId; los de álbum/colección no → no-op.
+      const _plId = clickedSong?._playlistId || contextSongs[0]?._playlistId || null;
+      if (_plId) DB.updatePlaylist(_plId, { lastPlayedAt: Date.now() }).catch(() => {});
       const startIdx = contextSongs.findIndex(s => s.id === clickedSong.id);
       contextSongs.forEach(s => _cacheItem(s));
       Player.setQueue(contextSongs, startIdx >= 0 ? startIdx : 0);

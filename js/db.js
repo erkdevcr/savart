@@ -679,11 +679,16 @@ const DB = (() => {
   async function getPlaylists() {
     const store = _tx('playlists');
     const pls   = await _promisify(store.getAll());
-    // Sort by most recent activity: lastPlayedAt takes priority over updatedAt
+    // v3.5.606: orden SOLO por reproducción real (lastPlayedAt). Antes se usaba
+    // max(lastPlayedAt, updatedAt) y updatedAt se bumpea con CUALQUIER escritura
+    // (prefetch de coverUrls al navegar, renames, add-song…) → navegar una
+    // playlist la "pintaba" al frente de Recent playlists sin haberla reproducido.
+    // updatedAt queda solo como desempate entre nunca-reproducidas.
     return pls.sort((a, b) => {
-      const ta = Math.max(a.lastPlayedAt || 0, a.updatedAt || 0);
-      const tb = Math.max(b.lastPlayedAt || 0, b.updatedAt || 0);
-      return tb - ta;
+      const pa = a.lastPlayedAt || 0;
+      const pb = b.lastPlayedAt || 0;
+      if (pa !== pb) return pb - pa;
+      return (b.updatedAt || 0) - (a.updatedAt || 0);
     });
   }
 
