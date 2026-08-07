@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.608';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.608 — _cacheItem persiste durationSec a DB (Soundrop search results → duración visible en playlists)
+const APP_VERSION  = '3.5.609';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.609 — Soundrop.fetchDurations: playlist pide duración a YT API para SD tracks sin durationSec en DB
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

@@ -13457,6 +13457,19 @@ const App = (() => {
         _libInDetail        = true;
         _libDetailRestoreFn = () => onPlaylistClick(fullPl || pl);
       }
+      // Fetch durations from YouTube for SD tracks still missing durationSec
+      const sdNoDur = songs.filter(s => s.isSoundrop && !(s.durationSec > 0) && s.videoId);
+      if (sdNoDur.length && typeof Soundrop !== 'undefined') {
+        Soundrop.fetchDurations(sdNoDur.map(s => s.videoId)).then(durMap => {
+          sdNoDur.forEach(s => {
+            const dur = durMap.get(s.videoId);
+            if (!(dur > 0)) return;
+            DB.setMeta(s.id, { durationSec: dur }).catch(() => {});
+            UI.updateLibrarySongDuration(s.id, dur);
+          });
+        }).catch(() => {});
+      }
+
       // Soft scan: ID3 metadata + covers for all songs in the playlist
       _softScanItems(songs).catch(() => {});
       // Drive fallback: fetch thumbnailLink for songs still without cover after local passes

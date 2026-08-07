@@ -482,7 +482,32 @@ const Soundrop = (() => {
     };
   })();
 
+  /**
+   * Fetch durations for a list of bare YouTube video IDs (no "sd_" prefix).
+   * Batch call — max 50 IDs per request (YouTube API limit).
+   * Returns a Map of videoId → durationSec.
+   */
+  async function fetchDurations(videoIds) {
+    const result = new Map();
+    if (!videoIds || !videoIds.length) return result;
+    // YouTube API max 50 IDs per call
+    for (let i = 0; i < videoIds.length; i += 50) {
+      const batch = videoIds.slice(i, i + 50);
+      try {
+        const params = new URLSearchParams({ part: 'contentDetails', id: batch.join(','), key: YT_KEY });
+        const res  = await fetch(`${YT_VIDEOS}?${params}`);
+        if (!res.ok) continue;
+        const data = await res.json();
+        (data.items || []).forEach(v => {
+          const dur = _parseDuration(v.contentDetails?.duration || '');
+          if (dur > 0) result.set(v.id, dur);
+        });
+      } catch (_) { /* non-fatal */ }
+    }
+    return result;
+  }
+
   // ── Expose ────────────────────────────────────────────────
-  return { search, getAudioLink, fetchBlob, saveToDrive, yt };
+  return { search, getAudioLink, fetchBlob, saveToDrive, yt, fetchDurations };
 
 })();
