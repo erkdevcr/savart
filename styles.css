@@ -568,10 +568,21 @@ img { display: block; }
 }
 .btn-secondary:hover { background: var(--bg-hover); }
 
+/* ── Blocked-track modal: 3-button footer — botones más compactos ── */
+#sd-blocked-modal .ds-modal-footer {
+  gap: 6px;
+  padding: 8px 10px;
+}
+#sd-blocked-modal .ds-modal-footer .btn-primary,
+#sd-blocked-modal .ds-modal-footer .btn-secondary {
+  padding: 8px 14px;
+  font-size: 13px;
+}
+
 /* ── Blocked-track cancel button with circular countdown ─── */
 .btn-sd-cancel-timer {
   gap: 8px;
-  padding-left: 14px;
+  padding-left: 10px;
 }
 .sd-cancel-timer-wrap {
   position: relative;
