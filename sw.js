@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.611';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.611 — Botón Stop en popup canción bloqueada: cierra modal sin pasar a la siguiente
+const APP_VERSION  = '3.5.612';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.612 — Sidebar playlists +15%: filas más altas, thumbs más grandes
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

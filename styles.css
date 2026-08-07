@@ -2173,8 +2173,8 @@ img { display: block; }
 .lib-sidebar-item {
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 8px 10px;
+  gap: 10px;
+  padding: 9px 12px;
   cursor: pointer;
   color: var(--text-secondary);
   font-size: 13px;
@@ -2201,8 +2201,8 @@ img { display: block; }
 }
 
 .lib-sidebar-thumb {
-  width: 30px;
-  height: 30px;
+  width: 34px;
+  height: 34px;
   border-radius: var(--radius-sm);
   background: var(--bg-elevated);
   flex-shrink: 0;
@@ -5341,13 +5341,13 @@ body.queue-open #mini-player { z-index: 65; }
   }
 
   .lib-sidebar-item {
-    padding: 9px 14px;
-    font-size: 13.5px;
+    padding: 10px 16px;
+    font-size: 15.5px;
   }
 
   .lib-sidebar-thumb {
-    width: 34px;
-    height: 34px;
+    width: 39px;
+    height: 39px;
   }
 }
 
@@ -6778,19 +6778,19 @@ body.queue-open #mini-player { z-index: 65; }
 /* ── Library sidebar playlist cards: larger on mobile ───────── */
 @media (max-width: 767px) {
   .lib-sidebar-item {
-    padding: 10px 12px;
-    gap: 11px;
+    padding: 12px 14px;
+    gap: 13px;
   }
   .lib-sidebar-thumb {
-    width: 46px;
-    height: 46px;
+    width: 53px;
+    height: 53px;
     border-radius: var(--radius-md);
   }
   .lib-sidebar-name {
-    font-size: 13px;
+    font-size: 15px;
   }
   .lib-sidebar-count {
-    font-size: 11px;
+    font-size: 13px;
   }
 }
 
