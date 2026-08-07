@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.617';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.617 — Resizer playlists: 3px, hover gris claro
+const APP_VERSION  = '3.5.618';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.618 — Cancelar/Detener del blocked modal = apariencia botón regular (eq-save-btn)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
