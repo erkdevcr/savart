@@ -5474,9 +5474,43 @@ const UI = (() => {
       <svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor" style="opacity:.2;margin-bottom:8px"><path d="M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zM17 6v8.18c-.31-.11-.65-.18-1-.18-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3V8h3V6h-5z"/></svg>
     </div>`;
 
+    // ── Draggable resizer (desktop only) ─────────────────────
+    const resizer = document.createElement('div');
+    resizer.id = 'lib-pl-resizer';
+
     twoCol.appendChild(listPane);
+    twoCol.appendChild(resizer);
     twoCol.appendChild(detailPane);
     container.appendChild(twoCol);
+
+    // Restore saved width
+    const savedW = parseInt(localStorage.getItem('savart_pl_list_w') || '0', 10);
+    if (savedW > 0) listPane.style.width = savedW + 'px';
+
+    resizer.addEventListener('pointerdown', e => {
+      if (window.innerWidth < 768) return;
+      e.preventDefault();
+      resizer.setPointerCapture(e.pointerId);
+      resizer.classList.add('dragging');
+      const startX = e.clientX;
+      const startW = listPane.getBoundingClientRect().width;
+      const minW   = 160;
+      const maxW   = Math.floor(twoCol.getBoundingClientRect().width * 0.65);
+
+      function onMove(ev) {
+        const newW = Math.min(maxW, Math.max(minW, startW + ev.clientX - startX));
+        listPane.style.width = newW + 'px';
+      }
+      function onUp() {
+        resizer.classList.remove('dragging');
+        const finalW = parseInt(listPane.style.width, 10);
+        if (finalW > 0) localStorage.setItem('savart_pl_list_w', finalW);
+        resizer.removeEventListener('pointermove', onMove);
+        resizer.removeEventListener('pointerup',   onUp);
+      }
+      resizer.addEventListener('pointermove', onMove);
+      resizer.addEventListener('pointerup',   onUp);
+    });
 
     // "Nueva playlist" button at the top of the list pane
     const newBtn = document.createElement('div');
