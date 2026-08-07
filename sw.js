@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.607';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.607 — Lyrics overlay desktop: fondo negro 90% full-width sobre screen-home, sin card, slide desde abajo
+const APP_VERSION  = '3.5.608';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.608 — _cacheItem persiste durationSec a DB (Soundrop search results → duración visible en playlists)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

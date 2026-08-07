@@ -6413,6 +6413,15 @@ const App = (() => {
         }
       }).catch(() => {});
     }
+    // Persist durationSec from Soundrop search results (YouTube contentDetails)
+    // so playlist rows show the duration even if the track was never played.
+    if (item.durationSec > 0) {
+      DB.getMeta(item.id).then(m => {
+        if (!(m?.durationSec > 0)) {
+          DB.setMeta(item.id, { durationSec: item.durationSec }).catch(() => {});
+        }
+      }).catch(() => {});
+    }
   }
 
   /* ── Context menu actions ────────────────────────────────── */
