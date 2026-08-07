@@ -465,6 +465,7 @@ const UI = (() => {
       sd_blocked_title:   'Canción bloqueada',
       sd_blocked_body:    'Para escucharla, conviértela y descárgala en tu Drive.',
       sd_blocked_convert: 'Convertir y guardar',
+      sd_blocked_stop:    'Detener',
       // ── Re-download warning ────────────────────────────────
       sd_redownload_title:   'Ya está en tu Drive',
       sd_redownload_msg:     'Esta canción ya fue descargada. ¿Volver a descargar?',
@@ -912,6 +913,7 @@ const UI = (() => {
       sd_blocked_title:   'Blocked song',
       sd_blocked_body:    'To play it, convert it and save it to your Drive.',
       sd_blocked_convert: 'Convert and save',
+      sd_blocked_stop:    'Stop',
       // ── Re-download warning ────────────────────────────────
       sd_redownload_title:   'Already in your Drive',
       sd_redownload_msg:     'This song was already downloaded. Download again?',

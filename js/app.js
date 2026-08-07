@@ -15883,6 +15883,7 @@ const App = (() => {
     // SD blocked modal: YT deshabilitó el embedding → convertir + guardar + reproducir
     document.getElementById('btn-sd-blocked-close')?.addEventListener('click',  () => { _closeSdBlockedModal(); Player.next?.(); });
     document.getElementById('btn-sd-blocked-cancel')?.addEventListener('click', () => { _closeSdBlockedModal(); Player.next?.(); });
+    document.getElementById('btn-sd-blocked-stop')?.addEventListener('click',   () => { _closeSdBlockedModal(); /* no next — detiene el flujo */ });
     document.getElementById('sd-blocked-modal-backdrop')?.addEventListener('click', () => { _closeSdBlockedModal(); Player.next?.(); });
     document.getElementById('btn-sd-blocked-convert')?.addEventListener('click', () => {
       const modal = document.getElementById('sd-blocked-modal');
