@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.612';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.612 — Sidebar playlists +15%: filas más altas, thumbs más grandes
+const APP_VERSION  = '3.5.613';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.613 — Sidebar playlists +15% adicional: filas aún más grandes
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
