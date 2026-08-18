@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.619';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.619 — AI Search: botón flotante draggable + mic + Gemini + Drive/Soundrop
+const APP_VERSION  = '3.5.620';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.620 — AI: i18n IA/AI, botón acento, drag táctil, errores descriptivos
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

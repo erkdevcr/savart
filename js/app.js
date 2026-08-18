@@ -1042,7 +1042,6 @@ const App = (() => {
     let _dragStart = null, _didDrag = false;
 
     trigger.addEventListener('pointerdown', e => {
-      if (e.button !== 0) return;
       e.preventDefault();
       trigger.setPointerCapture(e.pointerId);
       _didDrag = false;
@@ -1139,9 +1138,14 @@ const App = (() => {
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ query: query.trim() }),
       });
-      if (!res.ok) throw new Error(`worker_${res.status}`);
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.detail || errBody.error || `worker_${res.status}`);
+      }
 
-      const { intent, terms = [], useSoundrop = false, explanation = '' } = await res.json();
+      const data = await res.json();
+      if (data.error) throw new Error(data.detail || data.error);
+      const { intent, terms = [], useSoundrop = false, explanation = '' } = data;
 
       setStatus(`✦ ${explanation || 'Buscando…'}`, 'thinking');
 
@@ -1193,7 +1197,7 @@ const App = (() => {
       console.error('[AI]', err);
       const msg = err.message === 'no_worker'
         ? '✦ Worker no configurado'
-        : '✦ Error al procesar la consulta';
+        : `✦ ${err.message || 'Error al procesar la consulta'}`;
       setStatus(msg, 'error');
     }
   }
