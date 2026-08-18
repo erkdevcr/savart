@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.621';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.621 — fix AI search: Drive.searchFiles devuelve {folders,files}, no array
+const APP_VERSION  = '3.5.622';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.622 — fix AI search: fuzzy-rank por término (Drive.searchFiles expande a palabras sueltas)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

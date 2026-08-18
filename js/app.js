@@ -1168,8 +1168,14 @@ const App = (() => {
         // array plano. Además ignora el 2º arg (rootId): el filtro al root
         // elegido en Settings se hace aparte con _filterSearchToRoot (igual que
         // el buscador normal del browse, ver onSearch).
+        // Drive.searchFiles expande el término en palabras sueltas (≥3 letras) para
+        // tolerar acentos/typos — "Dread Mar I" también dispara una query solo por
+        // "mar", que en Drive (contains = substring) matchea cualquier archivo con
+        // "mar" en el nombre. _fuzzyRank puntúa cada resultado contra el término
+        // COMPLETO y descarta los que no se parecen — mismo filtro que usa el
+        // buscador normal del browse (ver onSearch) para este mismo problema.
         const batches = await Promise.all(
-          terms.map(t => Drive.searchFiles(t).then(_filterSearchToRoot).catch(() => ({ files: [] })))
+          terms.map(t => Drive.searchFiles(t).then(_filterSearchToRoot).then(r => _fuzzyRank(t, r)).catch(() => ({ files: [] })))
         );
         const seen = new Set();
         for (const batch of batches) {
