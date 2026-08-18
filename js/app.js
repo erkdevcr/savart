@@ -1163,13 +1163,17 @@ const App = (() => {
         const seen = new Set();
         songs = songs.filter(s => { if (seen.has(s.videoId)) return false; seen.add(s.videoId); return true; });
       } else {
-        // ── Google Drive ─────────────────────────────────────
+        // ── Google Drive ──────────────────────────────────────
+        // Drive.searchFiles resuelve { folders, files, nextPageToken } — NO un
+        // array plano. Además ignora el 2º arg (rootId): el filtro al root
+        // elegido en Settings se hace aparte con _filterSearchToRoot (igual que
+        // el buscador normal del browse, ver onSearch).
         const batches = await Promise.all(
-          terms.map(t => Drive.searchFiles(t, _rootFolderId).catch(() => []))
+          terms.map(t => Drive.searchFiles(t).then(_filterSearchToRoot).catch(() => ({ files: [] })))
         );
         const seen = new Set();
         for (const batch of batches) {
-          for (const f of (batch || [])) {
+          for (const f of (batch?.files || [])) {
             if (!seen.has(f.id)) { seen.add(f.id); songs.push(f); }
           }
         }
