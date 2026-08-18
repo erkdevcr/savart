@@ -1064,6 +1064,8 @@ const App = (() => {
       floatEl.style.bottom = 'auto';
       floatEl.style.left   = nx + 'px';
       floatEl.style.top    = ny + 'px';
+      // Si el panel está abierto mientras se arrastra, que lo siga en vivo.
+      if (panel.classList.contains('open')) _positionAiPanel();
     }
 
     function _onDragEnd() {
@@ -1081,21 +1083,23 @@ const App = (() => {
       }
     }
 
-    // Posiciona el panel (position:fixed) pegado al botón, con clamp a los
-    // 4 bordes del viewport — antes el panel era hijo flex de .ai-search-float
-    // y se abría siempre alineado a la derecha del botón; si el botón estaba
-    // arrastrado cerca del borde izquierdo, el panel (300px) se salía de pantalla.
+    // Posiciona el panel (position:fixed), centrado VERTICALMENTE con el botón
+    // y pegado a su izquierda (o derecha si no cabe) — con clamp a los 4 bordes
+    // del viewport. Se llama al abrir, al arrastrar (en vivo) y en resize, así
+    // que el panel siempre sigue al botón donde sea que lo muevas.
     function _positionAiPanel() {
-      const margin = 8;
+      const margin = 8, gap = 10;
       const tr = trigger.getBoundingClientRect();
       const pw = panel.offsetWidth  || 300;
       const ph = panel.offsetHeight || 160;
-      // Por defecto: arriba del botón, alineado a su borde derecho.
-      let left = tr.right - pw;
-      let top  = tr.top - ph - 8;
-      if (top < margin) top = tr.bottom + 8; // no cabe arriba → abre abajo
-      left = Math.max(margin, Math.min(window.innerWidth  - pw - margin, left));
-      top  = Math.max(margin, Math.min(window.innerHeight - ph - margin, top));
+
+      let top = tr.top + tr.height / 2 - ph / 2; // centrado con el botón
+      top = Math.max(margin, Math.min(window.innerHeight - ph - margin, top));
+
+      let left = tr.left - gap - pw;              // por defecto: a la izquierda
+      if (left < margin) left = tr.right + gap;   // no cabe → a la derecha
+      left = Math.max(margin, Math.min(window.innerWidth - pw - margin, left));
+
       panel.style.left = left + 'px';
       panel.style.top  = top  + 'px';
     }
