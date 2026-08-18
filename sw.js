@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.618';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.618 — Cancelar/Detener del blocked modal = apariencia botón regular (eq-save-btn)
+const APP_VERSION  = '3.5.619';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.619 — AI Search: botón flotante draggable + mic + Gemini + Drive/Soundrop
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

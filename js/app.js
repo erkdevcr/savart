@@ -214,6 +214,9 @@ const App = (() => {
     // de index.html antes del primer paint; aquí solo se inicializa el picker.
     _initThemePicker();
 
+    // AI Search floating button (v3.5.619)
+    _initAiSearch();
+
     // 3. Root folder — resolve from DB (synced) first, fall back to localStorage,
     // then default to Drive root so the app works for ANY Google account.
     // DB.getState('settings').rootFolderId is written by sync after pulling from Drive.
@@ -1011,6 +1014,188 @@ const App = (() => {
     const nm = document.getElementById('theme-picker-name');
     if (sw) sw.style.background = t.accent;
     if (nm) nm.textContent = UI.t(t.nameKey) || t.id;
+  }
+
+  /* ── AI Search ─────────────────────────────────────────── */
+
+  function _initAiSearch() {
+    const floatEl  = document.getElementById('ai-search-float');
+    const trigger  = document.getElementById('ai-search-trigger');
+    const panel    = document.getElementById('ai-search-panel');
+    const inputEl  = document.getElementById('ai-search-input');
+    const sendBtn  = document.getElementById('ai-search-send');
+    const micBtn   = document.getElementById('ai-search-mic');
+    if (!floatEl || !trigger) return;
+
+    // Restore saved position
+    try {
+      const pos = JSON.parse(localStorage.getItem('savart_ai_pos') || 'null');
+      if (pos && pos.x != null && pos.y != null) {
+        floatEl.style.right  = 'auto';
+        floatEl.style.bottom = 'auto';
+        floatEl.style.left   = Math.min(pos.x, window.innerWidth  - 80) + 'px';
+        floatEl.style.top    = Math.min(pos.y, window.innerHeight - 60) + 'px';
+      }
+    } catch (_) {}
+
+    // ── Drag logic ──────────────────────────────────────────
+    let _dragStart = null, _didDrag = false;
+
+    trigger.addEventListener('pointerdown', e => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      trigger.setPointerCapture(e.pointerId);
+      _didDrag = false;
+      const rect = floatEl.getBoundingClientRect();
+      _dragStart = { px: e.clientX, py: e.clientY, ex: rect.left, ey: rect.top };
+      trigger.addEventListener('pointermove', _onDragMove);
+      trigger.addEventListener('pointerup',   _onDragEnd, { once: true });
+    });
+
+    function _onDragMove(e) {
+      const dx = e.clientX - _dragStart.px;
+      const dy = e.clientY - _dragStart.py;
+      if (!_didDrag && Math.hypot(dx, dy) < 5) return;
+      _didDrag = true;
+      const W = window.innerWidth, H = window.innerHeight;
+      const bw = floatEl.offsetWidth, bh = floatEl.offsetHeight;
+      const nx = Math.max(8, Math.min(W - bw - 8, _dragStart.ex + dx));
+      const ny = Math.max(8, Math.min(H - bh - 8, _dragStart.ey + dy));
+      floatEl.style.right  = 'auto';
+      floatEl.style.bottom = 'auto';
+      floatEl.style.left   = nx + 'px';
+      floatEl.style.top    = ny + 'px';
+    }
+
+    function _onDragEnd() {
+      trigger.removeEventListener('pointermove', _onDragMove);
+      if (_didDrag) {
+        const r = floatEl.getBoundingClientRect();
+        try { localStorage.setItem('savart_ai_pos', JSON.stringify({ x: r.left, y: r.top })); } catch (_) {}
+      } else {
+        // Click: toggle panel
+        const isOpen = panel.classList.toggle('open');
+        if (isOpen) setTimeout(() => inputEl?.focus(), 50);
+      }
+    }
+
+    // Close on click outside
+    document.addEventListener('click', e => {
+      if (!floatEl.contains(e.target)) panel.classList.remove('open');
+    });
+
+    // Send
+    sendBtn?.addEventListener('click', () => {
+      const q = inputEl?.value?.trim();
+      if (q) _handleAiQuery(q);
+    });
+    inputEl?.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { const q = inputEl.value.trim(); if (q) _handleAiQuery(q); }
+    });
+
+    // Mic (Web Speech API)
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) {
+      if (micBtn) micBtn.style.display = 'none';
+    } else {
+      micBtn?.addEventListener('click', () => {
+        const rec = new SR();
+        rec.lang = (document.documentElement.lang === 'en') ? 'en-US' : 'es-ES';
+        rec.interimResults = false;
+        rec.maxAlternatives = 1;
+        micBtn.classList.add('listening');
+        try { rec.start(); } catch (_) { micBtn.classList.remove('listening'); return; }
+        rec.onresult = ev => {
+          const q = ev.results[0][0].transcript;
+          if (inputEl) inputEl.value = q;
+          micBtn.classList.remove('listening');
+          _handleAiQuery(q);
+        };
+        rec.onerror = () => micBtn.classList.remove('listening');
+        rec.onend   = () => micBtn.classList.remove('listening');
+      });
+    }
+  }
+
+  async function _handleAiQuery(query) {
+    if (!query?.trim()) return;
+    const statusEl = document.getElementById('ai-search-status');
+    const inputEl  = document.getElementById('ai-search-input');
+    const workerUrl = CONFIG.API_PROXY_URL || CONFIG.AUTH_WORKER_URL;
+
+    const setStatus = (msg, cls = '') => {
+      if (!statusEl) return;
+      statusEl.textContent = msg;
+      statusEl.className   = 'ai-search-status' + (cls ? ' ' + cls : '');
+    };
+
+    setStatus('✦ Pensando…', 'thinking');
+
+    try {
+      if (!workerUrl) throw new Error('no_worker');
+
+      const res = await fetch(`${workerUrl}/ai`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ query: query.trim() }),
+      });
+      if (!res.ok) throw new Error(`worker_${res.status}`);
+
+      const { intent, terms = [], useSoundrop = false, explanation = '' } = await res.json();
+
+      setStatus(`✦ ${explanation || 'Buscando…'}`, 'thinking');
+
+      let songs = [];
+
+      if (useSoundrop && typeof Soundrop !== 'undefined') {
+        // ── YouTube / Soundrop ───────────────────────────────
+        for (const term of terms.slice(0, 3)) {
+          try {
+            const r = await Soundrop.search(term);
+            if (Array.isArray(r)) songs.push(...r.slice(0, 10));
+          } catch (_) {}
+        }
+        // Deduplicate by videoId
+        const seen = new Set();
+        songs = songs.filter(s => { if (seen.has(s.videoId)) return false; seen.add(s.videoId); return true; });
+      } else {
+        // ── Google Drive ─────────────────────────────────────
+        const batches = await Promise.all(
+          terms.map(t => Drive.searchFiles(t, _rootFolderId).catch(() => []))
+        );
+        const seen = new Set();
+        for (const batch of batches) {
+          for (const f of (batch || [])) {
+            if (!seen.has(f.id)) { seen.add(f.id); songs.push(f); }
+          }
+        }
+      }
+
+      if (!songs.length) {
+        setStatus('✦ No encontré canciones para eso', 'empty');
+        return;
+      }
+
+      // Shuffle
+      songs = songs.slice().sort(() => Math.random() - 0.5);
+
+      // Play
+      Player.setQueue(songs, 0);
+      if (intent === 'radio' || intent === 'mood') {
+        _activateRadioForSongs(songs).catch(() => {});
+      }
+
+      if (inputEl) inputEl.value = '';
+      setStatus(`✦ ${explanation} · ${songs.length} canciones`, 'found');
+      setTimeout(() => document.getElementById('ai-search-panel')?.classList.remove('open'), 2000);
+
+    } catch (err) {
+      console.error('[AI]', err);
+      const msg = err.message === 'no_worker'
+        ? '✦ Worker no configurado'
+        : '✦ Error al procesar la consulta';
+      setStatus(msg, 'error');
+    }
   }
 
   function _initThemePicker() {
