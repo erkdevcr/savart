@@ -8757,11 +8757,11 @@ body.offline-mode #view-home .home-header {
 .ai-search-trigger {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 7px 14px;
+  gap: 2px;
+  padding: 7px 13px;
   background: var(--accent);
   border: none;
-  border-radius: var(--radius-pill);
+  border-radius: 999px; /* siempre extremos totalmente redondos, sin importar la altura */
   color: #fff;
   font-size: 12px;
   font-weight: 600;
