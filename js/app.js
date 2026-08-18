@@ -1074,9 +1074,32 @@ const App = (() => {
       } else {
         // Click: toggle panel
         const isOpen = panel.classList.toggle('open');
-        if (isOpen) setTimeout(() => inputEl?.focus(), 50);
+        if (isOpen) {
+          _positionAiPanel();
+          setTimeout(() => inputEl?.focus(), 50);
+        }
       }
     }
+
+    // Posiciona el panel (position:fixed) pegado al botón, con clamp a los
+    // 4 bordes del viewport — antes el panel era hijo flex de .ai-search-float
+    // y se abría siempre alineado a la derecha del botón; si el botón estaba
+    // arrastrado cerca del borde izquierdo, el panel (300px) se salía de pantalla.
+    function _positionAiPanel() {
+      const margin = 8;
+      const tr = trigger.getBoundingClientRect();
+      const pw = panel.offsetWidth  || 300;
+      const ph = panel.offsetHeight || 160;
+      // Por defecto: arriba del botón, alineado a su borde derecho.
+      let left = tr.right - pw;
+      let top  = tr.top - ph - 8;
+      if (top < margin) top = tr.bottom + 8; // no cabe arriba → abre abajo
+      left = Math.max(margin, Math.min(window.innerWidth  - pw - margin, left));
+      top  = Math.max(margin, Math.min(window.innerHeight - ph - margin, top));
+      panel.style.left = left + 'px';
+      panel.style.top  = top  + 'px';
+    }
+    window.addEventListener('resize', () => { if (panel.classList.contains('open')) _positionAiPanel(); });
 
     // Close on click outside
     document.addEventListener('click', e => {
@@ -1183,6 +1206,21 @@ const App = (() => {
             if (!seen.has(f.id)) { seen.add(f.id); songs.push(f); }
           }
         }
+      }
+
+      // Dedupe por nombre normalizado — el dedupe por id/videoId de arriba no
+      // detecta la MISMA canción repetida (ej. el mismo archivo en dos carpetas,
+      // o dos videos distintos de la misma canción en Soundrop). Se compara el
+      // título limpio y sin acentos; se conserva la primera aparición.
+      {
+        const seenNames = new Set();
+        songs = songs.filter(s => {
+          const key = norm(cleanTitle(s.name || s.displayName || ''));
+          if (!key) return true; // sin nombre — no se puede comparar, se deja
+          if (seenNames.has(key)) return false;
+          seenNames.add(key);
+          return true;
+        });
       }
 
       if (!songs.length) {
