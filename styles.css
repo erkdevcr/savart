@@ -8753,27 +8753,29 @@ body.offline-mode #view-home .home-header {
   user-select: none;
 }
 
-/* Collapsed trigger button */
+/* Collapsed trigger button — círculo perfecto (ancho = alto), solo ícono.
+   El texto "IA"/"AI" queda oculto visualmente (el aria-label del botón ya
+   describe la acción para lectores de pantalla). */
 .ai-search-trigger {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
-  padding: 7px 13px;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
   background: var(--accent);
   border: none;
-  border-radius: 999px; /* siempre extremos totalmente redondos, sin importar la altura */
+  border-radius: 50%;
   color: #fff;
-  font-size: 12px;
-  font-weight: 600;
   font-family: inherit;
   cursor: grab;
   touch-action: none;
   box-shadow: 0 2px 12px rgba(0,0,0,0.35);
   transition: opacity 0.15s, box-shadow 0.15s;
-  white-space: nowrap;
 }
 .ai-search-trigger:active { cursor: grabbing; opacity: 0.85; }
 .ai-search-trigger:hover  { opacity: 0.9; box-shadow: 0 4px 18px rgba(0,0,0,0.45); }
+.ai-search-trigger-label { display: none; }
 
 /* Expanded panel — position:fixed (JS calcula left/top con clamp, ver
    _positionAiPanel en app.js) para que nunca quede cortada por el borde
