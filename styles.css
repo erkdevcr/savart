@@ -8745,7 +8745,7 @@ body.offline-mode #view-home .home-header {
   position: fixed;
   right: 24px;
   bottom: 90px;   /* above mini-player */
-  z-index: 500;
+  z-index: 9999;  /* por encima de TODO — a la par de los overlays más altos de la app */
   display: flex;
   flex-direction: column-reverse;
   align-items: flex-end;
@@ -8753,9 +8753,9 @@ body.offline-mode #view-home .home-header {
   user-select: none;
 }
 
-/* Collapsed trigger button — círculo perfecto (ancho = alto), solo ícono.
-   El texto "IA"/"AI" queda oculto visualmente (el aria-label del botón ya
-   describe la acción para lectores de pantalla). */
+/* Collapsed trigger button — círculo perfecto (ancho = alto), solo ícono
+   llenando el círculo. El texto "IA"/"AI" queda oculto visualmente (el
+   aria-label del botón ya describe la acción para lectores de pantalla). */
 .ai-search-trigger {
   display: inline-flex;
   align-items: center;
@@ -8776,18 +8776,21 @@ body.offline-mode #view-home .home-header {
 .ai-search-trigger:active { cursor: grabbing; opacity: 0.85; }
 .ai-search-trigger:hover  { opacity: 0.9; box-shadow: 0 4px 18px rgba(0,0,0,0.45); }
 .ai-search-trigger-label { display: none; }
+.ai-search-trigger svg { width: 24px; height: 24px; } /* llena el círculo, antes 16px quedaba chico */
 
 /* Expanded panel — position:fixed (JS calcula left/top con clamp, ver
    _positionAiPanel en app.js) para que nunca quede cortada por el borde
-   de la ventana cuando el botón flotante está pegado a un extremo. */
+   de la ventana cuando el botón flotante está pegado a un extremo.
+   Borde color acento: la distingue del fondo de la app (antes solo tenía
+   el borde neutro --border, casi invisible sobre bg-elevated). */
 .ai-search-panel {
   display: none;
   position: fixed;
-  z-index: 501;
+  z-index: 9999;
   flex-direction: column;
   gap: 6px;
   background: var(--bg-elevated);
-  border: 1px solid var(--border);
+  border: 1px solid var(--accent);
   border-radius: 14px;
   padding: 10px;
   width: 300px;
