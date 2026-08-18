@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.627';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.627 — botón IA z-index 9999 (encima de todo), ícono 24px llenando el círculo, panel con borde acento
+const APP_VERSION  = '3.5.628';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.628 — botón IA: sin opacidad al hover/tap, queda sólido siempre
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

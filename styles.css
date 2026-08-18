@@ -8773,8 +8773,8 @@ body.offline-mode #view-home .home-header {
   box-shadow: 0 2px 12px rgba(0,0,0,0.35);
   transition: opacity 0.15s, box-shadow 0.15s;
 }
-.ai-search-trigger:active { cursor: grabbing; opacity: 0.85; }
-.ai-search-trigger:hover  { opacity: 0.9; box-shadow: 0 4px 18px rgba(0,0,0,0.45); }
+.ai-search-trigger:active { cursor: grabbing; }
+.ai-search-trigger:hover  { box-shadow: 0 4px 18px rgba(0,0,0,0.45); }
 .ai-search-trigger-label { display: none; }
 .ai-search-trigger svg { width: 24px; height: 24px; } /* llena el círculo, antes 16px quedaba chico */
 
