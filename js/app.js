@@ -1083,15 +1083,16 @@ const App = (() => {
       }
     }
 
-    // Posiciona el panel (position:fixed) SIN TAPAR el botón — se llama al
-    // abrir, al arrastrar (en vivo) y en resize, así el panel siempre sigue
-    // al botón donde sea que lo muevas.
-    // Antes: el clamp a los bordes del viewport podía forzar el panel sobre
-    // el botón en pantallas angostas (300px de panel casi = ancho de pantalla,
-    // ni "a la izquierda" ni "a la derecha" cabían enteros → el clamp ganaba
-    // y el panel terminaba tapando el botón). Ahora se elige el lado (o
-    // arriba/abajo) que realmente tiene espacio, en vez de forzar siempre
-    // izquierda/derecha.
+    // Posiciona el panel (position:fixed) SIEMPRE arriba o abajo del botón
+    // (nunca a los lados) — así el botón queda siempre visible, sin importar
+    // qué tan ancho sea el panel vs. la pantalla. Se llama al abrir, al
+    // arrastrar (en vivo) y en resize, así el panel siempre sigue al botón
+    // donde sea que lo muevas.
+    // (Antes probaba izquierda/derecha primero y cuando ninguno cabía —panel
+    // de 300px casi tan ancho como la pantalla— el clamp horizontal podía
+    // terminar tapando el botón. Ahora es siempre vertical: se elige arriba
+    // o abajo según cuál tenga más espacio, y el clamp solo actúa en horizontal,
+    // que nunca se superpone con el botón.)
     function _positionAiPanel() {
       const margin = 8, gap = 10;
       const tr = trigger.getBoundingClientRect();
@@ -1099,35 +1100,17 @@ const App = (() => {
       const ph = panel.offsetHeight || 160;
       const W = window.innerWidth, H = window.innerHeight;
 
-      const spaceLeft  = tr.left - margin;
-      const spaceRight = W - tr.right - margin;
-      let left, top;
+      const spaceAbove = tr.top - margin;
+      const spaceBelow = H - tr.bottom - margin;
+      const top = (spaceAbove >= ph + gap || spaceAbove >= spaceBelow)
+        ? tr.top - gap - ph
+        : tr.bottom + gap;
 
-      if (spaceLeft >= pw + gap || spaceLeft >= spaceRight) {
-        // A la izquierda del botón (o el lado con más espacio si ninguno alcanza)
-        left = tr.left - gap - pw;
-        top  = tr.top + tr.height / 2 - ph / 2;
-      } else if (spaceRight >= pw + gap) {
-        // A la derecha del botón
-        left = tr.right + gap;
-        top  = tr.top + tr.height / 2 - ph / 2;
-      }
-
-      // Ninguno de los lados alcanza (panel casi tan ancho como la pantalla) →
-      // arriba/abajo del botón, para no taparlo horizontalmente.
-      if (left == null || left < margin || left + pw > W - margin) {
-        const spaceAbove = tr.top - margin;
-        const spaceBelow = H - tr.bottom - margin;
-        top  = spaceAbove >= ph + gap || spaceAbove >= spaceBelow
-          ? tr.top - gap - ph
-          : tr.bottom + gap;
-        left = tr.left + tr.width / 2 - pw / 2;
-      }
-
+      let left = tr.left + tr.width / 2 - pw / 2; // centrado horizontal con el botón
       left = Math.max(margin, Math.min(W - pw - margin, left));
-      top  = Math.max(margin, Math.min(H - ph - margin, top));
+
       panel.style.left = left + 'px';
-      panel.style.top  = top  + 'px';
+      panel.style.top  = Math.max(margin, top) + 'px';
     }
     window.addEventListener('resize', () => { if (panel.classList.contains('open')) _positionAiPanel(); });
 
@@ -1198,7 +1181,7 @@ const App = (() => {
 
       const data = await res.json();
       if (data.error) throw new Error(data.detail || data.error);
-      const { intent, terms = [], useSoundrop = false, explanation = '' } = data;
+      const { intent, terms = [], exclude = [], useSoundrop = false, explanation = '', limit = null } = data;
 
       setStatus(`✦ ${explanation || 'Buscando…'}`, 'thinking');
 
@@ -1238,6 +1221,20 @@ const App = (() => {
         }
       }
 
+      // Excluir artistas que el usuario pidió evitar explícitamente ("menos X",
+      // "sin X", "que no sea X"). Coincidencia por substring sobre el nombre del
+      // archivo/video — mismo criterio que usa el buscador para encontrarlos, no
+      // hay un campo de "artista" separado en los resultados de Drive/Soundrop.
+      if (Array.isArray(exclude) && exclude.length) {
+        const excludeNorm = exclude.map(e => norm(e || '')).filter(Boolean);
+        if (excludeNorm.length) {
+          songs = songs.filter(s => {
+            const nameNorm = norm(s.name || s.displayName || '');
+            return !excludeNorm.some(ex => nameNorm.includes(ex));
+          });
+        }
+      }
+
       // Dedupe por nombre normalizado — el dedupe por id/videoId de arriba no
       // detecta la MISMA canción repetida (ej. el mismo archivo en dos carpetas,
       // o dos videos distintos de la misma canción en Soundrop). Se compara el
@@ -1260,6 +1257,12 @@ const App = (() => {
 
       // Shuffle
       songs = songs.slice().sort(() => Math.random() - 0.5);
+
+      // Si el usuario pidió una cantidad exacta ("pon 5 canciones de X"), recortar
+      // DESPUÉS del shuffle — así toma 5 al azar entre todas las coincidencias, no
+      // siempre las primeras 5 en el orden que las devolvió Drive/Soundrop.
+      const n = Number(limit);
+      if (Number.isInteger(n) && n > 0 && n < songs.length) songs = songs.slice(0, n);
 
       // Play
       Player.setQueue(songs, 0);
