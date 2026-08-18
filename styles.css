@@ -8778,6 +8778,14 @@ body.offline-mode #view-home .home-header {
 .ai-search-trigger-label { display: none; }
 .ai-search-trigger svg { width: 24px; height: 24px; } /* llena el círculo, antes 16px quedaba chico */
 
+/* Chispeo de las estrellitas — opción 3 elegida por Erick: la estrella
+   grande se mece (rota) y las 2 chicas titilan (fade+scale) desfasadas. */
+@keyframes ai-star-rock  { 0%, 100% { transform: rotate(-6deg); } 50% { transform: rotate(6deg); } }
+@keyframes ai-star-twink { 0%, 100% { opacity: .35; transform: scale(.85); } 50% { opacity: 1; transform: scale(1); } }
+.ai-star-m  { transform-box: fill-box; transform-origin: center; animation: ai-star-rock 3s ease-in-out infinite; }
+.ai-star-s1 { transform-box: fill-box; transform-origin: center; animation: ai-star-twink 2.6s ease-in-out infinite .3s; }
+.ai-star-s2 { transform-box: fill-box; transform-origin: center; animation: ai-star-twink 2.6s ease-in-out infinite 1.4s; }
+
 /* Expanded panel — position:fixed (JS calcula left/top con clamp, ver
    _positionAiPanel en app.js) para que nunca quede cortada por el borde
    de la ventana cuando el botón flotante está pegado a un extremo.

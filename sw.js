@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.629';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.629 — panel IA centrado verticalmente al botón y lo sigue en vivo al arrastrar
+const APP_VERSION  = '3.5.631';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.631 — panel IA: elige lado con espacio real (o arriba/abajo) para nunca tapar el botón
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

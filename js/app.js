@@ -1083,23 +1083,49 @@ const App = (() => {
       }
     }
 
-    // Posiciona el panel (position:fixed), centrado VERTICALMENTE con el botón
-    // y pegado a su izquierda (o derecha si no cabe) — con clamp a los 4 bordes
-    // del viewport. Se llama al abrir, al arrastrar (en vivo) y en resize, así
-    // que el panel siempre sigue al botón donde sea que lo muevas.
+    // Posiciona el panel (position:fixed) SIN TAPAR el botón — se llama al
+    // abrir, al arrastrar (en vivo) y en resize, así el panel siempre sigue
+    // al botón donde sea que lo muevas.
+    // Antes: el clamp a los bordes del viewport podía forzar el panel sobre
+    // el botón en pantallas angostas (300px de panel casi = ancho de pantalla,
+    // ni "a la izquierda" ni "a la derecha" cabían enteros → el clamp ganaba
+    // y el panel terminaba tapando el botón). Ahora se elige el lado (o
+    // arriba/abajo) que realmente tiene espacio, en vez de forzar siempre
+    // izquierda/derecha.
     function _positionAiPanel() {
       const margin = 8, gap = 10;
       const tr = trigger.getBoundingClientRect();
       const pw = panel.offsetWidth  || 300;
       const ph = panel.offsetHeight || 160;
+      const W = window.innerWidth, H = window.innerHeight;
 
-      let top = tr.top + tr.height / 2 - ph / 2; // centrado con el botón
-      top = Math.max(margin, Math.min(window.innerHeight - ph - margin, top));
+      const spaceLeft  = tr.left - margin;
+      const spaceRight = W - tr.right - margin;
+      let left, top;
 
-      let left = tr.left - gap - pw;              // por defecto: a la izquierda
-      if (left < margin) left = tr.right + gap;   // no cabe → a la derecha
-      left = Math.max(margin, Math.min(window.innerWidth - pw - margin, left));
+      if (spaceLeft >= pw + gap || spaceLeft >= spaceRight) {
+        // A la izquierda del botón (o el lado con más espacio si ninguno alcanza)
+        left = tr.left - gap - pw;
+        top  = tr.top + tr.height / 2 - ph / 2;
+      } else if (spaceRight >= pw + gap) {
+        // A la derecha del botón
+        left = tr.right + gap;
+        top  = tr.top + tr.height / 2 - ph / 2;
+      }
 
+      // Ninguno de los lados alcanza (panel casi tan ancho como la pantalla) →
+      // arriba/abajo del botón, para no taparlo horizontalmente.
+      if (left == null || left < margin || left + pw > W - margin) {
+        const spaceAbove = tr.top - margin;
+        const spaceBelow = H - tr.bottom - margin;
+        top  = spaceAbove >= ph + gap || spaceAbove >= spaceBelow
+          ? tr.top - gap - ph
+          : tr.bottom + gap;
+        left = tr.left + tr.width / 2 - pw / 2;
+      }
+
+      left = Math.max(margin, Math.min(W - pw - margin, left));
+      top  = Math.max(margin, Math.min(H - ph - margin, top));
       panel.style.left = left + 'px';
       panel.style.top  = top  + 'px';
     }
