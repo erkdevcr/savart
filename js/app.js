@@ -6999,11 +6999,24 @@ const App = (() => {
   /**
    * Similarity score [0..1] between two single (normalized) words.
    * 1.0 = exact, 0.9 = prefix/substring, else Levenshtein-based.
+   *
+   * La bonificación de prefijo/substring (0.9/0.8) solo aplica si la palabra
+   * más corta tiene 4+ letras — fix v3.5.636. Con palabras cortas (2-3 letras)
+   * esa bonificación daba falsos positivos fuertes por pura coincidencia de
+   * letras: el término de género "son" (salsa/son cubano) es PREFIJO literal
+   * de "Sonne" (canción de Rammstein) → 0.9 de "similitud" sin relación real.
+   * Mismo problema ya visto con "mar" (Dread Mar I) matcheando "amarillo".
+   * Con el piso de 4 letras, palabras cortas caen al cálculo por Levenshtein
+   * (que las penaliza fuerte si de verdad no se parecen) y se sigue tolerando
+   * el truncado/typos en palabras de 4+ letras ("amig" → "amigo", etc.).
    */
   function _wordSim(a, b) {
     if (a === b) return 1;
-    if (b.startsWith(a) || a.startsWith(b)) return 0.9;
-    if (b.includes(a) || a.includes(b)) return 0.8;
+    const shortLen = Math.min(a.length, b.length);
+    if (shortLen >= 4) {
+      if (b.startsWith(a) || a.startsWith(b)) return 0.9;
+      if (b.includes(a) || a.includes(b)) return 0.8;
+    }
     const dist    = _levenshtein(a, b);
     const maxLen  = Math.max(a.length, b.length);
     // Tighten penalty: 1 edit in a 5-char word = 0.7, 2 edits = 0.4

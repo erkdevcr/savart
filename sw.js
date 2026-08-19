@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.635';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.635 — AI search: soporta canción puntual ("X de Artista y luego más de ellos") fijada primera
+const APP_VERSION  = '3.5.636';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.636 — fuzzy match: bonus prefijo/substring solo con 4+ letras (fix falsos positivos tipo son/Sonne, mar/amarillo)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
