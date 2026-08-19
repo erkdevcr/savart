@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.636';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.636 — fuzzy match: bonus prefijo/substring solo con 4+ letras (fix falsos positivos tipo son/Sonne, mar/amarillo)
+const APP_VERSION  = '3.5.638';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.638 — AI search: apaga radio-mode heredado en artist_only/folder (evitaba rellenar con el artista anterior)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

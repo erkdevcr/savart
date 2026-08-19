@@ -1181,11 +1181,38 @@ const App = (() => {
 
       const data = await res.json();
       if (data.error) throw new Error(data.detail || data.error);
-      const { intent, terms = [], exclude = [], track = '', useSoundrop = false, explanation = '', limit = null } = data;
+      const { intent, terms = [], exclude = [], track = '', folderName = '', useSoundrop = false, explanation = '', limit = null } = data;
 
       setStatus(`✦ ${explanation || 'Buscando…'}`, 'thinking');
 
       let songs = [];
+
+      // Búsqueda normal por términos sueltos (Drive) — factorizada para
+      // reusarla también como respaldo del intent "folder" cuando no se
+      // encuentra la carpeta pedida (ver más abajo).
+      // Drive.searchFiles resuelve { folders, files, nextPageToken } — NO un
+      // array plano. Además ignora el 2º arg (rootId): el filtro al root
+      // elegido en Settings se hace aparte con _filterSearchToRoot (igual que
+      // el buscador normal del browse, ver onSearch).
+      // Drive.searchFiles expande el término en palabras sueltas (≥3 letras) para
+      // tolerar acentos/typos — "Dread Mar I" también dispara una query solo por
+      // "mar", que en Drive (contains = substring) matchea cualquier archivo con
+      // "mar" en el nombre. _fuzzyRank puntúa cada resultado contra el término
+      // COMPLETO y descarta los que no se parecen — mismo filtro que usa el
+      // buscador normal del browse (ver onSearch) para este mismo problema.
+      async function _aiSearchDriveTerms(termsArr) {
+        const batches = await Promise.all(
+          termsArr.map(t => Drive.searchFiles(t).then(_filterSearchToRoot).then(r => _fuzzyRank(t, r)).catch(() => ({ files: [] })))
+        );
+        const seen = new Set();
+        const out  = [];
+        for (const batch of batches) {
+          for (const f of (batch?.files || [])) {
+            if (!seen.has(f.id)) { seen.add(f.id); out.push(f); }
+          }
+        }
+        return out;
+      }
 
       if (useSoundrop && typeof Soundrop !== 'undefined') {
         // ── YouTube / Soundrop ───────────────────────────────
@@ -1198,27 +1225,32 @@ const App = (() => {
         // Deduplicate by videoId
         const seen = new Set();
         songs = songs.filter(s => { if (seen.has(s.videoId)) return false; seen.add(s.videoId); return true; });
-      } else {
-        // ── Google Drive ──────────────────────────────────────
-        // Drive.searchFiles resuelve { folders, files, nextPageToken } — NO un
-        // array plano. Además ignora el 2º arg (rootId): el filtro al root
-        // elegido en Settings se hace aparte con _filterSearchToRoot (igual que
-        // el buscador normal del browse, ver onSearch).
-        // Drive.searchFiles expande el término en palabras sueltas (≥3 letras) para
-        // tolerar acentos/typos — "Dread Mar I" también dispara una query solo por
-        // "mar", que en Drive (contains = substring) matchea cualquier archivo con
-        // "mar" en el nombre. _fuzzyRank puntúa cada resultado contra el término
-        // COMPLETO y descarta los que no se parecen — mismo filtro que usa el
-        // buscador normal del browse (ver onSearch) para este mismo problema.
-        const batches = await Promise.all(
-          terms.map(t => Drive.searchFiles(t).then(_filterSearchToRoot).then(r => _fuzzyRank(t, r)).catch(() => ({ files: [] })))
-        );
-        const seen = new Set();
-        for (const batch of batches) {
-          for (const f of (batch?.files || [])) {
-            if (!seen.has(f.id)) { seen.add(f.id); songs.push(f); }
-          }
+      } else if (intent === 'folder' && folderName && folderName.trim()) {
+        // ── Carpeta/colección específica ("pon la carpeta Fiesta Tropical") ──
+        // Busca la carpeta por nombre (fuzzy, igual que canciones) y trae TODO
+        // su contenido con Drive.listFolderAll — misma función que usa la app
+        // para cargar una playlist/colección completa a la cola.
+        let resolvedFolder = null;
+        try {
+          const r = await Drive.searchFiles(folderName.trim())
+            .then(_filterSearchToRoot)
+            .then(res => _fuzzyRank(folderName.trim(), res));
+          resolvedFolder = (r.folders || [])[0] || null; // ya viene ordenado por score desc
+        } catch (_) {}
+
+        if (resolvedFolder) {
+          try {
+            const contents = await Drive.listFolderAll(resolvedFolder.id);
+            songs = (contents.files || []).filter(f => !isFolder(f.mimeType));
+          } catch (_) {}
         }
+
+        // No se encontró la carpeta (o estaba vacía) → respaldo: buscador
+        // normal por términos sueltos, para no dejar al usuario sin nada.
+        if (!songs.length) songs = await _aiSearchDriveTerms(terms);
+      } else {
+        // ── Google Drive (búsqueda normal por términos) ──────
+        songs = await _aiSearchDriveTerms(terms);
       }
 
       // Excluir artistas que el usuario pidió evitar explícitamente ("menos X",
@@ -1285,6 +1317,15 @@ const App = (() => {
       Player.setQueue(songs, 0);
       if (intent === 'radio' || intent === 'mood') {
         _activateRadioForSongs(songs).catch(() => {});
+      } else {
+        // "artist_only" / "folder": el usuario pidió ESTO puntual, sin
+        // expansión de radio. _radioModeActive es un flag GLOBAL que no se
+        // resetea solo al cambiar de cola — si venía de una sesión anterior
+        // con radio activa (ej. escuchando Metallica) y ahora la cola nueva
+        // queda corta (2 canciones de Santana), el refill de "cola por
+        // agotarse" seguía usando el _radioArtist/_radioArtists VIEJOS
+        // (Metallica) y la rellenaba con eso. Se apaga explícitamente acá.
+        _radioModeActive = false;
       }
 
       if (inputEl) inputEl.value = '';
