@@ -1181,7 +1181,7 @@ const App = (() => {
 
       const data = await res.json();
       if (data.error) throw new Error(data.detail || data.error);
-      const { intent, terms = [], exclude = [], useSoundrop = false, explanation = '', limit = null } = data;
+      const { intent, terms = [], exclude = [], track = '', useSoundrop = false, explanation = '', limit = null } = data;
 
       setStatus(`✦ ${explanation || 'Buscando…'}`, 'thinking');
 
@@ -1255,12 +1255,29 @@ const App = (() => {
         return;
       }
 
-      // Shuffle
-      songs = songs.slice().sort(() => Math.random() - 0.5);
+      // Canción puntual ("Rueda Fortuna de Héroes del Silencio y luego más de
+      // ellos") — se busca el mejor match por título ANTES del shuffle general
+      // y se aparta, para fijarla de primera en la cola. Sin esto el shuffle de
+      // abajo la mezclaba con el resto y podía arrancar en cualquier canción.
+      let pinnedSong = null;
+      if (track && typeof track === 'string' && track.trim()) {
+        let bestScore = 0;
+        for (const s of songs) {
+          const sc = _fuzzyScore(track, s.name || s.displayName || '');
+          if (sc > bestScore) { bestScore = sc; pinnedSong = s; }
+        }
+        if (bestScore < 0.45) pinnedSong = null; // ningún match suficientemente bueno
+      }
+      const restSongs = pinnedSong ? songs.filter(s => s !== pinnedSong) : songs;
+
+      // Shuffle (del resto, si hay una fijada)
+      let shuffled = restSongs.slice().sort(() => Math.random() - 0.5);
+      songs = pinnedSong ? [pinnedSong, ...shuffled] : shuffled;
 
       // Si el usuario pidió una cantidad exacta ("pon 5 canciones de X"), recortar
       // DESPUÉS del shuffle — así toma 5 al azar entre todas las coincidencias, no
-      // siempre las primeras 5 en el orden que las devolvió Drive/Soundrop.
+      // siempre las primeras 5 en el orden que las devolvió Drive/Soundrop. La
+      // canción fijada (si hay) siempre queda dentro del recorte, va primera.
       const n = Number(limit);
       if (Number.isInteger(n) && n > 0 && n < songs.length) songs = songs.slice(0, n);
 

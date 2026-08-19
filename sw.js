@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.634';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.634 — panel IA siempre nace arriba/abajo del botón (nunca a los lados), botón siempre visible
+const APP_VERSION  = '3.5.635';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.635 — AI search: soporta canción puntual ("X de Artista y luego más de ellos") fijada primera
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
