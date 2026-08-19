@@ -11138,11 +11138,35 @@ const App = (() => {
     if (!confirmed) return;
 
     try {
-      // Reset all songs in this folder to virgin state
+      // Reset all songs in this folder AND every nested subfolder to virgin
+      // state — antes solo tomaba los items con folderId === folderId (hijos
+      // DIRECTOS); las subcarpetas (ej. carpetas de álbum dentro de la carpeta
+      // de artista) quedaban intactas. Se arma el árbol con la metadata ya
+      // cacheada localmente (el Deep Scan la pobló al recorrerla): un id
+      // cuenta como "carpeta" si algún otro registro lo tiene como folderId
+      // (o sea, tiene hijos), y se recorre recursivamente (BFS).
       // Also stamp skipAutoEnrich so opening the folder doesn't trigger MB/Discogs automatically.
       // Cleared by resetToVirgin when the user runs an explicit rescan.
       const allMeta = await DB.getAllMeta().catch(() => []);
-      const songs   = allMeta.filter(m => m.folderId === folderId);
+      const childrenByParent = new Map();
+      for (const m of allMeta) {
+        if (!m.folderId) continue;
+        if (!childrenByParent.has(m.folderId)) childrenByParent.set(m.folderId, []);
+        childrenByParent.get(m.folderId).push(m);
+      }
+      const songs = [];
+      const visitedFolders = new Set([folderId]);
+      const frontier = [folderId];
+      while (frontier.length) {
+        const current = frontier.shift();
+        for (const c of (childrenByParent.get(current) || [])) {
+          songs.push(c);
+          if (childrenByParent.has(c.id) && !visitedFolders.has(c.id)) {
+            visitedFolders.add(c.id);
+            frontier.push(c.id);
+          }
+        }
+      }
       for (const m of songs) {
         await DB.resetToVirgin(m.id).catch(() => {}); // estampa resetAt + skipAutoEnrich
         if (typeof Meta !== 'undefined') Meta.revoke?.(m.id);
@@ -11151,16 +11175,23 @@ const App = (() => {
 
       // Clear folder-level rescannedAt / manualAt from the folder's own DB record
       // (setMeta strips nulls so we need bulkWriteMeta for a direct put without those fields)
-      const folderRec = allMeta.find(m => m.id === folderId);
-      if (folderRec && (folderRec.rescannedAt || folderRec.manualAt)) {
-        delete folderRec.rescannedAt;
-        delete folderRec.manualAt;
-        await DB.bulkWriteMeta([folderRec]).catch(() => {});
+      // — ahora para folderId Y todas sus subcarpetas (visitedFolders).
+      const folderRecsToClear = [];
+      for (const fid of visitedFolders) {
+        const rec = allMeta.find(m => m.id === fid);
+        if (rec && (rec.rescannedAt || rec.manualAt)) {
+          delete rec.rescannedAt;
+          delete rec.manualAt;
+          folderRecsToClear.push(rec);
+        }
       }
+      if (folderRecsToClear.length) await DB.bulkWriteMeta(folderRecsToClear).catch(() => {});
 
-      // Delete collection record if it exists
-      await DB.deleteCollection(folderId).catch(() => {});
-      _collectionFolderIdsCache?.delete?.(folderId);
+      // Delete collection record if it exists — folderId y subcarpetas
+      for (const fid of visitedFolders) {
+        await DB.deleteCollection(fid).catch(() => {});
+        _collectionFolderIdsCache?.delete?.(fid);
+      }
       if (typeof Sync !== 'undefined') {
         Sync.push('metadata');    // FIX: el reset por fila no pusheaba metadata —
         Sync.push('collections'); // el enrichment viejo volvía desde Drive

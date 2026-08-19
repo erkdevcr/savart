@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.638';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.638 — AI search: apaga radio-mode heredado en artist_only/folder (evitaba rellenar con el artista anterior)
+const APP_VERSION  = '3.5.639';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.639 — onDsResetRow: reset recursivo a subcarpetas (antes solo hijos directos)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
