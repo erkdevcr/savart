@@ -1282,16 +1282,29 @@ const App = (() => {
         });
       }
 
+      // Canción puntual ("Vuelve de Shakira") — BÚSQUEDA DEDICADA por el título.
+      // Antes solo se buscaba por los terms (el artista) y el pin se elegía
+      // entre esos resultados: si el archivo se llama "Vuelve.mp3" dentro de la
+      // carpeta de Shakira, la búsqueda por "Shakira" NO lo encuentra (Drive
+      // matchea por nombre de ARCHIVO, no por carpeta) → el pin fallaba y sonaba
+      // "cualquier cosa". Ahora el título se busca aparte y se mergea.
+      let pinnedSong = null;
+      if (track && typeof track === 'string' && track.trim() && !useSoundrop) {
+        try {
+          const trackHits = await _aiSearchDriveTerms([track.trim()]);
+          const have = new Set(songs.map(s => s.id));
+          for (const t of trackHits) if (!have.has(t.id)) songs.push(t);
+        } catch (_) {}
+      }
+
       if (!songs.length) {
         setStatus('✦ No encontré canciones para eso', 'empty');
         return;
       }
 
-      // Canción puntual ("Rueda Fortuna de Héroes del Silencio y luego más de
-      // ellos") — se busca el mejor match por título ANTES del shuffle general
-      // y se aparta, para fijarla de primera en la cola. Sin esto el shuffle de
-      // abajo la mezclaba con el resto y podía arrancar en cualquier canción.
-      let pinnedSong = null;
+      // Elegir el mejor match por título ANTES del shuffle general y apartarlo,
+      // para fijarlo de primero en la cola. Sin esto el shuffle de abajo lo
+      // mezclaba con el resto y podía arrancar en cualquier canción.
       if (track && typeof track === 'string' && track.trim()) {
         let bestScore = 0;
         for (const s of songs) {

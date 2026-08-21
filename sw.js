@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.639';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.639 — onDsResetRow: reset recursivo a subcarpetas (antes solo hijos directos)
+const APP_VERSION  = '3.5.640';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.640 — AI search: búsqueda dedicada por título de canción (fix "Vuelve de Shakira" ponía cualquier cosa)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
