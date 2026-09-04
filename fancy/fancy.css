@@ -1,0 +1,203 @@
+/* ============================================================
+   SAVART — FANCY SKIN (capa de tema, se carga DESPUÉS de styles.css)
+   Y2K / vaporwave flat-vector OS: tema CLARO de pasteles brillantes
+   (rosa chicle, lavanda, amarillo, menta), contornos negros gruesos,
+   sombras duras desplazadas (sticker look, sin blur ni glow) y
+   tipografía redondeada Fredoka/Quicksand. Texto oscuro sobre
+   fondos claros — es la inversión completa del Savart oscuro.
+   Esta copia (Savart-fancy/) es independiente de Savart-web/.
+   OJO: styles.css tiene algunos '#fff' hardcodeados pensados para
+   fondo oscuro — si algo queda blanco-sobre-blanco, se pule aparte.
+   ============================================================ */
+
+/* ── Paleta Fancy ───────────────────────────────────────────
+   Pisa el :root de styles.css Y cualquier tema del picker
+   (html[data-theme=...]) — Fancy manda siempre. */
+:root,
+html[data-theme] {
+  /* Fondos — claros: rosa chicle de base, blanco crema en paneles */
+  --bg-base:      #f7cfe0;
+  --bg-surface:   #fffdf8;
+  --bg-elevated:  #fffdf8;
+  --bg-card:      #fdf6ec;
+  --bg-hover:     rgba(183, 163, 230, 0.5);
+
+  --folder-color: #b7a3e6;
+  --dot-color:    130, 100, 200;
+
+  --item-hover:   rgba(244, 114, 168, 0.12);
+  --item-tap:     rgba(244, 114, 168, 0.28);
+
+  --accent:       #ee5b98;
+  --accent-soft:  rgba(244, 114, 168, 0.22);
+
+  --text-primary:   #1a1a1a;
+  --text-secondary: rgba(26, 26, 26, 0.65);
+  --text-muted:     rgba(26, 26, 26, 0.45);
+  --text-disabled:  rgba(26, 26, 26, 0.28);
+
+  --error:    #e04555;
+  --success:  #58b94a;
+  --error-bg: rgba(224, 69, 85, 0.14);
+
+  /* Radios más gorditos — el look Y2K es todo redondeado */
+  --radius-sm:   10px;
+  --radius-md:   14px;
+  --radius-lg:   20px;
+  --radius-pill: 20px;
+}
+
+/* ── Fondo pastel ───────────────────────────────────────────
+   Rosa chicle con manchas suaves de lavanda/amarillo/menta —
+   plano, sin nebulosas ni blur. */
+body {
+  background:
+    radial-gradient(ellipse 700px 520px at 10% -5%,  rgba(183, 163, 230, 0.55), transparent 60%),
+    radial-gradient(ellipse 640px 480px at 95% 10%,  rgba(245, 225, 74, 0.35), transparent 58%),
+    radial-gradient(ellipse 600px 460px at 20% 105%, rgba(195, 234, 134, 0.45), transparent 58%),
+    #f7cfe0;
+  background-attachment: fixed;
+}
+
+/* ── Tipografía ─────────────────────────────────────────────
+   Fredoka redondeada para todo; Quicksand de respaldo. */
+body {
+  font-family: 'Fredoka', 'Quicksand', 'DM Sans', system-ui, sans-serif;
+  font-weight: 500;
+  font-size: 13.5px;
+}
+h1, h2, h3,
+.t-display, .t-title,
+.screen-header h1,
+#sidebar .sidebar-logo {
+  font-family: 'Fredoka', 'Quicksand', sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+
+/* ── Sticker look en superficies principales ────────────────
+   Contorno negro grueso + sombra dura desplazada (sin blur) +
+   esquinas bien redondas. Nada de glow — todo plano e ilustrado. */
+#sidebar,
+#bottom-nav,
+#mini-player,
+#context-menu,
+.ds-modal-card,
+.ai-search-panel,
+.home-card,
+#now-playing-panel,
+.settings-section {
+  border: 2.2px solid #1a1a1a;
+  box-shadow: 3.5px 3.5px 0 rgba(26, 26, 26, 0.18);
+  border-radius: 20px;
+}
+
+/* Menús y modales: blanco crema sólido (legibilidad total) */
+#context-menu,
+.ds-modal-card {
+  background: #fffdf8;
+}
+
+/* Player expandido: degradado pastel a pantalla completa */
+#player-expanded {
+  background:
+    radial-gradient(ellipse 700px 500px at 12% 0%,  rgba(183, 163, 230, 0.5), transparent 60%),
+    radial-gradient(ellipse 620px 460px at 95% 12%, rgba(245, 225, 74, 0.3), transparent 58%),
+    linear-gradient(180deg, #f7cfe0, #f3c3d8);
+}
+
+/* Mini-player: la estrella — banda lavanda con contorno grueso */
+#mini-player {
+  background: #b7a3e6;
+  border: 2.4px solid #1a1a1a;
+  box-shadow: 4px 4px 0 rgba(26, 26, 26, 0.2);
+}
+
+/* Botón flotante IA: sticker rosa con contorno */
+.ai-search-trigger {
+  border: 2.2px solid #1a1a1a;
+  box-shadow: 3px 3px 0 rgba(26, 26, 26, 0.25);
+}
+
+/* Botones primarios: contorno negro (el bg ya viene del --accent) */
+.btn-primary {
+  border: 2px solid #1a1a1a;
+  box-shadow: 2.5px 2.5px 0 rgba(26, 26, 26, 0.2);
+  color: #fff;
+}
+
+/* Covers y thumbs: marco de sticker */
+.home-card img,
+.queue-item-thumb {
+  border: 2px solid #1a1a1a;
+}
+
+/* Inputs: blanco crema con contorno */
+input[type="text"], input[type="search"], textarea {
+  background: #fffdf8;
+  border: 2px solid #1a1a1a;
+  color: #1a1a1a;
+}
+
+/* Scrollbars (WebKit) al tono */
+::-webkit-scrollbar-thumb {
+  background: rgba(183, 163, 230, 0.9) !important;
+  border: 1.5px solid rgba(26, 26, 26, 0.5) !important;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #b7a3e6 !important;
+}
+
+/* ============================================================
+   FIXES DE HARDCODES — styles.css tiene valores fijos pensados
+   para el tema oscuro que rompen (o desaparecen) sobre fondos
+   claros. Auditados uno a uno; los color:#fff sobre acento o
+   scrim oscuro quedaron como están (siguen siendo legibles).
+   ============================================================ */
+
+/* Variables usadas solo como fallback en styles.css (var(--border,
+   rgba(255,255,255,.1))) — sin definirlas, los bordes del editor de
+   álbum y afines caían a blanco translúcido = invisibles en crema. */
+:root,
+html[data-theme] {
+  --border:       rgba(26, 26, 26, 0.15);
+  --border-color: rgba(26, 26, 26, 0.15);
+  --accent-alpha: rgba(238, 91, 152, 0.25); /* tap-flash de filas */
+}
+
+/* Divisores de filas del browse: eran blanco 10% (invisibles) */
+.folder-row { border-bottom: 1px solid rgba(26, 26, 26, 0.12); }
+.song-row   { border-bottom: 1px solid rgba(26, 26, 26, 0.12); }
+
+/* Toasts (#08101f navy + borde azul + texto heredado del body, que
+   ahora es oscuro → quedaba oscuro-sobre-navy). Sticker crema. */
+.toast,
+#boot-toast {
+  background: #fffdf8;
+  border: 2px solid #1a1a1a;
+  box-shadow: 3px 3px 0 rgba(26, 26, 26, 0.2);
+  color: #1a1a1a;
+}
+
+/* Playlist picker: fila de búsqueda era #1A1A20 fijo y los
+   separadores blanco 6-7% */
+.pl-picker-search-wrap {
+  background: #fdf6ec;
+  border-bottom: 1px solid rgba(26, 26, 26, 0.15);
+}
+.pl-picker-create { border-bottom: 1px solid rgba(26, 26, 26, 0.12); }
+.pl-picker-sep    { background: rgba(26, 26, 26, 0.12); }
+
+/* Timer del botón Cancelar (popup Soundrop): anillo y contador
+   eran blancos sobre botón transparente → invisibles en crema */
+.sd-cancel-timer-track { stroke: rgba(26, 26, 26, 0.25); }
+.sd-cancel-timer-count { color: #1a1a1a; }
+
+/* Ícono placeholder del arte de pins del Home: blanco 55% */
+.pinned-art-icon { color: rgba(26, 26, 26, 0.45); }
+
+/* Tick central del slider de pitch (EQ): blanco 25% */
+.eq-pb-center-tick { background: rgba(26, 26, 26, 0.3); }
+
+/* Borde de los swatches del theme picker: blanco 18% */
+.theme-swatch { border-color: rgba(26, 26, 26, 0.25); }
