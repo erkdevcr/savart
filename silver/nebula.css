@@ -1,0 +1,155 @@
+/* ============================================================
+   SAVART — NEBULA SILVER SKIN (capa de tema, se carga DESPUÉS de styles.css)
+   Variante monocromática plata/platino del tema Nebula: mismo
+   glassmorphism (paneles translúcidos + blur, borde luminoso,
+   highlight superior) pero sin color — fondo negro neutro con
+   blobs de luz blanca/gris, acento plata y glows blancos.
+   Tipografías Orbitron (títulos) y Rajdhani (cuerpo).
+   Esta copia (Savart-nebula-silver/) es independiente de Savart-web/.
+   ============================================================ */
+
+/* ── Paleta Nebula Silver ───────────────────────────────────
+   Pisa el :root de styles.css Y cualquier tema del picker
+   (html[data-theme=...]) — Silver manda siempre. */
+:root,
+html[data-theme] {
+  /* Fondos — translúcidos: el vidrio necesita ver la luz detrás */
+  --bg-base:      #0b0c0e;
+  --bg-surface:   rgba(255, 255, 255, 0.045);
+  --bg-elevated:  rgba(23, 24, 27, 0.85);
+  --bg-card:      rgba(255, 255, 255, 0.075);
+  --bg-hover:     rgba(255, 255, 255, 0.14);
+
+  --folder-color: #c9d1d9;
+  --dot-color:    222, 228, 235;
+
+  --item-hover:   rgba(238, 243, 247, 0.08);
+  --item-tap:     rgba(238, 243, 247, 0.20);
+
+  --accent:       #9aa0a8;
+  --accent-soft:  rgba(238, 243, 247, 0.14);
+
+  --text-primary:   #ffffff;
+  --text-secondary: rgba(255, 255, 255, 0.8);
+  --text-muted:     rgba(255, 255, 255, 0.58);
+  --text-disabled:  rgba(255, 255, 255, 0.32);
+
+  --error:    #ff6b6b;
+  --success:  #d7ede0;
+  --error-bg: rgba(255, 107, 107, 0.16);
+}
+
+/* ── Fondo espacial plata ───────────────────────────────────
+   Blobs de luz blanca/gris neutra sobre negro profundo — sin
+   violeta ni cian, todo monocromo. El canvas de puntos (#bg-dots,
+   z-index -1) queda ENCIMA: puntos plata flotando sobre la bruma. */
+body {
+  background:
+    radial-gradient(ellipse 780px 560px at 8% -8%,  rgba(255, 255, 255, 0.14), transparent 60%),
+    radial-gradient(ellipse 680px 520px at 98% 8%,  rgba(210, 215, 222, 0.12), transparent 58%),
+    radial-gradient(ellipse 620px 480px at 26% 102%, rgba(255, 255, 255, 0.09), transparent 58%),
+    radial-gradient(ellipse 700px 500px at 80% 95%, rgba(180, 186, 194, 0.07), transparent 55%),
+    linear-gradient(180deg, #0b0c0e, #17181b 60%, #0b0c0e);
+  background-attachment: fixed;
+}
+
+/* ── Tipografías ────────────────────────────────────────────
+   Rajdhani para el cuerpo (condensada, técnica), Orbitron para
+   títulos y marca. DM Sans queda de fallback. */
+body {
+  font-family: 'Rajdhani', 'DM Sans', system-ui, sans-serif;
+  font-weight: 500;
+  font-size: 13.5px;
+  letter-spacing: 0.2px;
+}
+h1, h2, h3,
+.t-display, .t-title,
+.screen-header h1,
+#sidebar .sidebar-logo {
+  font-family: 'Orbitron', 'DM Sans', sans-serif;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+.t-label {
+  font-family: 'Orbitron', sans-serif;
+  letter-spacing: 0.14em;
+}
+
+/* ── Vidrio esmerilado en superficies flotantes ─────────────
+   backdrop blur + borde luminoso + glow plata + línea de brillo
+   superior (inset shadow — sin pseudo-elementos para no pisar
+   ::before/::after existentes de styles.css). */
+#sidebar,
+#bottom-nav,
+#mini-player,
+#context-menu,
+.ds-modal-card,
+.ai-search-panel,
+.home-card,
+#now-playing-panel,
+.settings-section {
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  box-shadow:
+    0 10px 30px rgba(0, 0, 4, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.30),
+    0 0 22px rgba(154, 160, 168, 0.24),
+    0 0 12px rgba(238, 243, 247, 0.16);
+}
+
+/* Menús y modales: un pelín más opacos para legibilidad al flotar
+   sobre contenido con texto. */
+#context-menu,
+.ds-modal-card {
+  background: rgba(23, 24, 27, 0.9);
+}
+
+/* Player expandido: vidrio a pantalla completa sobre la bruma plata */
+#player-expanded {
+  background:
+    radial-gradient(ellipse 700px 500px at 12% 0%,  rgba(255, 255, 255, 0.12), transparent 60%),
+    radial-gradient(ellipse 600px 460px at 95% 12%, rgba(210, 215, 222, 0.09), transparent 58%),
+    linear-gradient(180deg, rgba(11, 12, 14, 0.96), rgba(23, 24, 27, 0.97));
+  -webkit-backdrop-filter: blur(22px);
+  backdrop-filter: blur(22px);
+}
+
+/* Mini-player: glow un poco más marcado (es el elemento estrella) */
+#mini-player {
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  box-shadow:
+    0 10px 30px rgba(0, 0, 4, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    0 0 26px rgba(238, 243, 247, 0.22),
+    0 0 14px rgba(154, 160, 168, 0.20);
+}
+
+/* Botón flotante IA: anillo luminoso plata */
+.ai-search-trigger {
+  box-shadow:
+    0 2px 12px rgba(0, 0, 4, 0.45),
+    0 0 18px rgba(238, 243, 247, 0.45),
+    0 0 10px rgba(154, 160, 168, 0.35);
+}
+
+/* Barras de progreso y thumbs: glow plata */
+.pexp-progress-fill,
+#mini-player .mini-progress-fill {
+  box-shadow: 0 0 10px rgba(238, 243, 247, 0.6);
+}
+
+/* Covers y cards: borde sutil de vidrio */
+.home-card img,
+.queue-item-thumb {
+  border: 1px solid rgba(255, 255, 255, 0.10);
+}
+
+/* Scrollbars (WebKit) al tono */
+::-webkit-scrollbar-thumb {
+  background: rgba(238, 243, 247, 0.28) !important;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(238, 243, 247, 0.45) !important;
+}
