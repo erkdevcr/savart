@@ -46,6 +46,11 @@ const Drive = (() => {
     });
 
     if (!response.ok) {
+      // v3.5.641 (audit M7): un 401 significa token inválido/revocado —
+      // antes caía al DriveError genérico y el player lo trataba como
+      // error de descarga (auto-skip de toda la cola) en vez de pedir
+      // reautenticación.
+      if (response.status === 401) throw new AuthError();
       const body = await response.text().catch(() => '');
       throw new DriveError(
         `Drive API ${response.status}: ${body.slice(0, 200)}`,
@@ -248,7 +253,10 @@ const Drive = (() => {
     // folders-only. The folders-only query guarantees folder results even when
     // 100+ songs occupy the first page of the mixed query.
     const querySet = new Set();
-    const safe = s => s.replace(/'/g, "\\'");
+    // v3.5.641 (audit B5): escapar backslashes ANTES que comillas — si no,
+    // un término con '\' terminaba produciendo un query de Drive inválido
+    // (400 error) porque el backslash se colaba sin escapar.
+    const safe = s => s.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
     const primaryTerm = safe(term.trim());
     querySet.add(primaryTerm);
     querySet.add(safe(normalized));
@@ -506,7 +514,7 @@ const Drive = (() => {
    */
   async function findOrCreateFolder(name, parentId = 'root') {
     // Search for existing folder
-    const q   = `name='${name.replace(/'/g, "\\'")}' and mimeType='application/vnd.google-apps.folder' and '${parentId}' in parents and trashed=false`;
+    const q   = `name='${name.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}' and mimeType='application/vnd.google-apps.folder' and '${parentId}' in parents and trashed=false`;
     const url = `${CONFIG.API_BASE}/files?q=${encodeURIComponent(q)}&fields=files(id,name)&spaces=drive`;
     const res = await _fetch(url);
     const data = await res.json();

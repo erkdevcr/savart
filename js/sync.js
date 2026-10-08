@@ -94,9 +94,18 @@ const Sync = (() => {
     });
     if (!res.ok) {
       const body = await res.text().catch(() => res.statusText);
+      // v3.5.641 (audit R4): un 403 de Drive NO siempre significa permiso
+      // faltante — Google también usa 403 para rate-limiting (reason
+      // 'rateLimitExceeded'/'userRateLimitExceeded'/'dailyLimitExceeded').
+      // Antes CUALQUIER 403 disparaba la pantalla de consentimiento OAuth;
+      // ahora solo lo hace si el body realmente indica falta de permiso.
       if (res.status === 403) {
-        console.error('[Sync] 403 — drive.appdata scope not granted.');
-        throw new SyncScopeError();
+        const looksLikeRateLimit = /rateLimitExceeded|userRateLimitExceeded|dailyLimitExceeded|quotaExceeded/i.test(body);
+        if (!looksLikeRateLimit) {
+          console.error('[Sync] 403 — drive.appdata scope not granted.');
+          throw new SyncScopeError();
+        }
+        console.warn('[Sync] 403 — rate limit de Drive (no es falta de permiso):', body.slice(0, 200));
       }
       throw new Error(`[Sync] Drive API ${res.status}: ${body}`);
     }
@@ -170,14 +179,18 @@ const Sync = (() => {
 
   /* ── Manifest ────────────────────────────────────────────── */
 
-  /** Read manifest from Drive (returns {} if not found). */
+  /** Read manifest from Drive (returns {} only if the file doesn't exist yet). */
   async function _readManifest() {
     const fileId = _fileIds[MANIFEST];
-    if (!fileId) return {};
-    try {
-      const res = await _apiFetch(`${API}/files/${fileId}?alt=media`);
-      return await res.json();
-    } catch (_) { return {}; }
+    if (!fileId) return {}; // cuenta nueva / primer push — no es un error
+    // v3.5.641 (audit M4): antes el catch de abajo se tragaba CUALQUIER error
+    // (red caída, 5xx, 403) y devolvía {} igual que "no hay manifest" — _poll
+    // leía eso como éxito y reseteaba _pollFailures a 0 en cada tick, así que
+    // el backoff nunca se activaba (seguía consultando Drive cada 3 s estando
+    // offline). Ahora el error real se propaga; cada caller decide (_poll ya
+    // tiene su propio catch que SÍ incrementa el backoff).
+    const res = await _apiFetch(`${API}/files/${fileId}?alt=media`);
+    return await res.json();
   }
 
   /**

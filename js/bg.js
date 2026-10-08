@@ -160,8 +160,35 @@
 
   /* ── Animation loop ──────────────────────────────────────── */
 
+  // v3.5.641 (audit R1): el fondo animado era el mayor consumidor de CPU de
+  // la app (hasta 100% de un hilo en 1920×1080) — sin throttling de frame
+  // rate, sin pausa cuando la pestaña está oculta, y sin respetar
+  // prefers-reduced-motion. Los tres se agregan abajo sin tocar el look del
+  // dot-grid cuando SÍ está visible y animado.
+  const FRAME_INTERVAL   = 1000 / 30; // cap a ~30fps — el drift es lento, no se nota
+  const _reducedMotionMq = window.matchMedia?.('(prefers-reduced-motion: reduce)');
+  let _reducedMotion     = !!_reducedMotionMq?.matches;
+  let _pageHidden        = (typeof document !== 'undefined') && document.hidden;
+  let _rafId             = null;
+  let _lastDrawTime      = 0;
+
+  function _drawStaticFrame() {
+    // prefers-reduced-motion: un solo frame quieto (t=0), sin loop de rAF.
+    const bPos = blobs.map(b => ({ nx: b.bx, ny: b.by }));
+    drawGrid(ctxMain, W, H, cols, rows, gridX, gridY, bPos);
+    if (ctxExp && Wexp > 0 && Hexp > 0) drawGrid(ctxExp, Wexp, Hexp, colsExp, rowsExp, gridXexp, gridYexp, bPos);
+    if (ctxDs  && Wds  > 0 && Hds  > 0) drawGrid(ctxDs,  Wds,  Hds,  colsDs,  rowsDs,  gridXds,  gridYds,  bPos);
+  }
+
   function frame(now) {
-    requestAnimationFrame(frame);
+    _rafId = requestAnimationFrame(frame);
+
+    // Cap de frame rate: si no pasó suficiente tiempo desde el último dibujo,
+    // salir sin tocar canvas/CPU — el rAF sigue pidiéndose (mantiene el reloj
+    // sincronizado con el refresh del monitor) pero el trabajo real se saltea.
+    if (now - _lastDrawTime < FRAME_INTERVAL) return;
+    _lastDrawTime = now;
+
     if (then === null) then = now;
     t += (now - then) / 1000;
     then = now;
@@ -187,7 +214,44 @@
     }
   }
 
+  function _startLoop() {
+    if (_rafId !== null) return; // ya corriendo
+    then = null; // resync del reloj de animación tras una pausa
+    _rafId = requestAnimationFrame(frame);
+  }
+
+  function _stopLoop() {
+    if (_rafId === null) return;
+    cancelAnimationFrame(_rafId);
+    _rafId = null;
+  }
+
+  function _applyMotionPreference() {
+    if (_reducedMotion) {
+      _stopLoop();
+      _drawStaticFrame();
+    } else if (!_pageHidden) {
+      _startLoop();
+    }
+  }
+
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', () => {
+      _pageHidden = document.hidden;
+      if (_pageHidden) {
+        _stopLoop(); // pestaña/app en background — no hay nada que pintar
+      } else if (!_reducedMotion) {
+        _startLoop();
+      }
+    });
+  }
+
+  _reducedMotionMq?.addEventListener?.('change', (e) => {
+    _reducedMotion = e.matches;
+    _applyMotionPreference();
+  });
+
   window.addEventListener('resize', resizeMain);
   resizeMain();
-  requestAnimationFrame(frame);
+  _applyMotionPreference();
 })();

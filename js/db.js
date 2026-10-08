@@ -100,6 +100,16 @@ const DB = (() => {
       req.onsuccess = (event) => {
         _db = event.target.result;
         _db.onerror = (e) => console.error('[DB] Unhandled error:', e.target.error);
+        // v3.5.641 (audit M8): otra pestaña/sesión pidió una versión más nueva
+        // de la DB (bump de DB_VERSION) — esta conexión bloquea su upgrade.
+        // Cerrar aquí deja avanzar al otro lado; esta pestaña queda sin DB
+        // hasta que el usuario recargue (mejor que quedarse colgada o corromper
+        // datos con dos versiones de schema abiertas a la vez).
+        _db.onversionchange = () => {
+          console.warn('[DB] Versión nueva detectada en otra pestaña — cerrando conexión.');
+          _db.close();
+          _db = null;
+        };
         console.log('[DB] Opened:', CONFIG.DB_NAME);
         resolve(_db);
       };
@@ -107,6 +117,15 @@ const DB = (() => {
       req.onerror = (event) => {
         console.error('[DB] Failed to open:', event.target.error);
         reject(event.target.error);
+      };
+
+      // v3.5.641 (audit M8): sin este handler, un bump de DB_VERSION con otra
+      // pestaña/sesión abierta dejaba el open() colgado para siempre (ni
+      // onsuccess ni onerror disparan mientras esté bloqueado) — boot() nunca
+      // resolvía. onblocked SÍ dispara; avisamos y dejamos que el otro lado
+      // (onversionchange de esa pestaña vieja) se cierre solo.
+      req.onblocked = () => {
+        console.warn('[DB] Open bloqueado por otra pestaña con una versión anterior abierta.');
       };
     });
   }

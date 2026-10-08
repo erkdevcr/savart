@@ -292,6 +292,24 @@ const App = (() => {
     // 8. Decide initial screen
     if (Auth.isAuthenticated()) {
       _onTokenReady();
+    } else if (Auth.wasAuthenticated() && !navigator.onLine) {
+      // v3.5.641 (audit A3): sin red, un intento de re-auth silenciosa (GIS o el
+      // Worker de refresh) nunca puede resolver — antes esto dejaba al usuario
+      // varado en la pantalla de login 5 s y luego mostraba el botón, aunque
+      // tuviera canciones cacheadas y una sesión previa válida. Si ya hubo login
+      // antes y no hay red, se entra directo a la app sin token (modo offline):
+      // _onTokenReady() ya tolera la ausencia de token en todos sus pasos de Drive
+      // (todos con .catch(() => {})). Al volver la conexión, se reintenta el login
+      // silencioso real — si funciona, _onTokenReady() ve la vista ya en 'home'
+      // (no null/'login') y solo oculta el banner + reanuda el polling, sin
+      // reinicializar nada.
+      // _bindEvents() (paso 6, ya corrió) registró el listener genérico de
+      // 'online' que — cuando _offlineManual es false, como acá — ya hace
+      // _setOfflineMode(false) + intenta renovar el token al volver la red.
+      // No hace falta un segundo listener: basta con arrancar en modo offline.
+      console.log('[App] Offline + sesión previa — boot directo sin token.');
+      _setOfflineMode(true, false);
+      _onTokenReady();
     } else if (Auth.wasAuthenticated()) {
       // Was logged in before — attempt silent re-auth transparently.
       // Show the login screen but hide the login button while we try.
@@ -461,6 +479,13 @@ const App = (() => {
       Sync.startLiveSync(_onSyncDataChanged);
       console.log('[App] Token renovado — sesión continuada sin reiniciar.');
       return;
+    }
+
+    // v3.5.641 (audit R2): la caché de audio en IndexedDB puede llegar a 20 GB —
+    // sin almacenamiento persistente, el navegador puede borrarla bajo presión
+    // de espacio. Una sola llamada tras el login alcanza; no bloquea el boot.
+    if (navigator.storage?.persist) {
+      navigator.storage.persist().catch(() => {});
     }
 
     // One-time migration: reset all durationSec values that may have been saved
@@ -2313,8 +2338,16 @@ const App = (() => {
      arranque. Este helper difiere el trigger de radio hasta que el player ya
      está reproduciendo (>0.3 s de audio) o hasta 4 s como red de seguridad. */
   let _radioDeferPending = false;
+  let _radioDeferFn      = null;
   function _deferRadioUntilPlaying(fn, maxWaitMs = 4000) {
-    if (_radioDeferPending) return; // ya hay un trigger en espera — no duplicar
+    // v3.5.641 (audit M6): si ya hay un trigger en espera, el pedido nuevo
+    // NO se descarta — se guarda y reemplaza al anterior. Antes, cambiar de
+    // álbum dentro de la ventana de espera descartaba el pedido del álbum
+    // nuevo y ejecutaba el closure viejo (artistas del álbum anterior) sin
+    // ninguna validación de contexto → la radio mezclaba artistas del álbum
+    // equivocado y además dejaba de dispararse para el álbum nuevo.
+    _radioDeferFn = fn;
+    if (_radioDeferPending) return;
     _radioDeferPending = true;
     const t0 = Date.now();
     const iv = setInterval(() => {
@@ -2322,7 +2355,9 @@ const App = (() => {
       if (started || (Date.now() - t0) >= maxWaitMs) {
         clearInterval(iv);
         _radioDeferPending = false;
-        setTimeout(() => fn(), 250); // respiro corto tras el arranque
+        const runFn = _radioDeferFn;
+        _radioDeferFn = null;
+        setTimeout(() => runFn?.(), 250); // respiro corto tras el arranque
       }
     }, 200);
   }
@@ -7192,8 +7227,13 @@ const App = (() => {
 
     // ── Soundrop (YouTube) search branch ─────────────────────
     if (filter === 'soundrop') {
+      // v3.5.641 (audit B2): mismo guard _searchSeq que la rama de Drive —
+      // sin esto, una respuesta lenta de una búsqueda anterior podía
+      // reemplazar los resultados de la búsqueda actual.
+      const _seq = ++_searchSeq;
       try {
         const sdTracks = await Soundrop.search(term);
+        if (_seq !== _searchSeq) return; // llegó tarde — otra búsqueda ya pintó
         // Merge del aprendizaje local: videos que ya fallaron con 101/150 en este
         // device (la API los reporta embeddable pero bloquean por licencia).
         await Promise.all(sdTracks.map(async t => {
@@ -7201,6 +7241,7 @@ const App = (() => {
           const m = await DB.getMeta(t.id).catch(() => null);
           if (m?.embedBlocked) t.embedBlocked = true;
         }));
+        if (_seq !== _searchSeq) return;
         // Marcar pistas ya descargadas: (1) guardadas en Drive (soundropSaved + videoId)
         // o (2) cacheadas localmente vía fallback de reproducción (blob bajo sd_<videoId>).
         const _sdAllMeta = await DB.getAllMetaLight().catch(() => []);
@@ -7211,6 +7252,7 @@ const App = (() => {
           if (_sdSavedVids.has(t.videoId)) { t.sdCached = true; return; }
           if (await DB.isCached(t.id).catch(() => false)) t.sdCached = true;
         }));
+        if (_seq !== _searchSeq) return;
         sdTracks.forEach(t => _cacheItem(t));
         _lastSearchFiles = sdTracks;
         _cachedSdResults = { soundrop: sdTracks };
@@ -7218,6 +7260,7 @@ const App = (() => {
         UI.renderSearchResults(_cachedSdResults, 'soundrop');
         UI.setActiveSongRow(Player.getCurrentTrack()?.id ?? null);
       } catch (err) {
+        if (_seq !== _searchSeq) return;
         console.error('[App] Soundrop search error:', err);
         container.innerHTML = `<div class="empty-state"><p>${UI.t('search_error')}</p></div>`;
       }

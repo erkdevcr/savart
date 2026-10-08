@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.640';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.640 — AI search: búsqueda dedicada por título de canción (fix "Vuelve de Shakira" ponía cualquier cosa)
+const APP_VERSION  = '3.5.641';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.641 — auditoría REVISION.md: grupo "aplicar ya" + "vale la pena" (A1/A2/A3, B2-B5, M1/M3/M4/M6-M8, R1/R2/R4, S3/S6) + eliminado pitch-processor.js (no usado)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
@@ -28,7 +28,6 @@ const SHELL_FILES = [
   `${BASE}/js/db.js`,
   `${BASE}/js/sync.js`,
   `${BASE}/js/player.js`,
-  `${BASE}/js/pitch-processor.js`,
   `${BASE}/js/meta.js`,
   `${BASE}/js/lastfm.js`,
   `${BASE}/js/audd.js`,
@@ -55,7 +54,11 @@ self.addEventListener('install', (event) => {
   console.log('[SW] Installing v' + APP_VERSION);
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(SHELL_FILES).catch((err) => {
+      // v3.5.641 (audit M1): { cache: 'reload' } fuerza a bypassear la caché
+      // HTTP del navegador (GitHub Pages sirve con max-age=600) — sin esto,
+      // dos deploys dentro de la misma ventana de 10 min podían dejar que el
+      // SW instalara JS viejo bajo el nombre de caché nuevo.
+      return cache.addAll(SHELL_FILES.map(u => new Request(u, { cache: 'reload' }))).catch((err) => {
         // Non-fatal: some files may not exist yet (e.g. icons)
         console.warn('[SW] Precache partial error:', err);
       });
@@ -89,17 +92,23 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(event.request.url);
 
-  // Let Drive API and GIS requests go through to network always
-  if (url.hostname.includes('googleapis.com') ||
-      url.hostname.includes('accounts.google.com')) {
-    return; // Don't intercept — browser handles normally
-  }
+  // v3.5.641 (audit B1): la regla de fuentes va ANTES que la de googleapis —
+  // 'fonts.googleapis.com' también matchea 'googleapis.com', así que si esa
+  // regla corría primero (como antes) el CSS de Google Fonts jamás llegaba a
+  // 'savart-fonts' (solo los .woff2 de fonts.gstatic.com sí). Sin el CSS
+  // cacheado, las fuentes offline dependían de la caché HTTP de 1 día.
 
   // Google Fonts: Cache First
   if (url.hostname.includes('fonts.googleapis.com') ||
       url.hostname.includes('fonts.gstatic.com')) {
     event.respondWith(cacheFirst(event.request, 'savart-fonts'));
     return;
+  }
+
+  // Let Drive API and GIS requests go through to network always
+  if (url.hostname.includes('googleapis.com') ||
+      url.hostname.includes('accounts.google.com')) {
+    return; // Don't intercept — browser handles normally
   }
 
   // Cross-origin requests (Discogs CDN, Last.fm, AudD, lrclib, etc.) must NOT

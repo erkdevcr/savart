@@ -119,7 +119,10 @@ const UI = (() => {
       login_tagline_2:  'donde quieras.',
       login_reconnecting: 'Reconectando…',
       login_btn:        'Continuar con Google',
-      login_disclaimer: 'Al continuar, Savart accederá a tus archivos de Google Drive en modo solo lectura.',
+      // v3.5.641 (audit S6): el texto decía "solo lectura", pero la app pide el scope
+      // drive.file y genuinamente crea/renombra/mueve/elimina archivos (Soundrop, deep
+      // scan, edición de metadata) — la copia ahora refleja el acceso real.
+      login_disclaimer: 'Al continuar, Savart accederá a los archivos de Google Drive que crees o abras con la app.',
       session_expiring: 'La sesión expirará pronto.',
       renew:     'Renovar',
       logout:    'Cerrar sesión',
@@ -290,6 +293,7 @@ const UI = (() => {
       // ── Search states ──────────────────────────────────────
       searching:            'Buscando…',
       search_error:         'Error al buscar. Inténtalo de nuevo.',
+      sw_update_ready:      'Nueva versión disponible — toca para actualizar',
       // ── Deep scan controls ─────────────────────────────────
       scan_btn_start:       'Iniciar escaneo',
       scan_btn_pause:       'Pausar',
@@ -568,7 +572,7 @@ const UI = (() => {
       login_tagline_2:  'anywhere.',
       login_reconnecting: 'Reconnecting…',
       login_btn:        'Continue with Google',
-      login_disclaimer: 'By continuing, Savart will access your Google Drive files in read-only mode.',
+      login_disclaimer: 'By continuing, Savart will access the Google Drive files you create or open with the app.',
       session_expiring: 'Session expiring soon.',
       renew:     'Renew',
       logout:    'Log out',
@@ -739,6 +743,7 @@ const UI = (() => {
       // ── Search states ──────────────────────────────────────
       searching:            'Searching…',
       search_error:         'Search error. Please try again.',
+      sw_update_ready:      'New version available — tap to update',
       // ── Deep scan controls ─────────────────────────────────
       scan_btn_start:       'Start scan',
       scan_btn_pause:       'Pause',
@@ -3229,11 +3234,17 @@ const UI = (() => {
       menu.style.visibility = ''; // show only after correct position is set
     });
 
-    // Dismiss on outside click OR any scroll
+    // Dismiss on outside click or intentional user scroll.
+    // v3.5.641 (audit B4): 'scroll' en capture también dispara con scrolls
+    // PROGRAMÁTICOS (el render diferencial del Home restaura scrollLeft de
+    // sus secciones) — cerraba el menú solo. Mismo fix que el context menu
+    // genérico en v3.5.522: 'wheel'/'touchmove' detectan scroll real del
+    // usuario sin falsos positivos.
     setTimeout(() => {
       const _dismiss = () => menu.remove();
-      document.addEventListener('click',  _dismiss, { once: true, capture: true });
-      document.addEventListener('scroll', _dismiss, { once: true, capture: true, passive: true });
+      document.addEventListener('click',      _dismiss, { once: true, capture: true });
+      document.addEventListener('wheel',      _dismiss, { once: true, capture: true, passive: true });
+      document.addEventListener('touchmove',  _dismiss, { once: true, capture: true, passive: true });
     }, 0);
   }
 
@@ -4101,7 +4112,7 @@ const UI = (() => {
     entity.innerHTML = `
       <div class="lib-detail-entity-art" style="background:${albBg};color:var(--text-secondary)">
         ${album.coverUrl
-          ? `<img src="${album.coverUrl}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)" onerror="this.style.display='none';this.nextElementSibling.style.display=''"><div style="display:none">${_artistSvg}</div>`
+          ? `<img src="${escHtml(album.coverUrl)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)" onerror="this.style.display='none';this.nextElementSibling.style.display=''"><div style="display:none">${_artistSvg}</div>`
           : _artistSvg
         }
       </div>
@@ -4536,7 +4547,7 @@ const UI = (() => {
     card.innerHTML = `
       <div class="home-card-art" style="background:${albBg}"${album.hasManual && album.coverUrl ? ' data-manual-cover="1"' : ''}>
         ${album.coverUrl
-          ? `<img src="${album.coverUrl}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-md)">`
+          ? `<img src="${escHtml(album.coverUrl)}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-md)">`
           : `<svg viewBox="0 0 24 24" fill="currentColor" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:25%;height:auto;color:var(--text-muted)"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 14.5c-2.49 0-4.5-2.01-4.5-4.5S9.51 7.5 12 7.5s4.5 2.01 4.5 4.5-2.01 4.5-4.5 4.5zm0-5.5c-.55 0-1 .45-1 1s.45 1 1 1 1-.45 1-1-.45-1-1-1z"/></svg>`
         }
       </div>
@@ -5048,7 +5059,7 @@ const UI = (() => {
     entity.innerHTML = `
       <div class="lib-detail-entity-art" style="background:${albBg};color:var(--text-secondary)">
         ${album.coverUrl
-          ? `<img src="${album.coverUrl}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)" onerror="this.style.display='none';this.nextElementSibling.style.display=''"><div style="display:none">${_artistSvg}</div>`
+          ? `<img src="${escHtml(album.coverUrl)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)" onerror="this.style.display='none';this.nextElementSibling.style.display=''"><div style="display:none">${_artistSvg}</div>`
           : _artistSvg
         }
       </div>
@@ -5584,7 +5595,7 @@ const UI = (() => {
     const cells = [0,1,2,3].map(i => {
       const url = coverUrls[i];
       const bg  = url ? `#000` : COLORS[(hash+i) % COLORS.length];
-      const img = url ? `<img src="${url}" style="width:100%;height:100%;object-fit:cover;display:block">` : '';
+      const img = url ? `<img src="${escHtml(url)}" style="width:100%;height:100%;object-fit:cover;display:block">` : '';
       return `<div style="flex:1;background:${bg}">${img}</div>`;
     });
     return `<div style="display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;width:100%;height:100%">${cells.join('')}</div>`;
@@ -5653,7 +5664,7 @@ const UI = (() => {
       const url = coverUrls[i];
       const bg  = MOSAIC_COLORS[(hash + i) % MOSAIC_COLORS.length];
       const img = url
-        ? `<img src="${url}" alt="" loading="lazy" onerror="this.style.display='none'">`
+        ? `<img src="${escHtml(url)}" alt="" loading="lazy" onerror="this.style.display='none'">`
         : '';
       return `<div class="mosaic-cell" style="background:${bg}">` +
         `<div style="opacity:.25;color:#fff;pointer-events:none">${noteIcon}</div>${img}</div>`;

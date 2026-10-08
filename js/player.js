@@ -49,6 +49,9 @@ const Player = (() => {
   let _preloadAbortCtrl = null;  // AbortController for the in-flight preload fetch
   let _activeDownloadCtrl = null; // AbortController for the in-flight main download
   let _fastStartActive    = false; // true while playing a partial (head) blob; full download pending
+  let _fastStartWaiting   = false; // v3.5.641 (audit A2): true while _handleEnded is holding playback
+                                    // waiting for the full-file swap — 'ended' already set audio.paused
+                                    // to true, so wasPlaying below would read false and never resume.
 
   // EQ band gains (dB), indexed same as CONFIG.EQ_BANDS
   let _eqGains = new Array(12).fill(0);
@@ -659,8 +662,13 @@ const Player = (() => {
       _keepAliveStart();
       await el.play().catch(_handleAudioError);
     } else {
-      _keepAliveStop();
-      el.pause();
+      // v3.5.641 (audit A1): antes hacía _keepAliveStop()+el.pause() directo,
+      // sin marcar que la pausa fue del usuario. El listener 'pause' (abajo)
+      // interpretaba esa pausa como interrupción del sistema (llamada, etc.)
+      // y la auto-reanudaba a los 600ms al volver a la app — afectaba a TODOS
+      // los botones de play/pausa (mini player, expandido, desktop, barra
+      // espaciadora), todos pasan por acá. pause() ya hace todo esto bien.
+      pause();
     }
   }
 
@@ -1424,7 +1432,13 @@ const Player = (() => {
       if (_queue[_queueIndex]?.id !== item.id) return;
 
       const savedTime  = _audio.currentTime;
-      const wasPlaying = !_audio.paused;
+      // v3.5.641 (audit A2): si el head se agotó antes que la descarga completa,
+      // _handleEnded ya dejó _audio.paused=true (así lo pone 'ended' del navegador)
+      // — !_audio.paused daba false acá, no se llamaba play() más abajo y la
+      // canción quedaba congelada para siempre en el segundo donde se cortó.
+      // _fastStartWaiting cubre exactamente ese caso.
+      const wasPlaying = !_audio.paused || _fastStartWaiting;
+      _fastStartWaiting = false;
       const prevUrl    = _currentBlob;
 
       // Swap audio src to full blob
@@ -1453,7 +1467,8 @@ const Player = (() => {
     } catch (err) {
       if (err.name !== 'AbortError') {
         console.warn('[Player] Fast-start background download failed:', err.message);
-        _fastStartActive = false;
+        _fastStartActive  = false;
+        _fastStartWaiting = false; // no habrá swap — no dejar el flag colgado
         // Recovery: if the head was already exhausted (_handleEnded paused waiting
         // for a swap that will never come), the queue would die silently — notify
         // and advance. If the head is still playing, _fastStartActive=false makes
@@ -1520,6 +1535,11 @@ const Player = (() => {
 
     const nextItem = _queue[nextIndex];
     if (!nextItem || nextItem.id === _preloadingId) return;
+    // v3.5.641 (audit B3): las pistas Soundrop se reproducen vía YouTube iframe,
+    // no por Drive — Drive.downloadFile('sd_<videoId>') más abajo siempre falla
+    // para estos ids. Si ya está cacheada (fallback de conversión guardado),
+    // DB.isCached la encuentra igual y no hace falta el preload.
+    if (nextItem.isSoundrop || (typeof nextItem.id === 'string' && nextItem.id.startsWith('sd_'))) return;
 
     const alreadyCached = await DB.isCached(nextItem.id);
     if (alreadyCached) return;
@@ -1569,6 +1589,7 @@ const Player = (() => {
     // seek back and resume as soon as the full file is swapped in.
     if (_fastStartActive) {
       console.log('[Player] Fast-start: head blob exhausted, waiting for full download…');
+      _fastStartWaiting = true; // 'ended' already paused the audio — see wasPlaying below
       _msSetPlaybackState('paused');
       _onPlayPause?.(false);
       return; // don't advance to next track
