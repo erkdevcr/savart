@@ -8788,7 +8788,12 @@ body.offline-mode #view-home .home-header {
    propio overflow). ────────────────────────────────────────────────── */
 .ai-search-trigger.idle { animation: ai-bot-bob 4s ease-in-out infinite; }
 
-@keyframes ai-bot-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
+@keyframes ai-bot-bob {
+  0%, 100% { transform: translateY(0) scale(1, 1); }
+  25%       { transform: translateY(-1px) scale(0.95, 1.06); }
+  50%       { transform: translateY(-2px) scale(1, 1); }
+  75%       { transform: translateY(-1px) scale(1.06, 0.95); }
+}
 @keyframes ai-bot-pop { 0%, 100% { transform: scale(1); } 45% { transform: scale(1.07); } 70% { transform: scale(0.97); } }
 
 .ai-bot-eyes {
@@ -8860,7 +8865,7 @@ body.offline-mode #view-home .home-header {
 .ai-search-trigger[data-mood="sad"] { transform: translateY(3px) scale(0.98); animation: none; }
 
 /* wink */
-.ai-search-trigger[data-mood="wink"] .ai-bot-eye.left { height: 9%; border-radius: 999px; }
+.ai-search-trigger[data-mood="wink"] .ai-bot-eye.left { height: 22%; border-radius: 999px; }
 .ai-search-trigger[data-mood="wink"] .ai-bot-eye.right { height: 100%; }
 
 /* angry — ✦ error en la consulta */

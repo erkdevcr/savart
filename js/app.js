@@ -1061,7 +1061,7 @@ const App = (() => {
     _aiBotStage.classList.toggle('idle', mood === 'idle');
     if (mood !== 'idle') {
       _aiBotEyes.style.transition = 'transform 0.35s ease';
-      _aiBotEyes.style.transform = 'translate(-50%, -52%)';
+      _aiBotEyes.style.transform = 'translate(-50%, -52%) rotate(0deg)';
     }
   }
 
@@ -1090,10 +1090,13 @@ const App = (() => {
 
   function _aiBotRandomGlance() {
     if (_aiBotTracking || _aiBotCurrentMood !== 'idle') return;
-    const x = (Math.random() - 0.5) * 20;
-    const y = (Math.random() - 0.5) * 16;
+    // Rango amplio para que se note claramente que mira hacia un lado
+    // (antes ±10%, casi imperceptible); leve rotación hacia ese lado.
+    const x = (Math.random() - 0.5) * 38;
+    const y = (Math.random() - 0.5) * 14;
+    const rot = (x / 19) * 5;
     _aiBotEyes.style.transition = 'transform 0.75s ease';
-    _aiBotEyes.style.transform = `translate(calc(-50% + ${x}%), calc(-52% + ${y}%))`;
+    _aiBotEyes.style.transform = `translate(calc(-50% + ${x.toFixed(1)}%), calc(-52% + ${y.toFixed(1)}%)) rotate(${rot.toFixed(1)}deg)`;
   }
 
   function _aiBotScheduleGlance() {
@@ -1139,7 +1142,7 @@ const App = (() => {
       _aiBotTracking = false;
       if (_aiBotCurrentMood === 'idle') {
         _aiBotEyes.style.transition = 'transform 0.5s ease';
-        _aiBotEyes.style.transform = 'translate(-50%, -52%)';
+        _aiBotEyes.style.transform = 'translate(-50%, -52%) rotate(0deg)';
       }
     }
   }
