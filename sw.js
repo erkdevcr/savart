@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.647';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.647 — personaje IA: estiramiento/encogimiento en reposo, guiño menos fino, mirada hacia los lados mas notoria
+const APP_VERSION  = '3.5.648';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.648 — personaje IA: ojos de sorprendido ahora grandes y redondos de verdad (antes quedaban en ovalo alto por el max-width del flex)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

@@ -8820,6 +8820,7 @@ body.offline-mode #view-home .home-header {
   border-radius: 999px;
   transform-origin: center center;
   transition:
+    width 0.25s ease,
     height 0.25s ease,
     border-radius 0.25s ease,
     transform 0.25s ease,
@@ -8835,10 +8836,16 @@ body.offline-mode #view-home .home-header {
 }
 .ai-search-trigger[data-mood="happy"] { animation: ai-bot-pop 0.55s ease; }
 
-/* surprised */
+/* surprised — ojos grandes y perfectamente redondos. Tamaño fijo en px
+   (el botón es circular de tamaño fijo, 44px): dejarlo en %/aspect-ratio
+   dentro del flex de .ai-bot-eyes hacía que max-width angostara el ancho
+   mientras el alto seguía creciendo, dando un óvalo alto en vez de un
+   círculo. flex:none + width fijo evita que el flex los vuelva a angostar. */
 .ai-search-trigger[data-mood="surprised"] .ai-bot-eye {
-  height: 115%;
-  max-width: 32%;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  max-width: 16px;
   border-radius: 50%;
   aspect-ratio: 1;
 }
