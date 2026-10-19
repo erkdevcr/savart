@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.644';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.644 — sombra movida de los ojos a la cabeza (circulo del boton) del personaje IA
+const APP_VERSION  = '3.5.645';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.645 — nueva opcion Descargar en el menu 3-dot de canciones en Drive (copia al dispositivo)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

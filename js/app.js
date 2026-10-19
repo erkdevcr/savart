@@ -1165,6 +1165,39 @@ const App = (() => {
     _aiBotScheduleBlink();
   }
 
+  /* ── Descargar copia al dispositivo (canciones de Drive, no Soundrop) ─────
+     Reusa el blob ya cacheado en IDB (mismo cache que usa el player para
+     reproducir sin re-bajar el archivo) y, si no esta, lo descarga de Drive.
+     Dispara la descarga nativa del navegador con un <a download> efimero —
+     el nombre del archivo es item.name tal cual viene de Drive (ya incluye
+     extension). No aplica a Soundrop: esas usan onSdDownload (guardar EN
+     Drive), un flujo distinto. ──────────────────────────────────────────── */
+  async function _downloadSongToDevice(item) {
+    if (!item || !item.id) return;
+    const filename = (item.name || item.displayName || 'cancion').toString();
+    UI.showToast(`⬇ ${UI.t('toast_download_start')}`);
+    try {
+      let blob = await DB.getCachedBlob(item.id).catch(() => null);
+      if (!blob) blob = await Drive.downloadFile(item.id);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      // Revoke con un pequeño margen — algunos navegadores/WebViews necesitan
+      // que el blob: URL siga vivo un instante tras el click para completar
+      // la descarga antes de liberarlo.
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
+      UI.showToast(`✓ ${UI.t('toast_download_done')}`);
+    } catch (err) {
+      console.error('[Download]', err);
+      UI.showToast(UI.t('toast_download_error'), 'error');
+    }
+  }
+
   function _initAiSearch() {
     const floatEl  = document.getElementById('ai-search-float');
     const trigger  = document.getElementById('ai-search-trigger');
@@ -15959,6 +15992,7 @@ const App = (() => {
     }
     // Expose for context menu
     App.onSdDownload = (item) => _openSdSaveModal(item);
+    App.onDownloadToDevice = (item) => _downloadSongToDevice(item);
 
     // ── Re-download warning modal ──────────────────────────────
     function _showSdRedownloadModal(track, playAfterSave = false) {

@@ -439,7 +439,11 @@ const UI = (() => {
       toast_moved_to_albums:      'Movido a Álbumes',
       toast_moved_to_collections: 'Movido a Colecciones',
       toast_cleared:              'Limpiado ✓',
+      toast_download_start:       'Descargando…',
+      toast_download_done:        'Descargado ✓',
+      toast_download_error:       'Error al descargar',
       ctx_sd_download:            'Guardar en Drive',
+      ctx_download:               'Descargar',
       ctx_soundrop_delete:        'Eliminar',
       ctx_soundrop_delete_confirm:'¿Eliminar',
       ctx_soundrop_deleted:       'Eliminado de Soundrop',
@@ -889,7 +893,11 @@ const UI = (() => {
       toast_moved_to_albums:      'Moved to Albums',
       toast_moved_to_collections: 'Moved to Collections',
       toast_cleared:              'Cleared ✓',
+      toast_download_start:       'Downloading…',
+      toast_download_done:        'Downloaded ✓',
+      toast_download_error:       'Error downloading',
       ctx_sd_download:            'Save to Drive',
+      ctx_download:                'Download',
       ctx_soundrop_delete:        'Delete',
       ctx_soundrop_delete_confirm:'Delete',
       ctx_soundrop_deleted:       'Deleted from Soundrop',
@@ -2478,6 +2486,7 @@ const UI = (() => {
       _addCtxDivider(menu);
       _addCtxItem(menu, _iconEdit,     t('ctx_edit_song'), () => { hideContextMenu(); openSongEditModal(item); });
       if (isSd) _addCtxItem(menu, _iconSdDownload, t('ctx_sd_download'), () => { App.onSdDownload?.(item); hideContextMenu(); });
+      if (!isSd) _addCtxItem(menu, _iconSdDownload, t('ctx_download'), () => { App.onDownloadToDevice?.(item); hideContextMenu(); });
       if (item._playlistId) {
         _addCtxDivider(menu);
         _addCtxItem(menu, iconTrash(14), t('ctx_remove_from_pl'), () => { App.onRemoveFromPlaylist?.(item.id, item._playlistId); hideContextMenu(); });
@@ -2559,6 +2568,7 @@ const UI = (() => {
         _addCtxDivider(menu);
         _addCtxItem(menu, _iconEdit, t('ctx_edit_song'), () => { hideContextMenu(); openSongEditModal(item); });
         if (isSd) _addCtxItem(menu, _iconSdDownload, t('ctx_sd_download'), () => { App.onSdDownload?.(item); hideContextMenu(); });
+        if (!isSd) _addCtxItem(menu, _iconSdDownload, t('ctx_download'), () => { App.onDownloadToDevice?.(item); hideContextMenu(); });
       }
     }
 
@@ -2593,6 +2603,7 @@ const UI = (() => {
         _addCtxDivider(menu);
         _addCtxItem(menu, _iconEdit, t('ctx_edit_song'), () => { hideContextMenu(); openSongEditModal(item); });
         if (isSd) _addCtxItem(menu, _iconSdDownload, t('ctx_sd_download'), () => { App.onSdDownload?.(item); hideContextMenu(); });
+        if (!isSd) _addCtxItem(menu, _iconSdDownload, t('ctx_download'), () => { App.onDownloadToDevice?.(item); hideContextMenu(); });
       }
       _addCtxDivider(menu);
       _addCtxItem(menu, iconTrash(14), t('ctx_remove_top_played'), () => { App.onRemoveFromTopPlayed?.(item); hideContextMenu(); });
@@ -2674,6 +2685,7 @@ const UI = (() => {
       _addCtxDivider(menu);
       _addCtxItem(menu, _iconEdit,     t('ctx_edit_song'),      () => { hideContextMenu(); openSongEditModal(item); });
       if (isSd) _addCtxItem(menu, _iconSdDownload, t('ctx_sd_download'), () => { App.onSdDownload?.(item); hideContextMenu(); });
+      if (!isSd) _addCtxItem(menu, _iconSdDownload, t('ctx_download'), () => { App.onDownloadToDevice?.(item); hideContextMenu(); });
       _addCtxItem(menu, iconTrash(14), t('ctx_remove_history'), () => { App.onRemoveFromHistory(item);hideContextMenu(); });
     }
 
@@ -2711,6 +2723,7 @@ const UI = (() => {
       _addCtxDivider(menu);
       _addCtxItem(menu, _iconEdit,     t('ctx_edit_song'),  () => { hideContextMenu(); openSongEditModal(item); });
       if (isSd) _addCtxItem(menu, _iconSdDownload, t('ctx_sd_download'), () => { App.onSdDownload?.(item); hideContextMenu(); });
+      if (!isSd) _addCtxItem(menu, _iconSdDownload, t('ctx_download'), () => { App.onDownloadToDevice?.(item); hideContextMenu(); });
       _addCtxItem(menu, iconTrash(14), t('ctx_remove_history'), () => { App.onRemoveFromHistoryItem(item); hideContextMenu(); });
     }
 
@@ -2732,6 +2745,7 @@ const UI = (() => {
       _addCtxItem(menu, iconPlus(14), t('add_to_pl'),       (e) => { hideContextMenu(); App.onShowPlaylistPicker(e, item); });
       _addCtxItem(menu, iconPin(14),  t('ctx_pin_to_home'),  () => { App.onTogglePin(item);   hideContextMenu(); });
       if (isSd) _addCtxItem(menu, _iconSdDownload, t('ctx_sd_download'), () => { App.onSdDownload?.(item); hideContextMenu(); });
+      if (!isSd) _addCtxItem(menu, _iconSdDownload, t('ctx_download'), () => { App.onDownloadToDevice?.(item); hideContextMenu(); });
     }
 
     // ── Deep Scan folder rows ────────────────────────────────────
