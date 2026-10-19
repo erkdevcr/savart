@@ -8772,11 +8772,11 @@ body.offline-mode #view-home .home-header {
   font-family: inherit;
   cursor: grab;
   touch-action: none;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.35);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.3), 0 2px 12px rgba(0,0,0,0.35);
   transition: opacity 0.15s, box-shadow 0.15s, transform 0.4s ease;
 }
 .ai-search-trigger:active { cursor: grabbing; }
-.ai-search-trigger:hover  { box-shadow: 0 4px 18px rgba(0,0,0,0.45); }
+.ai-search-trigger:hover  { box-shadow: 0 1px 2px rgba(0,0,0,0.3), 0 4px 18px rgba(0,0,0,0.45); }
 .ai-search-trigger-label { display: none; }
 
 /* ── Bot face — reemplaza las 3 estrellitas con el personaje de Erick
