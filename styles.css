@@ -8760,6 +8760,8 @@ body.offline-mode #view-home .home-header {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  position: relative;
+  overflow: hidden;
   width: 44px;
   height: 44px;
   padding: 0;
@@ -8771,20 +8773,113 @@ body.offline-mode #view-home .home-header {
   cursor: grab;
   touch-action: none;
   box-shadow: 0 2px 12px rgba(0,0,0,0.35);
-  transition: opacity 0.15s, box-shadow 0.15s;
+  transition: opacity 0.15s, box-shadow 0.15s, transform 0.4s ease;
 }
 .ai-search-trigger:active { cursor: grabbing; }
 .ai-search-trigger:hover  { box-shadow: 0 4px 18px rgba(0,0,0,0.45); }
 .ai-search-trigger-label { display: none; }
-.ai-search-trigger svg { width: 24px; height: 24px; } /* llena el círculo, antes 16px quedaba chico */
 
-/* Chispeo de las estrellitas — opción 3 elegida por Erick: la estrella
-   grande se mece (rota) y las 2 chicas titilan (fade+scale) desfasadas. */
-@keyframes ai-star-rock  { 0%, 100% { transform: rotate(-6deg); } 50% { transform: rotate(6deg); } }
-@keyframes ai-star-twink { 0%, 100% { opacity: .35; transform: scale(.85); } 50% { opacity: 1; transform: scale(1); } }
-.ai-star-m  { transform-box: fill-box; transform-origin: center; animation: ai-star-rock 3s ease-in-out infinite; }
-.ai-star-s1 { transform-box: fill-box; transform-origin: center; animation: ai-star-twink 2.6s ease-in-out infinite .3s; }
-.ai-star-s2 { transform-box: fill-box; transform-origin: center; animation: ai-star-twink 2.6s ease-in-out infinite 1.4s; }
+/* ── Bot face — reemplaza las 3 estrellitas con el personaje de Erick
+   (character.html). El botón circular ES la "cabeza"; data-mood en el
+   propio botón dispara las variantes de .ai-bot-eye. Motor de moods/
+   blink/glance en app.js (_initAiBot). overflow:hidden en .ai-search-trigger
+   recorta los ojos al círculo cuando glance/tracking los desplaza — no
+   afecta el box-shadow (se pinta fuera del border-box, no lo recorta su
+   propio overflow). ────────────────────────────────────────────────── */
+.ai-search-trigger.idle { animation: ai-bot-bob 4s ease-in-out infinite; }
+
+@keyframes ai-bot-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
+@keyframes ai-bot-pop { 0%, 100% { transform: scale(1); } 45% { transform: scale(1.07); } 70% { transform: scale(0.97); } }
+
+.ai-bot-eyes {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: flex;
+  gap: 18%;
+  width: 46%;
+  height: 32%;
+  align-items: center;
+  justify-content: center;
+  transform: translate(-50%, -52%);
+  will-change: transform;
+  pointer-events: none;
+}
+.ai-bot-eye {
+  position: relative;
+  flex: 1;
+  max-width: 36%;
+  height: 100%;
+  aspect-ratio: 0.45;
+  background: #0a0a0a;
+  border-radius: 999px;
+  transform-origin: center center;
+  transition:
+    height 0.25s ease,
+    border-radius 0.25s ease,
+    transform 0.25s ease,
+    opacity 0.25s ease,
+    max-width 0.25s ease;
+}
+
+/* happy — ✦ encontró canciones */
+.ai-search-trigger[data-mood="happy"] .ai-bot-eye {
+  height: 40%;
+  border-radius: 40% 40% 55% 55% / 35% 35% 65% 65%;
+  transform: translateY(10%);
+}
+.ai-search-trigger[data-mood="happy"] { animation: ai-bot-pop 0.55s ease; }
+
+/* surprised */
+.ai-search-trigger[data-mood="surprised"] .ai-bot-eye {
+  height: 115%;
+  max-width: 32%;
+  border-radius: 50%;
+  aspect-ratio: 1;
+}
+.ai-search-trigger[data-mood="surprised"] { animation: ai-bot-pop 0.45s ease; }
+
+/* thinking — ✦ Pensando… (asimétrico + cabeza inclinada) */
+.ai-search-trigger[data-mood="thinking"] .ai-bot-eye.left {
+  height: 68%;
+  transform: translateY(-6%) rotate(-5deg);
+}
+.ai-search-trigger[data-mood="thinking"] .ai-bot-eye.right {
+  height: 96%;
+  transform: translate(5%, 2%) rotate(4deg);
+}
+.ai-search-trigger[data-mood="thinking"] { transform: rotate(-7deg); animation: none; }
+
+/* sad — ✦ no encontró nada */
+.ai-search-trigger[data-mood="sad"] .ai-bot-eye {
+  height: 46%;
+  border-radius: 55% 55% 40% 40% / 65% 65% 35% 35%;
+  transform: translateY(20%);
+  opacity: 0.88;
+}
+.ai-search-trigger[data-mood="sad"] { transform: translateY(3px) scale(0.98); animation: none; }
+
+/* wink */
+.ai-search-trigger[data-mood="wink"] .ai-bot-eye.left { height: 9%; border-radius: 999px; }
+.ai-search-trigger[data-mood="wink"] .ai-bot-eye.right { height: 100%; }
+
+/* angry — ✦ error en la consulta */
+.ai-search-trigger[data-mood="angry"] .ai-bot-eye {
+  height: 52%;
+  border-radius: 30% 30% 45% 45% / 40% 40% 60% 60%;
+}
+.ai-search-trigger[data-mood="angry"] .ai-bot-eye.left  { transform: rotate(15deg) translateY(-4%); }
+.ai-search-trigger[data-mood="angry"] .ai-bot-eye.right { transform: rotate(-15deg) translateY(-4%); }
+.ai-search-trigger[data-mood="angry"] { transform: scale(1.03); animation: none; }
+
+/* blink override */
+.ai-search-trigger.blinking .ai-bot-eye {
+  height: 8% !important;
+  border-radius: 999px !important;
+  transform: none !important;
+  max-width: 36% !important;
+  opacity: 1 !important;
+}
 
 /* Expanded panel — position:fixed (JS calcula left/top con clamp, ver
    _positionAiPanel en app.js) para que nunca quede cortada por el borde

@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.641';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.641 — auditoría REVISION.md: grupo "aplicar ya" + "vale la pena" (A1/A2/A3, B2-B5, M1/M3/M4/M6-M8, R1/R2/R4, S3/S6) + eliminado pitch-processor.js (no usado)
+const APP_VERSION  = '3.5.642';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.642 — personaje IA — reemplazo de las 3 estrellitas del boton de busqueda por el bot de ojos (mood driven por el estado de la busqueda)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

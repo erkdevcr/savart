@@ -1043,6 +1043,128 @@ const App = (() => {
 
   /* ── AI Search ─────────────────────────────────────────── */
 
+  /* ── AI Bot face — reemplaza las 3 estrellitas (character.html subido por
+     Erick). El botón circular #ai-search-trigger ES la "cabeza"; su propio
+     data-mood dispara las variantes CSS de .ai-bot-eye (ver styles.css).
+     Mismo motor de moods/blink/glance/tracking que el personaje standalone.
+     _aiBotForce() lo usa _handleAiQuery para que la carita refleje el
+     estado real de la búsqueda IA (thinking mientras corre, happy/sad/angry
+     al resolver) en vez de solo ciclar moods al azar. ──────────────────── */
+  const _AI_BOT_MOODS = ['happy', 'surprised', 'thinking', 'sad', 'wink', 'angry', 'idle'];
+  let _aiBotStage = null, _aiBotEyes = null;
+  let _aiBotMoodTimer = null, _aiBotGlanceTimer = null, _aiBotBlinkTimer = null;
+  let _aiBotTracking = false, _aiBotCurrentMood = 'idle', _aiBotForcedUntil = 0;
+
+  function _aiBotApplyMood(mood) {
+    _aiBotCurrentMood = mood;
+    _aiBotStage.dataset.mood = mood;
+    _aiBotStage.classList.toggle('idle', mood === 'idle');
+    if (mood !== 'idle') {
+      _aiBotEyes.style.transition = 'transform 0.35s ease';
+      _aiBotEyes.style.transform = 'translate(-50%, -52%)';
+    }
+  }
+
+  function _aiBotPickRandomMood() {
+    const pool = _AI_BOT_MOODS.concat(['idle', 'idle']);
+    let next = pool[Math.floor(Math.random() * pool.length)];
+    if (next === _aiBotCurrentMood && pool.length > 1) {
+      next = pool[(pool.indexOf(next) + 1) % pool.length];
+    }
+    _aiBotApplyMood(next);
+  }
+
+  function _aiBotScheduleMood() {
+    if (_aiBotMoodTimer) clearTimeout(_aiBotMoodTimer);
+    if (Date.now() < _aiBotForcedUntil) return; // una búsqueda real está mostrando su mood — no interrumpir
+    let hold = 1800 + Math.random() * 2000;
+    if (_aiBotCurrentMood === 'wink') hold = 700 + Math.random() * 500;
+    if (_aiBotCurrentMood === 'surprised') hold = 1200 + Math.random() * 800;
+    if (_aiBotCurrentMood === 'idle') hold = 2200 + Math.random() * 1800;
+    _aiBotMoodTimer = setTimeout(() => {
+      if (Date.now() < _aiBotForcedUntil) return;
+      _aiBotPickRandomMood();
+      _aiBotScheduleMood();
+    }, hold);
+  }
+
+  function _aiBotRandomGlance() {
+    if (_aiBotTracking || _aiBotCurrentMood !== 'idle') return;
+    const x = (Math.random() - 0.5) * 20;
+    const y = (Math.random() - 0.5) * 16;
+    _aiBotEyes.style.transition = 'transform 0.75s ease';
+    _aiBotEyes.style.transform = `translate(calc(-50% + ${x}%), calc(-52% + ${y}%))`;
+  }
+
+  function _aiBotScheduleGlance() {
+    if (_aiBotGlanceTimer) clearTimeout(_aiBotGlanceTimer);
+    const delay = 1200 + Math.random() * 2400;
+    _aiBotGlanceTimer = setTimeout(() => { _aiBotRandomGlance(); _aiBotScheduleGlance(); }, delay);
+  }
+
+  function _aiBotBlink() {
+    if (_aiBotStage.classList.contains('blinking')) return;
+    if (_aiBotCurrentMood === 'wink') return;
+    _aiBotStage.classList.add('blinking');
+    setTimeout(() => _aiBotStage.classList.remove('blinking'), 110);
+  }
+
+  function _aiBotScheduleBlink() {
+    if (_aiBotBlinkTimer) clearTimeout(_aiBotBlinkTimer);
+    const delay = 2000 + Math.random() * 3800;
+    _aiBotBlinkTimer = setTimeout(() => {
+      _aiBotBlink();
+      if (Math.random() < 0.18) setTimeout(_aiBotBlink, 180); // doble parpadeo ocasional
+      _aiBotScheduleBlink();
+    }, delay);
+  }
+
+  function _aiBotOnPointer(e) {
+    if (!_aiBotStage) return;
+    const rect = _aiBotStage.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    const dx = e.clientX - cx;
+    const dy = e.clientY - cy;
+    const dist = Math.hypot(dx, dy);
+    const maxDist = rect.width * 1.5;
+
+    if (dist < maxDist && _aiBotCurrentMood === 'idle') {
+      _aiBotTracking = true;
+      const nx = Math.max(-1, Math.min(1, dx / (rect.width * 0.75)));
+      const ny = Math.max(-1, Math.min(1, dy / (rect.height * 0.75)));
+      _aiBotEyes.style.transition = 'transform 0.14s ease-out';
+      _aiBotEyes.style.transform = `translate(calc(-50% + ${nx * 12}%), calc(-52% + ${ny * 10}%))`;
+    } else if (_aiBotTracking) {
+      _aiBotTracking = false;
+      if (_aiBotCurrentMood === 'idle') {
+        _aiBotEyes.style.transition = 'transform 0.5s ease';
+        _aiBotEyes.style.transform = 'translate(-50%, -52%)';
+      }
+    }
+  }
+
+  // mood = 'thinking'|'happy'|'sad'|'angry'|...; holdMs = cuánto bloquea el
+  // ciclo random antes de retomarlo solo.
+  function _aiBotForce(mood, holdMs) {
+    if (!_aiBotStage) return;
+    _aiBotForcedUntil = Date.now() + holdMs;
+    _aiBotApplyMood(mood);
+    if (_aiBotMoodTimer) clearTimeout(_aiBotMoodTimer);
+    _aiBotMoodTimer = setTimeout(_aiBotScheduleMood, holdMs);
+  }
+
+  function _initAiBot(stage) {
+    _aiBotStage = stage;
+    _aiBotEyes  = stage.querySelector('#ai-bot-eyes');
+    if (!_aiBotEyes) return;
+    window.addEventListener('pointermove', _aiBotOnPointer, { passive: true });
+    _aiBotApplyMood('idle');
+    _aiBotScheduleMood();
+    _aiBotScheduleGlance();
+    _aiBotScheduleBlink();
+  }
+
   function _initAiSearch() {
     const floatEl  = document.getElementById('ai-search-float');
     const trigger  = document.getElementById('ai-search-trigger');
@@ -1051,6 +1173,8 @@ const App = (() => {
     const sendBtn  = document.getElementById('ai-search-send');
     const micBtn   = document.getElementById('ai-search-mic');
     if (!floatEl || !trigger) return;
+
+    _initAiBot(trigger);
 
     // Restore saved position
     try {
@@ -1190,6 +1314,7 @@ const App = (() => {
     };
 
     setStatus('✦ Pensando…', 'thinking');
+    _aiBotForce('thinking', 15000);
 
     try {
       if (!workerUrl) throw new Error('no_worker');
@@ -1324,6 +1449,7 @@ const App = (() => {
 
       if (!songs.length) {
         setStatus('✦ No encontré canciones para eso', 'empty');
+        _aiBotForce('sad', 2600);
         return;
       }
 
@@ -1368,6 +1494,7 @@ const App = (() => {
 
       if (inputEl) inputEl.value = '';
       setStatus(`✦ ${explanation} · ${songs.length} canciones`, 'found');
+      _aiBotForce('happy', 2600);
       setTimeout(() => document.getElementById('ai-search-panel')?.classList.remove('open'), 2000);
 
     } catch (err) {
@@ -1376,6 +1503,7 @@ const App = (() => {
         ? '✦ Worker no configurado'
         : `✦ ${err.message || 'Error al procesar la consulta'}`;
       setStatus(msg, 'error');
+      _aiBotForce('angry', 2600);
     }
   }
 
