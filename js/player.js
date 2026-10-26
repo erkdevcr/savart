@@ -131,6 +131,15 @@ const Player = (() => {
       // We'll auto-resume once audio focus is returned.
       if (!_sdUserPausing && !_audio.ended) {
         _pausedByInterruption = true;
+        // El propio evento que nos interrumpió (p.ej. Bluetooth "noisy" al
+        // desconectarse) probablemente pausó TODO el audio activo, incluido
+        // el keepalive silencioso — sin él, Chrome puede congelar la pestaña
+        // en segundo plano (pantalla bloqueada) y el "play" que llega luego
+        // desde la bocina/radio al reconectar no tiene JS corriendo para
+        // recibirlo. Reiniciamos el keepalive de una (stop+start, no solo
+        // start, por si la instancia previa quedó pausada pero aún existe).
+        _keepAliveStop();
+        _keepAliveStart();
       }
     });
     _audio.addEventListener('ended',   _handleEnded);

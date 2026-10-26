@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.648';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.648 — personaje IA: ojos de sorprendido ahora grandes y redondos de verdad (antes quedaban en ovalo alto por el max-width del flex)
+const APP_VERSION  = '3.5.649';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.649 — reinicia el keepalive silencioso cuando una interrupcion (BT noisy/llamada) pausa el audio, para que Chrome no congele la pestana en 2do plano y el play externo (bocina/radio) al reconectar si llegue
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
