@@ -19,10 +19,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&family=Baskervville:ital@0;1&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="styles.css?v=3.5.656">
+  <link rel="stylesheet" href="styles.css?v=3.5.657">
   <!-- Version global — fallback para Android donde el SW no se registra.
        IMPORTANTE: mantener sincronizada con APP_VERSION de sw.js en cada bump. -->
-  <script>window.SAVART_VERSION = '3.5.656';</script>
+  <script>window.SAVART_VERSION = '3.5.657';</script>
   <!-- Tema (v3.5.552): aplicar ANTES del primer paint para evitar flash del tema default -->
   <script>try{var _th=localStorage.getItem('savart_theme');if(_th&&_th!=='blue')document.documentElement.dataset.theme=_th;}catch(e){}</script>
 </head>
@@ -340,12 +340,15 @@
 
     <!-- ── RADIO EMISORAS ───────────────────────────────────── -->
     <div id="screen-radio" class="screen">
-      <div class="screen-header">
-        <h1 data-i18n="nav_radio">Radio</h1>
-      </div>
-      <!-- Sticky toolbar: Emisoras/Favoritas/Borradas tabs (library-buttons look,
-           see .radio-tab in styles.css) + search bar, both stay visible on scroll. -->
+      <!-- Sticky toolbar: title + Emisoras/Favoritas/Borradas tabs (library-buttons
+           look, see .radio-tab in styles.css) + search bar, all stay visible on
+           scroll as ONE combined sticky block (mirrors .browse-header/.home-header,
+           which likewise replace the generic .screen-header rather than stacking
+           a second sticky element under it). -->
       <div class="radio-toolbar">
+        <div class="screen-header">
+          <h1 data-i18n="nav_radio">Radio</h1>
+        </div>
         <div class="radio-tabs" id="radio-tabs">
           <button class="radio-tab active" data-tab="all">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3.24 6.15C2.51 6.43 2 7.17 2 8v12c0 1.1.89 2 2 2h16c1.11 0 2-.9 2-2V8c0-1.11-.89-2-2-2H6.3l8.26-3.34L13.65 1 3.24 6.15zM13 18c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
@@ -1725,26 +1728,26 @@
 </script>
 
 <!-- Savart modules -->
-<script src="js/config.js?v=3.5.656"></script>
-<script src="js/radio-stations.js?v=3.5.656"></script>
-<script src="js/icy-metadata.js?v=3.5.656"></script>
-<script src="js/auth.js?v=3.5.656"></script>
-<script src="js/drive.js?v=3.5.656"></script>
-<script src="js/db.js?v=3.5.656"></script>
-<script src="js/sync.js?v=3.5.656"></script>
-<script src="js/player.js?v=3.5.656"></script>
-<script src="js/meta.js?v=3.5.656"></script>
-<script src="js/lastfm.js?v=3.5.656"></script>
-<script src="js/audd.js?v=3.5.656"></script>
-<script src="js/musicbrainz.js?v=3.5.656"></script>
-<script src="js/discogs.js?v=3.5.656"></script>
-<script src="js/lyrics.js?v=3.5.656"></script>
-<script src="js/soundrop.js?v=3.5.656"></script>
-<script src="js/yt-auth.js?v=3.5.656"></script>
-<script src="js/yt-playlists.js?v=3.5.656"></script>
-<script src="js/ui.js?v=3.5.656"></script>
-<script src="js/app.js?v=3.5.656"></script>
-<script src="js/bg.js?v=3.5.656"></script>
+<script src="js/config.js?v=3.5.657"></script>
+<script src="js/radio-stations.js?v=3.5.657"></script>
+<script src="js/icy-metadata.js?v=3.5.657"></script>
+<script src="js/auth.js?v=3.5.657"></script>
+<script src="js/drive.js?v=3.5.657"></script>
+<script src="js/db.js?v=3.5.657"></script>
+<script src="js/sync.js?v=3.5.657"></script>
+<script src="js/player.js?v=3.5.657"></script>
+<script src="js/meta.js?v=3.5.657"></script>
+<script src="js/lastfm.js?v=3.5.657"></script>
+<script src="js/audd.js?v=3.5.657"></script>
+<script src="js/musicbrainz.js?v=3.5.657"></script>
+<script src="js/discogs.js?v=3.5.657"></script>
+<script src="js/lyrics.js?v=3.5.657"></script>
+<script src="js/soundrop.js?v=3.5.657"></script>
+<script src="js/yt-auth.js?v=3.5.657"></script>
+<script src="js/yt-playlists.js?v=3.5.657"></script>
+<script src="js/ui.js?v=3.5.657"></script>
+<script src="js/app.js?v=3.5.657"></script>
+<script src="js/bg.js?v=3.5.657"></script>
 
 <!-- Inline: additional bindings that need the DOM -->
 <script>

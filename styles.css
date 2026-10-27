@@ -7955,15 +7955,25 @@ body.queue-open #mini-player { z-index: 65; }
   border-top: 1px solid var(--border);
 }
 
-/* Radio screen: sticky toolbar wraps the Emisoras/Favoritas/Borradas tabs
-   row plus the search bar, so both stay visible while scrolling the station
-   list (mirrors the .screen-header sticky treatment). The search row itself
-   no longer needs its own sticky rule since the wrapper handles it. */
+/* Radio screen: sticky toolbar wraps the title, the Emisoras/Favoritas/Borradas
+   tabs row, and the search bar into ONE combined sticky block, all staying
+   visible while scrolling the station list (mirrors how .browse-header and
+   .home-header replace the generic .screen-header on their own screens,
+   rather than stacking a second sticky element underneath it — two
+   independently-sticky top:0 elements would overlap instead of stacking). */
 .radio-toolbar {
   position: sticky;
   top: 0;
-  z-index: 15;
+  z-index: 20;
   background: var(--bg-surface);
+  border-bottom: 1px solid var(--bg-hover);
+}
+/* The title row is nested inside .radio-toolbar now, so it rides along with
+   the combined sticky block instead of being independently sticky itself
+   (which is what the generic .screen-header rule would otherwise make it). */
+#screen-radio .radio-toolbar .screen-header {
+  position: static;
+  border-bottom: none;
 }
 
 /* Radio screen: Emisoras/Favoritas/Borradas tabs, styled to match the

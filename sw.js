@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.656';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.656 — Radio Emisoras: searchbar de la pantalla Radio ahora reutiliza el mismo componente visual que Browse (.search-bar); fix: toast 'playback error' falso positivo al tocar una emisora — ya no compite con el reintento automático del propio stream
+const APP_VERSION  = '3.5.657';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.657 — Radio Emisoras: el toolbar (título + tabs Emisoras/Favoritas/Borradas + searchbar) ahora es UN solo bloque sticky combinado, en vez de dos elementos sticky top:0 independientes que se solapaban
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
