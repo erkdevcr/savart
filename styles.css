@@ -890,6 +890,14 @@ img { display: block; }
   border-radius: 50%;
 }
 
+/* Real station logo (see radio-stations.js logo field) -- .top-list-thumb img
+   already positions/object-fits the <img>; this just keeps it circular with a
+   neutral backdrop while it loads. */
+.top-list-thumb--radio-logo {
+  border-radius: 50%;
+  background: var(--bg-card);
+}
+
 .top-list-thumb img {
   position: absolute;
   inset: 0;
@@ -1035,6 +1043,20 @@ img { display: block; }
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+/* Real station logo -- overlays the colored avatar + icon (absolutely positioned so
+   it works inside the flex-centered circle); removed on load error via JS so the
+   fallback underneath shows through. Sits above the icon/bg, below the play button. */
+.home-card-art-logo-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+  z-index: 1;
+  pointer-events: none;
 }
 
 /* Mosaic variant: 2×2 grid fills the card art area */
@@ -7931,6 +7953,16 @@ body.queue-open #mini-player { z-index: 65; }
   gap: 8px;
   padding: 6px 16px 8px;
   border-top: 1px solid var(--border);
+}
+
+/* Radio screen: keep the search bar visible while scrolling the station list
+   (mirrors the .screen-header sticky treatment). Scoped to #screen-radio so the
+   Deep Scan artist search, which reuses .ds-artists-search-row, is unaffected. */
+#screen-radio .ds-artists-search-row {
+  position: sticky;
+  top: 0;
+  z-index: 15;
+  background: var(--bg-surface);
 }
 .ds-artists-search-icon { color: var(--text-disabled); flex-shrink: 0; }
 .ds-artists-search-input {

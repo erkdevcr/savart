@@ -1908,40 +1908,44 @@ const App = (() => {
         ...(track.embedBlocked ? { embedBlocked: true } : {}), // candado chip SD
         ...(track.durationSec > 0 ? { durationSec: track.durationSec } : {}),
       };
-      DB.addRecent(recentData).then(() => {
-        Sync.push('recents');
-        // Debounce: track-start fires very close to sync events — collapse into one render
-        if (UI.getCurrentView() === 'home') _loadHomeData({ debounce: true });
-      }).catch(() => {});
+      // Radio Emisoras: nunca debe aparecer en "Canciones recientes" / Historial
+      // ni en topPlayed del Home — son streams en vivo, no pistas de la librería.
+      if (!track.isRadio) {
+        DB.addRecent(recentData).then(() => {
+          Sync.push('recents');
+          // Debounce: track-start fires very close to sync events — collapse into one render
+          if (UI.getCurrentView() === 'home') _loadHomeData({ debounce: true });
+        }).catch(() => {});
 
-      // Add to playback history
-      DB.addToHistory({
-        id:           track.id,
-        name:         track.name,
-        displayName:  bestName,
-        artist:       bestArtist,
-        thumbnailUrl: bestThumb,           // may be blob:/id3 — db.js filters those out
-        thumbnailLink: track.thumbnailLink || null, // stable Drive CDN URL as fallback
-        folderId:     track.parents?.[0] || track.folderId || null,
-      }).then(() => {
-        Sync.push('history');
-        // Refresco tras COMMIT del historial (es lo que alimenta "Canciones
-        // recientes" del Home) — colapsa con el debounce del addRecent en un
-        // solo render y garantiza que la canción recién tocada ya esté escrita.
-        if (UI.getCurrentView() === 'home') _loadHomeData({ debounce: true });
-      }).catch(() => {});
+        // Add to playback history
+        DB.addToHistory({
+          id:           track.id,
+          name:         track.name,
+          displayName:  bestName,
+          artist:       bestArtist,
+          thumbnailUrl: bestThumb,           // may be blob:/id3 — db.js filters those out
+          thumbnailLink: track.thumbnailLink || null, // stable Drive CDN URL as fallback
+          folderId:     track.parents?.[0] || track.folderId || null,
+        }).then(() => {
+          Sync.push('history');
+          // Refresco tras COMMIT del historial (es lo que alimenta "Canciones
+          // recientes" del Home) — colapsa con el debounce del addRecent en un
+          // solo render y garantiza que la canción recién tocada ya esté escrita.
+          if (UI.getCurrentView() === 'home') _loadHomeData({ debounce: true });
+        }).catch(() => {});
 
-      // Persist display fields to metadata store so topPlayed can show them.
-      // Only write non-empty values to avoid overwriting enriched fields with blanks.
-      const _metaUpdate = { name: track.name, folderId: recentData.folderId };
-      if (bestName)         _metaUpdate.displayName  = bestName;
-      // Fix C6: NUNCA persistir blob: (muere al recargar y pisaba el centinela
-      // 'id3') ni URLs volátiles de Drive — solo URLs estables.
-      if (_isStableCoverUrl(bestThumb)) _metaUpdate.thumbnailUrl = bestThumb;
-      if (bestArtist)       _metaUpdate.artist       = bestArtist;
-      if (track.isSoundrop) { _metaUpdate.isSoundrop = true; _metaUpdate.videoId = track.videoId; }
-      if (track.durationSec > 0) _metaUpdate.durationSec = track.durationSec;
-      DB.setMeta(track.id, _metaUpdate).catch(() => {});
+        // Persist display fields to metadata store so topPlayed can show them.
+        // Only write non-empty values to avoid overwriting enriched fields with blanks.
+        const _metaUpdate = { name: track.name, folderId: recentData.folderId };
+        if (bestName)         _metaUpdate.displayName  = bestName;
+        // Fix C6: NUNCA persistir blob: (muere al recargar y pisaba el centinela
+        // 'id3') ni URLs volátiles de Drive — solo URLs estables.
+        if (_isStableCoverUrl(bestThumb)) _metaUpdate.thumbnailUrl = bestThumb;
+        if (bestArtist)       _metaUpdate.artist       = bestArtist;
+        if (track.isSoundrop) { _metaUpdate.isSoundrop = true; _metaUpdate.videoId = track.videoId; }
+        if (track.durationSec > 0) _metaUpdate.durationSec = track.durationSec;
+        DB.setMeta(track.id, _metaUpdate).catch(() => {});
+      }
 
       // ── Proactive early cover fetch ────────────────────────────────────────────
       // If there's no cover yet but we have artist metadata, query Last.fm in the
@@ -6148,6 +6152,15 @@ const App = (() => {
         DB.getRadioFavoriteStations(),
       ]);
 
+      // Favorited stations only keep { id, name, city, favoritedAt } (see
+      // DB.toggleRadioFavorite) — resolve the logo against the static catalog,
+      // the single source of truth, same pattern as onRadioStationClick.
+      const _radioCatalog = (typeof RadioStations !== 'undefined') ? RadioStations.STATIONS : [];
+      const stations = stationsRaw.map(st => {
+        const catalogEntry = _radioCatalog.find(s => s.id === st.id);
+        return catalogEntry?.logo ? { ...st, logo: catalogEntry.logo } : st;
+      });
+
       // Load metadata store records for all history (recents) AND topPlayed items.
       // Using a unified map keyed by file ID so both sections get fresh DB values.
       // History items are always songs — no type filter needed.
@@ -6333,7 +6346,7 @@ const App = (() => {
       const displayPinned  = enrichedPinned.slice(0, 12);
       const displayRecents = enrichedRecents.slice(0, 24); // song-only filtering to 12 happens inside renderHome
 
-      UI.renderHome({ pinned: displayPinned, recents: displayRecents, topPlayed, playlists: enrichedPlaylists, stations: stationsRaw });
+      UI.renderHome({ pinned: displayPinned, recents: displayRecents, topPlayed, playlists: enrichedPlaylists, stations });
       // Re-mark the active row after renderHome creates fresh DOM nodes
       UI.setActiveSongRow(Player.getCurrentTrack()?.id ?? null);
 

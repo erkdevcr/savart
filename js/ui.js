@@ -1802,10 +1802,16 @@ const UI = (() => {
     card.dataset.id = station.id;
 
     const bg = _stationColor(station.name);
+    // Real station logo overlays the colored avatar; removed on load error so the
+    // colored circle + radio icon show through underneath (same fallback as the Radio list row).
+    const logoImgHtml = station.logo
+      ? `<img class="home-card-art-logo-img" src="${escHtml(station.logo)}" alt="" loading="lazy">`
+      : '';
 
     card.innerHTML = `
       <div class="home-card-art home-card-art--circle" style="background:${bg}">
         <div class="folder-icon-placeholder" style="color:rgba(255,255,255,0.9)">${iconRadio(28)}</div>
+        ${logoImgHtml}
         <button class="home-card-play-btn" aria-label="Reproducir" tabindex="-1">
           <div class="play-btn-circle">${iconPlay(17)}</div>
         </button>
@@ -1813,6 +1819,11 @@ const UI = (() => {
       <button class="home-card-more" aria-label="Más opciones">${iconDots(14)}</button>
       <div class="home-card-name" style="text-align:center">${escHtml(station.name || '—')}</div>
     `;
+
+    const logoImgEl = card.querySelector('.home-card-art-logo-img');
+    if (logoImgEl) {
+      logoImgEl.addEventListener('error', () => logoImgEl.remove(), { once: true });
+    }
 
     card.querySelector('.home-card-more').addEventListener('click', (e) => {
       e.stopPropagation();
@@ -1863,17 +1874,29 @@ const UI = (() => {
     el.dataset.id = station.id;
 
     const bg = _stationColor(station.name);
+    const fallbackThumb = `<div class="top-list-thumb top-list-thumb--radio" style="background:${bg}"><div style="display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.9)">${iconRadio(20)}</div></div>`;
+    // Real station logo when the catalog has one (see radio-stations.js "logo" field);
+    // falls back to the colored circular avatar + radio icon on load error or when absent.
+    const thumbHtml = station.logo
+      ? `<div class="top-list-thumb top-list-thumb--radio-logo"><img src="${escHtml(station.logo)}" alt="" loading="lazy"></div>`
+      : fallbackThumb;
 
     el.innerHTML = `
-      <div class="top-list-thumb top-list-thumb--radio" style="background:${bg}">
-        <div style="display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.9)">${iconRadio(20)}</div>
-      </div>
+      ${thumbHtml}
       <div class="top-list-info">
         <div class="top-list-title">${escHtml(station.name || '—')}</div>
         ${station.city ? `<div class="top-list-meta">${escHtml(station.city)}</div>` : ''}
       </div>
       <button class="btn-more" aria-label="Más opciones">${iconDots()}</button>
     `;
+
+    const logoImg = el.querySelector('.top-list-thumb--radio-logo img');
+    if (logoImg) {
+      logoImg.addEventListener('error', () => {
+        const thumbEl = el.querySelector('.top-list-thumb--radio-logo');
+        if (thumbEl) thumbEl.outerHTML = fallbackThumb;
+      }, { once: true });
+    }
 
     el.addEventListener('click', (e) => {
       if (e.target.closest('.btn-more')) return;
