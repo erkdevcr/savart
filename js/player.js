@@ -49,6 +49,7 @@ const Player = (() => {
   let _preloadAbortCtrl = null;  // AbortController for the in-flight preload fetch
   let _activeDownloadCtrl = null; // AbortController for the in-flight main download
   let _fastStartActive    = false; // true while playing a partial (head) blob; full download pending
+  let _radioErrorRetries  = 0;     // consecutive reconnect attempts for a live radio stream
   let _fastStartWaiting   = false; // v3.5.641 (audit A2): true while _handleEnded is holding playback
                                     // waiting for the full-file swap — 'ended' already set audio.paused
                                     // to true, so wasPlaying below would read false and never resume.
@@ -1105,6 +1106,46 @@ const Player = (() => {
     if (myCtrl.signal.aborted) return; // switched during onBeforePlay
 
     try {
+      // ── Radio Emisoras: live stream ───────────────────────────
+      // Bypasses the Soundrop/Drive blob-fetch paths entirely — sets _audio.src
+      // directly to the station's stream URL and reuses the same play()/keepalive/
+      // MediaSession pipeline those paths use, so mini-player/expanded-player/lock-
+      // screen controls all work with no extra plumbing.
+      if (item.isRadio) {
+        _sdActive = false;
+        if (_currentBlob) {
+          _audio.src = '';
+          URL.revokeObjectURL(_currentBlob);
+          _currentBlob = null;
+        }
+        const _streamUrls = [item.url, ...(item.urls || [])].filter(Boolean);
+        let _connected = false;
+        for (const streamUrl of _streamUrls) {
+          if (myCtrl.signal.aborted) return;
+          try {
+            _audio.src = streamUrl;
+            _audio.playbackRate = 1.0;
+            _initAudioGraph();
+            if (_audioCtx?.state === 'suspended') await _audioCtx.resume().catch(() => {});
+            _keepAliveStart();
+            if (_audio.volume < 1.0) _audio.volume = 1.0;
+            _msSetMetadata(item);
+            _msSetPlaybackState('playing');
+            await _audio.play();
+            _connected = true;
+            _radioErrorRetries = 0;
+            break;
+          } catch (streamErr) {
+            console.warn('[Player] Radio stream failed, trying next URL:', streamUrl, streamErr);
+          }
+        }
+        if (_activeDownloadCtrl === myCtrl) _activeDownloadCtrl = null;
+        if (!_connected) {
+          _onError({ type: 'audio', message: 'toast_audio_error', item });
+        }
+        return;
+      }
+
       // ── Soundrop track ────────────────────────────────────────
       // _sdAudio has crossOrigin='anonymous', so the Web Audio graph can
       // process it through the full EQ/gain chain without CORS silence.
@@ -1619,6 +1660,19 @@ const Player = (() => {
   function _handleAudioError(err) {
     const error = err?.target?.error || err;
     console.error('[Player] Audio error:', error);
+    const _curTrack = getCurrentTrack();
+    if (_curTrack?.isRadio) {
+      // Live stream dropped (network hiccup, server reset) — try reconnecting
+      // automatically (using the station's fallback URLs) before surfacing an error.
+      _radioErrorRetries++;
+      if (_radioErrorRetries <= 3) {
+        setTimeout(() => {
+          if (getCurrentTrack()?.id === _curTrack.id) _playCurrentTrack();
+        }, 1500);
+        return;
+      }
+      _radioErrorRetries = 0;
+    }
     _onError({ type: 'audio', message: 'toast_audio_error', error });
   }
 

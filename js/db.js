@@ -891,6 +891,82 @@ const DB = (() => {
     return Object.values(meta);
   }
 
+  /* ── Radio Emisoras (favoritos + ocultas, local-only por dispositivo) ── */
+
+  /**
+   * Get favorited radio station IDs.
+   * @returns {Promise<string[]>}
+   */
+  async function getRadioFavorites() {
+    return (await getState('radioFavorites')) || [];
+  }
+
+  /**
+   * Toggle a station's favorite status (pins/unpins it to the Home "Emisoras" section).
+   * @param {{ id, name, city? }} station
+   * @returns {Promise<boolean>} true if now favorited, false if removed
+   */
+  async function toggleRadioFavorite(station) {
+    const favs = await getRadioFavorites();
+    const meta = await getState('radioFavoritesMeta') || {};
+    const idx  = favs.indexOf(station.id);
+    if (idx === -1) {
+      favs.push(station.id);
+      meta[station.id] = {
+        id:          station.id,
+        name:        station.name,
+        city:        station.city || '',
+        favoritedAt: Date.now(),
+      };
+      await setState('radioFavorites', favs);
+      await setState('radioFavoritesMeta', meta);
+      return true;
+    } else {
+      favs.splice(idx, 1);
+      delete meta[station.id];
+      await setState('radioFavorites', favs);
+      await setState('radioFavoritesMeta', meta);
+      return false;
+    }
+  }
+
+  /**
+   * Get full favorited station objects for the Home "Emisoras" section,
+   * most recently favorited first.
+   * @returns {Promise<Object[]>}
+   */
+  async function getRadioFavoriteStations() {
+    const meta = await getState('radioFavoritesMeta') || {};
+    return Object.values(meta).sort((a, b) => (b.favoritedAt || 0) - (a.favoritedAt || 0));
+  }
+
+  /**
+   * Get hidden (removed) station IDs. One-way hide per spec — no un-hide UI.
+   * @returns {Promise<string[]>}
+   */
+  async function getRadioHidden() {
+    return (await getState('radioHidden')) || [];
+  }
+
+  /**
+   * Hide a station from the Radio list (also removes it from favorites, if any).
+   * @param {string} id
+   */
+  async function hideRadioStation(id) {
+    const hidden = await getRadioHidden();
+    if (!hidden.includes(id)) {
+      hidden.push(id);
+      await setState('radioHidden', hidden);
+    }
+    const favs = await getRadioFavorites();
+    if (favs.includes(id)) {
+      const meta = await getState('radioFavoritesMeta') || {};
+      delete meta[id];
+      await setState('radioFavorites', favs.filter(f => f !== id));
+      await setState('radioFavoritesMeta', meta);
+    }
+  }
+
   /* ── History ────────────────────────────────────────────── */
 
   /**
@@ -1397,6 +1473,12 @@ const DB = (() => {
     getPinned,
     togglePin,
     getPinnedFolders,
+    // Radio Emisoras
+    getRadioFavorites,
+    toggleRadioFavorite,
+    getRadioFavoriteStations,
+    getRadioHidden,
+    hideRadioStation,
     // Rescan
     clearEnrichment,
     clearManualOverrides,

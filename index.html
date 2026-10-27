@@ -19,10 +19,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&family=Baskervville:ital@0;1&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="styles.css?v=3.5.649">
+  <link rel="stylesheet" href="styles.css?v=3.5.650">
   <!-- Version global — fallback para Android donde el SW no se registra.
        IMPORTANTE: mantener sincronizada con APP_VERSION de sw.js en cada bump. -->
-  <script>window.SAVART_VERSION = '3.5.649';</script>
+  <script>window.SAVART_VERSION = '3.5.650';</script>
   <!-- Tema (v3.5.552): aplicar ANTES del primer paint para evitar flash del tema default -->
   <script>try{var _th=localStorage.getItem('savart_theme');if(_th&&_th!=='blue')document.documentElement.dataset.theme=_th;}catch(e){}</script>
 </head>
@@ -108,9 +108,9 @@
         <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/><path d="M12 10h-2v2H9v-2H7V9h2V7h1v2h2v1z"/></svg>
         <span data-i18n="nav_scan">Escaneo</span>
       </button>
-      <button class="nav-item" data-nav="settings" data-view="settings">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94s-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96a7.02 7.02 0 0 0-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84a.484.484 0 0 0-.47.41l-.36 2.54a7.024 7.024 0 0 0-1.62.94l-2.39-.96a.479.479 0 0 0-.59.22L2.74 8.87a.479.479 0 0 0 .12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.27.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54a7.024 7.024 0 0 0 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32a.49.49 0 0 0-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z"/></svg>
-        <span data-i18n="settings">Ajustes</span>
+      <button class="nav-item" data-nav="radio" data-view="radio">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M3.24 6.15C2.51 6.43 2 7.17 2 8v12c0 1.1.89 2 2 2h16c1.11 0 2-.9 2-2V8c0-1.11-.89-2-2-2H6.3l8.26-3.34L13.65 1 3.24 6.15zM13 18c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
+        <span data-i18n="nav_radio">Radio</span>
       </button>
     </nav>
   </nav>
@@ -145,6 +145,9 @@
               <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/>
               <line x1="12" y1="20" x2="12.01" y2="20"/>
             </svg>
+          </button>
+          <button class="home-action-btn" id="btn-home-settings" data-nav="settings" aria-label="Ajustes" title="Ajustes">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94s-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96a7.02 7.02 0 0 0-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84a.484.484 0 0 0-.47.41l-.36 2.54a7.024 7.024 0 0 0-1.62.94l-2.39-.96a.479.479 0 0 0-.59.22L2.74 8.87a.479.479 0 0 0 .12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.27.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54a7.024 7.024 0 0 0 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32a.49.49 0 0 0-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z"/></svg>
           </button>
           <button class="home-action-btn" id="btn-home-info" aria-label="Info">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
@@ -332,6 +335,21 @@
       </div>
       <div id="history-list" class="top-list">
         <!-- Populated by App._loadHistory() / UI.renderHistory() -->
+      </div>
+    </div>
+
+    <!-- ── RADIO EMISORAS ───────────────────────────────────── -->
+    <div id="screen-radio" class="screen">
+      <div class="screen-header">
+        <h1 data-i18n="nav_radio">Radio</h1>
+      </div>
+      <div class="ds-artists-search-row">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" class="ds-artists-search-icon"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+        <input id="radio-search-input" class="ds-artists-search-input" type="search" data-i18n-placeholder="radio_search_placeholder" placeholder="Buscar emisora…">
+        <button id="btn-radio-search-clear" class="browse-search-clear" aria-label="Limpiar búsqueda" style="display:none"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button>
+      </div>
+      <div id="radio-list" class="top-list">
+        <!-- Populated by App._loadRadioData() / UI.renderRadioList() -->
       </div>
     </div>
 
@@ -1363,9 +1381,9 @@
     <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/><path d="M12 10h-2v2H9v-2H7V9h2V7h1v2h2v1z"/></svg>
     <span data-i18n="nav_scan">Escaneo</span>
   </button>
-  <button class="nav-tab" data-nav="settings" data-view="settings">
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94s-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96a7.02 7.02 0 0 0-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84a.484.484 0 0 0-.47.41l-.36 2.54a7.024 7.024 0 0 0-1.62.94l-2.39-.96a.479.479 0 0 0-.59.22L2.74 8.87a.479.479 0 0 0 .12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.27.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54a7.024 7.024 0 0 0 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32a.49.49 0 0 0-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z"/></svg>
-    <span data-i18n="settings">Ajustes</span>
+  <button class="nav-tab" data-nav="radio" data-view="radio">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M3.24 6.15C2.51 6.43 2 7.17 2 8v12c0 1.1.89 2 2 2h16c1.11 0 2-.9 2-2V8c0-1.11-.89-2-2-2H6.3l8.26-3.34L13.65 1 3.24 6.15zM13 18c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
+    <span data-i18n="nav_radio">Radio</span>
   </button>
 </nav>
 
@@ -1681,24 +1699,25 @@
 </script>
 
 <!-- Savart modules -->
-<script src="js/config.js?v=3.5.649"></script>
-<script src="js/auth.js?v=3.5.649"></script>
-<script src="js/drive.js?v=3.5.649"></script>
-<script src="js/db.js?v=3.5.649"></script>
-<script src="js/sync.js?v=3.5.649"></script>
-<script src="js/player.js?v=3.5.649"></script>
-<script src="js/meta.js?v=3.5.649"></script>
-<script src="js/lastfm.js?v=3.5.649"></script>
-<script src="js/audd.js?v=3.5.649"></script>
-<script src="js/musicbrainz.js?v=3.5.649"></script>
-<script src="js/discogs.js?v=3.5.649"></script>
-<script src="js/lyrics.js?v=3.5.649"></script>
-<script src="js/soundrop.js?v=3.5.649"></script>
-<script src="js/yt-auth.js?v=3.5.649"></script>
-<script src="js/yt-playlists.js?v=3.5.649"></script>
-<script src="js/ui.js?v=3.5.649"></script>
-<script src="js/app.js?v=3.5.649"></script>
-<script src="js/bg.js?v=3.5.649"></script>
+<script src="js/config.js?v=3.5.650"></script>
+<script src="js/radio-stations.js?v=3.5.650"></script>
+<script src="js/auth.js?v=3.5.650"></script>
+<script src="js/drive.js?v=3.5.650"></script>
+<script src="js/db.js?v=3.5.650"></script>
+<script src="js/sync.js?v=3.5.650"></script>
+<script src="js/player.js?v=3.5.650"></script>
+<script src="js/meta.js?v=3.5.650"></script>
+<script src="js/lastfm.js?v=3.5.650"></script>
+<script src="js/audd.js?v=3.5.650"></script>
+<script src="js/musicbrainz.js?v=3.5.650"></script>
+<script src="js/discogs.js?v=3.5.650"></script>
+<script src="js/lyrics.js?v=3.5.650"></script>
+<script src="js/soundrop.js?v=3.5.650"></script>
+<script src="js/yt-auth.js?v=3.5.650"></script>
+<script src="js/yt-playlists.js?v=3.5.650"></script>
+<script src="js/ui.js?v=3.5.650"></script>
+<script src="js/app.js?v=3.5.650"></script>
+<script src="js/bg.js?v=3.5.650"></script>
 
 <!-- Inline: additional bindings that need the DOM -->
 <script>

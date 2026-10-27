@@ -31,6 +31,7 @@ const UI = (() => {
       library:   'Biblioteca',
       history:   'Historial',
       settings:  'Ajustes',
+      nav_radio: 'Radio',
       // ── Login ──────────────────────────────────────────────
       login_tagline: 'Tu música de Google Drive,\ndonde quieras.',
       login_btn: 'Continuar con Google',
@@ -42,12 +43,14 @@ const UI = (() => {
       recents_songs:    'Canciones recientes',
       recent_playlists: 'Playlists recientes',
       top_played:       'Más reproducidas',
+      stations:         'Emisoras',
       // ── Home empty states ──────────────────────────────────
       empty_pinned:          'Fija carpetas desde el menú ··· para verlas aquí.',
       empty_recents_folders: 'Las carpetas que abras aparecerán aquí.',
       empty_recents_songs:   'Las canciones que escuches aparecerán aquí.',
       empty_top_played:      'Tus canciones más reproducidas aparecerán aquí.',
       empty_history:         'Las canciones que escuches aparecerán aquí.',
+      empty_stations:        'Agrega una emisora a favoritos para verla aquí.',
       home_cta_browse:       'Examinar tu Drive',
       show_all:              'Ver todo',
       // ── General labels ─────────────────────────────────────
@@ -76,6 +79,8 @@ const UI = (() => {
       ds_send_stop_and_send:      'Detener y enviar',
       ctx_add_fav_folder: 'Añadir a favoritos',
       ctx_pin_to_home:    'Agregar a inicio',
+      ctx_radio_add_fav:    'Añadir a favoritos',
+      ctx_radio_remove_fav: 'Quitar de favoritos',
       ctx_unpin_from_home:'Eliminar de inicio',
       ctx_remove_from_pl:    'Eliminar de playlist',
       ctx_remove_top_played: 'Quitar de más reproducidas',
@@ -85,6 +90,11 @@ const UI = (() => {
       ctx_pl_copy_to:     'Copiar canciones a…',
       ctx_remove_history: 'Borrar del historial',
       ctx_mark_fav:       'Marcar favorita',
+      radio_search_placeholder: 'Buscar emisora…',
+      radio_live:               'EN VIVO',
+      toast_radio_fav_added:    'Añadida a favoritos',
+      toast_radio_fav_removed:  'Quitada de favoritos',
+      toast_radio_removed:      'Emisora eliminada',
       // ── Queue actions ──────────────────────────────────────
       play_next: 'A continuación',
       play_after:'Después',
@@ -488,6 +498,7 @@ const UI = (() => {
       library:   'Library',
       history:   'History',
       settings:  'Settings',
+      nav_radio: 'Radio',
       // ── Login ──────────────────────────────────────────────
       login_tagline: 'Your Google Drive music,\nanywhere.',
       login_btn: 'Continue with Google',
@@ -499,12 +510,14 @@ const UI = (() => {
       recents_songs:    'Recent songs',
       recent_playlists: 'Recent playlists',
       top_played:       'Most played',
+      stations:         'Stations',
       // ── Home empty states ──────────────────────────────────
       empty_pinned:          'Pin folders from the ··· menu to see them here.',
       empty_recents_folders: 'Folders you open will appear here.',
       empty_recents_songs:   'Songs you listen to will appear here.',
       empty_top_played:      'Your most played songs will appear here.',
       empty_history:         'Songs you listen to will appear here.',
+      empty_stations:        'Add a station to favorites to see it here.',
       home_cta_browse:       'Browse your Drive',
       show_all:              'Show all',
       // ── General labels ─────────────────────────────────────
@@ -533,6 +546,8 @@ const UI = (() => {
       ds_send_stop_and_send:      'Stop and send',
       ctx_add_fav_folder: 'Add to favorites',
       ctx_pin_to_home:    'Add to home',
+      ctx_radio_add_fav:    'Add to favorites',
+      ctx_radio_remove_fav: 'Remove from favorites',
       ctx_unpin_from_home:'Remove from home',
       ctx_remove_from_pl:    'Remove from playlist',
       ctx_remove_top_played: 'Remove from most played',
@@ -542,6 +557,11 @@ const UI = (() => {
       ctx_pl_copy_to:     'Copy songs to…',
       ctx_remove_history: 'Remove from history',
       ctx_mark_fav:       'Mark as favorite',
+      radio_search_placeholder: 'Search station…',
+      radio_live:               'LIVE',
+      toast_radio_fav_added:    'Added to favorites',
+      toast_radio_fav_removed:  'Removed from favorites',
+      toast_radio_removed:      'Station removed',
       // ── Queue actions ──────────────────────────────────────
       play_next: 'Play next',
       play_after:'Play later',
@@ -1149,10 +1169,10 @@ const UI = (() => {
 
     _applyMarquee(titleEl, track ? (track.displayName || track.name || '') : '—');
     if (artistEl) artistEl.textContent = track?.artist || '';
-    if (albumEl)  albumEl.textContent  = track?.albumName ? `${track.albumName}${track.year ? ' · ' + track.year : ''}` : '';
+    if (albumEl)  albumEl.textContent  = track?.isRadio ? t('radio_live') : (track?.albumName ? `${track.albumName}${track.year ? ' · ' + track.year : ''}` : '');
 
-    // File info: "04 Comfortably Numb.flac · 38.2 MB"
-    if (fileEl && track) {
+    // File info: "04 Comfortably Numb.flac · 38.2 MB" (skipped for live radio — no file)
+    if (fileEl && track && !track.isRadio) {
       const ext  = (track.name || '').split('.').pop();
       const size = track.size ? formatBytes(parseInt(track.size, 10)) : '';
       fileEl.textContent = [track.name, size].filter(Boolean).join(' · ');
@@ -1165,7 +1185,7 @@ const UI = (() => {
     const badgeType  = document.getElementById('pexp-badge-type');
     const badgeKbps  = document.getElementById('pexp-badge-kbps');
     const badgeSize  = document.getElementById('pexp-badge-size');
-    if (badgesEl && track && !track.isSoundrop) {
+    if (badgesEl && track && !track.isSoundrop && !track.isRadio) {
       const ext     = (track.name || '').split('.').pop().toUpperCase() || '—';
       const sizeNum = parseInt(track.size || '0', 10);
       const durMs   = parseInt(track.durationMs || '0', 10);
@@ -1252,6 +1272,15 @@ const UI = (() => {
     const curEl   = document.getElementById('pexp-time-cur');
     const totEl   = document.getElementById('pexp-time-tot');
 
+    // Live radio stream: duration is Infinity — show an "EN VIVO"/"LIVE" badge
+    // instead of a bogus NaN:NaN time, and keep the fill bar fully lit (no seek).
+    if (duration === Infinity) {
+      if (fill)  fill.style.width = '100%';
+      if (curEl) curEl.textContent = t('radio_live');
+      if (totEl) totEl.textContent = '';
+      return;
+    }
+
     if (fill && duration > 0) {
       fill.style.width = `${(currentTime / duration) * 100}%`;
     }
@@ -1288,9 +1317,9 @@ const UI = (() => {
     if (!mp) return;
 
     const bar = mp.querySelector('.mini-progress');
-    if (bar && duration > 0) {
-      bar.style.width = `${(currentTime / duration) * 100}%`;
-    }
+    if (!bar) return;
+    if (duration === Infinity) { bar.style.width = '100%'; return; } // live radio stream
+    if (duration > 0) bar.style.width = `${(currentTime / duration) * 100}%`;
   }
 
   /* ── Home screen rendering ────────────────────────────────── */
@@ -1326,7 +1355,7 @@ const UI = (() => {
     _homeSectionSigs = {};
   }
 
-  function renderHome({ pinned = [], recents = [], topPlayed = [], playlists = [] }) {
+  function renderHome({ pinned = [], recents = [], topPlayed = [], playlists = [], stations = [] }) {
     const screen = document.getElementById('screen-home');
     if (!screen) return;
 
@@ -1341,6 +1370,7 @@ const UI = (() => {
       playlists:  playlists.length > 0 ? _homeSectionSig(playlists) : '',
       recents:    _homeSectionSig(recentSongsPre),
       top_played: _homeSectionSig(topPlayed),
+      stations:   _homeSectionSig(stations),
     };
     const domHasSections = !!content.querySelector('.home-section[data-section-type]');
 
@@ -1352,6 +1382,7 @@ const UI = (() => {
     const samePresence = domHasSections &&
       sigs.cta === '' && (_homeSectionSigs.cta ?? 'x') === '' &&
       ((sigs.playlists !== '') === !!content.querySelector('.home-section[data-section-type="playlists"]')) &&
+      ((sigs.stations !== '') === !!content.querySelector('.home-section[data-section-type="stations"]')) &&
       !!content.querySelector('.home-section[data-section-type="pinned"]') &&
       !!content.querySelector('.home-section[data-section-type="recents"]') &&
       !!content.querySelector('.home-section[data-section-type="top_played"]');
@@ -1360,11 +1391,13 @@ const UI = (() => {
       const builders = {
         pinned:     () => _buildHomeSection(t('pinned'), pinned, 'pinned'),
         playlists:  () => _buildHomeSection(t('recent_playlists'), playlists, 'playlists'),
+        stations:   () => _buildHomeSection(t('stations'), stations, 'stations'),
         recents:    () => _buildHomeSection(t('recents_songs'), recentSongsPre, 'recents'),
         top_played: () => _buildHomeSection(t('top_played'), topPlayed, 'top_played'),
       };
-      for (const type of ['pinned', 'playlists', 'recents', 'top_played']) {
+      for (const type of ['pinned', 'playlists', 'stations', 'recents', 'top_played']) {
         if (type === 'playlists' && sigs.playlists === '') continue;
+        if (type === 'stations' && sigs.stations === '') continue;
         if (sigs[type] === _homeSectionSigs[type]) continue; // sección sin cambios
         const cur = content.querySelector(`.home-section[data-section-type="${type}"]`);
         if (!cur) continue;
@@ -1426,6 +1459,9 @@ const UI = (() => {
     if (playlists.length > 0) {
       content.appendChild(_buildHomeSection(t('recent_playlists'), playlists, 'playlists'));
     }
+    if (stations.length > 0) {
+      content.appendChild(_buildHomeSection(t('stations'), stations, 'stations'));
+    }
     content.appendChild(_buildHomeSection(t('recents_songs'), recentSongs, 'recents'));
     content.appendChild(_buildHomeSection(t('top_played'), topPlayed, 'top_played'));
 
@@ -1479,6 +1515,7 @@ const UI = (() => {
       ph.textContent =
         type === 'pinned'    ? t('empty_pinned') :
         type === 'top_played'? t('empty_top_played') :
+        type === 'stations'  ? t('empty_stations') :
         title === t('recents_folders') ? t('empty_recents_folders') :
                                t('empty_recents_songs');
       section.appendChild(ph);
@@ -1509,6 +1546,14 @@ const UI = (() => {
       const scroll = document.createElement('div');
       scroll.className = 'home-cards-scroll';
       items.forEach(pl => scroll.appendChild(_buildPlaylistHomeCard(pl)));
+      section.appendChild(scroll);
+      _bindDragScroll(scroll);
+
+    } else if (type === 'stations') {
+      // Radio stations: horizontal scroll with circular cards (name only, no city)
+      const scroll = document.createElement('div');
+      scroll.className = 'home-cards-scroll';
+      items.forEach(st => scroll.appendChild(_buildStationHomeCard(st)));
       section.appendChild(scroll);
       _bindDragScroll(scroll);
 
@@ -1739,6 +1784,108 @@ const UI = (() => {
     });
 
     return card;
+  }
+
+  /** Deterministic hue for a station's circular avatar, derived from its name. */
+  function _stationColor(name) {
+    let hash = 0;
+    const s = name || '';
+    for (let i = 0; i < s.length; i++) hash = (hash * 31 + s.charCodeAt(i)) >>> 0;
+    const hue = hash % 360;
+    return `hsl(${hue}, 55%, 42%)`;
+  }
+
+  /** Radio station home card: circular avatar + name only (city omitted per spec). */
+  function _buildStationHomeCard(station) {
+    const card = document.createElement('div');
+    card.className = 'home-card';
+    card.dataset.id = station.id;
+
+    const bg = _stationColor(station.name);
+
+    card.innerHTML = `
+      <div class="home-card-art home-card-art--circle" style="background:${bg}">
+        <div class="folder-icon-placeholder" style="color:rgba(255,255,255,0.9)">${iconRadio(28)}</div>
+        <button class="home-card-play-btn" aria-label="Reproducir" tabindex="-1">
+          <div class="play-btn-circle">${iconPlay(17)}</div>
+        </button>
+      </div>
+      <button class="home-card-more" aria-label="Más opciones">${iconDots(14)}</button>
+      <div class="home-card-name" style="text-align:center">${escHtml(station.name || '—')}</div>
+    `;
+
+    card.querySelector('.home-card-more').addEventListener('click', (e) => {
+      e.stopPropagation();
+      showContextMenu(e, 'home_station', station);
+    });
+
+    card.querySelector('.home-card-play-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (typeof App !== 'undefined') App.onRadioStationClick?.(station);
+    });
+
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('.home-card-more')) return;
+      if (e.target.closest('.home-card-play-btn')) return;
+      if (typeof App !== 'undefined') App.onRadioStationClick?.(station);
+    });
+
+    return card;
+  }
+
+  /* ── Radio Emisoras screen ───────────────────────────────── */
+
+  /**
+   * Render the Radio screen's station list (filtered/all).
+   * @param {Object[]} stations - station objects { id, name, city, url, urls, isFavorite }
+   */
+  function renderRadioList(stations) {
+    const container = document.getElementById('radio-list');
+    if (!container) return;
+    container.innerHTML = '';
+
+    if (!stations || stations.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'home-section-empty';
+      empty.style.padding = '32px 16px';
+      empty.textContent = t('no_results');
+      container.appendChild(empty);
+      return;
+    }
+
+    stations.forEach(station => container.appendChild(_buildRadioRow(station)));
+  }
+
+  /** Radio station list row (search screen): colored circular avatar + name + city + 3-dot. */
+  function _buildRadioRow(station) {
+    const el = document.createElement('div');
+    el.className = 'top-list-item';
+    el.dataset.id = station.id;
+
+    const bg = _stationColor(station.name);
+
+    el.innerHTML = `
+      <div class="top-list-thumb top-list-thumb--radio" style="background:${bg}">
+        <div style="display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.9)">${iconRadio(20)}</div>
+      </div>
+      <div class="top-list-info">
+        <div class="top-list-title">${escHtml(station.name || '—')}</div>
+        ${station.city ? `<div class="top-list-meta">${escHtml(station.city)}</div>` : ''}
+      </div>
+      <button class="btn-more" aria-label="Más opciones">${iconDots()}</button>
+    `;
+
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('.btn-more')) return;
+      if (typeof App !== 'undefined') App.onRadioStationClick?.(station);
+    });
+
+    el.querySelector('.btn-more')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      showContextMenu(e, 'radio_station', station);
+    });
+
+    return el;
   }
 
   /* ── History screen ──────────────────────────────────────── */
@@ -2762,6 +2909,19 @@ const UI = (() => {
       _addCtxItem(menu, _iconRemove, t('ctx_ds_remove_from_list'), () => { App.onDsRemoveFromList?.(item);  hideContextMenu(); });
     }
 
+    // ── Radio Emisoras menus ─────────────────────────────────────
+
+    if (type === 'radio_station') {
+      _addCtxItem(menu, iconStar(14), item.isFavorite ? t('ctx_radio_remove_fav') : t('ctx_radio_add_fav'),
+        () => { App.onToggleRadioFavorite?.(item); hideContextMenu(); });
+      _addCtxDivider(menu);
+      _addCtxItem(menu, iconTrash(14), t('ctx_delete'), () => { App.onHideRadioStation?.(item); hideContextMenu(); });
+    }
+
+    if (type === 'home_station') {
+      _addCtxItem(menu, iconPin(14), t('ctx_radio_remove_fav'), () => { App.onToggleRadioFavorite?.(item); hideContextMenu(); });
+    }
+
     // Position menu near cursor — measure actual rendered size to avoid overflow
     // Use visualViewport when available: on Android it excludes the system navigation
     // bar, whereas window.innerHeight includes the area behind it.
@@ -3424,6 +3584,10 @@ const UI = (() => {
 
   function iconSettings(size = 22) {
     return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94s-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96a7.02 7.02 0 0 0-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84a.484.484 0 0 0-.47.41l-.36 2.54a7.024 7.024 0 0 0-1.62.94l-2.39-.96a.479.479 0 0 0-.59.22L2.74 8.87a.479.479 0 0 0 .12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.27.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54a7.024 7.024 0 0 0 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32a.49.49 0 0 0-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z"/></svg>`;
+  }
+
+  function iconRadio(size = 16) {
+    return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="currentColor"><path d="M3.24 6.15C2.51 6.43 2 7.17 2 8v12c0 1.1.89 2 2 2h16c1.11 0 2-.9 2-2V8c0-1.11-.89-2-2-2H6.3l8.26-3.34L13.65 1 3.24 6.15zM13 18c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>`;
   }
 
   function iconGoogle(size = 18) {
@@ -6069,6 +6233,8 @@ const UI = (() => {
     renderQueuePanel,
     // Home
     renderHome,
+    // Radio
+    renderRadioList,
     // History
     renderHistory,
     // Browse
@@ -6119,7 +6285,7 @@ const UI = (() => {
     // Icons (available for use in index.html and other modules)
     iconPlay, iconPause, iconPrev, iconNext,
     iconFolder, iconMusicNote, iconHome, iconSearch, iconLibrary, iconSettings,
-    iconChevronRight, iconDots, iconStar, iconPin, iconPlus, iconGoogle,
+    iconChevronRight, iconDots, iconStar, iconPin, iconPlus, iconGoogle, iconRadio,
     // Utils
     escHtml,
   };

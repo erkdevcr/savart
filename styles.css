@@ -886,6 +886,10 @@ img { display: block; }
   position: relative; /* needed for eq-bars overlay */
 }
 
+.top-list-thumb--radio {
+  border-radius: 50%;
+}
+
 .top-list-thumb img {
   position: absolute;
   inset: 0;
@@ -1023,6 +1027,14 @@ img { display: block; }
   -webkit-user-drag: none;
   user-drag: none;
   pointer-events: none; /* prevents browser image-drag from stealing pointer events */
+}
+
+/* Circular variant: used for radio station home cards (name only, no city) */
+.home-card-art--circle {
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* Mosaic variant: 2×2 grid fills the card art area */

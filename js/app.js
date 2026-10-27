@@ -17,6 +17,7 @@ const App = (() => {
 
   /* ── Browse state ────────────────────────────────────────── */
   let _breadcrumb      = [];    // [{ id, name }] from root to current
+  let _radioStations   = [];    // in-memory catalog for the Radio screen (hidden filtered out, isFavorite stamped)
   let _rootFolderId    = 'root';
   let _rootFolderName  = CONFIG.ROOT_FOLDER_NAME; // overridden by localStorage if user changed it
   let _browseFolderId  = null;  // current open folder id (for rescan)
@@ -6139,11 +6140,12 @@ const App = (() => {
       });
     }
     try {
-      const [pinned, recents, topPlayedRaw, rawPlaylists] = await Promise.all([
+      const [pinned, recents, topPlayedRaw, rawPlaylists, stationsRaw] = await Promise.all([
         DB.getPinnedFolders(),
         DB.getHistory(24),   // home "recents" = playback history — only played songs, sorted by playedAt
         DB.getTopPlayed(12),
         DB.getPlaylists(),
+        DB.getRadioFavoriteStations(),
       ]);
 
       // Load metadata store records for all history (recents) AND topPlayed items.
@@ -6331,7 +6333,7 @@ const App = (() => {
       const displayPinned  = enrichedPinned.slice(0, 12);
       const displayRecents = enrichedRecents.slice(0, 24); // song-only filtering to 12 happens inside renderHome
 
-      UI.renderHome({ pinned: displayPinned, recents: displayRecents, topPlayed, playlists: enrichedPlaylists });
+      UI.renderHome({ pinned: displayPinned, recents: displayRecents, topPlayed, playlists: enrichedPlaylists, stations: stationsRaw });
       // Re-mark the active row after renderHome creates fresh DOM nodes
       UI.setActiveSongRow(Player.getCurrentTrack()?.id ?? null);
 
@@ -14831,6 +14833,91 @@ const App = (() => {
 
   /* ── Nav tab click ───────────────────────────────────────── */
 
+  /* ── Radio Emisoras ──────────────────────────────────────── */
+
+  /** Load the station catalog (hidden filtered out, favorites stamped) and render it. */
+  async function _loadRadioData() {
+    const [hidden, favIds] = await Promise.all([DB.getRadioHidden(), DB.getRadioFavorites()]);
+    const hiddenSet = new Set(hidden);
+    const favSet    = new Set(favIds);
+    const all       = (typeof RadioStations !== 'undefined') ? RadioStations.STATIONS : [];
+    _radioStations = all
+      .filter(s => !hiddenSet.has(s.id))
+      .map(s => ({ ...s, isFavorite: favSet.has(s.id) }))
+      .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+    _renderRadioFiltered();
+    _wireRadioSearch();
+  }
+
+  /** Re-render the Radio list applying the current search term. */
+  function _renderRadioFiltered() {
+    const searchInput = document.getElementById('radio-search-input');
+    const q = norm(searchInput?.value || '');
+    const filtered = q
+      ? _radioStations.filter(s => norm(s.name).includes(q) || norm(s.city || '').includes(q))
+      : _radioStations;
+    UI.renderRadioList(filtered);
+  }
+
+  /** Wire the Radio screen's search bar (idempotent via data attribute). */
+  function _wireRadioSearch() {
+    const searchInput = document.getElementById('radio-search-input');
+    const clearBtn     = document.getElementById('btn-radio-search-clear');
+    if (searchInput && !searchInput.dataset.wired) {
+      searchInput.dataset.wired = '1';
+      searchInput.addEventListener('input', () => {
+        _renderRadioFiltered();
+        if (clearBtn) clearBtn.style.display = searchInput.value ? '' : 'none';
+      });
+      clearBtn?.addEventListener('click', () => {
+        searchInput.value = '';
+        searchInput.focus();
+        clearBtn.style.display = 'none';
+        _renderRadioFiltered();
+      });
+    }
+  }
+
+  /** Play a radio station immediately — direct stream, bypasses Drive/Soundrop. */
+  function onRadioStationClick(station) {
+    _resetRadio();
+    // Resolve against the static catalog — favorited stations stored on Home only
+    // keep { id, name, city }, not the stream URL(s), so always pull those from
+    // the single source of truth (the catalog) rather than trusting the caller.
+    const catalog = (typeof RadioStations !== 'undefined') ? RadioStations.STATIONS : [];
+    const full = catalog.find(s => s.id === station.id) || station;
+    const track = {
+      id:           full.id,
+      isRadio:      true,
+      name:         full.name,
+      displayName:  full.name,
+      artist:       full.city || '',
+      url:          full.url,
+      urls:         full.urls || [],
+      thumbnailUrl: null,
+    };
+    Player.setQueue([track], 0);
+  }
+
+  /** Toggle a station's favorite status (pins/unpins it to Home's "Emisoras" section). */
+  async function onToggleRadioFavorite(station) {
+    const nowFav = await DB.toggleRadioFavorite(station);
+    UI.showToast(nowFav ? UI.t('toast_radio_fav_added') : UI.t('toast_radio_fav_removed'));
+    const idx = _radioStations.findIndex(s => s.id === station.id);
+    if (idx !== -1) _radioStations[idx] = { ..._radioStations[idx], isFavorite: nowFav };
+    _renderRadioFiltered();
+    _loadHomeData();
+  }
+
+  /** Hide a station from the Radio list (one-way per spec — also unfavorites it). */
+  async function onHideRadioStation(station) {
+    await DB.hideRadioStation(station.id);
+    UI.showToast(UI.t('toast_radio_removed'));
+    _radioStations = _radioStations.filter(s => s.id !== station.id);
+    _renderRadioFiltered();
+    _loadHomeData();
+  }
+
   function onNavClick(viewId) {
     // Close EQ overlay if open (mobile nav tap should dismiss it)
     const _eqOv = document.getElementById('overlay-eq');
@@ -14891,6 +14978,7 @@ const App = (() => {
       }
     }
     if (viewId === 'deep-scan') _openDeepScan();
+    if (viewId === 'radio') _loadRadioData();
   }
 
   /**
@@ -17662,6 +17750,10 @@ const App = (() => {
     onRemoveFromHistoryItem,
     // Nav
     onNavClick,
+    // Radio Emisoras
+    onRadioStationClick,
+    onToggleRadioFavorite,
+    onHideRadioStation,
     // Settings
     onLogout,
     onLanguageChange,

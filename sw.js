@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.649';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.649 — reinicia el keepalive silencioso cuando una interrupcion (BT noisy/llamada) pausa el audio, para que Chrome no congele la pestana en 2do plano y el play externo (bocina/radio) al reconectar si llegue
+const APP_VERSION  = '3.5.650';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.650 — nueva feature "Radio Emisoras": catalogo de ~287 emisoras CR con stream directo, favoritos pinneados en Home (seccion Emisoras) y ocultar emisoras; boton Settings movido al header
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
