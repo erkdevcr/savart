@@ -8037,6 +8037,67 @@ body.queue-open #mini-player { z-index: 65; }
   background: color-mix(in srgb, var(--accent) 20%, transparent);
   color: var(--accent);
 }
+
+/* ── Radio Emisoras: 15s/30s rewind/forward "DVR" seek buttons ──────────
+   Replace the track-nav controls (prev/next, plus mini-extras' skip-prev/
+   skip-next) wherever they normally sit, whenever the currently playing
+   track is a live station — a single-station queue has no meaningful
+   previous/next track anyway. Driven by player.js's getRadioDvrState()/
+   radioSeekBy(), backed by the best-effort rolling buffer in radio-dvr.js
+   (works for a subset of the catalog — see that file for why). */
+body.radio-track-active .track-nav-btn { display: none; }
+body.radio-track-active #mini-player .track-nav-btn { display: none; } /* beats the #mini-player .mini-controls button ID rule */
+.radio-seek-btn {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  line-height: 1;
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  transition: color 0.15s, background 0.15s, opacity 0.15s;
+  font-family: inherit;
+}
+body.radio-track-active .radio-seek-btn { display: flex; }
+.radio-seek-btn:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+.radio-seek-btn .radio-seek-num {
+  font-size: 13px;
+  font-weight: 600;
+}
+.radio-seek-btn .radio-seek-unit {
+  font-size: 8px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.2px;
+  margin-top: -1px;
+  opacity: 0.75;
+}
+.radio-seek-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Per-surface sizing — matches the footprint of the prev/next controls each
+   one replaces (see .pexp-ctrl-btn, .mini-controls button, .mini-extra-btn,
+   .dmp-btn above). */
+.pexp-controls .radio-seek-btn { width: 48px; height: 48px; }
+#mini-player .mini-controls .radio-seek-btn { width: 34px; height: 32px; }
+#mini-player .mini-controls .radio-seek-btn .radio-seek-num { font-size: 11px; }
+#mini-player .mini-controls .radio-seek-btn .radio-seek-unit { font-size: 7px; }
+.mini-extras .radio-seek-btn { width: 30px; height: 28px; }
+.mini-extras .radio-seek-btn .radio-seek-num { font-size: 10px; }
+.mini-extras .radio-seek-btn .radio-seek-unit { font-size: 6px; }
+.dmp-controls .radio-seek-btn { width: 36px; height: 42px; }
+.dmp-controls .radio-seek-btn .radio-seek-num { font-size: 12px; }
+
 .ds-artists-search-icon { color: var(--text-disabled); flex-shrink: 0; }
 .ds-artists-search-input {
   flex: 1;

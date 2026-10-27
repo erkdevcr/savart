@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.657';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.657 — Radio Emisoras: el toolbar (título + tabs Emisoras/Favoritas/Borradas + searchbar) ahora es UN solo bloque sticky combinado, en vez de dos elementos sticky top:0 independientes que se solapaban
+const APP_VERSION  = '3.5.659';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.659 — fix: especificidad CSS para ocultar prev/next del mini-player móvil en modo radio; guard contra condición de carrera si se cambia de pista mientras RadioDvr.start() está en vuelo
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
@@ -29,6 +29,7 @@ const SHELL_FILES = [
   `${BASE}/js/sync.js`,
   `${BASE}/js/player.js`,
   `${BASE}/js/icy-metadata.js`,
+  `${BASE}/js/radio-dvr.js`,
   `${BASE}/js/meta.js`,
   `${BASE}/js/lastfm.js`,
   `${BASE}/js/audd.js`,

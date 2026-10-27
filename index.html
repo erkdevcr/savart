@@ -19,10 +19,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&family=Baskervville:ital@0;1&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="styles.css?v=3.5.657">
+  <link rel="stylesheet" href="styles.css?v=3.5.659">
   <!-- Version global — fallback para Android donde el SW no se registra.
        IMPORTANTE: mantener sincronizada con APP_VERSION de sw.js en cada bump. -->
-  <script>window.SAVART_VERSION = '3.5.657';</script>
+  <script>window.SAVART_VERSION = '3.5.659';</script>
   <!-- Tema (v3.5.552): aplicar ANTES del primer paint para evitar flash del tema default -->
   <script>try{var _th=localStorage.getItem('savart_theme');if(_th&&_th!=='blue')document.documentElement.dataset.theme=_th;}catch(e){}</script>
 </head>
@@ -1253,15 +1253,23 @@
         <button class="pexp-ctrl-btn" id="btn-pexp-shuffle" aria-label="Aleatorio">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg>
         </button>
-        <button class="pexp-ctrl-btn" id="btn-pexp-prev" aria-label="Anterior">
+        <!-- Radio Emisoras: 15s/30s rewind/forward — shown in place of
+             prev/next only while a live station is playing (see
+             body.radio-track-active in styles.css and player.js
+             getRadioDvrState()/radioSeekBy()). -->
+        <button class="radio-seek-btn" data-seek="-30" aria-label="Retroceder 30 segundos" disabled><span class="radio-seek-num">30</span><span class="radio-seek-unit">seg</span></button>
+        <button class="radio-seek-btn" data-seek="-15" aria-label="Retroceder 15 segundos" disabled><span class="radio-seek-num">15</span><span class="radio-seek-unit">seg</span></button>
+        <button class="pexp-ctrl-btn track-nav-btn" id="btn-pexp-prev" aria-label="Anterior">
           <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>
         </button>
         <button class="pexp-play-btn" id="btn-pexp-play" aria-label="Play/Pausa">
           <svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
         </button>
-        <button class="pexp-ctrl-btn" id="btn-pexp-next" aria-label="Siguiente">
+        <button class="pexp-ctrl-btn track-nav-btn" id="btn-pexp-next" aria-label="Siguiente">
           <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M16 6h2v12h-2zM6 6v12l8.5-6z"/></svg>
         </button>
+        <button class="radio-seek-btn" data-seek="15" aria-label="Adelantar 15 segundos" disabled><span class="radio-seek-num">15</span><span class="radio-seek-unit">seg</span></button>
+        <button class="radio-seek-btn" data-seek="30" aria-label="Adelantar 30 segundos" disabled><span class="radio-seek-num">30</span><span class="radio-seek-unit">seg</span></button>
         <button class="pexp-ctrl-btn" id="btn-pexp-repeat" aria-label="Repetir">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>
         </button>
@@ -1344,15 +1352,19 @@
     </div>
     <!-- Playback controls -->
     <div class="dmp-controls">
-      <button class="dmp-btn" id="dmp-btn-prev" aria-label="Anterior">
+      <button class="radio-seek-btn" data-seek="-30" aria-label="Retroceder 30 segundos" disabled><span class="radio-seek-num">30</span><span class="radio-seek-unit">seg</span></button>
+      <button class="radio-seek-btn" data-seek="-15" aria-label="Retroceder 15 segundos" disabled><span class="radio-seek-num">15</span><span class="radio-seek-unit">seg</span></button>
+      <button class="dmp-btn track-nav-btn" id="dmp-btn-prev" aria-label="Anterior">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>
       </button>
       <button class="dmp-btn dmp-btn-play" id="dmp-btn-play" aria-label="Play/Pausa">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
       </button>
-      <button class="dmp-btn" id="dmp-btn-next" aria-label="Siguiente">
+      <button class="dmp-btn track-nav-btn" id="dmp-btn-next" aria-label="Siguiente">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M16 6h2v12h-2zM6 6v12l8.5-6z"/></svg>
       </button>
+      <button class="radio-seek-btn" data-seek="15" aria-label="Adelantar 15 segundos" disabled><span class="radio-seek-num">15</span><span class="radio-seek-unit">seg</span></button>
+      <button class="radio-seek-btn" data-seek="30" aria-label="Adelantar 30 segundos" disabled><span class="radio-seek-num">30</span><span class="radio-seek-unit">seg</span></button>
     </div>
   </div>
 
@@ -1445,15 +1457,19 @@
   </div>
   <!-- Mobile controls: Prev · Play · Next + SD download -->
   <div class="mini-controls">
-    <button class="btn-prev-mini" aria-label="Anterior">
+    <button class="radio-seek-btn" data-seek="-30" aria-label="Retroceder 30 segundos" disabled><span class="radio-seek-num">30</span><span class="radio-seek-unit">seg</span></button>
+    <button class="radio-seek-btn" data-seek="-15" aria-label="Retroceder 15 segundos" disabled><span class="radio-seek-num">15</span><span class="radio-seek-unit">seg</span></button>
+    <button class="btn-prev-mini track-nav-btn" aria-label="Anterior">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>
     </button>
     <button class="btn-play-mini" aria-label="Play/Pausa">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
     </button>
-    <button class="btn-next-mini" aria-label="Siguiente">
+    <button class="btn-next-mini track-nav-btn" aria-label="Siguiente">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M16 6h2v12h-2zM6 6v12l8.5-6z"/></svg>
     </button>
+    <button class="radio-seek-btn" data-seek="15" aria-label="Adelantar 15 segundos" disabled><span class="radio-seek-num">15</span><span class="radio-seek-unit">seg</span></button>
+    <button class="radio-seek-btn" data-seek="30" aria-label="Adelantar 30 segundos" disabled><span class="radio-seek-num">30</span><span class="radio-seek-unit">seg</span></button>
     <button id="btn-mini-sd-download" class="sd-download-btn sd-download-btn--mini" aria-label="Guardar en Drive" style="display:none">
       <svg width="11" height="9" viewBox="0 0 24 20" fill="white"><polyline points="12,2 4,14 12,18 20,14" stroke="white" stroke-width="2.5" fill="none" stroke-linejoin="round"/></svg>
       <span class="sd-btn-label">SD</span>
@@ -1461,19 +1477,23 @@
   </div>
   <!-- Desktop extras: skip-prev · prev · play · next · skip-next + volume -->
   <div class="mini-extras">
-    <button class="mini-extra-btn mini-skip-prev" aria-label="Inicio de pista">
+    <button class="mini-extra-btn mini-skip-prev track-nav-btn" aria-label="Inicio de pista">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>
     </button>
-    <button class="mini-extra-btn btn-prev-mini-desk" aria-label="Anterior">
+    <button class="mini-extra-btn btn-prev-mini-desk track-nav-btn" aria-label="Anterior">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M15.41 16.59L10.83 12l4.58-4.59L14 6l-6 6 6 6z"/></svg>
     </button>
+    <button class="radio-seek-btn" data-seek="-30" aria-label="Retroceder 30 segundos" disabled><span class="radio-seek-num">30</span><span class="radio-seek-unit">seg</span></button>
+    <button class="radio-seek-btn" data-seek="-15" aria-label="Retroceder 15 segundos" disabled><span class="radio-seek-num">15</span><span class="radio-seek-unit">seg</span></button>
     <button class="mini-extra-btn btn-play-mini-desk" aria-label="Play/Pausa">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
     </button>
-    <button class="mini-extra-btn btn-next-mini-desk" aria-label="Siguiente">
+    <button class="radio-seek-btn" data-seek="15" aria-label="Adelantar 15 segundos" disabled><span class="radio-seek-num">15</span><span class="radio-seek-unit">seg</span></button>
+    <button class="radio-seek-btn" data-seek="30" aria-label="Adelantar 30 segundos" disabled><span class="radio-seek-num">30</span><span class="radio-seek-unit">seg</span></button>
+    <button class="mini-extra-btn btn-next-mini-desk track-nav-btn" aria-label="Siguiente">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6z"/></svg>
     </button>
-    <button class="mini-extra-btn mini-skip-next" aria-label="Fin de pista">
+    <button class="mini-extra-btn mini-skip-next track-nav-btn" aria-label="Fin de pista">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M16 6h2v12h-2zM6 6v12l8.5-6z"/></svg>
     </button>
     <div class="mini-volume">
@@ -1728,26 +1748,27 @@
 </script>
 
 <!-- Savart modules -->
-<script src="js/config.js?v=3.5.657"></script>
-<script src="js/radio-stations.js?v=3.5.657"></script>
-<script src="js/icy-metadata.js?v=3.5.657"></script>
-<script src="js/auth.js?v=3.5.657"></script>
-<script src="js/drive.js?v=3.5.657"></script>
-<script src="js/db.js?v=3.5.657"></script>
-<script src="js/sync.js?v=3.5.657"></script>
-<script src="js/player.js?v=3.5.657"></script>
-<script src="js/meta.js?v=3.5.657"></script>
-<script src="js/lastfm.js?v=3.5.657"></script>
-<script src="js/audd.js?v=3.5.657"></script>
-<script src="js/musicbrainz.js?v=3.5.657"></script>
-<script src="js/discogs.js?v=3.5.657"></script>
-<script src="js/lyrics.js?v=3.5.657"></script>
-<script src="js/soundrop.js?v=3.5.657"></script>
-<script src="js/yt-auth.js?v=3.5.657"></script>
-<script src="js/yt-playlists.js?v=3.5.657"></script>
-<script src="js/ui.js?v=3.5.657"></script>
-<script src="js/app.js?v=3.5.657"></script>
-<script src="js/bg.js?v=3.5.657"></script>
+<script src="js/config.js?v=3.5.659"></script>
+<script src="js/radio-stations.js?v=3.5.659"></script>
+<script src="js/icy-metadata.js?v=3.5.659"></script>
+<script src="js/radio-dvr.js?v=3.5.659"></script>
+<script src="js/auth.js?v=3.5.659"></script>
+<script src="js/drive.js?v=3.5.659"></script>
+<script src="js/db.js?v=3.5.659"></script>
+<script src="js/sync.js?v=3.5.659"></script>
+<script src="js/player.js?v=3.5.659"></script>
+<script src="js/meta.js?v=3.5.659"></script>
+<script src="js/lastfm.js?v=3.5.659"></script>
+<script src="js/audd.js?v=3.5.659"></script>
+<script src="js/musicbrainz.js?v=3.5.659"></script>
+<script src="js/discogs.js?v=3.5.659"></script>
+<script src="js/lyrics.js?v=3.5.659"></script>
+<script src="js/soundrop.js?v=3.5.659"></script>
+<script src="js/yt-auth.js?v=3.5.659"></script>
+<script src="js/yt-playlists.js?v=3.5.659"></script>
+<script src="js/ui.js?v=3.5.659"></script>
+<script src="js/app.js?v=3.5.659"></script>
+<script src="js/bg.js?v=3.5.659"></script>
 
 <!-- Inline: additional bindings that need the DOM -->
 <script>

@@ -58,6 +58,10 @@ const Player = (() => {
   let _radioMetaWatcher   = null;  // { stop() } handle from IcyMetadata.watch, or null
   let _radioMetaUrl       = null;  // the stream URL the current watcher is attached to
   let _lastRadioStreamUrl = null;  // the stream URL _radioAudio is currently connected to
+  let _radioDvrEngine     = null;  // RadioDvr instance when the live-stream rolling buffer
+                                    // (15s/30s rewind/forward) is active for this connection,
+                                    // or null when this station couldn't support it and
+                                    // playback fell back to plain <audio src> (see radio-dvr.js)
   let _fastStartWaiting   = false; // v3.5.641 (audit A2): true while _handleEnded is holding playback
                                     // waiting for the full-file swap — 'ended' already set audio.paused
                                     // to true, so wasPlaying below would read false and never resume.
@@ -1168,6 +1172,7 @@ const Player = (() => {
         _radioActive = false;
         if (_radioAudio) { _radioAudio.pause(); _radioAudio.src = ''; }
         _stopRadioMetaWatch();
+        if (_radioDvrEngine) { _radioDvrEngine.stop(); _radioDvrEngine = null; }
         _lastRadioStreamUrl = null;
       }
 
@@ -1196,8 +1201,36 @@ const Player = (() => {
           if (myCtrl.signal.aborted) { _radioConnecting = false; return; }
           try {
             _lastRadioStreamUrl = streamUrl;
-            _radioAudio.src = streamUrl;
             _radioAudio.volume = _volume;
+
+            // Best-effort 15s/30s rewind/forward: try to establish a client-side
+            // rolling buffer via RadioDvr (fetch + MediaSource) before falling
+            // back to plain <audio src> playback (no seeking) — see radio-dvr.js.
+            // Whether this succeeds depends entirely on the station's own CORS
+            // policy for a plain cross-origin GET (varies per server, and can
+            // change over time), so every station gets a genuine per-connection
+            // attempt rather than being pre-excluded by domain.
+            if (_radioDvrEngine) { _radioDvrEngine.stop(); _radioDvrEngine = null; }
+            let _dvrOk = false;
+            if (typeof RadioDvr !== 'undefined') {
+              const engine = RadioDvr.create(_radioAudio);
+              _dvrOk = await engine.start(streamUrl).catch(() => false);
+              // RadioDvr.start() can take a few seconds (up to its chunk
+              // timeouts) — if the track was switched away while we were
+              // waiting, bail out now instead of clobbering whatever is
+              // playing next with this now-stale connection attempt.
+              if (myCtrl.signal.aborted) { engine.stop(); _radioConnecting = false; return; }
+              if (_dvrOk) {
+                _radioDvrEngine = engine;
+                _radioDvrEngine.onDrop(() => _handleRadioStreamDrop(item));
+              } else {
+                engine.stop();
+              }
+            }
+            if (!_dvrOk) {
+              _radioAudio.src = streamUrl; // plain playback — rewind/forward stay disabled
+            }
+
             _keepAliveStart();
             _msSetMetadata(item);
             _msSetPlaybackState('playing');
@@ -1207,6 +1240,7 @@ const Player = (() => {
             break;
           } catch (streamErr) {
             console.warn('[Player] Radio stream failed, trying next URL:', streamUrl, streamErr);
+            if (_radioDvrEngine) { _radioDvrEngine.stop(); _radioDvrEngine = null; }
           }
         }
         _radioConnecting = false;
@@ -1231,6 +1265,7 @@ const Player = (() => {
           } else {
             _radioErrorRetries = 0;
             _stopRadioMetaWatch();
+            if (_radioDvrEngine) { _radioDvrEngine.stop(); _radioDvrEngine = null; }
             _onError({ type: 'audio', message: 'toast_audio_error', item });
           }
         }
@@ -1733,6 +1768,7 @@ const Player = (() => {
         _onPlayPause?.(false);
         _keepAliveStop();
         _stopRadioMetaWatch();
+        if (_radioDvrEngine) { _radioDvrEngine.stop(); _radioDvrEngine = null; }
       }
       return;
     }
@@ -1793,8 +1829,34 @@ const Player = (() => {
       }
       _radioErrorRetries = 0;
       _stopRadioMetaWatch();
+      if (_radioDvrEngine) { _radioDvrEngine.stop(); _radioDvrEngine = null; }
     }
     _onError({ type: 'audio', message: 'toast_audio_error', error });
+  }
+
+  /**
+   * Called by the active RadioDvr engine (see radio-dvr.js) when its background
+   * fetch/append loop drops — e.g. a network hiccup or the server resetting the
+   * connection. Mirrors _handleAudioError's radio branch exactly (same retry
+   * budget, same give-up toast), since from the user's perspective this is the
+   * same kind of failure; it just surfaces through the DVR engine's own fetch
+   * instead of a native <audio> 'error'/'ended' event.
+   */
+  function _handleRadioStreamDrop(item) {
+    if (_radioConnecting) return; // the connect-phase loop already owns this attempt
+    const _curTrack = getCurrentTrack();
+    if (!_curTrack?.isRadio || _curTrack.id !== item?.id) return;
+    if (_radioDvrEngine) { _radioDvrEngine.stop(); _radioDvrEngine = null; }
+    _radioErrorRetries++;
+    if (_radioErrorRetries <= 3) {
+      setTimeout(() => {
+        if (getCurrentTrack()?.id === _curTrack.id) _playCurrentTrack();
+      }, 1500);
+      return;
+    }
+    _radioErrorRetries = 0;
+    _stopRadioMetaWatch();
+    _onError({ type: 'audio', message: 'toast_audio_error', item: _curTrack });
   }
 
   /**
@@ -1821,6 +1883,46 @@ const Player = (() => {
     if (_radioMetaWatcher) { try { _radioMetaWatcher.stop(); } catch (_) {} }
     _radioMetaWatcher = null;
     _radioMetaUrl = null;
+  }
+
+  /**
+   * Best-effort live-radio DVR state, for the 15s/30s rewind/forward buttons.
+   * Returns which directions currently have enough buffered room to seek into.
+   * `available` is false whenever this station's connection fell back to plain
+   * <audio src> playback (no MediaSource buffer to seek within at all) — see
+   * radio-dvr.js for when that happens (depends on the station's own CORS
+   * policy at connect time, which varies per server).
+   */
+  function getRadioDvrState() {
+    const unavailable = { available: false, canBack15: false, canBack30: false, canFwd15: false, canFwd30: false };
+    if (!_radioActive || !_radioDvrEngine || !_radioDvrEngine.isReady()) return unavailable;
+    const range = _radioDvrEngine.getBufferedRange();
+    if (!range) return unavailable;
+    const ct = _radioAudio.currentTime;
+    const behind = ct - range.start;
+    const ahead  = range.end - ct;
+    return {
+      available: true,
+      canBack15: behind >= 15,
+      canBack30: behind >= 30,
+      canFwd15:  ahead  >= 15,
+      canFwd30:  ahead  >= 30,
+    };
+  }
+
+  /**
+   * Seeks the live radio stream by deltaSeconds (negative = rewind, positive =
+   * forward), clamped to the DVR engine's currently-buffered range. No-op
+   * (returns false) when there is no active DVR buffer for this station.
+   */
+  function radioSeekBy(deltaSeconds) {
+    if (!_radioActive || !_radioDvrEngine || !_radioDvrEngine.isReady()) return false;
+    const range = _radioDvrEngine.getBufferedRange();
+    if (!range) return false;
+    let target = _radioAudio.currentTime + deltaSeconds;
+    target = Math.max(range.start, Math.min(range.end - 0.25, target));
+    _radioAudio.currentTime = target;
+    return true;
   }
 
   /* ── Getters ────────────────────────────────────────────── */
@@ -1918,6 +2020,9 @@ const Player = (() => {
     getDuration,
     getCurrentTrack,
     patchQueueItem,
+    // Radio Emisoras: best-effort 15s/30s rewind/forward (see radio-dvr.js)
+    getRadioDvrState,
+    radioSeekBy,
     // SD restore: cancel an in-progress SD load and resume the previous Drive track
     abortSdLoad: _doSdRestore,
   };

@@ -1751,6 +1751,13 @@ const App = (() => {
     UI.updateExpandedPlayer(enriched, true);
     _updateSpeedBadge(Player.getTempo()); // always show current speed immediately
     document.body.classList.add('audio-playing'); // track change = playback starting
+    // Radio Emisoras: swap prev/next for the 15s/30s rewind/forward buttons
+    // (see .radio-seek-btn in styles.css) whenever a live station is playing.
+    // Reset to "no buffer yet" immediately — the real state arrives via
+    // _onProgress once RadioDvr has a buffered range to report (or never, for
+    // a station that fell back to plain playback — see radio-dvr.js).
+    document.body.classList.toggle('radio-track-active', !!track?.isRadio);
+    if (track?.isRadio) UI.updateRadioSeekButtons(Player.getRadioDvrState());
     UI.setActiveSongRow(track?.id);
     document.title = track ? `${enriched.displayName} — Savart` : 'Savart';
 
@@ -2047,6 +2054,12 @@ const App = (() => {
     UI.updateProgress(currentTime, duration);
     if (UI.isExpandedPlayerVisible()) {
       UI.updateExpandedPlayerProgress(currentTime, duration);
+    }
+    // Radio Emisoras: re-evaluate the 15s/30s rewind/forward buttons on every
+    // tick, since the buffered range they depend on keeps moving.
+    const _curTrack = Player.getCurrentTrack();
+    if (_curTrack?.isRadio) {
+      UI.updateRadioSeekButtons(Player.getRadioDvrState());
     }
   }
 
@@ -16017,6 +16030,16 @@ const App = (() => {
     });
     document.querySelector('.mini-skip-next')?.addEventListener('click', (e) => {
       e.stopPropagation(); Player.next();
+    });
+
+    // Radio Emisoras: 15s/30s rewind/forward buttons — one shared handler for
+    // all 16 instances (4 buttons × 4 player surfaces; see .radio-seek-btn).
+    document.querySelectorAll('.radio-seek-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const delta = parseInt(btn.dataset.seek, 10);
+        if (!Number.isNaN(delta)) Player.radioSeekBy(delta);
+      });
     });
 
     // Mini-player volume

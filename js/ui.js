@@ -1338,6 +1338,27 @@ const UI = (() => {
     if (duration > 0) bar.style.width = `${(currentTime / duration) * 100}%`;
   }
 
+  /**
+   * Radio Emisoras: enable/disable the 15s/30s rewind/forward buttons across
+   * all 4 player surfaces (pexp, mobile mini-player, desktop mini-player,
+   * desktop micro-player) based on Player.getRadioDvrState(). Buttons are
+   * matched by their data-seek attribute (-30/-15/15/30), not by id, since
+   * each surface has its own copy of all four (see .radio-seek-btn).
+   * @param {{available:boolean, canBack15:boolean, canBack30:boolean, canFwd15:boolean, canFwd30:boolean}} state
+   */
+  function updateRadioSeekButtons(state) {
+    const s = state || {};
+    document.querySelectorAll('.radio-seek-btn').forEach(btn => {
+      const delta = parseInt(btn.dataset.seek, 10);
+      let enabled = false;
+      if (delta === -30) enabled = !!s.canBack30;
+      else if (delta === -15) enabled = !!s.canBack15;
+      else if (delta === 15) enabled = !!s.canFwd15;
+      else if (delta === 30) enabled = !!s.canFwd30;
+      btn.disabled = !enabled;
+    });
+  }
+
   /* ── Home screen rendering ────────────────────────────────── */
 
   /**
@@ -6274,6 +6295,7 @@ const UI = (() => {
     setHeartActive,
     updateMiniPlayer,
     updateProgress,
+    updateRadioSeekButtons,
     // Expanded player
     setExpandedPlayerVisible,
     isExpandedPlayerVisible,
