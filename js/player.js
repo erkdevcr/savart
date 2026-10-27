@@ -53,6 +53,8 @@ const Player = (() => {
   let _activeDownloadCtrl = null; // AbortController for the in-flight main download
   let _fastStartActive    = false; // true while playing a partial (head) blob; full download pending
   let _radioErrorRetries  = 0;     // consecutive reconnect attempts for a live radio stream
+  let _radioConnecting    = false; // true while _playCurrentTrack's fallback-URL loop is actively
+                                    // trying to connect a radio stream — see _handleAudioError
   let _radioMetaWatcher   = null;  // { stop() } handle from IcyMetadata.watch, or null
   let _radioMetaUrl       = null;  // the stream URL the current watcher is attached to
   let _lastRadioStreamUrl = null;  // the stream URL _radioAudio is currently connected to
@@ -1189,8 +1191,9 @@ const Player = (() => {
         }
         const _streamUrls = [item.url, ...(item.urls || [])].filter(Boolean);
         let _connected = false;
+        _radioConnecting = true;
         for (const streamUrl of _streamUrls) {
-          if (myCtrl.signal.aborted) return;
+          if (myCtrl.signal.aborted) { _radioConnecting = false; return; }
           try {
             _lastRadioStreamUrl = streamUrl;
             _radioAudio.src = streamUrl;
@@ -1206,9 +1209,30 @@ const Player = (() => {
             console.warn('[Player] Radio stream failed, trying next URL:', streamUrl, streamErr);
           }
         }
+        _radioConnecting = false;
         if (_activeDownloadCtrl === myCtrl) _activeDownloadCtrl = null;
         if (!_connected) {
-          _onError({ type: 'audio', message: 'toast_audio_error', item });
+          // Every URL for this station failed on this attempt. A fair share
+          // of these are transient (slow handshake, a momentary redirect or
+          // 5xx) and resolve a second later — retry a couple of times before
+          // bothering the user. This used to be instead (also) handled by
+          // _handleAudioError reacting to the audio element's native 'error'
+          // event for the very same failure, racing this loop's own retry —
+          // that was the actual bug: a toast would fire here immediately
+          // while that OTHER retry was already about to succeed, producing a
+          // "false alarm" toast right before playback started. Now this loop
+          // is the sole owner of connect-phase failures (_handleAudioError
+          // ignores them while _radioConnecting is true — see there).
+          _radioErrorRetries++;
+          if (_radioErrorRetries <= 3) {
+            setTimeout(() => {
+              if (getCurrentTrack()?.id === item.id) _playCurrentTrack();
+            }, 1500);
+          } else {
+            _radioErrorRetries = 0;
+            _stopRadioMetaWatch();
+            _onError({ type: 'audio', message: 'toast_audio_error', item });
+          }
         }
         return;
       }
@@ -1697,6 +1721,7 @@ const Player = (() => {
     // Treat it like a connection drop and try to reconnect before giving up.
     const _endedTrack = getCurrentTrack();
     if (_endedTrack?.isRadio) {
+      if (_radioConnecting) return; // the connect-phase loop in _playCurrentTrack owns this attempt
       _radioErrorRetries++;
       if (_radioErrorRetries <= 3) {
         setTimeout(() => {
@@ -1748,8 +1773,17 @@ const Player = (() => {
     console.error('[Player] Audio error:', error);
     const _curTrack = getCurrentTrack();
     if (_curTrack?.isRadio) {
-      // Live stream dropped (network hiccup, server reset) — try reconnecting
-      // automatically (using the station's fallback URLs) before surfacing an error.
+      // While _playCurrentTrack's own fallback-URL loop is actively trying to
+      // connect (see _radioConnecting), it already owns retry/failure
+      // reporting for this attempt. A native 'error' event commonly fires
+      // once per failed .src attempt during that loop too — reacting to it
+      // here as well used to race the loop's own retry and could show a
+      // premature "playback error" toast moments before the connection
+      // actually succeeded.
+      if (_radioConnecting) return;
+      // Live stream dropped (network hiccup, server reset) while already
+      // playing — try reconnecting automatically (using the station's
+      // fallback URLs) before surfacing an error.
       _radioErrorRetries++;
       if (_radioErrorRetries <= 3) {
         setTimeout(() => {

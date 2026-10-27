@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.655';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.655 — Radio Emisoras: reproductor ahora muestra el logo de la emisora por defecto en la portada (antes nada); nuevo js/icy-metadata.js intenta en vivo (best-effort) leer título/artista real del stream (ICY metadata) y buscar su portada real via Last.fm — funciona solo cuando el servidor de la emisora lo permite (nunca en Zeno FM, la mayoría del catálogo)
+const APP_VERSION  = '3.5.656';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.656 — Radio Emisoras: searchbar de la pantalla Radio ahora reutiliza el mismo componente visual que Browse (.search-bar); fix: toast 'playback error' falso positivo al tocar una emisora — ya no compite con el reintento automático del propio stream
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
