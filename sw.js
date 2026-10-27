@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.652';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.652 — Radio Emisoras: logos reales (216/287 estaciones, via img/radio-logos/*.webp, con fallback al avatar circular de color si falla la carga); searchbar sticky en la pantalla Radio; fix: las emisoras ya no se guardan en recents/historial (Canciones recientes del Home / Historial / topPlayed) — son streams en vivo, no pistas de la librería
+const APP_VERSION  = '3.5.653';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.653 — Radio Emisoras: menú unificado de 3 puntos (reproductor + filas) con Pin to home / Add to favorites / Delete-o-Restaurar; nuevas pestañas Emisoras/Favoritas/Borradas encima de la searchbar en la pantalla Radio (estilo botones de libreria)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

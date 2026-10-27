@@ -7955,14 +7955,77 @@ body.queue-open #mini-player { z-index: 65; }
   border-top: 1px solid var(--border);
 }
 
-/* Radio screen: keep the search bar visible while scrolling the station list
-   (mirrors the .screen-header sticky treatment). Scoped to #screen-radio so the
-   Deep Scan artist search, which reuses .ds-artists-search-row, is unaffected. */
-#screen-radio .ds-artists-search-row {
+/* Radio screen: sticky toolbar wraps the Emisoras/Favoritas/Borradas tabs
+   row plus the search bar, so both stay visible while scrolling the station
+   list (mirrors the .screen-header sticky treatment). The search row itself
+   no longer needs its own sticky rule since the wrapper handles it. */
+.radio-toolbar {
   position: sticky;
   top: 0;
   z-index: 15;
   background: var(--bg-surface);
+}
+
+/* Radio screen: Emisoras/Favoritas/Borradas tabs, styled to match the
+   Library screen's .lib-tab "library buttons" look (see .lib-tab above),
+   laid out horizontally since the Radio screen is a single-pane layout. */
+.radio-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 16px 0;
+}
+.radio-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  user-select: none;
+  font-family: inherit;
+}
+.radio-tab svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  opacity: 0.65;
+  transition: opacity 0.15s;
+}
+.radio-tab:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.radio-tab:hover svg { opacity: 1; }
+.radio-tab.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.radio-tab.active svg { opacity: 1; }
+
+/* Count badge inside each radio tab */
+.radio-tab-count {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--bg-hover);
+  border-radius: 8px;
+  padding: 1px 5px;
+  line-height: 1.5;
+  min-width: 18px;
+  text-align: center;
+  display: none; /* hidden until a count is set */
+}
+.radio-tab-count:not(:empty) { display: inline-block; }
+.radio-tab.active .radio-tab-count {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  color: var(--accent);
 }
 .ds-artists-search-icon { color: var(--text-disabled); flex-shrink: 0; }
 .ds-artists-search-input {

@@ -891,10 +891,21 @@ const DB = (() => {
     return Object.values(meta);
   }
 
-  /* ── Radio Emisoras (favoritos + ocultas, local-only por dispositivo) ── */
+  /* ── Radio Emisoras (pin a inicio + favoritas de Radio + borradas, local-only
+       por dispositivo) ──────────────────────────────────────────────────────
+       v3.5.653 — Terminología UI vs. nombres internos (no renombrados para no
+       romper datos ya guardados):
+         - "Pin to home"      → radioFavorites / radioFavoritesMeta / toggleRadioFavorite
+                                 (agrega la emisora a la sección "Emisoras" del Home)
+         - "Add to favorites" → radioScreenFavorites / toggleRadioScreenFavorite
+                                 (NUEVO — alimenta la pestaña "Favoritas" dentro de
+                                 la propia pantalla de Radio, no toca el Home)
+         - "Delete"           → radioHidden / hideRadioStation (ahora visible en la
+                                 pestaña "Borradas", ya no desaparece para siempre)
+         - "Restore"          → restoreRadioStation (NUEVO — deshace el Delete)      */
 
   /**
-   * Get favorited radio station IDs.
+   * Get favorited ("pinned to home") radio station IDs.
    * @returns {Promise<string[]>}
    */
   async function getRadioFavorites() {
@@ -902,9 +913,9 @@ const DB = (() => {
   }
 
   /**
-   * Toggle a station's favorite status (pins/unpins it to the Home "Emisoras" section).
+   * Toggle a station's "Pin to home" status (pins/unpins it to the Home "Emisoras" section).
    * @param {{ id, name, city? }} station
-   * @returns {Promise<boolean>} true if now favorited, false if removed
+   * @returns {Promise<boolean>} true if now pinned, false if removed
    */
   async function toggleRadioFavorite(station) {
     const favs = await getRadioFavorites();
@@ -931,8 +942,8 @@ const DB = (() => {
   }
 
   /**
-   * Get full favorited station objects for the Home "Emisoras" section,
-   * most recently favorited first.
+   * Get full pinned station objects for the Home "Emisoras" section,
+   * most recently pinned first.
    * @returns {Promise<Object[]>}
    */
   async function getRadioFavoriteStations() {
@@ -941,7 +952,37 @@ const DB = (() => {
   }
 
   /**
-   * Get hidden (removed) station IDs. One-way hide per spec — no un-hide UI.
+   * Get "Add to favorites" station IDs — these feed the Radio screen's own
+   * "Favoritas" tab and never touch the Home section. Just IDs: display data
+   * (name, city, stream URL, logo…) always comes from the static catalog
+   * (RadioStations.STATIONS), the single source of truth.
+   * @returns {Promise<string[]>}
+   */
+  async function getRadioScreenFavorites() {
+    return (await getState('radioScreenFavorites')) || [];
+  }
+
+  /**
+   * Toggle a station's "Add to favorites" status (Radio screen's "Favoritas" tab).
+   * @param {string} id
+   * @returns {Promise<boolean>} true if now favorited, false if removed
+   */
+  async function toggleRadioScreenFavorite(id) {
+    const favs = await getRadioScreenFavorites();
+    const idx  = favs.indexOf(id);
+    if (idx === -1) {
+      favs.push(id);
+      await setState('radioScreenFavorites', favs);
+      return true;
+    } else {
+      favs.splice(idx, 1);
+      await setState('radioScreenFavorites', favs);
+      return false;
+    }
+  }
+
+  /**
+   * Get hidden ("deleted") station IDs — shown in the Radio screen's "Borradas" tab.
    * @returns {Promise<string[]>}
    */
   async function getRadioHidden() {
@@ -949,7 +990,9 @@ const DB = (() => {
   }
 
   /**
-   * Hide a station from the Radio list (also removes it from favorites, if any).
+   * Hide ("delete") a station — moves it to the "Borradas" tab and clears it from
+   * both "Pin to home" and "Add to favorites", mirroring how a deleted item drops
+   * out of every other list.
    * @param {string} id
    */
   async function hideRadioStation(id) {
@@ -964,6 +1007,25 @@ const DB = (() => {
       delete meta[id];
       await setState('radioFavorites', favs.filter(f => f !== id));
       await setState('radioFavoritesMeta', meta);
+    }
+    const screenFavs = await getRadioScreenFavorites();
+    if (screenFavs.includes(id)) {
+      await setState('radioScreenFavorites', screenFavs.filter(f => f !== id));
+    }
+  }
+
+  /**
+   * Restore a previously deleted station — removes it from "Borradas" so it
+   * reappears in "Emisoras". Does not restore any pin/favorite it had before
+   * being deleted; the user re-adds those if they still want them.
+   * @param {string} id
+   */
+  async function restoreRadioStation(id) {
+    const hidden = await getRadioHidden();
+    const idx = hidden.indexOf(id);
+    if (idx !== -1) {
+      hidden.splice(idx, 1);
+      await setState('radioHidden', hidden);
     }
   }
 
@@ -1477,8 +1539,11 @@ const DB = (() => {
     getRadioFavorites,
     toggleRadioFavorite,
     getRadioFavoriteStations,
+    getRadioScreenFavorites,
+    toggleRadioScreenFavorite,
     getRadioHidden,
     hideRadioStation,
+    restoreRadioStation,
     // Rescan
     clearEnrichment,
     clearManualOverrides,

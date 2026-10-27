@@ -81,6 +81,7 @@ const UI = (() => {
       ctx_pin_to_home:    'Agregar a inicio',
       ctx_radio_add_fav:    'Añadir a favoritos',
       ctx_radio_remove_fav: 'Quitar de favoritos',
+      ctx_radio_restore:    'Restaurar',
       ctx_unpin_from_home:'Eliminar de inicio',
       ctx_remove_from_pl:    'Eliminar de playlist',
       ctx_remove_top_played: 'Quitar de más reproducidas',
@@ -92,9 +93,16 @@ const UI = (() => {
       ctx_mark_fav:       'Marcar favorita',
       radio_search_placeholder: 'Buscar emisora…',
       radio_live:               'EN VIVO',
+      radio_tab_favorites:      'Favoritas',
+      radio_tab_deleted:        'Borradas',
+      empty_radio_favorites:    'Aún no tienes emisoras favoritas.',
+      empty_radio_deleted:      'No hay emisoras borradas.',
       toast_radio_fav_added:    'Añadida a favoritos',
       toast_radio_fav_removed:  'Quitada de favoritos',
       toast_radio_removed:      'Emisora eliminada',
+      toast_radio_pin_added:    'Fijada en inicio',
+      toast_radio_pin_removed:  'Quitada de inicio',
+      toast_radio_restored:     'Emisora restaurada',
       // ── Queue actions ──────────────────────────────────────
       play_next: 'A continuación',
       play_after:'Después',
@@ -548,6 +556,7 @@ const UI = (() => {
       ctx_pin_to_home:    'Add to home',
       ctx_radio_add_fav:    'Add to favorites',
       ctx_radio_remove_fav: 'Remove from favorites',
+      ctx_radio_restore:    'Restore',
       ctx_unpin_from_home:'Remove from home',
       ctx_remove_from_pl:    'Remove from playlist',
       ctx_remove_top_played: 'Remove from most played',
@@ -559,9 +568,16 @@ const UI = (() => {
       ctx_mark_fav:       'Mark as favorite',
       radio_search_placeholder: 'Search station…',
       radio_live:               'LIVE',
+      radio_tab_favorites:      'Favorites',
+      radio_tab_deleted:        'Deleted',
+      empty_radio_favorites:    'You don\'t have any favorite stations yet.',
+      empty_radio_deleted:      'No deleted stations.',
       toast_radio_fav_added:    'Added to favorites',
       toast_radio_fav_removed:  'Removed from favorites',
       toast_radio_removed:      'Station removed',
+      toast_radio_pin_added:    'Pinned to home',
+      toast_radio_pin_removed:  'Removed from home',
+      toast_radio_restored:     'Station restored',
       // ── Queue actions ──────────────────────────────────────
       play_next: 'Play next',
       play_after:'Play later',
@@ -1850,7 +1866,7 @@ const UI = (() => {
    * Render the Radio screen's station list (filtered/all).
    * @param {Object[]} stations - station objects { id, name, city, url, urls, isFavorite }
    */
-  function renderRadioList(stations) {
+  function renderRadioList(stations, { emptyMessage } = {}) {
     const container = document.getElementById('radio-list');
     if (!container) return;
     container.innerHTML = '';
@@ -1859,7 +1875,9 @@ const UI = (() => {
       const empty = document.createElement('div');
       empty.className = 'home-section-empty';
       empty.style.padding = '32px 16px';
-      empty.textContent = t('no_results');
+      // Per-tab message (e.g. "Favoritas"/"Borradas" vacías) when given,
+      // otherwise the generic "no results" message (used by "Emisoras" + search).
+      empty.textContent = emptyMessage || t('no_results');
       container.appendChild(empty);
       return;
     }
@@ -2635,6 +2653,7 @@ const UI = (() => {
     const _iconAlbum      = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 14.5c-2.49 0-4.5-2.01-4.5-4.5S9.51 7.5 12 7.5s4.5 2.01 4.5 4.5-2.01 4.5-4.5 4.5zm0-5.5c-.55 0-1 .45-1 1s.45 1 1 1 1-.45 1-1-.45-1-1-1z"/></svg>`;
     const _iconCollection = `<svg width="16" height="14" viewBox="0 0 361.54 315.2" fill="currentColor"><path d="M136.81,41.58C61.25,41.58,0,102.83,0,178.39s61.25,136.81,136.81,136.81,136.81-61.25,136.81-136.81S212.37,41.58,136.81,41.58ZM136.81,239.6c-33.8,0-61.21-27.4-61.21-61.21s27.4-61.21,61.21-61.21,61.21,27.4,61.21,61.21-27.4,61.21-61.21,61.21ZM136.81,191.78c-7.39,0-13.39-5.99-13.39-13.39s5.99-13.39,13.39-13.39,13.39,5.99,13.39,13.39-5.99,13.39-13.39,13.39ZM361.54,126.94c0,54.17-33.93,100.4-81.69,118.63,9.59-20.39,14.96-43.16,14.96-67.18,0-78.52-57.28-143.65-132.33-155.91C182.95,8.31,207.8,0,234.6,0c70.11,0,126.94,56.83,126.94,126.94Z"/></svg>`;
     const _iconSdDownload = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>`;
+    const _iconRestore    = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg>`;
 
     if (type === 'song') {
       const isSd = !!item.isSoundrop;
@@ -2933,16 +2952,28 @@ const UI = (() => {
     }
 
     // ── Radio Emisoras menus ─────────────────────────────────────
+    // Same 3 actions everywhere a station's 3-dot appears (Radio list rows AND
+    // the player's 3-dot while a station is playing — see btn-pexp-more(-hdr)
+    // in app.js, which resolves the current station via getRadioStationForMenu
+    // before calling showContextMenu with this same 'radio_station' type).
 
     if (type === 'radio_station') {
-      _addCtxItem(menu, iconStar(14), item.isFavorite ? t('ctx_radio_remove_fav') : t('ctx_radio_add_fav'),
+      _addCtxItem(menu, iconPin(14), item.isPinned ? t('ctx_unpin_from_home') : t('ctx_pin_to_home'),
         () => { App.onToggleRadioFavorite?.(item); hideContextMenu(); });
+      _addCtxItem(menu, iconStar(14), item.isScreenFavorite ? t('ctx_radio_remove_fav') : t('ctx_radio_add_fav'),
+        () => { App.onToggleRadioScreenFavorite?.(item); hideContextMenu(); });
       _addCtxDivider(menu);
-      _addCtxItem(menu, iconTrash(14), t('ctx_delete'), () => { App.onHideRadioStation?.(item); hideContextMenu(); });
+      // "Borradas" tab: Delete doesn't apply to an already-deleted station — offer
+      // Restore instead so there is a way back to "Emisoras".
+      if (item.isHidden) {
+        _addCtxItem(menu, _iconRestore, t('ctx_radio_restore'), () => { App.onRestoreRadioStation?.(item); hideContextMenu(); });
+      } else {
+        _addCtxItem(menu, iconTrash(14), t('ctx_delete'), () => { App.onHideRadioStation?.(item); hideContextMenu(); });
+      }
     }
 
     if (type === 'home_station') {
-      _addCtxItem(menu, iconPin(14), t('ctx_radio_remove_fav'), () => { App.onToggleRadioFavorite?.(item); hideContextMenu(); });
+      _addCtxItem(menu, iconPin(14), t('ctx_unpin_from_home'), () => { App.onToggleRadioFavorite?.(item); hideContextMenu(); });
     }
 
     // Position menu near cursor — measure actual rendered size to avoid overflow

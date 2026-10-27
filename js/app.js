@@ -17,7 +17,10 @@ const App = (() => {
 
   /* ── Browse state ────────────────────────────────────────── */
   let _breadcrumb      = [];    // [{ id, name }] from root to current
-  let _radioStations   = [];    // in-memory catalog for the Radio screen (hidden filtered out, isFavorite stamped)
+  let _radioStations   = [];    // in-memory catalog for the Radio screen — ALL stations (hidden
+                                 // included), each stamped isPinned/isScreenFavorite/isHidden;
+                                 // _radioTab picks which subset is actually shown
+  let _radioTab        = 'all'; // 'all' (Emisoras) | 'favorites' (Favoritas) | 'deleted' (Borradas)
   let _rootFolderId    = 'root';
   let _rootFolderName  = CONFIG.ROOT_FOLDER_NAME; // overridden by localStorage if user changed it
   let _browseFolderId  = null;  // current open folder id (for rescan)
@@ -14848,28 +14851,63 @@ const App = (() => {
 
   /* ── Radio Emisoras ──────────────────────────────────────── */
 
-  /** Load the station catalog (hidden filtered out, favorites stamped) and render it. */
+  /** Load the station catalog — ALL stations, hidden included — stamped with
+   *  isPinned / isScreenFavorite / isHidden, and render the current tab. */
   async function _loadRadioData() {
-    const [hidden, favIds] = await Promise.all([DB.getRadioHidden(), DB.getRadioFavorites()]);
-    const hiddenSet = new Set(hidden);
-    const favSet    = new Set(favIds);
-    const all       = (typeof RadioStations !== 'undefined') ? RadioStations.STATIONS : [];
+    const [hidden, favIds, screenFavIds] = await Promise.all([
+      DB.getRadioHidden(), DB.getRadioFavorites(), DB.getRadioScreenFavorites(),
+    ]);
+    const hiddenSet    = new Set(hidden);
+    const favSet       = new Set(favIds);
+    const screenFavSet = new Set(screenFavIds);
+    const all          = (typeof RadioStations !== 'undefined') ? RadioStations.STATIONS : [];
     _radioStations = all
-      .filter(s => !hiddenSet.has(s.id))
-      .map(s => ({ ...s, isFavorite: favSet.has(s.id) }))
+      .map(s => ({
+        ...s,
+        isPinned:         favSet.has(s.id),
+        isScreenFavorite: screenFavSet.has(s.id),
+        isHidden:         hiddenSet.has(s.id),
+      }))
       .sort((a, b) => a.name.localeCompare(b.name, 'es'));
     _renderRadioFiltered();
+    _updateRadioTabCounts();
     _wireRadioSearch();
+    _wireRadioTabs();
   }
 
-  /** Re-render the Radio list applying the current search term. */
+  /** Stations belonging to a given Radio tab (before the search filter is applied). */
+  function _radioStationsForTab(tab) {
+    if (tab === 'favorites') return _radioStations.filter(s => s.isScreenFavorite && !s.isHidden);
+    if (tab === 'deleted')   return _radioStations.filter(s => s.isHidden);
+    return _radioStations.filter(s => !s.isHidden); // 'all' → Emisoras
+  }
+
+  /** Re-render the Radio list applying the current tab + search term. */
   function _renderRadioFiltered() {
     const searchInput = document.getElementById('radio-search-input');
     const q = norm(searchInput?.value || '');
+    const tabStations = _radioStationsForTab(_radioTab);
     const filtered = q
-      ? _radioStations.filter(s => norm(s.name).includes(q) || norm(s.city || '').includes(q))
-      : _radioStations;
-    UI.renderRadioList(filtered);
+      ? tabStations.filter(s => norm(s.name).includes(q) || norm(s.city || '').includes(q))
+      : tabStations;
+    const emptyMessage =
+      _radioTab === 'favorites' ? UI.t('empty_radio_favorites') :
+      _radioTab === 'deleted'   ? UI.t('empty_radio_deleted')   :
+      undefined; // 'all' falls back to UI.renderRadioList's generic no_results message
+    UI.renderRadioList(filtered, { emptyMessage });
+  }
+
+  /** Update the Emisoras / Favoritas / Borradas tab count chips. */
+  function _updateRadioTabCounts() {
+    const elAll = document.getElementById('radio-tab-count-all');
+    const elFav = document.getElementById('radio-tab-count-favorites');
+    const elDel = document.getElementById('radio-tab-count-deleted');
+    const countAll = _radioStations.filter(s => !s.isHidden).length;
+    const countFav = _radioStations.filter(s => s.isScreenFavorite && !s.isHidden).length;
+    const countDel = _radioStations.filter(s => s.isHidden).length;
+    if (elAll) elAll.textContent = countAll > 0 ? String(countAll) : '';
+    if (elFav) elFav.textContent = countFav > 0 ? String(countFav) : '';
+    if (elDel) elDel.textContent = countDel > 0 ? String(countDel) : '';
   }
 
   /** Wire the Radio screen's search bar (idempotent via data attribute). */
@@ -14889,6 +14927,22 @@ const App = (() => {
         _renderRadioFiltered();
       });
     }
+  }
+
+  /** Wire the Emisoras / Favoritas / Borradas tab buttons (idempotent via data attribute). */
+  function _wireRadioTabs() {
+    const tabs = document.getElementById('radio-tabs');
+    if (!tabs || tabs.dataset.wired) return;
+    tabs.dataset.wired = '1';
+    tabs.querySelectorAll('.radio-tab').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tab = btn.dataset.tab;
+        if (tab === _radioTab) return;
+        _radioTab = tab;
+        tabs.querySelectorAll('.radio-tab').forEach(b => b.classList.toggle('active', b === btn));
+        _renderRadioFiltered();
+      });
+    });
   }
 
   /** Play a radio station immediately — direct stream, bypasses Drive/Soundrop. */
@@ -14912,23 +14966,69 @@ const App = (() => {
     Player.setQueue([track], 0);
   }
 
-  /** Toggle a station's favorite status (pins/unpins it to Home's "Emisoras" section). */
+  /** Resolve a station's current Pin/Favorite/Hidden flags for the player's 3-dot
+   *  menu — the currently playing track object only carries playback fields (see
+   *  onRadioStationClick above), so look the rest up fresh rather than trusting it. */
+  async function getRadioStationForMenu(id) {
+    const cached = _radioStations.find(s => s.id === id);
+    if (cached) return cached; // already stamped by _loadRadioData — cheap path
+    const catalog = (typeof RadioStations !== 'undefined') ? RadioStations.STATIONS : [];
+    const base = catalog.find(s => s.id === id);
+    if (!base) return null;
+    const [hidden, favIds, screenFavIds] = await Promise.all([
+      DB.getRadioHidden(), DB.getRadioFavorites(), DB.getRadioScreenFavorites(),
+    ]);
+    return {
+      ...base,
+      isPinned:         favIds.includes(id),
+      isScreenFavorite: screenFavIds.includes(id),
+      isHidden:         hidden.includes(id),
+    };
+  }
+
+  /** Toggle a station's "Pin to home" status (pins/unpins it to Home's "Emisoras" section). */
   async function onToggleRadioFavorite(station) {
-    const nowFav = await DB.toggleRadioFavorite(station);
-    UI.showToast(nowFav ? UI.t('toast_radio_fav_added') : UI.t('toast_radio_fav_removed'));
+    const nowPinned = await DB.toggleRadioFavorite(station);
+    UI.showToast(nowPinned ? UI.t('toast_radio_pin_added') : UI.t('toast_radio_pin_removed'));
     const idx = _radioStations.findIndex(s => s.id === station.id);
-    if (idx !== -1) _radioStations[idx] = { ..._radioStations[idx], isFavorite: nowFav };
+    if (idx !== -1) _radioStations[idx] = { ..._radioStations[idx], isPinned: nowPinned };
     _renderRadioFiltered();
     _loadHomeData();
   }
 
-  /** Hide a station from the Radio list (one-way per spec — also unfavorites it). */
+  /** Toggle a station's "Add to favorites" status — Radio screen's own "Favoritas"
+   *  tab; unlike "Pin to home" this never touches the Home section. */
+  async function onToggleRadioScreenFavorite(station) {
+    const nowFav = await DB.toggleRadioScreenFavorite(station.id);
+    UI.showToast(nowFav ? UI.t('toast_radio_fav_added') : UI.t('toast_radio_fav_removed'));
+    const idx = _radioStations.findIndex(s => s.id === station.id);
+    if (idx !== -1) _radioStations[idx] = { ..._radioStations[idx], isScreenFavorite: nowFav };
+    _renderRadioFiltered();
+    _updateRadioTabCounts();
+  }
+
+  /** Delete a station — moves it to the Radio screen's "Borradas" tab (also clears
+   *  its Pin-to-home and Add-to-favorites status, mirroring DB.hideRadioStation). */
   async function onHideRadioStation(station) {
     await DB.hideRadioStation(station.id);
     UI.showToast(UI.t('toast_radio_removed'));
-    _radioStations = _radioStations.filter(s => s.id !== station.id);
+    const idx = _radioStations.findIndex(s => s.id === station.id);
+    if (idx !== -1) {
+      _radioStations[idx] = { ..._radioStations[idx], isHidden: true, isPinned: false, isScreenFavorite: false };
+    }
     _renderRadioFiltered();
+    _updateRadioTabCounts();
     _loadHomeData();
+  }
+
+  /** Restore a deleted station from the "Borradas" tab back to "Emisoras". */
+  async function onRestoreRadioStation(station) {
+    await DB.restoreRadioStation(station.id);
+    UI.showToast(UI.t('toast_radio_restored'));
+    const idx = _radioStations.findIndex(s => s.id === station.id);
+    if (idx !== -1) _radioStations[idx] = { ..._radioStations[idx], isHidden: false };
+    _renderRadioFiltered();
+    _updateRadioTabCounts();
   }
 
   function onNavClick(viewId) {
@@ -15890,10 +15990,18 @@ const App = (() => {
     document.getElementById('btn-pexp-close')?.addEventListener('click', _closeExpandedPlayer);
 
     // Expanded player: 3-dot button → context menu for current track
-    document.getElementById('btn-pexp-more')?.addEventListener('click', (e) => {
+    // (blue 3-dot) — a radio stream gets the same Pin to home / Add to favorites /
+    // Delete-or-Restore menu as the Radio screen's rows, not the song menu.
+    document.getElementById('btn-pexp-more')?.addEventListener('click', async (e) => {
       e.stopPropagation();
       const track = Player.getCurrentTrack();
-      if (track) UI.showContextMenu(e, 'player_song', track);
+      if (!track) return;
+      if (track.isRadio) {
+        const station = await getRadioStationForMenu(track.id);
+        if (station) UI.showContextMenu(e, 'radio_station', station);
+      } else {
+        UI.showContextMenu(e, 'player_song', track);
+      }
     });
 
     // pexp-album and mini-artist clicks intentionally removed — no navigation on name tap
@@ -16025,12 +16133,17 @@ const App = (() => {
 
     // Expanded player: ⋮ more options (desktop header) → same menu as mobile topbar
     // Uses anchorRect so the menu right-aligns to the button, 25px below it.
-    document.getElementById('btn-pexp-more-hdr')?.addEventListener('click', (e) => {
+    document.getElementById('btn-pexp-more-hdr')?.addEventListener('click', async (e) => {
       e.stopPropagation();
       const track = Player.getCurrentTrack();
+      if (!track) return;
       const rect  = e.currentTarget.getBoundingClientRect();
-      if (track) UI.showContextMenu(e, 'player_song', track,
-        { anchorRect: rect, anchorGap: 25 });
+      if (track.isRadio) {
+        const station = await getRadioStationForMenu(track.id);
+        if (station) UI.showContextMenu(e, 'radio_station', station, { anchorRect: rect, anchorGap: 25 });
+      } else {
+        UI.showContextMenu(e, 'player_song', track, { anchorRect: rect, anchorGap: 25 });
+      }
     });
 
     // ── Soundrop download buttons (expanded + mini) ───────────
@@ -17765,8 +17878,11 @@ const App = (() => {
     onNavClick,
     // Radio Emisoras
     onRadioStationClick,
+    getRadioStationForMenu,
     onToggleRadioFavorite,
+    onToggleRadioScreenFavorite,
     onHideRadioStation,
+    onRestoreRadioStation,
     // Settings
     onLogout,
     onLanguageChange,
