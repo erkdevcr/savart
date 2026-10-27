@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.650';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.650 — nueva feature "Radio Emisoras": catalogo de ~287 emisoras CR con stream directo, favoritos pinneados en Home (seccion Emisoras) y ocultar emisoras; boton Settings movido al header
+const APP_VERSION  = '3.5.651';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.651 — fix: Radio Emisoras no sonaba — las emisoras pasaban por el mismo elemento <audio> conectado al grafo Web Audio (EQ/compresor), y Chrome silencia cualquier audio cross-origin sin CORS una vez pasa por un MediaElementAudioSourceNode. Ahora usan un <audio> dedicado (_radioAudio) fuera del grafo
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

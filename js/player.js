@@ -22,6 +22,9 @@ const Player = (() => {
   /* ── State ──────────────────────────────────────────────── */
   let _audio        = null;      // HTMLAudioElement — Drive tracks (Web Audio graph)
   let _sdActive      = false;    // true while a Soundrop track is playing
+  let _radioActive   = false;    // true while a Radio Emisoras live stream is playing
+  let _radioAudio    = null;     // dedicated HTMLAudioElement for radio — NEVER connected to
+                                  // the Web Audio graph (see isRadio branch in _playCurrentTrack)
   let _sdPlaySession = 0;        // incremented on each SD play attempt
   let _sdLockedPause = false;    // true when YT auto-paused due to screen lock (not user action)
   let _sdUserPausing = false;    // true when pause() was called by the user (distinguishes from YT auto-pause)
@@ -165,6 +168,40 @@ const Player = (() => {
         const item = _queue[_queueIndex];
         if (item) _onDurationReady(item, _audio.duration);
       }
+    });
+
+    // ── Radio Emisoras: dedicated audio element ──────────────────────────
+    // Deliberately NOT connected to the Web Audio graph (_audioCtx /
+    // createMediaElementSource) — see the long comment in _playCurrentTrack's
+    // isRadio branch for why (CORS-less cross-origin media goes silent once
+    // routed through a MediaElementAudioSourceNode). It shares the keepalive /
+    // MediaSession / interruption-recovery logic below via _getAudio(), since
+    // those already key off whichever element _getAudio() returns.
+    _radioAudio = new Audio();
+    _radioAudio.preload    = 'none';
+    _radioAudio.playsInline = true;
+    _radioAudio.addEventListener('play', () => {
+      _onPlayPause(true);
+      _msSetPlaybackState('playing');
+    });
+    _radioAudio.addEventListener('pause', () => {
+      _onPlayPause(false);
+      _msSetPlaybackState('paused');
+      if (!_sdUserPausing && !_radioAudio.ended) {
+        _pausedByInterruption = true;
+        // Same fix as the Drive path (v3.5.649): restart the silent keepalive
+        // immediately — a BT "noisy" disconnect can pause ALL active audio,
+        // keepalive included, which would otherwise let Chrome freeze the
+        // backgrounded tab before the reconnect's hardware play arrives.
+        _keepAliveStop();
+        _keepAliveStart();
+      }
+    });
+    _radioAudio.addEventListener('ended', _handleEnded);
+    _radioAudio.addEventListener('error', _handleAudioError);
+    _radioAudio.addEventListener('timeupdate', () => {
+      _onProgress(_radioAudio.currentTime, _radioAudio.duration || Infinity);
+      _msUpdatePositionState();
     });
 
     document.addEventListener('visibilitychange', () => {
@@ -471,7 +508,7 @@ const Player = (() => {
    * Soundrop tracks use _ytProxy (YouTube IFrame API) — no Worker requests on play.
    * Drive tracks use _audio (HTMLAudioElement, full Web Audio graph).
    */
-  function _getAudio() { return _sdActive ? _ytProxy : _audio; }
+  function _getAudio() { return _sdActive ? _ytProxy : (_radioActive ? _radioAudio : _audio); }
 
   function _initAudioGraph() {
     if (_audioCtx) return;
@@ -665,7 +702,7 @@ const Player = (() => {
     if (!_sdActive) _initAudioGraph();
     if (el.paused) {
       // No content loaded yet — happens when queue is restored from saved state
-      if (!_sdActive && !_currentBlob) {
+      if (!_sdActive && !_radioActive && !_currentBlob) {
         await _playCurrentTrack();
         return;
       }
@@ -837,6 +874,9 @@ const Player = (() => {
     if (_sdActive && typeof Soundrop !== 'undefined') {
       try { Soundrop.yt.setVolume(_volume); } catch (_) {}
     }
+    // Radio Emisoras: _radioAudio bypasses the Web Audio graph entirely —
+    // apply the master volume directly on the element.
+    if (_radioAudio) _radioAudio.volume = _volume;
   }
 
   function getVolume() { return _volume; }
@@ -1106,13 +1146,27 @@ const Player = (() => {
     if (myCtrl.signal.aborted) return; // switched during onBeforePlay
 
     try {
+      // Tear down a previously-active radio stream whenever the upcoming track is
+      // NOT radio — _radioAudio is a fully separate <audio> element (see below) and
+      // never stops itself when another track type takes over.
+      if (!item.isRadio && _radioActive) {
+        _radioActive = false;
+        if (_radioAudio) { _radioAudio.pause(); _radioAudio.src = ''; }
+      }
+
       // ── Radio Emisoras: live stream ───────────────────────────
-      // Bypasses the Soundrop/Drive blob-fetch paths entirely — sets _audio.src
-      // directly to the station's stream URL and reuses the same play()/keepalive/
-      // MediaSession pipeline those paths use, so mini-player/expanded-player/lock-
-      // screen controls all work with no extra plumbing.
+      // Plays through a DEDICATED <audio> element (_radioAudio) that is NEVER
+      // connected to the Web Audio graph (_audioCtx/createMediaElementSource).
+      // Reason: most free radio streams (Shoutcast/Icecast/StreamTheWorld, etc.)
+      // don't send CORS headers, and Chrome SILENTLY MUTES any cross-origin
+      // media once it's routed through a MediaElementAudioSourceNode — the URL
+      // plays fine standalone (browser tab, VLC) but is dead silent once wired
+      // into the EQ/compressor graph used for Drive tracks. _radioAudio bypasses
+      // that entirely (no EQ for live radio — a reasonable trade-off), while still
+      // sharing the same keepalive/MediaSession/lock-screen pipeline via _getAudio().
       if (item.isRadio) {
-        _sdActive = false;
+        if (_sdActive) { _sdActive = false; Soundrop.yt.stop(); }
+        _radioActive = true;
         if (_currentBlob) {
           _audio.src = '';
           URL.revokeObjectURL(_currentBlob);
@@ -1123,15 +1177,12 @@ const Player = (() => {
         for (const streamUrl of _streamUrls) {
           if (myCtrl.signal.aborted) return;
           try {
-            _audio.src = streamUrl;
-            _audio.playbackRate = 1.0;
-            _initAudioGraph();
-            if (_audioCtx?.state === 'suspended') await _audioCtx.resume().catch(() => {});
+            _radioAudio.src = streamUrl;
+            _radioAudio.volume = _volume;
             _keepAliveStart();
-            if (_audio.volume < 1.0) _audio.volume = 1.0;
             _msSetMetadata(item);
             _msSetPlaybackState('playing');
-            await _audio.play();
+            await _radioAudio.play();
             _connected = true;
             _radioErrorRetries = 0;
             break;
@@ -1626,6 +1677,24 @@ const Player = (() => {
   /* ── Event handlers ─────────────────────────────────────── */
 
   function _handleEnded() {
+    // Live radio stream closed cleanly (rare — most drops fire 'error' instead).
+    // Treat it like a connection drop and try to reconnect before giving up.
+    const _endedTrack = getCurrentTrack();
+    if (_endedTrack?.isRadio) {
+      _radioErrorRetries++;
+      if (_radioErrorRetries <= 3) {
+        setTimeout(() => {
+          if (getCurrentTrack()?.id === _endedTrack.id) _playCurrentTrack();
+        }, 1500);
+      } else {
+        _radioErrorRetries = 0;
+        _msSetPlaybackState('paused');
+        _onPlayPause?.(false);
+        _keepAliveStop();
+      }
+      return;
+    }
+
     // Resume AudioContext NOW — we are inside a trusted audio event context.
     // On Android with screen off, the AudioContext gets suspended between tracks.
     // Calling resume() here (synchronously, before any await) works because
