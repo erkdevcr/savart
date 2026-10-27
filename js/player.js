@@ -53,6 +53,9 @@ const Player = (() => {
   let _activeDownloadCtrl = null; // AbortController for the in-flight main download
   let _fastStartActive    = false; // true while playing a partial (head) blob; full download pending
   let _radioErrorRetries  = 0;     // consecutive reconnect attempts for a live radio stream
+  let _radioMetaWatcher   = null;  // { stop() } handle from IcyMetadata.watch, or null
+  let _radioMetaUrl       = null;  // the stream URL the current watcher is attached to
+  let _lastRadioStreamUrl = null;  // the stream URL _radioAudio is currently connected to
   let _fastStartWaiting   = false; // v3.5.641 (audit A2): true while _handleEnded is holding playback
                                     // waiting for the full-file swap — 'ended' already set audio.paused
                                     // to true, so wasPlaying below would read false and never resume.
@@ -86,6 +89,7 @@ const Player = (() => {
   let _onDurationReady  = null;  // (driveItem, durationSec) => void — fires on loadedmetadata with real duration
   let _onSdBlocked      = null;  // (sdItem) => void — YT bloqueó el embedding y no hay MP3 en cache: app muestra popup "Convertir y guardar"
   let _onSdAborted      = null;  // (prevItem) => void — SD load failed/cancelled, previous track restored
+  let _onRadioMetadata  = null;  // (title: string) => void — best-effort live "StreamTitle" from a radio stream (see icy-metadata.js)
 
   // Restore state: set when jumping to an SD track while a Drive track is playing.
   // Allows restoring the previous audio if the SD track fails to load.
@@ -104,7 +108,7 @@ const Player = (() => {
    * Call once on app startup.
    * @param {Object} callbacks
    */
-  function init({ onTrackChange, onPlayPause, onProgress, onQueueChange, onError, onBlobReady, onFullBlobReady, onBeforePlay, onDurationReady, onPreloadComplete, onSdBlocked, onSdAborted } = {}) {
+  function init({ onTrackChange, onPlayPause, onProgress, onQueueChange, onError, onBlobReady, onFullBlobReady, onBeforePlay, onDurationReady, onPreloadComplete, onSdBlocked, onSdAborted, onRadioMetadata } = {}) {
     _onTrackChange    = onTrackChange    || (() => {});
     _onPlayPause      = onPlayPause      || (() => {});
     _onProgress       = onProgress       || (() => {});
@@ -117,6 +121,7 @@ const Player = (() => {
     _onPreloadComplete = onPreloadComplete || null;
     _onSdBlocked       = onSdBlocked       || null;
     _onSdAborted       = onSdAborted       || null;
+    _onRadioMetadata   = onRadioMetadata    || null;
 
     _audio = new Audio();
     _audio.preload    = 'auto';
@@ -183,10 +188,18 @@ const Player = (() => {
     _radioAudio.addEventListener('play', () => {
       _onPlayPause(true);
       _msSetPlaybackState('playing');
+      // Best-effort "now playing" metadata — see js/icy-metadata.js. Starting it
+      // here (rather than right after .play() succeeds) means a single code path
+      // covers the initial connect, resuming from pause, and every reconnect.
+      if (_radioActive && _lastRadioStreamUrl) _startRadioMetaWatch(_lastRadioStreamUrl);
     });
     _radioAudio.addEventListener('pause', () => {
       _onPlayPause(false);
       _msSetPlaybackState('paused');
+      // Stop polling for metadata while paused — no point spending bandwidth
+      // reading stream bytes nobody is listening to. Restarts via the 'play'
+      // listener above when playback resumes.
+      _stopRadioMetaWatch();
       if (!_sdUserPausing && !_radioAudio.ended) {
         _pausedByInterruption = true;
         // Same fix as the Drive path (v3.5.649): restart the silent keepalive
@@ -1152,6 +1165,8 @@ const Player = (() => {
       if (!item.isRadio && _radioActive) {
         _radioActive = false;
         if (_radioAudio) { _radioAudio.pause(); _radioAudio.src = ''; }
+        _stopRadioMetaWatch();
+        _lastRadioStreamUrl = null;
       }
 
       // ── Radio Emisoras: live stream ───────────────────────────
@@ -1177,6 +1192,7 @@ const Player = (() => {
         for (const streamUrl of _streamUrls) {
           if (myCtrl.signal.aborted) return;
           try {
+            _lastRadioStreamUrl = streamUrl;
             _radioAudio.src = streamUrl;
             _radioAudio.volume = _volume;
             _keepAliveStart();
@@ -1691,6 +1707,7 @@ const Player = (() => {
         _msSetPlaybackState('paused');
         _onPlayPause?.(false);
         _keepAliveStop();
+        _stopRadioMetaWatch();
       }
       return;
     }
@@ -1741,8 +1758,35 @@ const Player = (() => {
         return;
       }
       _radioErrorRetries = 0;
+      _stopRadioMetaWatch();
     }
     _onError({ type: 'audio', message: 'toast_audio_error', error });
+  }
+
+  /**
+   * Start (or re-point) the best-effort "now playing" metadata watcher for the
+   * currently-connected radio stream. No-op if already watching this exact URL.
+   * See js/icy-metadata.js for why this only works for a minority of stations.
+   */
+  function _startRadioMetaWatch(url) {
+    if (!url || typeof IcyMetadata === 'undefined') return;
+    if (_radioMetaWatcher && _radioMetaUrl === url) return; // already watching this one
+    _stopRadioMetaWatch();
+    _radioMetaUrl = url;
+    _radioMetaWatcher = IcyMetadata.watch(url, {
+      onTitle: (title) => {
+        if (_onRadioMetadata) { try { _onRadioMetadata(title); } catch (_) {} }
+      },
+      // onUnavailable: this stream doesn't support it (CORS/no icy-metaint/etc.) —
+      // IcyMetadata.watch already stops itself; nothing to do here but let the
+      // station logo keep showing, which is already the default.
+    });
+  }
+
+  function _stopRadioMetaWatch() {
+    if (_radioMetaWatcher) { try { _radioMetaWatcher.stop(); } catch (_) {} }
+    _radioMetaWatcher = null;
+    _radioMetaUrl = null;
   }
 
   /* ── Getters ────────────────────────────────────────────── */

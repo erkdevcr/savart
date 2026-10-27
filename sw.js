@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.653';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.653 — Radio Emisoras: menú unificado de 3 puntos (reproductor + filas) con Pin to home / Add to favorites / Delete-o-Restaurar; nuevas pestañas Emisoras/Favoritas/Borradas encima de la searchbar en la pantalla Radio (estilo botones de libreria)
+const APP_VERSION  = '3.5.654';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.654 — Radio Emisoras: limpieza de nombres (quitado el prefijo 'Zeno FM - ' de 76 estaciones, p.ej. 'Zeno FM - Rumba Radio' -> 'Rumba Radio')
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''
@@ -28,6 +28,7 @@ const SHELL_FILES = [
   `${BASE}/js/db.js`,
   `${BASE}/js/sync.js`,
   `${BASE}/js/player.js`,
+  `${BASE}/js/icy-metadata.js`,
   `${BASE}/js/meta.js`,
   `${BASE}/js/lastfm.js`,
   `${BASE}/js/audd.js`,

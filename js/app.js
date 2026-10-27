@@ -262,6 +262,7 @@ const App = (() => {
       onDurationReady: _onDurationReady,    // fires on loadedmetadata with accurate duration
       onSdBlocked:     _showSdBlockedModal, // YT bloqueó el embedding y no hay MP3 en cache → popup
       onSdAborted:     _onSdAborted,        // SD load cancelled/failed → restore previous Drive track
+      onRadioMetadata: _onRadioMetadata,    // best-effort live song title from the stream (see icy-metadata.js)
     });
 
     // 5. Init auth
@@ -14961,9 +14962,81 @@ const App = (() => {
       artist:       full.city || '',
       url:          full.url,
       urls:         full.urls || [],
-      thumbnailUrl: null,
+      // Default to the station's own logo — may be upgraded to a real song
+      // cover by _onRadioMetadata() if this stream happens to expose live
+      // "now playing" data (best-effort — see js/icy-metadata.js).
+      thumbnailUrl: full.logo || null,
+      // Station identity, kept separately from the fields above so they
+      // survive even after _onRadioMetadata() overwrites displayName/artist
+      // with a live song title.
+      stationName:  full.name,
+      stationCity:  full.city || '',
+      stationLogo:  full.logo || null,
     };
     Player.setQueue([track], 0);
+  }
+
+  /**
+   * Best-effort live "now playing" update for a radio stream — see
+   * js/icy-metadata.js for what this can and can't do and why. Fires at most
+   * once every ~25s per station, only for the minority of streams whose
+   * server exposes ICY metadata over a CORS-permitted connection.
+   *
+   * @param {string} rawTitle — the stream's raw StreamTitle text, usually
+   *   formatted "Artist - Song" (Shoutcast/Icecast convention) but not
+   *   guaranteed — some stations send just a title, a show name, or ad copy.
+   */
+  function _onRadioMetadata(rawTitle) {
+    const track = Player.getCurrentTrack();
+    if (!track || !track.isRadio || !rawTitle) return;
+
+    const title = rawTitle.trim();
+    if (!title) return;
+
+    // "Artist - Song" is the near-universal convention for this field —
+    // split on the first " - " and treat the rest as the title.
+    let parsedArtist = '';
+    let parsedTitle  = title;
+    const dashIdx = title.indexOf(' - ');
+    if (dashIdx > 0) {
+      parsedArtist = title.slice(0, dashIdx).trim();
+      parsedTitle  = title.slice(dashIdx + 3).trim();
+    }
+    if (!parsedTitle) return;
+
+    const patch = {
+      displayName: parsedTitle,
+      artist:      parsedArtist || track.stationName || track.name || '',
+      liveSong:    { title: parsedTitle, artist: parsedArtist }, // guards the cover lookup below
+    };
+    const isCurrent = Player.patchQueueItem(track.id, patch);
+    if (isCurrent) {
+      const refreshed = Player.getCurrentTrack();
+      const enriched  = _enrichTrack(refreshed);
+      UI.updateMiniPlayer(enriched, Player.isPlaying());
+      UI.updateExpandedPlayer(enriched, Player.isPlaying());
+    }
+
+    // Piggyback on the existing Last.fm cover lookup (same one used for
+    // library songs) instead of building a radio-specific cover source —
+    // it's a plain artist+title text lookup, no audio fingerprinting needed.
+    if (parsedArtist && parsedTitle && typeof Lastfm !== 'undefined') {
+      Lastfm.fetchCoverByTrack(parsedArtist, parsedTitle).then(coverUrl => {
+        if (!coverUrl) return;
+        const latest = Player.getCurrentTrack();
+        // Bail if the station changed, or a newer song already superseded
+        // this lookup, while the Last.fm request was in flight.
+        if (!latest || latest.id !== track.id) return;
+        if (latest.liveSong?.title !== parsedTitle || latest.liveSong?.artist !== parsedArtist) return;
+        const stillCurrent = Player.patchQueueItem(track.id, { thumbnailUrl: coverUrl });
+        if (stillCurrent) {
+          const refreshed2 = Player.getCurrentTrack();
+          const enriched2  = _enrichTrack(refreshed2);
+          UI.updateMiniPlayer(enriched2, Player.isPlaying());
+          UI.updateExpandedPlayer(enriched2, Player.isPlaying());
+        }
+      }).catch(() => {});
+    }
   }
 
   /** Resolve a station's current Pin/Favorite/Hidden flags for the player's 3-dot
