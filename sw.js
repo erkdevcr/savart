@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.654';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.654 — Radio Emisoras: limpieza de nombres (quitado el prefijo 'Zeno FM - ' de 76 estaciones, p.ej. 'Zeno FM - Rumba Radio' -> 'Rumba Radio')
+const APP_VERSION  = '3.5.655';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.655 — Radio Emisoras: reproductor ahora muestra el logo de la emisora por defecto en la portada (antes nada); nuevo js/icy-metadata.js intenta en vivo (best-effort) leer título/artista real del stream (ICY metadata) y buscar su portada real via Last.fm — funciona solo cuando el servidor de la emisora lo permite (nunca en Zeno FM, la mayoría del catálogo)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

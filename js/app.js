@@ -15004,12 +15004,21 @@ const App = (() => {
     }
     if (!parsedTitle) return;
 
+    const resolvedArtist = parsedArtist || track.stationName || track.name || '';
     const patch = {
       displayName: parsedTitle,
-      artist:      parsedArtist || track.stationName || track.name || '',
+      artist:      resolvedArtist,
       liveSong:    { title: parsedTitle, artist: parsedArtist }, // guards the cover lookup below
     };
     const isCurrent = Player.patchQueueItem(track.id, patch);
+    // _enrichTrack() prefers the Meta cache over track.* fields (it's the
+    // authoritative source for library songs, patched from the DB in
+    // _onTrackChange) — keep it in sync here too, or the station name/city
+    // cached when this station started playing would keep shadowing the
+    // live title/artist set above.
+    if (typeof Meta !== 'undefined') {
+      Meta.forcePatch(track.id, { title: parsedTitle, artist: resolvedArtist });
+    }
     if (isCurrent) {
       const refreshed = Player.getCurrentTrack();
       const enriched  = _enrichTrack(refreshed);
@@ -15029,6 +15038,9 @@ const App = (() => {
         if (!latest || latest.id !== track.id) return;
         if (latest.liveSong?.title !== parsedTitle || latest.liveSong?.artist !== parsedArtist) return;
         const stillCurrent = Player.patchQueueItem(track.id, { thumbnailUrl: coverUrl });
+        if (typeof Meta !== 'undefined') {
+          Meta.forcePatch(track.id, { coverUrl });
+        }
         if (stillCurrent) {
           const refreshed2 = Player.getCurrentTrack();
           const enriched2  = _enrichTrack(refreshed2);
