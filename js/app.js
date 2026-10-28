@@ -69,6 +69,7 @@ const App = (() => {
   // Debouncing prevents rapid successive calls from causing multiple full re-renders
   // of the home screen (which resets scroll position and causes visible flicker).
   let _loadHomeDebounceTimer = null;
+  let _homeRenderGen = 0; // fix H1: generación de render — un render viejo no pisa a uno más nuevo
   let _loadHomePendingResolvers = []; // resolvers de llamadas colapsadas por el debounce
   const _LOAD_HOME_DEBOUNCE_MS = 350;
 
@@ -5601,7 +5602,11 @@ const App = (() => {
     // Pass 0: persisted covers from IndexedDB — manual cover always wins, then blob, then external URL
     await Promise.allSettled(songs.map(async song => {
       try {
-        const dbMeta = await _getM(song.id);
+        // fix H3: el metaMap compartido se leyó al inicio del render; si la card no
+        // tiene cover todavía, relee de la DB (el cover pudo persistirse después).
+        const dbMeta = _homeCardHasCover(song.id)
+          ? await _getM(song.id)
+          : await DB.getMeta(song.id).catch(() => null);
         if (!dbMeta) return;
         // Manual cover wins over embedded ID3 art — user explicitly chose this URL.
         const hasManualUrl = (dbMeta.manualAt || 0) > 0
@@ -5630,6 +5635,12 @@ const App = (() => {
     // etiquetada 'id3', congelando la card con la portada equivocada.
     await Promise.allSettled(songs.map(async song => {
       const meta = Meta.getCached(song.id);
+      // fix H3: URL externa en la caché de sesión (la que ve el player) — solo
+      // rellena una card VACÍA; nunca pisa ni congela una portada ya pintada.
+      if (meta?.coverUrl && !meta.coverUrl.startsWith('blob:')) {
+        if (meta.coverUrl !== 'id3' && !_homeCardHasCover(song.id)) _updateHomeCardThumbnail(song.id, meta.coverUrl, false);
+        return;
+      }
       if (!meta?.coverUrl?.startsWith('blob:')) return;
       try {
         const dbMeta = await _getM(song.id).catch(() => null);
@@ -6160,6 +6171,7 @@ const App = (() => {
         }, _LOAD_HOME_DEBOUNCE_MS);
       });
     }
+    const _renderGen = ++_homeRenderGen;
     try {
       const [pinned, recents, topPlayedRaw, rawPlaylists, stationsRaw] = await Promise.all([
         DB.getPinnedFolders(),
@@ -6363,9 +6375,25 @@ const App = (() => {
       const displayPinned  = enrichedPinned.slice(0, 12);
       const displayRecents = enrichedRecents.slice(0, 24); // song-only filtering to 12 happens inside renderHome
 
+      // fix H1: si arrancó un render más nuevo mientras éste esperaba la DB, sus datos
+      // (leídos ANTES de que se persistiera el cover) quedarían pintados encima de
+      // los del render nuevo → card sin cover aunque el player ya lo muestre.
+      if (_renderGen !== _homeRenderGen) return;
+
       UI.renderHome({ pinned: displayPinned, recents: displayRecents, topPlayed, playlists: enrichedPlaylists, stations });
       // Re-mark the active row after renderHome creates fresh DOM nodes
       UI.setActiveSongRow(Player.getCurrentTrack()?.id ?? null);
+
+      // fix H2: lo que el player muestra, el Home también. La canción en reproducción
+      // ya tiene su portada resuelta en el player (Meta cache / track); si la card
+      // recién creada no la tiene, píntala ya — sin esperar a los passes del prefetch.
+      try {
+        const _curT = Player.getCurrentTrack();
+        if (_curT && !_curT.isRadio && !_homeCardHasCover(_curT.id)) {
+          const _curU = _enrichTrack(_curT)?.thumbnailUrl;
+          if (_curU && _curU !== 'id3') _updateHomeCardThumbnail(_curT.id, _curU, _curU.startsWith('blob:'));
+        }
+      } catch (_) { /* non-fatal */ }
 
       // Persist home data to localStorage so the next startup can paint instantly
       // before the DB is ready (stale-while-revalidate).
