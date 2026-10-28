@@ -8112,6 +8112,12 @@ body.radio-track-active .radio-seek-btn { display: flex; }
    one replaces (see .pexp-ctrl-btn, .mini-controls button, .mini-extra-btn,
    .dmp-btn above). */
 .pexp-controls .radio-seek-btn { width: 48px; height: 48px; }
+/* v3.5.667: en radio shuffle/repeat no aplican → se ocultan para ganar espacio, y el play
+   nunca se encoge (antes quedaba ovalado al agregar los botones −/+ 15/30 seg). */
+body.radio-track-active #btn-pexp-shuffle,
+body.radio-track-active #btn-pexp-repeat { display: none; }
+.pexp-controls .pexp-play-btn { flex-shrink: 0; }
+.pexp-controls .radio-seek-btn { flex-shrink: 1; min-width: 0; }
 #mini-player .mini-controls .radio-seek-btn { width: 34px; height: 32px; }
 #mini-player .mini-controls .radio-seek-btn .radio-seek-num { font-size: 11px; }
 #mini-player .mini-controls .radio-seek-btn .radio-seek-unit { font-size: 7px; }
