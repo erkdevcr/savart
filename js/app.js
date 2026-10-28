@@ -15092,6 +15092,7 @@ const App = (() => {
     if (idx !== -1) _radioStations[idx] = { ..._radioStations[idx], isPinned: nowPinned };
     _renderRadioFiltered();
     _loadHomeData();
+    if (typeof Sync !== 'undefined') Sync.push('radioFav'); // v3.5.660: sincroniza "Pin to home" entre dispositivos
   }
 
   /** Toggle a station's "Add to favorites" status — Radio screen's own "Favoritas"
@@ -15103,6 +15104,7 @@ const App = (() => {
     if (idx !== -1) _radioStations[idx] = { ..._radioStations[idx], isScreenFavorite: nowFav };
     _renderRadioFiltered();
     _updateRadioTabCounts();
+    if (typeof Sync !== 'undefined') Sync.push('radioScreenFav'); // v3.5.660: sincroniza la pestaña "Favoritas" entre dispositivos
   }
 
   /** Delete a station — moves it to the Radio screen's "Borradas" tab (also clears
@@ -15117,6 +15119,9 @@ const App = (() => {
     _renderRadioFiltered();
     _updateRadioTabCounts();
     _loadHomeData();
+    // v3.5.660: hideRadioStation() también limpia Pin-to-home y Favoritas — propagar
+    // ambas listas (no-op vía hash-check si la emisora no estaba en alguna de ellas).
+    if (typeof Sync !== 'undefined') { Sync.push('radioFav'); Sync.push('radioScreenFav'); }
   }
 
   /** Restore a deleted station from the "Borradas" tab back to "Emisoras". */
@@ -16161,26 +16166,51 @@ const App = (() => {
           return Math.min(1, Math.max(0, (ev.clientX - rect.left) / rect.width));
         };
         let dragging = false;
+        // v3.5.664: radio + active DVR buffer → scrub within the retained
+        // range instead of a normal song duration. Snapshotted once at
+        // pointerdown (re-anchoring mid-drag as the live edge slides forward
+        // would be confusing) and cleared when the drag ends. null means
+        // "not scrubbing a radio buffer" — falls back to the original
+        // Player.seekTo()-based behavior untouched.
+        let _radioRange = null;
         track.addEventListener('pointerdown', (ev) => {
+          const curTrack = Player.getCurrentTrack();
+          if (curTrack?.isRadio) {
+            const dvr = Player.getRadioDvrState();
+            // No DVR buffer for this station (CORS-blocked, or still
+            // connecting) — nothing to scrub, bail out before starting a drag.
+            if (!dvr.available) return;
+            _radioRange = { start: dvr.rangeStart, end: dvr.rangeEnd };
+          } else {
+            _radioRange = null;
+          }
           dragging = true;
           UI.setSeekDragging(true);
           try { track.setPointerCapture(ev.pointerId); } catch (_) {}
-          UI.previewSeek(_pct(ev), Player.getDuration());
+          if (_radioRange) UI.previewRadioSeek(_pct(ev), _radioRange);
+          else              UI.previewSeek(_pct(ev), Player.getDuration());
           ev.preventDefault();
         });
         track.addEventListener('pointermove', (ev) => {
           if (!dragging) return;
-          UI.previewSeek(_pct(ev), Player.getDuration());
+          if (_radioRange) UI.previewRadioSeek(_pct(ev), _radioRange);
+          else              UI.previewSeek(_pct(ev), Player.getDuration());
         });
         track.addEventListener('pointerup', (ev) => {
           if (!dragging) return;
           dragging = false;
           const pct = _pct(ev);
           UI.setSeekDragging(false);
-          Player.seekTo(pct * Player.getDuration());
+          if (_radioRange) {
+            Player.radioSeekTo(_radioRange.start + pct * (_radioRange.end - _radioRange.start));
+            _radioRange = null;
+          } else {
+            Player.seekTo(pct * Player.getDuration());
+          }
         });
         track.addEventListener('pointercancel', () => {
           dragging = false;
+          _radioRange = null;
           UI.setSeekDragging(false);
         });
       }
@@ -16194,12 +16224,18 @@ const App = (() => {
     });
 
     // Expanded player: EQ button → open EQ overlay
+    // v3.5.663: disabled while a radio station plays (dimmed via CSS on
+    // body.radio-track-active — see styles.css) — still tappable so we can
+    // explain why instead of silently doing nothing.
     document.getElementById('btn-pexp-eq-open')?.addEventListener('click', () => {
+      if (Player.getCurrentTrack()?.isRadio) { UI.showToast(UI.t('toast_radio_no_speed_eq')); return; }
       document.getElementById('overlay-eq')?.classList.add('visible');
     });
 
     // Expanded player: Speed (Tempo) → ctrl-sheet overlay on all screen sizes
+    // v3.5.663: same radio guard as EQ above.
     document.getElementById('btn-pexp-speed')?.addEventListener('click', () => {
+      if (Player.getCurrentTrack()?.isRadio) { UI.showToast(UI.t('toast_radio_no_speed_eq')); return; }
       _openCtrlSheet('overlay-speed');
     });
 
@@ -17018,9 +17054,19 @@ const App = (() => {
     });
 
     // Mini-player desktop progress seek
+    // v3.5.664: same radio-DVR-aware mapping as the expanded player's bar —
+    // scrub within the retained buffer instead of calling seekTo(Infinity)
+    // (silently ignored today thanks to seekTo()'s isFinite() guard, but
+    // this actually lets it seek now).
     document.getElementById('mini-progress-track')?.addEventListener('click', (e) => {
       const rect = e.currentTarget.getBoundingClientRect();
-      const pct  = (e.clientX - rect.left) / rect.width;
+      const pct  = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+      const curTrack = Player.getCurrentTrack();
+      if (curTrack?.isRadio) {
+        const dvr = Player.getRadioDvrState();
+        if (dvr.available) Player.radioSeekTo(dvr.rangeStart + pct * (dvr.rangeEnd - dvr.rangeStart));
+        return;
+      }
       Player.seekTo(pct * Player.getDuration());
     });
 

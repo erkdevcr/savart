@@ -9,8 +9,8 @@
    - Google Fonts: Cache First (CDN)
    ============================================================ */
 
-const APP_VERSION  = '3.5.659';
-const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.659 — fix: especificidad CSS para ocultar prev/next del mini-player móvil en modo radio; guard contra condición de carrera si se cambia de pista mientras RadioDvr.start() está en vuelo
+const APP_VERSION  = '3.5.664';
+const CACHE_NAME   = `savart-shell-v${APP_VERSION}`; // 3.5.664 — Radio Emisoras: la barra de progreso principal (reproductor expandido y mini-player de escritorio) ahora también puede rebobinar/adelantar dentro del buffer DVR retenido, arrastrando o haciendo click — no solo con los botones de 15s/30s — mostrando "-M:SS" detrás de vivo mientras se arrastra; sin DVR disponible para la emisora, se queda igual que antes (barra fija, no interactiva)
 
 /* Base path — auto-detected from sw.js location.
    localhost:8080  → ''

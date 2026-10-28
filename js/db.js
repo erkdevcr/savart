@@ -891,18 +891,27 @@ const DB = (() => {
     return Object.values(meta);
   }
 
-  /* ── Radio Emisoras (pin a inicio + favoritas de Radio + borradas, local-only
-       por dispositivo) ──────────────────────────────────────────────────────
+  /* ── Radio Emisoras (pin a inicio + favoritas de Radio + borradas) ─────────
        v3.5.653 — Terminología UI vs. nombres internos (no renombrados para no
        romper datos ya guardados):
          - "Pin to home"      → radioFavorites / radioFavoritesMeta / toggleRadioFavorite
                                  (agrega la emisora a la sección "Emisoras" del Home)
-         - "Add to favorites" → radioScreenFavorites / toggleRadioScreenFavorite
-                                 (NUEVO — alimenta la pestaña "Favoritas" dentro de
-                                 la propia pantalla de Radio, no toca el Home)
+         - "Add to favorites" → radioScreenFavorites / radioScreenFavoritesMeta /
+                                 toggleRadioScreenFavorite (alimenta la pestaña
+                                 "Favoritas" dentro de la propia pantalla de Radio,
+                                 no toca el Home)
          - "Delete"           → radioHidden / hideRadioStation (ahora visible en la
-                                 pestaña "Borradas", ya no desaparece para siempre)
-         - "Restore"          → restoreRadioStation (NUEVO — deshace el Delete)      */
+                                 pestaña "Borradas", ya no desaparece para siempre;
+                                 esta lista SÍ sigue siendo local-only por dispositivo)
+         - "Restore"          → restoreRadioStation (deshace el Delete)
+       v3.5.660 — "Pin to home" y "Favoritas" ahora sincronizan entre dispositivos
+       (ver js/sync.js: tipos 'radioFav' y 'radioScreenFav'); "Borradas" se queda
+       local-only a propósito (es papelera, no un estado que valga la pena llevar
+       de un dispositivo a otro). radioScreenFavoritesMeta es el mapa id→{id,
+       favoritedAt} que le da a "Favoritas" el mismo merge LWW por-item que ya
+       tenía "Pin to home" (radioFavoritesMeta) — sin timestamps por ítem, dos
+       dispositivos no podrían distinguir "se borró en el otro" de "se agregó
+       offline en este".                                                          */
 
   /**
    * Get favorited ("pinned to home") radio station IDs.
@@ -969,14 +978,19 @@ const DB = (() => {
    */
   async function toggleRadioScreenFavorite(id) {
     const favs = await getRadioScreenFavorites();
+    const meta = await getState('radioScreenFavoritesMeta') || {};
     const idx  = favs.indexOf(id);
     if (idx === -1) {
       favs.push(id);
+      meta[id] = { id, favoritedAt: Date.now() };
       await setState('radioScreenFavorites', favs);
+      await setState('radioScreenFavoritesMeta', meta);
       return true;
     } else {
       favs.splice(idx, 1);
+      delete meta[id];
       await setState('radioScreenFavorites', favs);
+      await setState('radioScreenFavoritesMeta', meta);
       return false;
     }
   }
@@ -1010,7 +1024,10 @@ const DB = (() => {
     }
     const screenFavs = await getRadioScreenFavorites();
     if (screenFavs.includes(id)) {
+      const screenMeta = await getState('radioScreenFavoritesMeta') || {};
+      delete screenMeta[id];
       await setState('radioScreenFavorites', screenFavs.filter(f => f !== id));
+      await setState('radioScreenFavoritesMeta', screenMeta);
     }
   }
 

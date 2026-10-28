@@ -103,6 +103,8 @@ const UI = (() => {
       toast_radio_pin_added:    'Fijada en inicio',
       toast_radio_pin_removed:  'Quitada de inicio',
       toast_radio_restored:     'Emisora restaurada',
+      toast_radio_no_queue:     'No se puede agregar a la cola mientras suena una emisora de radio',
+      toast_radio_no_speed_eq:  'Velocidad y EQ no están disponibles con una emisora de radio',
       // ── Queue actions ──────────────────────────────────────
       play_next: 'A continuación',
       play_after:'Después',
@@ -578,6 +580,8 @@ const UI = (() => {
       toast_radio_pin_added:    'Pinned to home',
       toast_radio_pin_removed:  'Removed from home',
       toast_radio_restored:     'Station restored',
+      toast_radio_no_queue:     "Can't add to the queue while a radio station is playing",
+      toast_radio_no_speed_eq:  'Speed and EQ aren\'t available with a radio station',
       // ── Queue actions ──────────────────────────────────────
       play_next: 'Play next',
       play_after:'Play later',
@@ -1037,6 +1041,47 @@ const UI = (() => {
     if (banner) banner.classList.remove('visible');
   }
 
+  /* ── Player cover fallback for radio stations without a logo ──────────
+     v3.5.660: when the currently playing track is a radio station with no
+     displayable cover (no logo/thumbnailUrl, or the image fails to load),
+     fill the ENTIRE cover rectangle with a deterministic per-station color
+     (same _stationColor() hash the Radio screen's own rows already use) and
+     swap the generic music-note placeholder icon for the radio icon. Unlike
+     the small icon-sized badge used in the Radio list rows, here the color
+     covers the whole player-cover box — set unconditionally for radio tracks
+     (harmless when a real cover image is showing on top of it, and means an
+     image that fails to load later already has the right color behind it,
+     no extra onerror wiring needed). */
+
+  /** Pull the `d` attribute out of a `iconXxx()`-generated single-path SVG string. */
+  function _pathDataOf(svgMarkup) {
+    const m = /\sd="([^"]+)"/.exec(svgMarkup || '');
+    return m ? m[1] : '';
+  }
+
+  /**
+   * @param {HTMLElement|null} containerEl - the thumb/art box (gets the inline background)
+   * @param {HTMLElement|null} iconHostEl  - either the wrapping placeholder <div>
+   *   (mini-player, expanded player) or the bare <svg> itself (desk micro-player);
+   *   in both cases only the inner <path d> is touched, so ids/sizing/viewBox
+   *   stay exactly as authored in index.html.
+   * @param {DriveItem|null} track
+   */
+  function _applyPlayerThumbRadioFallback(containerEl, iconHostEl, track) {
+    if (!containerEl) return;
+    const isRadio = !!track?.isRadio;
+    containerEl.style.background = isRadio
+      ? _stationColor(track.stationName || track.displayName || track.name || '')
+      : '';
+    if (!iconHostEl) return;
+    const pathEl = iconHostEl.tagName === 'svg'
+      ? iconHostEl.querySelector('path')
+      : iconHostEl.querySelector('svg path');
+    if (pathEl) {
+      pathEl.setAttribute('d', _pathDataOf(isRadio ? iconRadio() : iconMusicNote()));
+    }
+  }
+
   /* ── Mini-player ─────────────────────────────────────────── */
 
   /**
@@ -1074,6 +1119,11 @@ const UI = (() => {
         thumbImg.style.display = 'none';
       }
     }
+    _applyPlayerThumbRadioFallback(
+      mp.querySelector('.mini-thumb'),
+      mp.querySelector('.mini-thumb .thumb-placeholder'),
+      track
+    );
 
     // Update play/pause icon (mobile + desktop)
     const btnPlay = mp.querySelector('.btn-play-mini');
@@ -1117,6 +1167,7 @@ const UI = (() => {
         icon.style.display = '';
       }
     }
+    _applyPlayerThumbRadioFallback(img?.closest('.dmp-thumb'), icon, track);
 
     // Update play/pause icon
     const playBtn = document.getElementById('dmp-btn-play');
@@ -1201,6 +1252,7 @@ const UI = (() => {
     const badgeType  = document.getElementById('pexp-badge-type');
     const badgeKbps  = document.getElementById('pexp-badge-kbps');
     const badgeSize  = document.getElementById('pexp-badge-size');
+    const badgeRadioBuffer = document.getElementById('pexp-badge-radio-buffer');
     if (badgesEl && track && !track.isSoundrop && !track.isRadio) {
       const ext     = (track.name || '').split('.').pop().toUpperCase() || '—';
       const sizeNum = parseInt(track.size || '0', 10);
@@ -1216,6 +1268,7 @@ const UI = (() => {
       if (badgeType) { badgeType.textContent = ext;                              badgeType.style.display = ''; }
       if (badgeKbps) { badgeKbps.textContent = kbps ? `${kbps} kbps` : '— kbps'; badgeKbps.style.display = ''; }
       if (badgeSize) { badgeSize.textContent = sizeStr;                           badgeSize.style.display = ''; }
+      if (badgeRadioBuffer) badgeRadioBuffer.style.display = 'none';
       badgesEl.style.visibility = 'visible';
     } else if (badgesEl) {
       // SD track: hide Drive-only chips but keep badges row visible so the
@@ -1223,6 +1276,11 @@ const UI = (() => {
       if (badgeType) badgeType.style.display = 'none';
       if (badgeKbps) badgeKbps.style.display = 'none';
       if (badgeSize) badgeSize.style.display = 'none';
+      // v3.5.662: radio's own buffer-size chip — shown only for radio (not
+      // plain Soundrop tracks, which also land in this branch). Text content
+      // is kept current by updateRadioSeekButtons(), called periodically
+      // while a radio station plays (see app.js _onProgress/_onTrackChange).
+      if (badgeRadioBuffer) badgeRadioBuffer.style.display = track?.isRadio ? '' : 'none';
       badgesEl.style.visibility = 'visible';
     }
 
@@ -1241,6 +1299,7 @@ const UI = (() => {
         artPh.style.display  = '';
       }
     }
+    _applyPlayerThumbRadioFallback(document.getElementById('pexp-art'), artPh, track);
 
     // Play/Pause button icon
     const playBtn = document.getElementById('btn-pexp-play');
@@ -1288,9 +1347,24 @@ const UI = (() => {
     const curEl   = document.getElementById('pexp-time-cur');
     const totEl   = document.getElementById('pexp-time-tot');
 
-    // Live radio stream: duration is Infinity — show an "EN VIVO"/"LIVE" badge
-    // instead of a bogus NaN:NaN time, and keep the fill bar fully lit (no seek).
+    // Live radio stream: duration is Infinity.
     if (duration === Infinity) {
+      // v3.5.664: when the DVR rolling buffer is active, show position
+      // WITHIN the retained window (like a live-TV "behind live" scrubber)
+      // instead of a flat, non-interactive full bar — this is what lets the
+      // main progress bar rewind/forward too, not just the 15s/30s buttons
+      // (see the pexp-progress-track drag handler in app.js, which does the
+      // actual seeking via Player.radioSeekTo()).
+      const dvr = (typeof Player !== 'undefined') ? Player.getRadioDvrState() : null;
+      if (dvr && dvr.available && dvr.rangeEnd > dvr.rangeStart) {
+        const pct = (dvr.currentTime - dvr.rangeStart) / (dvr.rangeEnd - dvr.rangeStart);
+        if (fill)  fill.style.width = `${Math.min(100, Math.max(0, pct * 100))}%`;
+        if (curEl) curEl.textContent = '-' + formatTime(dvr.rangeEnd - dvr.currentTime);
+        if (totEl) totEl.textContent = t('radio_live');
+        return;
+      }
+      // No DVR buffer for this station (CORS-blocked, or still connecting) —
+      // bar isn't interactive, exactly as before this version.
       if (fill)  fill.style.width = '100%';
       if (curEl) curEl.textContent = t('radio_live');
       if (totEl) totEl.textContent = '';
@@ -1321,6 +1395,24 @@ const UI = (() => {
     if (fill) fill.style.width = `${pct * 100}%`;
     const curEl = document.getElementById('pexp-time-cur');
     if (curEl && duration > 0) curEl.textContent = formatTime(pct * duration);
+  }
+
+  /**
+   * v3.5.664: radio counterpart to previewSeek() — maps the 0..1 drag
+   * fraction onto the DVR buffer's retained range (snapshotted by the caller
+   * at pointerdown, see app.js) instead of a normal song duration, and shows
+   * "-M:SS" behind live rather than an elapsed time.
+   * @param {number} pct - 0..1 position along the track
+   * @param {{start:number,end:number}} range - buffered range snapshot
+   */
+  function previewRadioSeek(pct, range) {
+    const fill = document.getElementById('pexp-progress-fill');
+    if (fill) fill.style.width = `${pct * 100}%`;
+    const curEl = document.getElementById('pexp-time-cur');
+    if (curEl && range && range.end > range.start) {
+      const target = range.start + pct * (range.end - range.start);
+      curEl.textContent = '-' + formatTime(range.end - target);
+    }
   }
 
   /**
@@ -1357,6 +1449,12 @@ const UI = (() => {
       else if (delta === 30) enabled = !!s.canFwd30;
       btn.disabled = !enabled;
     });
+    // v3.5.662: keep the expanded player's buffer-size chip current too —
+    // same DVR state object, just a different field (bufferMB).
+    const badgeBuf = document.getElementById('pexp-badge-radio-buffer');
+    if (badgeBuf) {
+      badgeBuf.textContent = s.available ? `${(s.bufferMB || 0).toFixed(1)} MB` : '0.0 MB';
+    }
   }
 
   /* ── Home screen rendering ────────────────────────────────── */
@@ -2680,8 +2778,8 @@ const UI = (() => {
       const isSd = !!item.isSoundrop;
       _addCtxItem(menu, iconPlay(14),  t('ctx_play'),    () => { App.onSongClick(item);         hideContextMenu(); });
       _addCtxDivider(menu);
-      _addCtxItem(menu, _iconNext,     t('play_next'),   () => { Player.insertNext(item);        hideContextMenu(); });
-      _addCtxItem(menu, _iconQueue,    t('play_after'),  () => { Player.appendToQueue(item);     hideContextMenu(); });
+      _addCtxItem(menu, _iconNext,     t('play_next'),   () => { if (_blockQueueDuringRadio()) { hideContextMenu(); return; } Player.insertNext(item);        hideContextMenu(); });
+      _addCtxItem(menu, _iconQueue,    t('play_after'),  () => { if (_blockQueueDuringRadio()) { hideContextMenu(); return; } Player.appendToQueue(item);     hideContextMenu(); });
       if (!isSd && item.artist) _addCtxItem(menu, _iconRadio, t('ctx_artist_radio'), () => { App.onArtistRadio?.(item); hideContextMenu(); });
       _addCtxDivider(menu);
       if (!isSd && item.artist) _addCtxItem(menu, _iconArtist, t('ctx_go_to_artist'), () => { App.onGoToArtist?.(item); hideContextMenu(); });
@@ -2717,8 +2815,8 @@ const UI = (() => {
     if (type === 'folder') {
       _addCtxItem(menu, iconPlay(14),   t('ctx_play'),           () => { App.onFolderPlay(item);              hideContextMenu(); });
       _addCtxDivider(menu);
-      _addCtxItem(menu, _iconNext,      t('play_next'),          () => { App.onFolderQueue(item, 'next');      hideContextMenu(); });
-      _addCtxItem(menu, _iconQueue,     t('play_after'),         () => { App.onFolderQueue(item, 'end');       hideContextMenu(); });
+      _addCtxItem(menu, _iconNext,      t('play_next'),          () => { if (_blockQueueDuringRadio()) { hideContextMenu(); return; } App.onFolderQueue(item, 'next');      hideContextMenu(); });
+      _addCtxItem(menu, _iconQueue,     t('play_after'),         () => { if (_blockQueueDuringRadio()) { hideContextMenu(); return; } App.onFolderQueue(item, 'end');       hideContextMenu(); });
       _addCtxDivider(menu);
       _addCtxItem(menu, _iconFolder,    t('ctx_go_to_folder'),   () => { App.onGoToFolder(item);              hideContextMenu(); });
       // "Go to album / Go to collection" — only for folders that have songs (chip visible)
@@ -2791,8 +2889,8 @@ const UI = (() => {
         hideContextMenu();
       });
       _addCtxDivider(menu);
-      _addCtxItem(menu, _iconNext,  t('play_next'),  () => { isFolder ? App.onFolderQueue(item,'next') : Player.insertNext(item);     hideContextMenu(); });
-      _addCtxItem(menu, _iconQueue, t('play_after'), () => { isFolder ? App.onFolderQueue(item,'end')  : Player.appendToQueue(item);  hideContextMenu(); });
+      _addCtxItem(menu, _iconNext,  t('play_next'),  () => { if (_blockQueueDuringRadio()) { hideContextMenu(); return; } isFolder ? App.onFolderQueue(item,'next') : Player.insertNext(item);     hideContextMenu(); });
+      _addCtxItem(menu, _iconQueue, t('play_after'), () => { if (_blockQueueDuringRadio()) { hideContextMenu(); return; } isFolder ? App.onFolderQueue(item,'end')  : Player.appendToQueue(item);  hideContextMenu(); });
       if (!isFolder && !isSd && item.artist) _addCtxItem(menu, _iconRadio, t('ctx_artist_radio'), () => { App.onArtistRadio?.(item); hideContextMenu(); });
       _addCtxDivider(menu);
       if (!isFolder && !isSd && item.artist) _addCtxItem(menu, _iconArtist, t('ctx_go_to_artist'), () => { App.onGoToArtist?.(item); hideContextMenu(); });
@@ -2822,8 +2920,8 @@ const UI = (() => {
     if (type === 'lib_album') {
       _addCtxItem(menu, iconPlay(14),  t('ctx_play'),         () => { App.onAlbumPlay?.(item);              hideContextMenu(); });
       _addCtxDivider(menu);
-      _addCtxItem(menu, _iconNext,     t('play_next'),         () => { App.onAlbumQueue?.(item, 'next');     hideContextMenu(); });
-      _addCtxItem(menu, _iconQueue,    t('play_after'),        () => { App.onAlbumQueue?.(item, 'end');      hideContextMenu(); });
+      _addCtxItem(menu, _iconNext,     t('play_next'),         () => { if (_blockQueueDuringRadio()) { hideContextMenu(); return; } App.onAlbumQueue?.(item, 'next');     hideContextMenu(); });
+      _addCtxItem(menu, _iconQueue,    t('play_after'),        () => { if (_blockQueueDuringRadio()) { hideContextMenu(); return; } App.onAlbumQueue?.(item, 'end');      hideContextMenu(); });
       _addCtxDivider(menu);
       _addCtxItem(menu, _iconFolder,   t('ctx_go_to_folder'), () => { App.onAlbumGoToFolder?.(item);        hideContextMenu(); });
       _addCtxItem(menu, _iconScan,     t('ctx_send_to_scan'), () => { App.onSendToScan?.({ id: item.folderId, name: item.name }); hideContextMenu(); });
@@ -2841,8 +2939,8 @@ const UI = (() => {
     if (type === 'lib_collection') {
       _addCtxItem(menu, iconPlay(14),  t('ctx_play'),         () => { App.onCollectionPlay?.(item);         hideContextMenu(); });
       _addCtxDivider(menu);
-      _addCtxItem(menu, _iconNext,     t('play_next'),         () => { App.onCollectionQueue?.(item, 'next'); hideContextMenu(); });
-      _addCtxItem(menu, _iconQueue,    t('play_after'),        () => { App.onCollectionQueue?.(item, 'end');  hideContextMenu(); });
+      _addCtxItem(menu, _iconNext,     t('play_next'),         () => { if (_blockQueueDuringRadio()) { hideContextMenu(); return; } App.onCollectionQueue?.(item, 'next'); hideContextMenu(); });
+      _addCtxItem(menu, _iconQueue,    t('play_after'),        () => { if (_blockQueueDuringRadio()) { hideContextMenu(); return; } App.onCollectionQueue?.(item, 'end');  hideContextMenu(); });
       _addCtxDivider(menu);
       _addCtxItem(menu, _iconFolder,   t('ctx_go_to_folder'), () => { App.onAlbumGoToFolder?.({ folderId: item.folderId, name: item.name }); hideContextMenu(); });
       _addCtxItem(menu, _iconScan,     t('ctx_send_to_scan'), () => { App.onSendToScan?.({ id: item.folderId, name: item.name }); hideContextMenu(); });
@@ -2860,8 +2958,8 @@ const UI = (() => {
     if (type === 'playlist') {
       _addCtxItem(menu, iconPlay(14),  t('ctx_play'),        () => { App.onPlaylistPlay?.(item);           hideContextMenu(); });
       _addCtxDivider(menu);
-      _addCtxItem(menu, _iconNext,     t('play_next'),       () => { App.onPlaylistQueue?.(item,'next');    hideContextMenu(); });
-      _addCtxItem(menu, _iconQueue,    t('play_after'),      () => { App.onPlaylistQueue?.(item,'end');     hideContextMenu(); });
+      _addCtxItem(menu, _iconNext,     t('play_next'),       () => { if (_blockQueueDuringRadio()) { hideContextMenu(); return; } App.onPlaylistQueue?.(item,'next');    hideContextMenu(); });
+      _addCtxItem(menu, _iconQueue,    t('play_after'),      () => { if (_blockQueueDuringRadio()) { hideContextMenu(); return; } App.onPlaylistQueue?.(item,'end');     hideContextMenu(); });
       _addCtxDivider(menu);
       if (item.isYouTube) {
         // YT playlists: read-only — no rename/delete, but can duplicate or copy songs
@@ -2879,8 +2977,8 @@ const UI = (() => {
       const isSd = !!item.isSoundrop;
       _addCtxItem(menu, iconPlay(14),  t('ctx_play'),           () => { Player.setQueue([item], 0);  hideContextMenu(); });
       _addCtxDivider(menu);
-      _addCtxItem(menu, _iconNext,     t('play_next'),          () => { Player.insertNext(item);      hideContextMenu(); });
-      _addCtxItem(menu, _iconQueue,    t('play_after'),         () => { Player.appendToQueue(item);   hideContextMenu(); });
+      _addCtxItem(menu, _iconNext,     t('play_next'),          () => { if (_blockQueueDuringRadio()) { hideContextMenu(); return; } Player.insertNext(item);      hideContextMenu(); });
+      _addCtxItem(menu, _iconQueue,    t('play_after'),         () => { if (_blockQueueDuringRadio()) { hideContextMenu(); return; } Player.appendToQueue(item);   hideContextMenu(); });
       if (!isSd && item.artist) _addCtxItem(menu, _iconRadio, t('ctx_artist_radio'), () => { App.onArtistRadio?.(item); hideContextMenu(); });
       _addCtxDivider(menu);
       if (!isSd && item.artist) _addCtxItem(menu, _iconArtist, t('ctx_go_to_artist'), () => { App.onGoToArtist?.(item); hideContextMenu(); });
@@ -2902,8 +3000,8 @@ const UI = (() => {
     if (type === 'home_folder') {
       _addCtxItem(menu, iconPlay(14),  t('ctx_play'),           () => { App.onFolderPlay(item);          hideContextMenu(); });
       _addCtxDivider(menu);
-      _addCtxItem(menu, _iconNext,     t('play_next'),          () => { App.onFolderQueue(item, 'next'); hideContextMenu(); });
-      _addCtxItem(menu, _iconQueue,    t('play_after'),         () => { App.onFolderQueue(item, 'end');  hideContextMenu(); });
+      _addCtxItem(menu, _iconNext,     t('play_next'),          () => { if (_blockQueueDuringRadio()) { hideContextMenu(); return; } App.onFolderQueue(item, 'next'); hideContextMenu(); });
+      _addCtxItem(menu, _iconQueue,    t('play_after'),         () => { if (_blockQueueDuringRadio()) { hideContextMenu(); return; } App.onFolderQueue(item, 'end');  hideContextMenu(); });
       _addCtxDivider(menu);
       _addCtxItem(menu, _iconFolder,   t('ctx_go_to_folder'),   () => { App.onGoToFolder(item);          hideContextMenu(); });
       _addCtxItem(menu, _iconScan,     t('ctx_send_to_scan'),   () => { App.onSendToScan?.(item);        hideContextMenu(); });
@@ -2918,8 +3016,8 @@ const UI = (() => {
       const isSd = !!item.isSoundrop;
       _addCtxItem(menu, iconPlay(14),  t('ctx_play'),        () => { Player.setQueue([item], 0);  hideContextMenu(); });
       _addCtxDivider(menu);
-      _addCtxItem(menu, _iconNext,     t('play_next'),       () => { Player.insertNext(item);      hideContextMenu(); });
-      _addCtxItem(menu, _iconQueue,    t('play_after'),      () => { Player.appendToQueue(item);   hideContextMenu(); });
+      _addCtxItem(menu, _iconNext,     t('play_next'),       () => { if (_blockQueueDuringRadio()) { hideContextMenu(); return; } Player.insertNext(item);      hideContextMenu(); });
+      _addCtxItem(menu, _iconQueue,    t('play_after'),      () => { if (_blockQueueDuringRadio()) { hideContextMenu(); return; } Player.appendToQueue(item);   hideContextMenu(); });
       if (!isSd && item.artist) _addCtxItem(menu, _iconRadio, t('ctx_artist_radio'), () => { App.onArtistRadio?.(item); hideContextMenu(); });
       _addCtxDivider(menu);
       if (!isSd && item.artist) _addCtxItem(menu, _iconArtist, t('ctx_go_to_artist'), () => { App.onGoToArtist?.(item); hideContextMenu(); });
@@ -3427,6 +3525,19 @@ const UI = (() => {
       window.visualViewport.removeEventListener('resize', _plPickerVvListener);
       _plPickerVvListener = null;
     }
+  }
+
+  /**
+   * v3.5.663: "Reproducir a continuación" / "Reproducir al final" can't be
+   * honored while a radio station is playing (no queue concept for a live
+   * stream — see also the Speed/EQ guard in app.js, same idea). Instead of
+   * silently doing nothing, show an explanatory toast and let the caller
+   * bail out. Returns true when blocked.
+   */
+  function _blockQueueDuringRadio() {
+    if (!Player.getCurrentTrack()?.isRadio) return false;
+    showToast(t('toast_radio_no_queue'));
+    return true;
   }
 
   function _addCtxItem(menu, icon, label, onClick, extraClass = '') {
@@ -6303,6 +6414,7 @@ const UI = (() => {
     updateExpandedPlayerProgress,
     setSeekDragging,
     previewSeek,
+    previewRadioSeek,
     // Queue panel
     showQueuePanel,
     isQueuePanelVisible,

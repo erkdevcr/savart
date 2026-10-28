@@ -372,6 +372,20 @@ img { display: block; }
   object-fit: cover;
 }
 
+/* v3.5.660: .thumb-placeholder had no dedicated rule here (only the
+   .song-thumb-scoped one applied, which .mini-thumb isn't) — the fallback
+   note icon rendered unpositioned/uncentered. Overlay + center it like the
+   img above so the radio-station color fallback (set inline via JS, see
+   _applyPlayerThumbRadioFallback in js/ui.js) fills the whole 46×46 box. */
+#mini-player .mini-thumb .thumb-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-disabled);
+}
+
 #mini-player .mini-thumb .eq-bars {
   display: none;
   position: absolute;
@@ -8097,6 +8111,15 @@ body.radio-track-active .radio-seek-btn { display: flex; }
 .mini-extras .radio-seek-btn .radio-seek-unit { font-size: 6px; }
 .dmp-controls .radio-seek-btn { width: 36px; height: 42px; }
 .dmp-controls .radio-seek-btn .radio-seek-num { font-size: 12px; }
+
+/* v3.5.663: Speed + EQ buttons (expanded player) are dimmed while a radio
+   station plays — they stay tappable (not pointer-events:none) so app.js's
+   click handlers can show an explanatory toast instead of silently doing
+   nothing; see toast_radio_no_speed_eq. */
+body.radio-track-active #btn-pexp-eq-open,
+body.radio-track-active #btn-pexp-speed {
+  opacity: 0.35;
+}
 
 .ds-artists-search-icon { color: var(--text-disabled); flex-shrink: 0; }
 .ds-artists-search-input {

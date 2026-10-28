@@ -42,8 +42,18 @@ const RadioDvr = (() => {
     let ready      = false;
     let onDropCb   = null;
     let appendQueue = Promise.resolve();
+    // v3.5.662: running estimate of the CURRENTLY retained buffer size, in
+    // bytes — exposed via getBufferedBytes() for the player's "buffer en MB"
+    // diagnostic chip (lets the user watch it grow and plateau around
+    // RETAIN_SECONDS while staying on the same station). MediaSource has no
+    // direct byte-size API for a SourceBuffer's content, so this is tracked
+    // by hand: incremented as chunks are appended, then scaled down in
+    // _evictOld() proportionally to the time range removed (reasonable since
+    // a live stream's bitrate is roughly constant) rather than growing forever.
+    let bytesAppended = 0;
 
     function _appendChunk(chunk) {
+      bytesAppended += chunk?.byteLength || 0;
       appendQueue = appendQueue.then(() => new Promise((resolve, reject) => {
         if (stopped || !sb) { resolve(); return; }
         const onUpdateEnd = () => { cleanup(); resolve(); };
@@ -64,8 +74,16 @@ const RadioDvr = (() => {
         return Promise.resolve();
       }
       const start = audioEl.buffered.start(0);
+      const end   = audioEl.buffered.end(audioEl.buffered.length - 1);
       const removeEnd = audioEl.currentTime - RETAIN_SECONDS;
       if (!(removeEnd > start + 1)) return Promise.resolve();
+      // Scale the byte estimate down by the fraction of the retained time
+      // range we're about to remove — see bytesAppended's comment above.
+      const totalDur = end - start;
+      if (totalDur > 0) {
+        const removedFraction = Math.min(1, Math.max(0, (removeEnd - start) / totalDur));
+        bytesAppended = Math.max(0, bytesAppended * (1 - removedFraction));
+      }
       return new Promise((resolve) => {
         const onUp = () => { sb.removeEventListener('updateend', onUp); resolve(); };
         sb.addEventListener('updateend', onUp, { once: true });
@@ -144,9 +162,14 @@ const RadioDvr = (() => {
       return { start: audioEl.buffered.start(0), end: audioEl.buffered.end(audioEl.buffered.length - 1) };
     }
 
+    /** Approximate size (bytes) of the currently retained rolling buffer. */
+    function getBufferedBytes() {
+      return ready ? bytesAppended : 0;
+    }
+
     function onDrop(cb) { onDropCb = cb; }
 
-    return { start, stop, isReady, getBufferedRange, onDrop };
+    return { start, stop, isReady, getBufferedRange, getBufferedBytes, onDrop };
   }
 
   return { create };

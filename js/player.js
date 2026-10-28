@@ -1894,7 +1894,17 @@ const Player = (() => {
    * policy at connect time, which varies per server).
    */
   function getRadioDvrState() {
-    const unavailable = { available: false, canBack15: false, canBack30: false, canFwd15: false, canFwd30: false };
+    // bufferMB (v3.5.662): approximate size, in MB, of the currently retained
+    // rolling buffer — feeds the expanded player's diagnostic chip so the
+    // user can watch it grow and plateau over time on the same station.
+    // rangeStart/rangeEnd/currentTime (v3.5.664): raw buffered-range + playhead,
+    // in <audio>.currentTime units — lets the UI map a 0..1 scrub-bar fraction
+    // onto an absolute radioSeekTo() position (see updateExpandedPlayerProgress
+    // and the pexp-progress-track drag handler in app.js).
+    const unavailable = {
+      available: false, canBack15: false, canBack30: false, canFwd15: false, canFwd30: false,
+      bufferMB: 0, rangeStart: 0, rangeEnd: 0, currentTime: 0,
+    };
     if (!_radioActive || !_radioDvrEngine || !_radioDvrEngine.isReady()) return unavailable;
     const range = _radioDvrEngine.getBufferedRange();
     if (!range) return unavailable;
@@ -1907,6 +1917,10 @@ const Player = (() => {
       canBack30: behind >= 30,
       canFwd15:  ahead  >= 15,
       canFwd30:  ahead  >= 30,
+      bufferMB:  _radioDvrEngine.getBufferedBytes() / (1024 * 1024),
+      rangeStart:   range.start,
+      rangeEnd:     range.end,
+      currentTime:  ct,
     };
   }
 
@@ -1921,6 +1935,24 @@ const Player = (() => {
     if (!range) return false;
     let target = _radioAudio.currentTime + deltaSeconds;
     target = Math.max(range.start, Math.min(range.end - 0.25, target));
+    _radioAudio.currentTime = target;
+    return true;
+  }
+
+  /**
+   * v3.5.664: absolute-position counterpart to radioSeekBy() — lets the main
+   * progress bar (not just the 15s/30s buttons) scrub anywhere within the
+   * currently retained DVR buffer, like dragging a "behind live" live-TV
+   * scrubber. Same clamping to [range.start, range.end-0.25] so it can never
+   * seek past the live edge or before the oldest retained audio.
+   * @param {number} absoluteSeconds - target position on the <audio> element's
+   *   own timeline (i.e. audio.currentTime units, NOT seconds-behind-live).
+   */
+  function radioSeekTo(absoluteSeconds) {
+    if (!_radioActive || !_radioDvrEngine || !_radioDvrEngine.isReady()) return false;
+    const range = _radioDvrEngine.getBufferedRange();
+    if (!range) return false;
+    const target = Math.max(range.start, Math.min(range.end - 0.25, absoluteSeconds));
     _radioAudio.currentTime = target;
     return true;
   }
@@ -2022,7 +2054,7 @@ const Player = (() => {
     patchQueueItem,
     // Radio Emisoras: best-effort 15s/30s rewind/forward (see radio-dvr.js)
     getRadioDvrState,
-    radioSeekBy,
+    radioSeekBy, radioSeekTo,
     // SD restore: cancel an in-progress SD load and resume the previous Drive track
     abortSdLoad: _doSdRestore,
   };

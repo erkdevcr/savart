@@ -48,6 +48,11 @@ const Sync = (() => {
     hot:         'savart_hot.json',   // delta: only the most recent rescan batch (~5–50 songs)
     home:        'savart_home.json',  // home snapshot — read at boot via readHome(), not merged in init()
     yt:          'savart_yt.json',    // YT account info + forced-logout flag (cross-device)
+    // v3.5.660 — Radio Emisoras: "Pin to home" y "Favoritas" ahora sincronizan
+    // entre dispositivos (independiente del snapshot de home.json — su propio
+    // canal, igual que 'pinned'). "Borradas" (radioHidden) se queda local-only.
+    radioFav:       'savart_radio_fav.json',       // radioFavorites/radioFavoritesMeta ("Pin to home")
+    radioScreenFav: 'savart_radio_screenfav.json', // radioScreenFavorites/Meta (pestaña "Favoritas")
   };
 
   // Types that should not be pushed or merged during init().
@@ -286,6 +291,23 @@ const Sync = (() => {
     return merged;
   }
 
+  // Same LWW-by-timestamp shape as _mergePinned, generalized for any meta dict
+  // keyed by station id whose items carry a `favoritedAt` field — used by both
+  // radio "Pin to home" (radioFavoritesMeta) and "Favoritas" (radioScreenFavoritesMeta).
+  function _mergeFavMeta(localMeta, remoteMeta, remoteManifestTs) {
+    const remoteTs = remoteManifestTs || 0;
+    const merged = { ...remoteMeta };
+    for (const [id, item] of Object.entries(localMeta)) {
+      if (merged[id]) continue; // already in remote — remote wins
+      const favoritedAt = item.favoritedAt || 0;
+      if (favoritedAt > remoteTs) {
+        merged[id] = item; // favorited after remote snapshot → genuine offline addition
+      }
+      // else: remote knew about this item and chose to omit it → respect the deletion
+    }
+    return merged;
+  }
+
   function _mergeRecents(local, remote) {
     // Build a unified tombstone map: highest removedAt wins across both sides
     const tombstones = new Map();
@@ -474,6 +496,27 @@ const Sync = (() => {
 
         await DB.setState('pinnedMeta', mergedPinned);
         await DB.setState('pinned', finalOrder);
+        break;
+      }
+
+      case 'radioFav': {
+        // "Pin to home" radio favorites — plain meta dict keyed by station id,
+        // no separate order array (Home's "Emisoras" section sorts by favoritedAt).
+        const remoteMeta = data || {};
+        const localMeta  = (await DB.getState('radioFavoritesMeta')) || {};
+        const merged     = _mergeFavMeta(localMeta, remoteMeta, remoteTs);
+        await DB.setState('radioFavoritesMeta', merged);
+        await DB.setState('radioFavorites', Object.keys(merged));
+        break;
+      }
+
+      case 'radioScreenFav': {
+        // Radio screen's own "Favoritas" tab — same shape as 'radioFav'.
+        const remoteMeta = data || {};
+        const localMeta  = (await DB.getState('radioScreenFavoritesMeta')) || {};
+        const merged     = _mergeFavMeta(localMeta, remoteMeta, remoteTs);
+        await DB.setState('radioScreenFavoritesMeta', merged);
+        await DB.setState('radioScreenFavorites', Object.keys(merged));
         break;
       }
 
@@ -1086,6 +1129,33 @@ const Sync = (() => {
     console.log(`[Sync] Pushed pinned (${Object.keys(clean).length})`);
   }
 
+  async function _pushRadioFav() {
+    const raw = (await DB.getState('radioFavoritesMeta')) || {};
+    const now = Date.now();
+    const clean = {};
+    for (const [id, item] of Object.entries(raw)) {
+      if (!item || typeof item !== 'object') continue;
+      // Backfill favoritedAt for entries saved before the field existed — same
+      // rationale as _pushPinned's pinnedAt backfill (LWW needs it to tell an
+      // offline addition from a remote-respected deletion).
+      clean[id] = { ...item, favoritedAt: item.favoritedAt || now };
+    }
+    if (!(await _writeIfChanged('radioFav', FILENAMES.radioFav, clean))) return false;
+    console.log(`[Sync] Pushed radio "Pin to home" favorites (${Object.keys(clean).length})`);
+  }
+
+  async function _pushRadioScreenFav() {
+    const raw = (await DB.getState('radioScreenFavoritesMeta')) || {};
+    const now = Date.now();
+    const clean = {};
+    for (const [id, item] of Object.entries(raw)) {
+      if (!item || typeof item !== 'object') continue;
+      clean[id] = { ...item, favoritedAt: item.favoritedAt || now };
+    }
+    if (!(await _writeIfChanged('radioScreenFav', FILENAMES.radioScreenFav, clean))) return false;
+    console.log(`[Sync] Pushed radio "Favoritas" tab (${Object.keys(clean).length})`);
+  }
+
   async function _pushRecents() {
     const all  = await DB.getRecentsAll();
     const week = Date.now() - (CONFIG.TOMBSTONE_MAX_DAYS || 30) * 24 * 60 * 60 * 1000;
@@ -1478,6 +1548,8 @@ const Sync = (() => {
     hot:         () => Promise.resolve(), // no-op — hot is pushed only via pushHot(), not init
     home:        _pushHome,
     yt:          _pushYT,
+    radioFav:       _pushRadioFav,
+    radioScreenFav: _pushRadioScreenFav,
   };
 
   /* ── Live polling ────────────────────────────────────────── */
@@ -1649,7 +1721,8 @@ const Sync = (() => {
 
       // ── Classify types: stale (need download) vs fresh (can skip) ───────────
       const PULL_TYPES = ['favorites', 'playlists', 'pinned', 'recents',
-                          'playcounts', 'settings', 'history', 'metadata', 'collections'];
+                          'playcounts', 'settings', 'history', 'metadata', 'collections',
+                          'radioFav', 'radioScreenFav'];
       for (const type of PULL_TYPES) {
         const remoteTs = _remoteTs[type] || 0;
         const localTs  = _localTs[type]  || 0;
@@ -1677,10 +1750,12 @@ const Sync = (() => {
         remoteFavs, remotePlaylists, remotePinned,
         remoteRecents, remotePlaycounts, remoteSettings, remoteHistory,
         remoteMetadata, remoteCollections,
+        remoteRadioFav, remoteRadioScreenFav,
       ] = await Promise.all([
         _pull('favorites'), _pull('playlists'),  _pull('pinned'),
         _pull('recents'),   _pull('playcounts'), _pull('settings'), _pull('history'),
         _pull('metadata'),  _pull('collections'),
+        _pull('radioFav'),  _pull('radioScreenFav'),
       ]);
       _prog(24);
 
@@ -1759,6 +1834,26 @@ const Sync = (() => {
         console.log(`[Sync] Merged pinned: ${mergedIds.length} items (remote: ${remoteOrder.length}, local-only: ${localOnlyIds.length})`);
       });
       _prog(48);
+
+      // ── Merge radio "Pin to home" favorites ────────────────
+      await _mergeStep('radioFav', async () => {
+        if (!remoteRadioFav || typeof remoteRadioFav !== 'object') return;
+        const localMeta = (await DB.getState('radioFavoritesMeta')) || {};
+        const merged    = _mergeFavMeta(localMeta, remoteRadioFav, _remoteTs.radioFav || 0);
+        await DB.setState('radioFavoritesMeta', merged);
+        await DB.setState('radioFavorites', Object.keys(merged));
+        console.log(`[Sync] Merged radio "Pin to home": ${Object.keys(merged).length} items`);
+      });
+
+      // ── Merge radio "Favoritas" tab ─────────────────────────
+      await _mergeStep('radioScreenFav', async () => {
+        if (!remoteRadioScreenFav || typeof remoteRadioScreenFav !== 'object') return;
+        const localMeta = (await DB.getState('radioScreenFavoritesMeta')) || {};
+        const merged    = _mergeFavMeta(localMeta, remoteRadioScreenFav, _remoteTs.radioScreenFav || 0);
+        await DB.setState('radioScreenFavoritesMeta', merged);
+        await DB.setState('radioScreenFavorites', Object.keys(merged));
+        console.log(`[Sync] Merged radio "Favoritas": ${Object.keys(merged).length} items`);
+      });
 
       // ── Merge recents ─────────────────────────────────────
       await _mergeStep('recents', async () => {
@@ -2109,6 +2204,8 @@ const Sync = (() => {
     settings:    2000,
     metadata:    10000, // biblioteca completa (varios MB) — debounce amplio + skip por hash
     collections: 2000,
+    radioFav:       1500,
+    radioScreenFav: 1500,
   };
 
   /**
