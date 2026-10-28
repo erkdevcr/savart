@@ -41,6 +41,8 @@ const RadioDvr = (() => {
     let stopped    = false;
     let ready      = false;
     let onDropCb   = null;
+    let onChunkCb  = null;   // v3.5.670: recibe cada chunk crudo (para grabar emisora)
+    let contentType = '';    // v3.5.670: Content-Type de la respuesta (mp3 / aac …)
     let appendQueue = Promise.resolve();
     // v3.5.662: running estimate of the CURRENTLY retained buffer size, in
     // bytes — exposed via getBufferedBytes() for the player's "buffer en MB"
@@ -53,6 +55,7 @@ const RadioDvr = (() => {
     let bytesAppended = 0;
 
     function _appendChunk(chunk) {
+      if (onChunkCb && !stopped) { try { onChunkCb(chunk); } catch (_) {} }
       bytesAppended += chunk?.byteLength || 0;
       appendQueue = appendQueue.then(() => new Promise((resolve, reject) => {
         if (stopped || !sb) { resolve(); return; }
@@ -125,7 +128,8 @@ const RadioDvr = (() => {
         const resp = await fetch(url, { method: 'GET', mode: 'cors' });
         if (!resp.ok || !resp.body) throw new Error('bad response ' + resp.status);
 
-        const mime = _pickMime(resp.headers.get('content-type')) || 'audio/mpeg';
+        contentType = resp.headers.get('content-type') || '';
+        const mime = _pickMime(contentType) || 'audio/mpeg';
         sb = ms.addSourceBuffer(mime);
         reader = resp.body.getReader();
 
@@ -168,8 +172,11 @@ const RadioDvr = (() => {
     }
 
     function onDrop(cb) { onDropCb = cb; }
+    /** v3.5.670: callback por cada chunk crudo recibido (antes de pasar al SourceBuffer). */
+    function onChunk(cb) { onChunkCb = cb; }
+    function getContentType() { return contentType; }
 
-    return { start, stop, isReady, getBufferedRange, getBufferedBytes, onDrop };
+    return { start, stop, isReady, getBufferedRange, getBufferedBytes, onDrop, onChunk, getContentType };
   }
 
   return { create };

@@ -15983,6 +15983,82 @@ const App = (() => {
    * Open a ctrl-sheet overlay and sync its controls from the settings values.
    * @param {'overlay-speed'|'overlay-timer'} id
    */
+  /* ── Grabar emisora (v3.5.670) ───────────────────────────── */
+  const _RADIO_REC_FOLDER_KEY  = 'savart_radio_rec_folder';
+  const _RADIO_REC_FOLDER_NAME = 'Grabaciones de radio';
+
+  function _fmtRecMs(ms) {
+    const s = Math.max(0, Math.floor(ms / 1000)), p2 = n => String(n).padStart(2, '0');
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = s % 60;
+    return h ? `${h}:${p2(m)}:${p2(ss)}` : `${m}:${p2(ss)}`;
+  }
+
+  function _refreshRadioRecSheet() {
+    const choose = document.getElementById('radio-rec-choose');
+    const active = document.getElementById('radio-rec-active');
+    if (!choose || !active) return;
+    const st = Player.getRadioRecState();
+    choose.style.display = st.recording ? 'none' : '';
+    active.style.display = st.recording ? '' : 'none';
+    if (st.recording) {
+      const tEl = document.getElementById('radio-rec-time');
+      const sEl = document.getElementById('radio-rec-size');
+      if (tEl) tEl.textContent = _fmtRecMs(st.elapsedMs);
+      if (sEl) sEl.textContent = `${(st.bytes / 1048576).toFixed(1)} MB`;
+    } else {
+      const sub = document.getElementById('radio-rec-start-sub');
+      if (sub) sub.textContent = st.logMs > 1000
+        ? `${UI.t('radio_rec_includes')} ${_fmtRecMs(st.logMs)}`
+        : UI.t('radio_rec_from_start_sub');
+    }
+  }
+
+  function _startRadioRec(fromStart) {
+    _closeCtrlSheet('overlay-radio-rec');
+    if (!Player.startRadioRecording({ fromStart })) {
+      UI.showToast(UI.t('toast_radio_rec_unavailable'));
+      return;
+    }
+    UI.showToast(UI.t('toast_radio_rec_started'));
+    UI.updateRadioSeekButtons(Player.getRadioDvrState());
+  }
+
+  async function _uploadRadioRecording(rec) {
+    if (!rec?.blob) return;
+    const d  = new Date(rec.startedAt || Date.now());
+    const p2 = n => String(n).padStart(2, '0');
+    const stamp = `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())} ${p2(d.getHours())}.${p2(d.getMinutes())}`;
+    const safeName = String(rec.stationName || 'Radio').replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim() || 'Radio';
+    const filename = `${safeName} ${stamp}.${rec.ext}`;
+    UI.showToast(UI.t('toast_radio_rec_saving'));
+    try {
+      if (typeof Drive === 'undefined' || !Auth.isAuthenticated()) throw new Error('no-auth');
+      let folderId = null;
+      try { folderId = localStorage.getItem(_RADIO_REC_FOLDER_KEY); } catch (_) {}
+      let ok = false;
+      if (folderId) {
+        try { await Drive.uploadFile(rec.blob, filename, rec.mime, folderId); ok = true; } catch (_) { /* carpeta borrada/sin acceso → se vuelve a buscar */ }
+      }
+      if (!ok) {
+        folderId = await Drive.findOrCreateFolder(_RADIO_REC_FOLDER_NAME, 'root');
+        try { localStorage.setItem(_RADIO_REC_FOLDER_KEY, folderId); } catch (_) {}
+        await Drive.uploadFile(rec.blob, filename, rec.mime, folderId);
+      }
+      UI.showToast(UI.t('toast_radio_rec_saved'), 'success');
+    } catch (err) {
+      console.error('[App] Radio recording upload failed:', err);
+      // Respaldo: que la grabación no se pierda — se descarga al dispositivo
+      try {
+        const url = URL.createObjectURL(rec.blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = filename;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+      } catch (_) {}
+      UI.showToast(UI.t('toast_radio_rec_failed'), 'error');
+    }
+  }
+
   function _openCtrlSheet(id) {
     if (id === 'overlay-speed') {
       // #tempo-slider was removed from Settings; read directly from the overlay slider
@@ -16271,6 +16347,33 @@ const App = (() => {
     document.getElementById('btn-pexp-timer')?.addEventListener('click', () => {
       _openCtrlSheet('overlay-timer');
     });
+
+    // v3.5.670: grabar emisora → hoja con "Desde ahora" / "Desde que sintonicé"
+    document.getElementById('btn-pexp-rec')?.addEventListener('click', () => {
+      const st = Player.getRadioRecState();
+      if (!st.available) { UI.showToast(UI.t('toast_radio_rec_unavailable')); return; }
+      _refreshRadioRecSheet();
+      _openCtrlSheet('overlay-radio-rec');
+    });
+    document.getElementById('btn-radio-rec-now')?.addEventListener('click', () => _startRadioRec(false));
+    document.getElementById('btn-radio-rec-start')?.addEventListener('click', () => _startRadioRec(true));
+    document.getElementById('btn-radio-rec-stop')?.addEventListener('click', () => {
+      _closeCtrlSheet('overlay-radio-rec');
+      const r = Player.stopRadioRecording();
+      if (r) _uploadRadioRecording(r); else UI.showToast(UI.t('toast_radio_rec_empty'));
+      UI.updateRadioSeekButtons(Player.getRadioDvrState());
+    });
+    document.getElementById('btn-radio-rec-discard')?.addEventListener('click', () => {
+      _closeCtrlSheet('overlay-radio-rec');
+      Player.stopRadioRecording({ discard: true });
+      UI.showToast(UI.t('toast_radio_rec_discarded'));
+      UI.updateRadioSeekButtons(Player.getRadioDvrState());
+    });
+    // Grabación cerrada por el player (cambio de emisora / límite de tamaño) → subir
+    window.addEventListener('savart:radiorec-finished', (e) => _uploadRadioRecording(e.detail));
+    setInterval(() => {
+      if (document.getElementById('overlay-radio-rec')?.classList.contains('visible')) _refreshRadioRecSheet();
+    }, 1000);
 
     // Ctrl sheet close buttons + backdrop
     document.querySelectorAll('.ctrl-sheet').forEach(sheet => {

@@ -63,6 +63,16 @@ const Player = (() => {
                                     // or null when this station couldn't support it and
                                     // playback fell back to plain <audio src> (see radio-dvr.js)
   let _dvrConnectedAt     = 0;     // v3.5.668: Date.now() cuando el DVR de la conexión actual quedó listo
+  // v3.5.670: grabación de emisoras. _radioLog guarda los chunks crudos del stream desde que se
+  // sintonizó la emisora (tope por bytes → "desde el inicio"); _radioRec acumula lo grabado.
+  const _RADIO_LOG_MAX_BYTES = 24 * 1024 * 1024;   // ≈ 25 min a 128 kbps
+  const _RADIO_REC_MAX_BYTES = 150 * 1024 * 1024;  // tope de una grabación (auto-guarda al llegar)
+  let _radioLog           = [];     // [{ ts, data:Uint8Array }]
+  let _radioLogBytes      = 0;
+  let _radioLogStationId  = null;
+  let _radioLogExt        = 'mp3';
+  let _radioLogMime       = 'audio/mpeg';
+  let _radioRec           = null;   // { chunks, bytes, startedAt, stationId, stationName, ext, mime } | null
   const _DVR_OFF_KEY      = 'savart_radio_dvr_off';
   const _DVR_OFF_TTL_MS   = 24 * 3600 * 1000; // reintentar el DVR en la emisora tras 24 h
   const _DVR_MIN_LIFE_MS  = 30000;            // un DVR que cae antes de 30 s se considera incompatible
@@ -1178,6 +1188,8 @@ const Player = (() => {
         _stopRadioMetaWatch();
         if (_radioDvrEngine) { _radioDvrEngine.stop(); _radioDvrEngine = null; }
         _lastRadioStreamUrl = null;
+        _radioRecFinishAuto();   // v3.5.670: si había grabación activa, se cierra y se sube
+        _radioResetLog(null);
       }
 
       // ── Radio Emisoras: live stream ───────────────────────────
@@ -1193,6 +1205,8 @@ const Player = (() => {
       if (item.isRadio) {
         if (_sdActive) { _sdActive = false; Soundrop.yt.stop(); }
         _radioActive = true;
+        // v3.5.670: otra emisora → se cierra la grabación anterior y el log empieza de cero
+        if (_radioLogStationId !== item.id) { _radioRecFinishAuto(); _radioResetLog(item.id); }
         if (_currentBlob) {
           _audio.src = '';
           URL.revokeObjectURL(_currentBlob);
@@ -1218,6 +1232,7 @@ const Player = (() => {
             let _dvrOk = false;
             if (typeof RadioDvr !== 'undefined' && !_dvrIsOff(item.id)) {
               const engine = RadioDvr.create(_radioAudio);
+              engine.onChunk(_radioOnChunk); // v3.5.670: log + grabación
               _dvrOk = await engine.start(streamUrl).catch(() => false);
               // RadioDvr.start() can take a few seconds (up to its chunk
               // timeouts) — if the track was switched away while we were
@@ -1227,6 +1242,7 @@ const Player = (() => {
               if (_dvrOk) {
                 _radioDvrEngine = engine;
                 _dvrConnectedAt = Date.now();
+                { const _f = _radioFmt(engine.getContentType()); _radioLogExt = _f.ext; _radioLogMime = _f.mime; }
                 _radioDvrEngine.onDrop(() => _handleRadioStreamDrop(item));
               } else {
                 engine.stop();
@@ -1781,6 +1797,75 @@ const Player = (() => {
     console.warn('[Player] Radio DVR dropped <30s after connect — disabling DVR for', stationId);
   }
 
+  /* ── Grabación de emisoras (v3.5.670) ───────────────────── */
+  function _radioFmt(ct) {
+    ct = (ct || '').toLowerCase();
+    if (ct.includes('aac'))                        return { ext: 'aac', mime: 'audio/aac' };
+    if (ct.includes('mp4'))                        return { ext: 'm4a', mime: 'audio/mp4' };
+    if (ct.includes('ogg') || ct.includes('opus')) return { ext: 'ogg', mime: 'audio/ogg' };
+    return { ext: 'mp3', mime: 'audio/mpeg' };
+  }
+  function _radioResetLog(stationId) {
+    _radioLog = []; _radioLogBytes = 0; _radioLogStationId = stationId || null;
+  }
+  function _radioOnChunk(chunk) {
+    if (!chunk || !chunk.byteLength) return;
+    _radioLog.push({ ts: Date.now(), data: chunk });
+    _radioLogBytes += chunk.byteLength;
+    while (_radioLogBytes > _RADIO_LOG_MAX_BYTES && _radioLog.length > 1) {
+      _radioLogBytes -= _radioLog.shift().data.byteLength;
+    }
+    if (_radioRec) {
+      _radioRec.chunks.push(chunk);
+      _radioRec.bytes += chunk.byteLength;
+      if (_radioRec.bytes >= _RADIO_REC_MAX_BYTES) _radioRecFinishAuto();
+    }
+  }
+  /** Cierra la grabación activa (cambio de emisora / límite) y avisa a la app para subirla. */
+  function _radioRecFinishAuto() {
+    const r = stopRadioRecording();
+    if (r) { try { window.dispatchEvent(new CustomEvent('savart:radiorec-finished', { detail: r })); } catch (_) {} }
+  }
+  function getRadioRecState() {
+    const dvrReady = !!(_radioActive && _radioDvrEngine && _radioDvrEngine.isReady());
+    const now = Date.now();
+    return {
+      available: dvrReady || !!_radioRec,
+      recording: !!_radioRec,
+      bytes:     _radioRec ? _radioRec.bytes : 0,
+      elapsedMs: _radioRec ? now - _radioRec.startedAt : 0,
+      logMs:     _radioLog.length ? now - _radioLog[0].ts : 0,
+      logBytes:  _radioLogBytes,
+      ext:       _radioLogExt,
+    };
+  }
+  function startRadioRecording({ fromStart = false } = {}) {
+    if (_radioRec) return false;
+    if (!(_radioActive && _radioDvrEngine && _radioDvrEngine.isReady())) return false;
+    const tr   = getCurrentTrack();
+    const seed = fromStart ? _radioLog.map(e => e.data) : [];
+    _radioRec = {
+      chunks: seed,
+      bytes: seed.reduce((a, c) => a + c.byteLength, 0),
+      startedAt: (fromStart && _radioLog.length) ? _radioLog[0].ts : Date.now(),
+      stationId: tr?.id || null,
+      stationName: tr?.displayName || tr?.name || 'Radio',
+      ext: _radioLogExt, mime: _radioLogMime,
+    };
+    return true;
+  }
+  /** Detiene la grabación. Devuelve { blob, ext, mime, durationMs, bytes, stationName, startedAt } o null. */
+  function stopRadioRecording({ discard = false } = {}) {
+    const r = _radioRec; _radioRec = null;
+    if (!r || discard || !r.bytes) return null;
+    return {
+      blob: new Blob(r.chunks, { type: r.mime }),
+      ext: r.ext, mime: r.mime, bytes: r.bytes,
+      durationMs: Date.now() - r.startedAt,
+      stationName: r.stationName, startedAt: r.startedAt,
+    };
+  }
+
   function _handleEnded() {
     // Live radio stream closed cleanly (rare — most drops fire 'error' instead).
     // Treat it like a connection drop and try to reconnect before giving up.
@@ -2088,6 +2173,7 @@ const Player = (() => {
     // Radio Emisoras: best-effort 15s/30s rewind/forward (see radio-dvr.js)
     getRadioDvrState,
     radioSeekBy, radioSeekTo,
+    getRadioRecState, startRadioRecording, stopRadioRecording,
     // SD restore: cancel an in-progress SD load and resume the previous Drive track
     abortSdLoad: _doSdRestore,
   };

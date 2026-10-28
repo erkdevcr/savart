@@ -105,6 +105,24 @@ const UI = (() => {
       toast_radio_restored:     'Emisora restaurada',
       toast_radio_no_queue:     'No se puede agregar a la cola mientras suena una emisora de radio',
       toast_radio_no_speed_eq:  'Velocidad y EQ no están disponibles con una emisora de radio',
+      radio_rec_btn:            'Grabar',
+      radio_rec_title:          'Grabar emisora',
+      radio_rec_from_now:       'Desde ahora',
+      radio_rec_from_now_sub:   'Empieza a grabar a partir de este momento',
+      radio_rec_from_start:     'Desde que sintonicé',
+      radio_rec_from_start_sub: 'Aún no hay audio acumulado',
+      radio_rec_includes:       'Incluye lo ya acumulado:',
+      radio_rec_recording:      'Grabando',
+      radio_rec_stop:           'Detener y guardar',
+      radio_rec_discard:        'Descartar',
+      radio_rec_note:           'Se guarda en tu Drive › Grabaciones de radio',
+      toast_radio_rec_unavailable: 'Esta emisora no permite grabar (sin buffer disponible)',
+      toast_radio_rec_started:  'Grabando…',
+      toast_radio_rec_saving:   'Guardando grabación en Drive…',
+      toast_radio_rec_saved:    'Grabación guardada en Drive › Grabaciones de radio',
+      toast_radio_rec_failed:   'No se pudo subir a Drive — se descargó al dispositivo',
+      toast_radio_rec_empty:    'No hay audio grabado todavía',
+      toast_radio_rec_discarded:'Grabación descartada',
       // ── Queue actions ──────────────────────────────────────
       play_next: 'A continuación',
       play_after:'Después',
@@ -582,6 +600,24 @@ const UI = (() => {
       toast_radio_restored:     'Station restored',
       toast_radio_no_queue:     "Can't add to the queue while a radio station is playing",
       toast_radio_no_speed_eq:  'Speed and EQ aren\'t available with a radio station',
+      radio_rec_btn:            'Record',
+      radio_rec_title:          'Record station',
+      radio_rec_from_now:       'From now',
+      radio_rec_from_now_sub:   'Start recording from this moment on',
+      radio_rec_from_start:     'From when I tuned in',
+      radio_rec_from_start_sub: 'No audio accumulated yet',
+      radio_rec_includes:       'Includes what is already buffered:',
+      radio_rec_recording:      'Recording',
+      radio_rec_stop:           'Stop and save',
+      radio_rec_discard:        'Discard',
+      radio_rec_note:           'Saved to your Drive › Radio recordings',
+      toast_radio_rec_unavailable: 'This station can\'t be recorded (no buffer available)',
+      toast_radio_rec_started:  'Recording…',
+      toast_radio_rec_saving:   'Saving recording to Drive…',
+      toast_radio_rec_saved:    'Recording saved to Drive › Grabaciones de radio',
+      toast_radio_rec_failed:   'Couldn\'t upload to Drive — downloaded to the device',
+      toast_radio_rec_empty:    'Nothing recorded yet',
+      toast_radio_rec_discarded:'Recording discarded',
       // ── Queue actions ──────────────────────────────────────
       play_next: 'Play next',
       play_after:'Play later',
@@ -1456,6 +1492,15 @@ const UI = (() => {
     const badgeBuf = document.getElementById('pexp-badge-radio-buffer');
     if (badgeBuf) {
       badgeBuf.textContent = s.available ? `${(s.bufferMB || 0).toFixed(1)} MB` : '0.0 MB';
+    }
+    // v3.5.670: botón Grabar — estado (grabando / sin buffer) y contador de tiempo
+    const recBtn = document.getElementById('btn-pexp-rec');
+    if (recBtn && typeof Player !== 'undefined' && Player.getRadioRecState) {
+      const rs = Player.getRadioRecState();
+      recBtn.classList.toggle('recording', !!rs.recording);
+      recBtn.classList.toggle('rec-unavailable', !rs.available);
+      const lbl = document.getElementById('pexp-rec-label');
+      if (lbl) lbl.textContent = rs.recording ? formatTime(rs.elapsedMs / 1000) : t('radio_rec_btn');
     }
   }
 
