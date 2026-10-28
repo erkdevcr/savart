@@ -62,6 +62,10 @@ const Player = (() => {
                                     // (15s/30s rewind/forward) is active for this connection,
                                     // or null when this station couldn't support it and
                                     // playback fell back to plain <audio src> (see radio-dvr.js)
+  let _dvrConnectedAt     = 0;     // v3.5.668: Date.now() cuando el DVR de la conexión actual quedó listo
+  const _DVR_OFF_KEY      = 'savart_radio_dvr_off';
+  const _DVR_OFF_TTL_MS   = 24 * 3600 * 1000; // reintentar el DVR en la emisora tras 24 h
+  const _DVR_MIN_LIFE_MS  = 30000;            // un DVR que cae antes de 30 s se considera incompatible
   let _fastStartWaiting   = false; // v3.5.641 (audit A2): true while _handleEnded is holding playback
                                     // waiting for the full-file swap — 'ended' already set audio.paused
                                     // to true, so wasPlaying below would read false and never resume.
@@ -1212,7 +1216,7 @@ const Player = (() => {
             // attempt rather than being pre-excluded by domain.
             if (_radioDvrEngine) { _radioDvrEngine.stop(); _radioDvrEngine = null; }
             let _dvrOk = false;
-            if (typeof RadioDvr !== 'undefined') {
+            if (typeof RadioDvr !== 'undefined' && !_dvrIsOff(item.id)) {
               const engine = RadioDvr.create(_radioAudio);
               _dvrOk = await engine.start(streamUrl).catch(() => false);
               // RadioDvr.start() can take a few seconds (up to its chunk
@@ -1222,6 +1226,7 @@ const Player = (() => {
               if (myCtrl.signal.aborted) { engine.stop(); _radioConnecting = false; return; }
               if (_dvrOk) {
                 _radioDvrEngine = engine;
+                _dvrConnectedAt = Date.now();
                 _radioDvrEngine.onDrop(() => _handleRadioStreamDrop(item));
               } else {
                 engine.stop();
@@ -1751,12 +1756,38 @@ const Player = (() => {
 
   /* ── Event handlers ─────────────────────────────────────── */
 
+  /* v3.5.668: algunas emisoras (p. ej. AAC de StreamTheWorld) conectan bien por
+     fetch+MediaSource pero el stream se corta a los pocos segundos; como cada
+     reconexión exitosa reinicia el contador de reintentos, quedaba en bucle
+     (corte + recarga cada ~3 s). Si el DVR cae a los <30 s de conectar, se marca
+     la emisora como "sin DVR" (24 h) y reconecta con <audio src> plano, que sí
+     tolera esos streams (se pierde solo el rebobinado). */
+  function _dvrOffMap() {
+    try { return JSON.parse(localStorage.getItem(_DVR_OFF_KEY) || '{}') || {}; } catch (_) { return {}; }
+  }
+  function _dvrIsOff(stationId) {
+    if (!stationId) return false;
+    const ts = _dvrOffMap()[stationId];
+    return !!ts && (Date.now() - ts) < _DVR_OFF_TTL_MS;
+  }
+  function _dvrNoteDrop(stationId) {
+    if (!_radioDvrEngine || !stationId) return;
+    if (!_dvrConnectedAt || (Date.now() - _dvrConnectedAt) >= _DVR_MIN_LIFE_MS) return;
+    try {
+      const m = _dvrOffMap();
+      m[stationId] = Date.now();
+      localStorage.setItem(_DVR_OFF_KEY, JSON.stringify(m));
+    } catch (_) { /* sin localStorage: el reintento plano igual no usará DVR esta vez */ }
+    console.warn('[Player] Radio DVR dropped <30s after connect — disabling DVR for', stationId);
+  }
+
   function _handleEnded() {
     // Live radio stream closed cleanly (rare — most drops fire 'error' instead).
     // Treat it like a connection drop and try to reconnect before giving up.
     const _endedTrack = getCurrentTrack();
     if (_endedTrack?.isRadio) {
       if (_radioConnecting) return; // the connect-phase loop in _playCurrentTrack owns this attempt
+      _dvrNoteDrop(_endedTrack.id);
       _radioErrorRetries++;
       if (_radioErrorRetries <= 3) {
         setTimeout(() => {
@@ -1820,6 +1851,7 @@ const Player = (() => {
       // Live stream dropped (network hiccup, server reset) while already
       // playing — try reconnecting automatically (using the station's
       // fallback URLs) before surfacing an error.
+      _dvrNoteDrop(_curTrack.id);
       _radioErrorRetries++;
       if (_radioErrorRetries <= 3) {
         setTimeout(() => {
@@ -1846,6 +1878,7 @@ const Player = (() => {
     if (_radioConnecting) return; // the connect-phase loop already owns this attempt
     const _curTrack = getCurrentTrack();
     if (!_curTrack?.isRadio || _curTrack.id !== item?.id) return;
+    _dvrNoteDrop(_curTrack.id);
     if (_radioDvrEngine) { _radioDvrEngine.stop(); _radioDvrEngine = null; }
     _radioErrorRetries++;
     if (_radioErrorRetries <= 3) {
