@@ -20,7 +20,11 @@ const App = (() => {
   let _radioStations   = [];    // in-memory catalog for the Radio screen — ALL stations (hidden
                                  // included), each stamped isPinned/isScreenFavorite/isHidden;
                                  // _radioTab picks which subset is actually shown
-  let _radioTab        = 'all'; // 'all' (Emisoras) | 'favorites' (Favoritas) | 'deleted' (Borradas)
+  let _radioTab        = 'all'; // 'all' (Emisoras) | 'favorites' (Favoritas) | 'recordings' (Grabaciones) | 'deleted' (Borradas)
+  let _radioRecs       = [];    // v3.5.671: grabaciones de radio (Drive › Grabaciones de radio), más nuevas primero
+  let _radioRecsHydrated = false;     // ya se leyó la caché local (DB state 'radioRecordings')
+  let _radioRecsSyncedAt = 0;         // última lectura de la carpeta de Drive en esta sesión
+  let _radioRecStationFilter = null;  // id de emisora que filtra la pestaña Grabaciones (o null = todas)
   let _rootFolderId    = 'root';
   let _rootFolderName  = CONFIG.ROOT_FOLDER_NAME; // overridden by localStorage if user changed it
   let _browseFolderId  = null;  // current open folder id (for rescan)
@@ -14911,10 +14915,17 @@ const App = (() => {
         isHidden:         hiddenSet.has(s.id),
       }))
       .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+    await _hydrateRadioRecs();
     _renderRadioFiltered();
     _updateRadioTabCounts();
     _wireRadioSearch();
     _wireRadioTabs();
+    // v3.5.671: refresca la lista de grabaciones desde Drive (1 vez por minuto como máximo)
+    _loadRadioRecordings().then(changed => {
+      if (!changed) return;
+      _updateRadioTabCounts();
+      if (_radioTab === 'recordings') _renderRadioFiltered();
+    }).catch(() => {});
   }
 
   /** Stations belonging to a given Radio tab (before the search filter is applied). */
@@ -14926,6 +14937,8 @@ const App = (() => {
 
   /** Re-render the Radio list applying the current tab + search term. */
   function _renderRadioFiltered() {
+    _syncRadioTabButtons();
+    if (_radioTab === 'recordings') { _renderRadioRecordings(); return; }
     const searchInput = document.getElementById('radio-search-input');
     const q = norm(searchInput?.value || '');
     const tabStations = _radioStationsForTab(_radioTab);
@@ -14944,6 +14957,8 @@ const App = (() => {
     const elAll = document.getElementById('radio-tab-count-all');
     const elFav = document.getElementById('radio-tab-count-favorites');
     const elDel = document.getElementById('radio-tab-count-deleted');
+    const elRec = document.getElementById('radio-tab-count-recordings');
+    if (elRec) elRec.textContent = _radioRecs.length > 0 ? String(_radioRecs.length) : '';
     const countAll = _radioStations.filter(s => !s.isHidden).length;
     const countFav = _radioStations.filter(s => s.isScreenFavorite && !s.isHidden).length;
     const countDel = _radioStations.filter(s => s.isHidden).length;
@@ -14979,12 +14994,219 @@ const App = (() => {
     tabs.querySelectorAll('.radio-tab').forEach(btn => {
       btn.addEventListener('click', () => {
         const tab = btn.dataset.tab;
-        if (tab === _radioTab) return;
+        if (tab === _radioTab) {
+          // Volver a tocar "Grabaciones" con un filtro de emisora activo lo quita (muestra todas)
+          if (tab === 'recordings' && _radioRecStationFilter) { _radioRecStationFilter = null; _renderRadioFiltered(); }
+          return;
+        }
         _radioTab = tab;
-        tabs.querySelectorAll('.radio-tab').forEach(b => b.classList.toggle('active', b === btn));
+        if (tab === 'recordings') {
+          _radioRecStationFilter = null; // entrada manual a la pestaña → sin filtro
+          _loadRadioRecordings({ force: true }).then(changed => {
+            if (changed) { _updateRadioTabCounts(); if (_radioTab === 'recordings') _renderRadioFiltered(); }
+          }).catch(() => {});
+        }
         _renderRadioFiltered();
       });
     });
+  }
+
+  /** Marca como activa la pestaña de _radioTab (también al llegar desde "Ver grabaciones"). */
+  function _syncRadioTabButtons() {
+    document.querySelectorAll('#radio-tabs .radio-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === _radioTab));
+  }
+
+  /* ── Grabaciones de radio (v3.5.671) ─────────────────────── */
+
+  /** Convierte un archivo de Drive (carpeta Grabaciones de radio) en un registro de grabación. */
+  function _radioRecFromDrive(f) {
+    const ap = f.appProperties || {};
+    const catalog = (typeof RadioStations !== 'undefined') ? RadioStations.STATIONS : [];
+    const base = String(f.name || '').replace(/\.[^.]+$/, '').replace(/\s*\d{4}-\d{2}-\d{2} \d{2}\.\d{2}$/, '').trim();
+    let startedAt = parseInt(ap.rec_startedAt, 10) || 0;
+    if (!startedAt) {
+      const m = String(f.name || '').match(/(\d{4})-(\d{2})-(\d{2}) (\d{2})\.(\d{2})/);
+      if (m) startedAt = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]).getTime();
+    }
+    let stationId   = ap.rec_stationId || null;
+    let stationName = ap.rec_stationName || '';
+    if (!stationId) { // grabaciones sin appProperties: se deduce por el nombre del archivo
+      const st = catalog.find(s => norm(s.name) === norm(base));
+      if (st) { stationId = st.id; stationName = stationName || st.name; }
+    }
+    return {
+      id: f.id, name: f.name, mimeType: f.mimeType, size: f.size || 0, parents: f.parents || [],
+      stationId, stationName: stationName || base, startedAt,
+      durationMs: parseInt(ap.rec_durationMs, 10) || 0,
+      title: ap.rec_title || '', // nombre personalizado (renombrar grabación)
+    };
+  }
+
+  async function _hydrateRadioRecs() {
+    if (_radioRecsHydrated) return;
+    _radioRecsHydrated = true;
+    try {
+      const stored = await DB.getState('radioRecordings');
+      if (Array.isArray(stored) && !_radioRecs.length) _radioRecs = stored;
+    } catch (_) {}
+  }
+
+  function _persistRadioRecs() {
+    DB.setState('radioRecordings', _radioRecs).catch(() => {});
+  }
+
+  /** Lee la carpeta "Grabaciones de radio" de Drive. Devuelve true si la lista cambió. */
+  async function _loadRadioRecordings({ force = false } = {}) {
+    await _hydrateRadioRecs();
+    if (!force && Date.now() - _radioRecsSyncedAt < 60000) return false;
+    if (typeof Drive === 'undefined' || !Auth.isAuthenticated()) return false;
+    let folderId = null;
+    try { folderId = localStorage.getItem(_RADIO_REC_FOLDER_KEY); } catch (_) {}
+    let files = null;
+    if (folderId) {
+      try { files = (await Drive.listFolderAll(folderId)).files; } catch (_) { files = null; folderId = null; }
+    }
+    if (!files) {
+      folderId = await Drive.findFolder(_RADIO_REC_FOLDER_NAME, 'root').catch(() => null);
+      if (!folderId) { // aún no existe la carpeta → no hay grabaciones
+        _radioRecsSyncedAt = Date.now();
+        const changed = _radioRecs.length > 0;
+        _radioRecs = []; if (changed) _persistRadioRecs();
+        return changed;
+      }
+      try { localStorage.setItem(_RADIO_REC_FOLDER_KEY, folderId); } catch (_) {}
+      files = (await Drive.listFolderAll(folderId)).files;
+    }
+    _radioRecsSyncedAt = Date.now();
+    const next = files.map(_radioRecFromDrive)
+      .sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0));
+    const changed = JSON.stringify(next) !== JSON.stringify(_radioRecs);
+    _radioRecs = next;
+    if (changed) _persistRadioRecs();
+    return changed;
+  }
+
+  function radioStationHasRecordings(stationId) {
+    return !!stationId && _radioRecs.some(r => r.stationId === stationId);
+  }
+
+  function _renderRadioRecordings() {
+    const q = norm(document.getElementById('radio-search-input')?.value || '');
+    let list = _radioRecs;
+    if (_radioRecStationFilter) list = list.filter(r => r.stationId === _radioRecStationFilter);
+    if (q) list = list.filter(r => norm(r.stationName || '').includes(q) || norm(r.name || '').includes(q));
+    let filterName = null;
+    if (_radioRecStationFilter) {
+      const catalog = (typeof RadioStations !== 'undefined') ? RadioStations.STATIONS : [];
+      filterName = catalog.find(s => s.id === _radioRecStationFilter)?.name
+        || _radioRecs.find(r => r.stationId === _radioRecStationFilter)?.stationName || '';
+    }
+    UI.renderRadioRecordings(list, {
+      emptyMessage: _radioRecStationFilter ? UI.t('empty_radio_recordings_station') : UI.t('empty_radio_recordings'),
+      filterName,
+      onClearFilter: () => { _radioRecStationFilter = null; _renderRadioFiltered(); },
+    });
+  }
+
+  /** "Ver grabaciones" (3 puntos de la emisora) → pestaña Grabaciones filtrada por esa emisora. */
+  function onViewRadioRecordings(station) {
+    _radioRecStationFilter = station?.id || null;
+    _radioTab = 'recordings';
+    const si = document.getElementById('radio-search-input');
+    if (si) si.value = '';
+    onNavClick('radio'); // cierra el reproductor expandido en móvil y muestra la pantalla de Radio
+    _renderRadioFiltered();
+  }
+
+  function _radioRecToTrack(r) {
+    const when = r.startedAt ? new Date(r.startedAt).toLocaleString() : '';
+    return {
+      id: r.id, name: r.name, mimeType: r.mimeType, size: r.size, parents: r.parents,
+      isAudio: true, isPlayable: true,
+      displayName: r.title || `${r.stationName}${when ? ' · ' + when : ''}`,
+      artist: r.stationName || '',
+      albumName: _RADIO_REC_FOLDER_NAME,
+      ...(r.durationMs > 0 ? { durationSec: Math.round(r.durationMs / 1000) } : {}),
+    };
+  }
+
+  /** Reproduce una grabación (y deja el resto de la lista visible como cola). */
+  function onRadioRecordingClick(rec, list) {
+    const base = (Array.isArray(list) && list.length) ? list : [rec];
+    const tracks = base.map(_radioRecToTrack);
+    const idx = Math.max(0, base.findIndex(r => r.id === rec.id));
+    _resetRadio();
+    tracks.forEach(t => _cacheItem(t));
+    Player.setQueue(tracks, idx);
+  }
+
+  /** Renombra una grabación (nombre del archivo en Drive + título mostrado). Reutiliza el modal "Cambiar nombre". */
+  function onRenameRadioRecording(rec) {
+    if (!rec?.id) return;
+    const modal = document.getElementById('sd-ren-modal');
+    if (!modal) return;
+    const input   = document.getElementById('sd-ren-input');
+    const btnSave = document.getElementById('btn-sd-ren-save');
+    const extMatch = String(rec.name || '').match(/\.([A-Za-z0-9]{2,4})$/);
+    const ext = extMatch ? extMatch[1] : 'mp3';
+    const baseName = rec.title || String(rec.name || '').replace(/\.[^.]+$/, '');
+    input.value = baseName;
+    input.placeholder = UI.t('sd_ren_ph') || 'Nuevo nombre…';
+    btnSave.disabled = false;
+    modal.style.display = '';
+    setTimeout(() => { input.focus(); input.select(); }, 50);
+
+    const close = () => { modal.style.display = 'none'; };
+    document.getElementById('btn-sd-ren-close').onclick      = close;
+    document.getElementById('btn-sd-ren-cancel').onclick     = close;
+    document.getElementById('sd-ren-modal-backdrop').onclick = close;
+
+    const save = async () => {
+      const newName = input.value.replace(/[\\/]+/g, ' ').replace(/\s+/g, ' ').trim();
+      if (!newName || newName === baseName) { close(); return; }
+      btnSave.disabled = true;
+      const fullName = new RegExp('\\.' + ext + '$', 'i').test(newName) ? newName : `${newName}.${ext}`;
+      try {
+        await Drive.updateFileMeta(rec.id, { name: fullName });
+        // Se reescriben TODAS las props: así la emisora sigue asociada aunque el
+        // nombre ya no empiece con el de la emisora (grabaciones antiguas sin props).
+        await Drive.setAppProperties(rec.id, {
+          rec_stationId:   String(rec.stationId || ''),
+          rec_stationName: String(rec.stationName || ''),
+          rec_startedAt:   String(rec.startedAt || ''),
+          rec_durationMs:  String(Math.round(rec.durationMs || 0)),
+          rec_title:       newName,
+        });
+        // Si ya se reprodujo, el displayName guardado en la DB local mandaría sobre el nuevo
+        DB.setMeta(rec.id, { displayName: newName, name: fullName }).catch(() => {});
+        if (typeof Sync !== 'undefined') Sync.push('metadata');
+        _radioRecs = _radioRecs.map(r => r.id === rec.id ? { ...r, name: fullName, title: newName } : r);
+        _persistRadioRecs();
+        close();
+        if (_radioTab === 'recordings') _renderRadioFiltered();
+        UI.showToast(UI.t('toast_radio_rec_renamed'));
+      } catch (err) {
+        console.error('[App] Rename radio recording failed:', err);
+        UI.showToast(UI.t('toast_radio_rec_rename_failed'), 'error');
+        btnSave.disabled = false;
+      }
+    };
+    btnSave.onclick = save;
+    input.onkeydown = (ev) => { if (ev.key === 'Enter') save(); };
+  }
+
+  async function onDeleteRadioRecording(rec) {
+    try {
+      await Drive.trashFile(rec.id);
+      _radioRecs = _radioRecs.filter(r => r.id !== rec.id);
+      _persistRadioRecs();
+      _updateRadioTabCounts();
+      if (_radioTab === 'recordings') _renderRadioFiltered();
+      UI.showToast(UI.t('toast_radio_rec_deleted'));
+    } catch (err) {
+      console.error('[App] Delete radio recording failed:', err);
+      UI.showToast(UI.t('toast_radio_rec_delete_failed'), 'error');
+    }
   }
 
   /** Play a radio station immediately — direct stream, bypasses Drive/Soundrop. */
@@ -15096,6 +15318,7 @@ const App = (() => {
    *  menu — the currently playing track object only carries playback fields (see
    *  onRadioStationClick above), so look the rest up fresh rather than trusting it. */
   async function getRadioStationForMenu(id) {
+    await _hydrateRadioRecs(); // v3.5.671: para la opción "Ver grabaciones" del menú
     const cached = _radioStations.find(s => s.id === id);
     if (cached) return cached; // already stamped by _loadRadioData — cheap path
     const catalog = (typeof RadioStations !== 'undefined') ? RadioStations.STATIONS : [];
@@ -16035,15 +16258,31 @@ const App = (() => {
       if (typeof Drive === 'undefined' || !Auth.isAuthenticated()) throw new Error('no-auth');
       let folderId = null;
       try { folderId = localStorage.getItem(_RADIO_REC_FOLDER_KEY); } catch (_) {}
-      let ok = false;
+      let fileId = null;
       if (folderId) {
-        try { await Drive.uploadFile(rec.blob, filename, rec.mime, folderId); ok = true; } catch (_) { /* carpeta borrada/sin acceso → se vuelve a buscar */ }
+        try { fileId = await Drive.uploadFile(rec.blob, filename, rec.mime, folderId); } catch (_) { /* carpeta borrada/sin acceso → se vuelve a buscar */ }
       }
-      if (!ok) {
+      if (!fileId) {
         folderId = await Drive.findOrCreateFolder(_RADIO_REC_FOLDER_NAME, 'root');
         try { localStorage.setItem(_RADIO_REC_FOLDER_KEY, folderId); } catch (_) {}
-        await Drive.uploadFile(rec.blob, filename, rec.mime, folderId);
+        fileId = await Drive.uploadFile(rec.blob, filename, rec.mime, folderId);
       }
+      // v3.5.671: la emisora y datos de la grabación viajan en el propio archivo (appProperties)
+      // → la pestaña Grabaciones y el filtro por emisora funcionan en cualquier dispositivo.
+      const _props = {
+        rec_stationId:   String(rec.stationId || ''),
+        rec_stationName: String(rec.stationName || ''),
+        rec_startedAt:   String(rec.startedAt || ''),
+        rec_durationMs:  String(Math.round(rec.durationMs || 0)),
+      };
+      Drive.setAppProperties(fileId, _props).catch(() => {});
+      await _hydrateRadioRecs();
+      _radioRecs = [_radioRecFromDrive({
+        id: fileId, name: filename, mimeType: rec.mime, size: rec.bytes, parents: [folderId], appProperties: _props,
+      }), ..._radioRecs.filter(r => r.id !== fileId)];
+      _persistRadioRecs();
+      _updateRadioTabCounts();
+      if (_radioTab === 'recordings' && UI.getCurrentView?.() === 'radio') _renderRadioFiltered();
       UI.showToast(UI.t('toast_radio_rec_saved'), 'success');
     } catch (err) {
       console.error('[App] Radio recording upload failed:', err);
@@ -18168,6 +18407,11 @@ const App = (() => {
     onToggleRadioScreenFavorite,
     onHideRadioStation,
     onRestoreRadioStation,
+    radioStationHasRecordings,
+    onViewRadioRecordings,
+    onRadioRecordingClick,
+    onRenameRadioRecording,
+    onDeleteRadioRecording,
     // Settings
     onLogout,
     onLanguageChange,

@@ -534,6 +534,20 @@ const Drive = (() => {
     return created.id;
   }
 
+  /**
+   * v3.5.671: like findOrCreateFolder but NEVER creates — returns the folder ID or null.
+   * @param {string} name
+   * @param {string} parentId
+   * @returns {Promise<string|null>}
+   */
+  async function findFolder(name, parentId = 'root') {
+    const q   = `name='${name.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}' and mimeType='application/vnd.google-apps.folder' and '${parentId}' in parents and trashed=false`;
+    const url = `${CONFIG.API_BASE}/files?q=${encodeURIComponent(q)}&fields=files(id,name)&spaces=drive`;
+    const res = await _fetch(url);
+    const data = await res.json();
+    return (data.files && data.files.length > 0) ? data.files[0].id : null;
+  }
+
   /* ── uploadFile ─────────────────────────────────────────── */
   /**
    * Upload a Blob to Drive using multipart upload.
@@ -657,6 +671,7 @@ const Drive = (() => {
     findCoverImage,
     setAppProperties,
     findOrCreateFolder,
+    findFolder,
     uploadFile,
     updateFileMeta,
     trashFile,

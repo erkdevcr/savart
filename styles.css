@@ -8033,6 +8033,25 @@ body.queue-open #mini-player { z-index: 65; }
 }
 .radio-tab.active svg { opacity: 1; }
 
+/* v3.5.671: 4 pestañas — en pantallas angostas la barra se desplaza en horizontal */
+.radio-tabs { overflow-x: auto; scrollbar-width: none; }
+.radio-tabs::-webkit-scrollbar { display: none; }
+.radio-tab { flex-shrink: 0; white-space: nowrap; }
+.radio-tab[data-tab="recordings"] svg { color: #e5484d; opacity: 1; }
+.radio-rec-filter {
+  display: flex; align-items: center; gap: 8px;
+  margin: 8px 16px 4px; padding: 6px 8px 6px 12px;
+  background: var(--accent-soft); color: var(--accent);
+  border-radius: 999px; font-size: 12px; width: fit-content; max-width: calc(100% - 32px);
+}
+.radio-rec-filter span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.radio-rec-filter button {
+  display: flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; border-radius: 50%; border: none;
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  color: var(--accent); cursor: pointer; flex-shrink: 0;
+}
+
 /* Count badge inside each radio tab */
 .radio-tab-count {
   font-size: 10px;

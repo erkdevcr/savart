@@ -95,6 +95,16 @@ const UI = (() => {
       radio_live:               'EN VIVO',
       radio_tab_favorites:      'Favoritas',
       radio_tab_deleted:        'Borradas',
+      radio_tab_recordings:     'Grabaciones',
+      empty_radio_recordings:   'Aún no hay grabaciones. Graba una emisora desde el reproductor.',
+      empty_radio_recordings_station: 'Esta emisora no tiene grabaciones.',
+      ctx_radio_view_recordings:'Ver grabaciones',
+      ctx_radio_rec_delete:     'Eliminar grabación',
+      toast_radio_rec_renamed:  'Grabación renombrada',
+      toast_radio_rec_rename_failed: 'No se pudo renombrar la grabación',
+      radio_rec_filter_label:   'Emisora',
+      toast_radio_rec_deleted:  'Grabación enviada a la papelera de Drive',
+      toast_radio_rec_delete_failed: 'No se pudo eliminar la grabación',
       empty_radio_favorites:    'Aún no tienes emisoras favoritas.',
       empty_radio_deleted:      'No hay emisoras borradas.',
       toast_radio_fav_added:    'Añadida a favoritos',
@@ -590,6 +600,16 @@ const UI = (() => {
       radio_live:               'LIVE',
       radio_tab_favorites:      'Favorites',
       radio_tab_deleted:        'Deleted',
+      radio_tab_recordings:     'Recordings',
+      empty_radio_recordings:   'No recordings yet. Record a station from the player.',
+      empty_radio_recordings_station: 'This station has no recordings.',
+      ctx_radio_view_recordings:'View recordings',
+      ctx_radio_rec_delete:     'Delete recording',
+      toast_radio_rec_renamed:  'Recording renamed',
+      toast_radio_rec_rename_failed: 'Couldn\'t rename the recording',
+      radio_rec_filter_label:   'Station',
+      toast_radio_rec_deleted:  'Recording moved to Drive trash',
+      toast_radio_rec_delete_failed: 'Couldn\'t delete the recording',
       empty_radio_favorites:    'You don\'t have any favorite stations yet.',
       empty_radio_deleted:      'No deleted stations.',
       toast_radio_fav_added:    'Added to favorites',
@@ -2051,6 +2071,89 @@ const UI = (() => {
     stations.forEach(station => container.appendChild(_buildRadioRow(station)));
   }
 
+  /**
+   * v3.5.671: lista de la pestaña "Grabaciones" del Radio.
+   * @param {Object[]} recs - grabaciones { id, name, stationId, stationName, startedAt, durationMs, size, … }
+   * @param {{emptyMessage?:string, filterName?:string, onClearFilter?:Function}} opts
+   */
+  function renderRadioRecordings(recs, { emptyMessage, filterName, onClearFilter } = {}) {
+    const container = document.getElementById('radio-list');
+    if (!container) return;
+    container.innerHTML = '';
+
+    if (filterName) {
+      const chip = document.createElement('div');
+      chip.className = 'radio-rec-filter';
+      chip.innerHTML = `<span>${escHtml(t('radio_rec_filter_label'))}: ${escHtml(filterName)}</span>
+        <button aria-label="✕"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button>`;
+      chip.querySelector('button').addEventListener('click', () => onClearFilter?.());
+      container.appendChild(chip);
+    }
+
+    if (!recs || recs.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'home-section-empty';
+      empty.style.padding = '32px 16px';
+      empty.textContent = emptyMessage || t('empty_radio_recordings');
+      container.appendChild(empty);
+      return;
+    }
+    recs.forEach(rec => container.appendChild(_buildRadioRecRow(rec, recs)));
+  }
+
+  function _buildRadioRecRow(rec, allRecs) {
+    const el = document.createElement('div');
+    el.className = 'top-list-item';
+    el.dataset.id = rec.id;
+
+    const catalog = (typeof RadioStations !== 'undefined') ? RadioStations.STATIONS : [];
+    const st   = catalog.find(s => s.id === rec.stationId);
+    const name = rec.stationName || st?.name || '—';
+    const bg   = _stationColor(name);
+    const fallbackThumb = `<div class="top-list-thumb top-list-thumb--radio" style="background:${bg}"><div style="display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.9)">${iconRadio(20)}</div></div>`;
+    const thumbHtml = st?.logo
+      ? `<div class="top-list-thumb top-list-thumb--radio-logo"><img src="${escHtml(st.logo)}" alt="" loading="lazy"></div>`
+      : fallbackThumb;
+
+    let when = '';
+    if (rec.startedAt) {
+      try {
+        when = new Date(rec.startedAt).toLocaleString(undefined, { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+      } catch (_) { when = new Date(rec.startedAt).toLocaleString(); }
+    }
+    const parts = [name];
+    if (rec.title && when) parts.push(when); // renombrada: el título ocupa la línea principal, la fecha pasa aquí
+    if (rec.durationMs > 0) parts.push(formatTime(Math.round(rec.durationMs / 1000)));
+    if (rec.size > 0)       parts.push(`${(rec.size / 1048576).toFixed(1)} MB`);
+
+    el.innerHTML = `
+      ${thumbHtml}
+      <div class="top-list-info">
+        <div class="top-list-title">${escHtml(rec.title || when || rec.name || '—')}</div>
+        <div class="top-list-meta">${escHtml(parts.join(' · '))}</div>
+      </div>
+      <button class="btn-more" aria-label="Más opciones">${iconDots()}</button>
+    `;
+
+    const logoImg = el.querySelector('.top-list-thumb--radio-logo img');
+    if (logoImg) {
+      logoImg.addEventListener('error', () => {
+        const thumbEl = el.querySelector('.top-list-thumb--radio-logo');
+        if (thumbEl) thumbEl.outerHTML = fallbackThumb;
+      }, { once: true });
+    }
+
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('.btn-more')) return;
+      if (typeof App !== 'undefined') App.onRadioRecordingClick?.(rec, allRecs);
+    });
+    el.querySelector('.btn-more')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      showContextMenu(e, 'radio_recording', rec);
+    });
+    return el;
+  }
+
   /** Radio station list row (search screen): colored circular avatar + name + city + 3-dot. */
   function _buildRadioRow(station) {
     const el = document.createElement('div');
@@ -3128,6 +3231,12 @@ const UI = (() => {
         () => { App.onToggleRadioFavorite?.(item); hideContextMenu(); });
       _addCtxItem(menu, iconStar(14), item.isScreenFavorite ? t('ctx_radio_remove_fav') : t('ctx_radio_add_fav'),
         () => { App.onToggleRadioScreenFavorite?.(item); hideContextMenu(); });
+      // v3.5.671: solo si esta emisora ya tiene grabaciones → salta a la pestaña
+      // "Grabaciones" filtrada por ella.
+      if (typeof App !== 'undefined' && App.radioStationHasRecordings?.(item.id)) {
+        _addCtxItem(menu, '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="6"/></svg>',
+          t('ctx_radio_view_recordings'), () => { App.onViewRadioRecordings?.(item); hideContextMenu(); });
+      }
       _addCtxDivider(menu);
       // "Borradas" tab: Delete doesn't apply to an already-deleted station — offer
       // Restore instead so there is a way back to "Emisoras".
@@ -3136,6 +3245,15 @@ const UI = (() => {
       } else {
         _addCtxItem(menu, iconTrash(14), t('ctx_delete'), () => { App.onHideRadioStation?.(item); hideContextMenu(); });
       }
+    }
+
+    if (type === 'radio_recording') {
+      _addCtxItem(menu, '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>',
+        t('ctx_play'), () => { App.onRadioRecordingClick?.(item); hideContextMenu(); });
+      _addCtxItem(menu, _iconEdit, t('ctx_rename'), () => { App.onRenameRadioRecording?.(item); hideContextMenu(); });
+      _addCtxDivider(menu);
+      _addCtxItem(menu, iconTrash(14), t('ctx_radio_rec_delete'),
+        () => { App.onDeleteRadioRecording?.(item); hideContextMenu(); });
     }
 
     if (type === 'home_station') {
@@ -6462,6 +6580,7 @@ const UI = (() => {
     setSeekDragging,
     previewSeek,
     previewRadioSeek,
+    renderRadioRecordings,
     // Queue panel
     showQueuePanel,
     isQueuePanelVisible,

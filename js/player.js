@@ -1862,7 +1862,7 @@ const Player = (() => {
       blob: new Blob(r.chunks, { type: r.mime }),
       ext: r.ext, mime: r.mime, bytes: r.bytes,
       durationMs: Date.now() - r.startedAt,
-      stationName: r.stationName, startedAt: r.startedAt,
+      stationName: r.stationName, stationId: r.stationId, startedAt: r.startedAt,
     };
   }
 
