@@ -1359,8 +1359,10 @@ const UI = (() => {
       if (dvr && dvr.available && dvr.rangeEnd > dvr.rangeStart) {
         const pct = (dvr.currentTime - dvr.rangeStart) / (dvr.rangeEnd - dvr.rangeStart);
         if (fill)  fill.style.width = `${Math.min(100, Math.max(0, pct * 100))}%`;
-        if (curEl) curEl.textContent = '-' + formatTime(dvr.rangeEnd - dvr.currentTime);
-        if (totEl) totEl.textContent = t('radio_live');
+        // v3.5.669: izquierda = tiempo avanzado dentro del buffer (positivo),
+        // derecha = lo que va sumando el buffer (largo retenido, crece hasta ~5 min).
+        if (curEl) curEl.textContent = formatTime(Math.max(0, dvr.currentTime - dvr.rangeStart));
+        if (totEl) totEl.textContent = formatTime(dvr.rangeEnd - dvr.rangeStart);
         return;
       }
       // No DVR buffer for this station (CORS-blocked, or still connecting) —
@@ -1411,7 +1413,7 @@ const UI = (() => {
     const curEl = document.getElementById('pexp-time-cur');
     if (curEl && range && range.end > range.start) {
       const target = range.start + pct * (range.end - range.start);
-      curEl.textContent = '-' + formatTime(range.end - target);
+      curEl.textContent = formatTime(target - range.start); // v3.5.669: tiempo positivo dentro del buffer
     }
   }
 
