@@ -8096,6 +8096,11 @@ body.radio-track-active #mini-player .track-nav-btn { display: none; } /* beats 
   font-family: inherit;
 }
 body.radio-track-active .radio-seek-btn { display: flex; }
+/* v3.5.676: la regla de ID `#mini-player .mini-controls button {display:flex}` pisaba el
+   display:none de .radio-seek-btn → en el mini reproductor móvil los 15/30 salían también con
+   canciones de Drive. Se re-oculta con mayor especificidad y solo se muestran en radio. */
+#mini-player .mini-controls .radio-seek-btn { display: none; }
+body.radio-track-active #mini-player .mini-controls .radio-seek-btn { display: flex; }
 .radio-seek-btn:hover:not(:disabled) {
   color: var(--text-primary);
   background: var(--bg-hover);
