@@ -1347,6 +1347,12 @@ const App = (() => {
     }
   }
 
+  // Memoria corta de sesión del bot IA (v3.5.673): últimos turnos { q, r, t } para que
+  // "pon más de eso" / "sin baladas" funcionen. Solo en memoria; caduca tras 15 min sin uso.
+  let _aiHistory = [];
+  const _AI_HISTORY_MAX = 3;
+  const _AI_HISTORY_TTL_MS = 15 * 60 * 1000;
+
   async function _handleAiQuery(query) {
     if (!query?.trim()) return;
     const statusEl = document.getElementById('ai-search-status');
@@ -1368,7 +1374,13 @@ const App = (() => {
       const res = await fetch(`${workerUrl}/ai`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ query: query.trim() }),
+        body:    JSON.stringify({
+          query:   query.trim(),
+          history: _aiHistory
+            .filter(h => Date.now() - h.t < _AI_HISTORY_TTL_MS)
+            .slice(-_AI_HISTORY_MAX)
+            .map(({ q, r }) => ({ q, r })),
+        }),
       });
       if (!res.ok) {
         const errBody = await res.json().catch(() => ({}));
@@ -1380,6 +1392,12 @@ const App = (() => {
       const { intent, terms = [], exclude = [], track = '', folderName = '', useSoundrop = false, explanation = '', limit = null } = data;
 
       setStatus(`✦ ${explanation || 'Buscando…'}`, 'thinking');
+
+      // Recordar este turno (lo interpretado, no el resultado) para la siguiente consulta
+      _aiHistory = [
+        ..._aiHistory.filter(h => Date.now() - h.t < _AI_HISTORY_TTL_MS),
+        { q: query.trim().slice(0, 200), t: Date.now(), r: { intent, terms: terms.slice(0, 6), exclude: exclude.slice(0, 4), track, folderName } },
+      ].slice(-_AI_HISTORY_MAX);
 
       let songs = [];
 
