@@ -1060,6 +1060,8 @@ const UI = (() => {
     const isLoggedIn = viewId !== 'login';
     document.getElementById('bottom-nav').style.display = isLoggedIn ? '' : 'none';
     document.getElementById('sidebar').style.display    = isLoggedIn ? '' : 'none';
+    // El personaje del bot IA solo aparece cuando ya se muestra el Home (no en el login)
+    document.body.classList.toggle('on-login', !isLoggedIn);
   }
 
   function getCurrentView() { return _currentView; }

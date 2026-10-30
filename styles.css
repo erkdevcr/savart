@@ -9015,6 +9015,14 @@ body.offline-mode #view-home .home-header {
   align-items: flex-end;
   gap: 8px;
   user-select: none;
+  transition: opacity .35s ease;
+}
+/* Mientras está el login, el bot IA no se muestra; aparece (fade-in) al entrar al Home */
+body.on-login .ai-search-float {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: none;
 }
 
 /* Collapsed trigger button — círculo perfecto (ancho = alto), solo ícono
