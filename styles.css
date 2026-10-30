@@ -9238,3 +9238,11 @@ body.offline-mode #view-home .home-header {
 .ai-search-status.found    { color: var(--text-secondary); }
 .ai-search-status.error    { color: #e55; }
 .ai-search-status.empty    { color: var(--text-disabled); }
+/* v3.5.674: botones Sí / No de "¿La busco en Soundrop?" */
+.ai-status-btn {
+  margin-left: 6px; padding: 2px 12px;
+  font-size: 12px; font-family: inherit; line-height: 1.5;
+  color: var(--accent); background: var(--accent-soft);
+  border: none; border-radius: 999px; cursor: pointer;
+}
+.ai-status-btn:hover { background: color-mix(in srgb, var(--accent) 25%, transparent); }

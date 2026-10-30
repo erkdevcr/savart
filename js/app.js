@@ -1353,7 +1353,13 @@ const App = (() => {
   const _AI_HISTORY_MAX = 3;
   const _AI_HISTORY_TTL_MS = 15 * 60 * 1000;
 
-  async function _handleAiQuery(query) {
+  /**
+   * @param {string} query
+   * @param {{reuse?:Object, forceSoundrop?:boolean}} [opts] — reuse: respuesta del worker ya
+   *   obtenida (al contestar "Sí" a "¿La busco en Soundrop?" no se vuelve a llamar a Gemini);
+   *   forceSoundrop: buscar en YouTube/Soundrop aunque el usuario no lo haya pedido.
+   */
+  async function _handleAiQuery(query, opts = {}) {
     if (!query?.trim()) return;
     const statusEl = document.getElementById('ai-search-status');
     const inputEl  = document.getElementById('ai-search-input');
@@ -1369,32 +1375,38 @@ const App = (() => {
     _aiBotForce('thinking', 15000);
 
     try {
-      if (!workerUrl) throw new Error('no_worker');
+      let data;
+      if (opts.reuse) {
+        data = opts.reuse; // "Sí, búscala en Soundrop": se reutiliza la interpretación, sin otra llamada a Gemini
+      } else {
+        if (!workerUrl) throw new Error('no_worker');
 
-      const res = await fetch(`${workerUrl}/ai`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-          query:   query.trim(),
-          history: _aiHistory
-            .filter(h => Date.now() - h.t < _AI_HISTORY_TTL_MS)
-            .slice(-_AI_HISTORY_MAX)
-            .map(({ q, r }) => ({ q, r })),
-        }),
-      });
-      if (!res.ok) {
-        const errBody = await res.json().catch(() => ({}));
-        throw new Error(errBody.detail || errBody.error || `worker_${res.status}`);
+        const res = await fetch(`${workerUrl}/ai`, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({
+            query:   query.trim(),
+            history: _aiHistory
+              .filter(h => Date.now() - h.t < _AI_HISTORY_TTL_MS)
+              .slice(-_AI_HISTORY_MAX)
+              .map(({ q, r }) => ({ q, r })),
+          }),
+        });
+        if (!res.ok) {
+          const errBody = await res.json().catch(() => ({}));
+          throw new Error(errBody.detail || errBody.error || `worker_${res.status}`);
+        }
+
+        data = await res.json();
+        if (data.error) throw new Error(data.detail || data.error);
       }
-
-      const data = await res.json();
-      if (data.error) throw new Error(data.detail || data.error);
-      const { intent, terms = [], exclude = [], track = '', folderName = '', useSoundrop = false, explanation = '', limit = null } = data;
+      const { intent, terms = [], exclude = [], track = '', folderName = '', useSoundrop: _aiUseSd = false, explanation = '', limit = null } = data;
+      const useSoundrop = !!opts.forceSoundrop || !!_aiUseSd;
 
       setStatus(`✦ ${explanation || 'Buscando…'}`, 'thinking');
 
       // Recordar este turno (lo interpretado, no el resultado) para la siguiente consulta
-      _aiHistory = [
+      if (!opts.reuse) _aiHistory = [
         ..._aiHistory.filter(h => Date.now() - h.t < _AI_HISTORY_TTL_MS),
         { q: query.trim().slice(0, 200), t: Date.now(), r: { intent, terms: terms.slice(0, 6), exclude: exclude.slice(0, 4), track, folderName } },
       ].slice(-_AI_HISTORY_MAX);
@@ -1430,7 +1442,12 @@ const App = (() => {
 
       if (useSoundrop && typeof Soundrop !== 'undefined') {
         // ── YouTube / Soundrop ───────────────────────────────
-        for (const term of terms.slice(0, 3)) {
+        // Con canción puntual ("Vuelve de Shakira") la 1ª búsqueda es "artista + título";
+        // buscar solo el artista traía 10 videos cualquiera y el título no aparecía.
+        const _sdTerms = (track && String(track).trim())
+          ? [`${terms[0] || ''} ${String(track).trim()}`.trim(), ...terms.slice(0, 2)]
+          : terms.slice(0, 3);
+        for (const term of _sdTerms) {
           try {
             const r = await Soundrop.search(term);
             if (Array.isArray(r)) songs.push(...r.slice(0, 10));
@@ -1512,8 +1529,28 @@ const App = (() => {
       }
 
       if (!songs.length) {
-        setStatus('✦ No encontré canciones para eso', 'empty');
         _aiBotForce('sad', 2600);
+        // Drive no tiene nada → preguntar (no buscar solo) si se prueba en Soundrop.
+        // No aplica a "carpeta" (una carpeta propia que no existe no se busca en YouTube).
+        if (!useSoundrop && intent !== 'folder' && typeof Soundrop !== 'undefined' && statusEl) {
+          statusEl.className = 'ai-search-status empty';
+          statusEl.textContent = '';
+          const msg = document.createElement('span');
+          msg.textContent = '✦ No lo encontré en tu Drive. ¿La busco en Soundrop? ';
+          const mkBtn = (label, onClick) => {
+            const b = document.createElement('button');
+            b.type = 'button'; b.className = 'ai-status-btn'; b.textContent = label;
+            b.addEventListener('click', onClick);
+            return b;
+          };
+          statusEl.append(
+            msg,
+            mkBtn('Sí', () => _handleAiQuery(query, { reuse: data, forceSoundrop: true })),
+            mkBtn('No', () => setStatus('✦ Listo, no la busco en Soundrop', 'empty')),
+          );
+          return;
+        }
+        setStatus('✦ No encontré canciones para eso', 'empty');
         return;
       }
 
