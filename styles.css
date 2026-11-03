@@ -6586,7 +6586,8 @@ body.queue-open #mini-player { z-index: 65; }
 }
 
 .eq-custom-sparkline {
-  height: 20px;   /* v3.5.681: barras en vez de línea */
+  height: 20px;   /* v3.5.684: coincide con el viewBox (1 unidad = 1 px de alto) */
+  display: block;
   width: 100%;
   margin-bottom: 2px;
 }
