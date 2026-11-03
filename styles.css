@@ -4547,10 +4547,31 @@ body.queue-open #mini-player { z-index: 65; }
    - Open   → flex:1 1 0 + min-height:0 so the drawer fills remaining card
               space (up to 225px) and scrolls when the viewport is short */
 #overlay-eq .eq-custom-section {
-  flex-shrink: 0;
+  flex: 0 1 auto;     /* v3.5.682: cede altura cuando la ventana es baja… */
+  min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+/* …pero la fila Guardar/Agrupar y la barra "Ajustes personalizados" nunca se encogen */
+#overlay-eq .eq-custom-section > :not(.eq-presets-drawer) { flex-shrink: 0; }
+/* Abierto: el cajón toma el espacio que queda (máx. 225 px) y hace scroll interno */
+#overlay-eq .eq-presets-drawer.open {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* v3.5.682: ventana/móvil MUY bajo (p. ej. horizontal): ni el cajón (con 1-2 filas de alto)
+   ni el resto caben, así que la tarjeta entera hace scroll —con el encabezado fijo arriba—
+   y los presets quedan siempre alcanzables. */
+@media (max-height: 560px) {
+  #overlay-eq #screen-eq { overflow-y: auto; overflow-x: hidden; }
+  #overlay-eq #screen-eq .eq-header {
+    position: sticky; top: 0; z-index: 3;
+    background: var(--bg-elevated);
+  }
+  #overlay-eq #screen-eq .eq-custom-section { flex-shrink: 0; overflow: visible; }
+  #overlay-eq #screen-eq .eq-presets-drawer.open { flex: none; max-height: none; overflow: visible; }
 }
 
 /* Mobile: 3-column grid so all cards fit without horizontal overflow */
@@ -6454,6 +6475,24 @@ body.queue-open #mini-player { z-index: 65; }
 #btn-eq-group { margin-left: auto; }
 .eq-save-btn.active { color: var(--accent); border-color: var(--accent); }
 .eq-save-btn.active:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); border-color: var(--accent); }
+
+/* v3.5.683: botones "Guardar actual" / "Agrupar barras" y la barra que despliega
+   "Ajustes personalizados" con texto y borde en un gris más claro (antes casi se perdían
+   sobre el fondo). Solo en la tarjeta del EQ: .eq-save-btn se reutiliza en otras pantallas. */
+#screen-eq .eq-save-row .eq-save-btn:not(.active) {
+  color: var(--text-secondary);
+  border-color: var(--text-muted);
+}
+#screen-eq .eq-save-row .eq-save-btn:not(.active):hover {
+  color: var(--text-primary);
+  border-color: var(--text-secondary);
+}
+#screen-eq .eq-presets-toggle { color: var(--text-secondary); }
+#screen-eq .eq-presets-toggle .eq-toggle-label { color: var(--text-secondary); }
+#screen-eq .eq-presets-toggle .eq-toggle-line { background: var(--text-muted); }
+#screen-eq .eq-presets-toggle:hover,
+#screen-eq .eq-presets-toggle:hover .eq-toggle-label { color: var(--text-primary); }
+#screen-eq .eq-presets-toggle:hover .eq-toggle-line { background: var(--text-secondary); }
 
 /* Full-width toggle bar with centered V chevron */
 .eq-presets-toggle {
