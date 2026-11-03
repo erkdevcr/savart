@@ -270,6 +270,22 @@ const Drive = (() => {
 
     const terms = [...querySet];
 
+    // v3.5.688: frases contiguas dentro de la consulta (solo si tiene 3+ palabras). Drive busca
+    // `name contains` con la cadena COMPLETA, así que "arjona se fue" no encuentra "Se Fue.mp3"
+    // (el artista suele estar en la carpeta, no en el nombre del archivo). Las sub-frases
+    // ("arjona se", "se fue") sí lo encuentran; el filtrado fino lo hace _fuzzyRank con el contexto.
+    const _words = normalized.split(/\s+/).filter(Boolean);
+    const phraseSet = new Set();
+    if (_words.length >= 3) {
+      for (let len = 2; len < _words.length; len++) {
+        for (let i = 0; i + len <= _words.length; i++) {
+          const ph = _words.slice(i, i + len).join(' ');
+          if (ph.length >= 4) phraseSet.add(safe(ph));
+        }
+      }
+    }
+    const phrases = [...phraseSet].filter(p => !querySet.has(p)).slice(0, 8);
+
     // Fire mixed queries + dedicated folder queries in parallel.
     // La query principal va primero y alimenta onPartial (primer pintado).
     const primaryQ = _driveSearchQuery(primaryTerm, 'mixed');
@@ -277,6 +293,7 @@ const Drive = (() => {
     const allQueries = [
       primaryQ,
       ...terms.filter(q => q !== primaryTerm).map(q => _driveSearchQuery(q, 'mixed')),
+      ...phrases.map(q => _driveSearchQuery(q, 'mixed')),
       ...terms.map(q => _driveSearchQuery(q, 'folders')),
     ];
     const settled = await Promise.allSettled(allQueries);

@@ -7471,9 +7471,9 @@ const App = (() => {
    * Splits both into words and scores best-matching pair per query word.
    * "mi mrjor amigo" vs "Mi Mejor Amigo.mp3" → ~0.9
    */
-  function _fuzzyScore(query, filename) {
+  function _fuzzyScore(query, filename, stripExt = true) {
     const qNorm = _searchNorm(query);
-    const fNorm = _searchNorm(filename.replace(/\.[^.]+$/, '')); // strip extension
+    const fNorm = _searchNorm(stripExt ? filename.replace(/\.[^.]+$/, '') : filename); // strip extension
 
     // Fast path: exact substring
     if (fNorm.includes(qNorm)) return 1;
@@ -7502,9 +7502,47 @@ const App = (() => {
    * Fuzzy-rank a Drive results object.
    * Items below MIN_SCORE are dropped; survivors sorted by score desc.
    */
-  function _fuzzyRank(term, result) {
+  /**
+   * v3.5.688: contexto de búsqueda — el nombre del archivo casi nunca trae al artista
+   * ("Se Fue.mp3" dentro de "Ricardo Arjona/…"), así que "arjona se fue" daba 0 resultados.
+   * Se construye un índice del metadata local (artista/álbum/título y nombres de carpeta).
+   */
+  async function _buildSearchCtx() {
+    const list = await DB.getAllMetaLight().catch(() => []);
+    const byId = new Map();
+    for (const m of list) if (m?.id) byId.set(m.id, m);
+    return { byId };
+  }
+
+  /** Texto de contexto de un item: artista, álbum, título limpio y carpetas padre/abuela. */
+  function _searchExtras(item, ctx) {
+    if (!ctx) return '';
+    const m  = ctx.byId.get(item.id) || null;
+    const ap = item.appProperties || {};
+    const parts = [ap.s_artist, ap.s_album, ap.s_title, m?.artist, m?.album, m?.displayName];
+    const p1 = item.parents?.[0] || m?.folderId || null;
+    const f1 = p1 ? ctx.byId.get(p1) : null;
+    if (f1) {
+      parts.push(f1.name || f1.displayName);
+      const f2 = f1.folderId ? ctx.byId.get(f1.folderId) : null;
+      if (f2) parts.push(f2.name || f2.displayName);
+    }
+    return parts.filter(Boolean).join(' ');
+  }
+
+  function _fuzzyRank(term, result, ctx = null) {
     const MIN_SCORE = 0.45; // allow ~1 edit in 5-char word
-    const score = item => _fuzzyScore(term, item.name || item.displayName || '');
+    const score = item => {
+      const nm   = item.name || item.displayName || '';
+      const base = _fuzzyScore(term, nm);
+      if (!ctx || base >= 1 || item.isFolder) return base;
+      const extra = _searchExtras(item, ctx);
+      if (!extra) return base;
+      // Nombre + contexto, sin quitar "extensión" (el contexto puede traer puntos: "Vol. 2").
+      // -2 % para que, a igual coincidencia, los que ya traen el término en su nombre salgan primero.
+      const withCtx = _fuzzyScore(term, nm.replace(/\.[^.]+$/, '') + ' ' + extra, false) * 0.98;
+      return Math.max(base, withCtx);
+    };
 
     const rankList = arr => arr
       .map(item => ({ item, score: score(item) }))
@@ -7516,6 +7554,34 @@ const App = (() => {
       folders: rankList(result.folders || []),
       files:   rankList(result.files   || []),
     };
+  }
+
+  /**
+   * v3.5.688: canciones de la biblioteca local (metadata ya escaneado) cuyo nombre+contexto
+   * coincide con la consulta pero que Drive no devolvió — p. ej. "Se Fue" de Arjona cuando hay
+   * más de 100 "Se Fue" y la página de Drive no llega hasta esa. Devuelve items tipo Drive.
+   */
+  function _localLibraryMatches(term, ctx, excludeIds) {
+    if (!ctx) return [];
+    const AUDIO_RE = /\.(mp3|m4a|flac|wav|ogg|opus|aac|wma)$/i;
+    const out = [];
+    for (const m of ctx.byId.values()) {
+      if (excludeIds.has(m.id)) continue;
+      const nm = m.name || m.displayName || '';
+      if (!nm || !(AUDIO_RE.test(nm) || /^audio\//.test(m.mimeType || ''))) continue;
+      const item = {
+        id: m.id, name: nm, displayName: m.displayName || nm,
+        mimeType: m.mimeType || 'audio/mpeg', parents: m.folderId ? [m.folderId] : [],
+        thumbnailUrl: m.thumbnailUrl || null, isFolder: false, isAudio: true, isPlayable: true,
+        size: m.size || 0, durationMs: (m.durationSec || 0) * 1000, appProperties: null,
+      };
+      const extra = _searchExtras(item, ctx);
+      if (!extra) continue;
+      const sc = _fuzzyScore(term, nm.replace(/\.[^.]+$/, '') + ' ' + extra, false);
+      if (sc >= 0.9) out.push(item);     // solo coincidencias claras: aquí no hay página de Drive que las respalde
+      if (out.length >= 60) break;
+    }
+    return out;
   }
 
   // Last song results from a search — used by the "Play results" button
@@ -7626,9 +7692,15 @@ const App = (() => {
       try {
         const normTerm = norm(term);
         const all      = await DB.getAllMetaLight().catch(() => []);
+        // v3.5.688: cada palabra de la consulta debe aparecer en nombre/artista/álbum/carpeta
+        // (antes se exigía la frase completa contigua: "arjona se fue" nunca coincidía).
+        const _tokens  = normTerm.split(/\s+/).filter(Boolean);
+        const _byId    = new Map(all.map(x => [x.id, x]));
         const matched  = all.filter(m => {
-          const haystack = [m.name, m.displayName, m.artist, m.album].filter(Boolean).map(norm).join(' ');
-          if (!haystack.includes(normTerm)) return false;
+          const f1 = m.folderId ? _byId.get(m.folderId) : null;
+          const f2 = f1?.folderId ? _byId.get(f1.folderId) : null;
+          const haystack = [m.name, m.displayName, m.artist, m.album, f1?.name, f2?.name].filter(Boolean).map(norm).join(' ');
+          if (!_tokens.every(t => haystack.includes(t))) return false;
           // "Aquí": filtrar por carpeta abierta (offline usa folderId en DB)
           if (searchHereActive && m.folderId !== _browseFolderId) return false;
           return true;
@@ -7677,6 +7749,7 @@ const App = (() => {
       // exacto) se pinta apenas responde, sin esperar a las ~8-20 queries de
       // expansión (variantes de acento / palabras sueltas / folders-only).
       const _seq = ++_searchSeq;
+      const _ctxP = _buildSearchCtx();   // v3.5.688: índice local para buscar también por artista/álbum/carpeta
       const rawAll = await Drive.searchFiles(term, _rootFolderId, async (partial) => {
         try {
           if (_seq !== _searchSeq) return;          // búsqueda más nueva en curso
@@ -7684,7 +7757,7 @@ const App = (() => {
           if (_seq !== _searchSeq) return;
           if (searchHereActive) p = await _filterSearchToFolder(p, _browseFolderId);
           if (_seq !== _searchSeq) return;
-          const quick = _fuzzyRank(term, p);
+          const quick = _fuzzyRank(term, p, await _ctxP);
           if (!quick.files?.length && !quick.folders?.length) return; // nada útil aún
           [...(quick.folders || []), ...(quick.files || [])].forEach(item => _cacheItem(item));
           _lastSearchFiles = quick.files || [];
@@ -7697,8 +7770,21 @@ const App = (() => {
       if (_seq !== _searchSeq) return;
       if (searchHereActive) raw = await _filterSearchToFolder(raw, _browseFolderId);
       if (_seq !== _searchSeq) return;
+      // v3.5.688: suma canciones de la biblioteca local que coinciden por contexto
+      // (artista/álbum/carpeta) y que Drive no devolvió; se filtran igual que lo de Drive.
+      const _ctx = await _ctxP;
+      if (_seq !== _searchSeq) return;
+      {
+        const have  = new Set((raw.files || []).map(f => f.id));
+        let extra   = { folders: [], files: _localLibraryMatches(term, _ctx, have) };
+        if (extra.files.length) {
+          extra = await _filterSearchToRoot(extra);
+          if (searchHereActive) extra = await _filterSearchToFolder(extra, _browseFolderId);
+          if (extra.files.length) raw = { ...raw, files: [...(raw.files || []), ...extra.files] };
+        }
+      }
       // Fuzzy-score + sort — drops unrelated results from word-expansion queries
-      const result = _fuzzyRank(term, raw);
+      const result = _fuzzyRank(term, raw, _ctx);
       // Cache all items for queue resolution
       [...(result.folders || []), ...(result.files || [])].forEach(item => _cacheItem(item));
       // Store song results for the "Play results" button + search cache
