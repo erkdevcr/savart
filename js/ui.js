@@ -6164,6 +6164,27 @@ const UI = (() => {
   }
 
   /**
+   * Reemplaza TODO el mosaico de una playlist de la lista de Biblioteca por la
+   * lista de portadas dada (ya sin repetidas). A diferencia de
+   * updatePlaylistSidebarCover (que antepone una portada) esto no puede duplicar
+   * celdas: lo usa la resolución rápida en segundo plano.
+   * @param {string}   plId
+   * @param {string[]} coverUrls — hasta 4 URLs distintas
+   */
+  function setPlaylistSidebarCovers(plId, coverUrls) {
+    const item = document.querySelector(
+      `.lib-pl-item[data-pl-id="${CSS.escape(plId)}"], .lib-sidebar-item[data-pl-id="${CSS.escape(plId)}"]`
+    );
+    if (!item) return;
+    const thumb = item.querySelector('.lib-pl-thumb, .lib-sidebar-thumb');
+    if (!thumb) return;
+    const covers = [...new Set(coverUrls || [])].slice(0, 4);
+    item.dataset.coverUrls = JSON.stringify(covers);
+    const chipHtml = thumb.querySelector('.yt-pl-chip')?.outerHTML || '';
+    thumb.innerHTML = _buildMosaicThumb(covers, item.dataset.plName || '') + chipHtml;
+  }
+
+  /**
    * Rebuild the 2×2 mosaic on a home playlist card after background scanning
    * resolves covers that weren't available when renderHome() ran.
    * @param {string}   plId   — playlist id (matches card.dataset.plid)
@@ -6624,6 +6645,7 @@ const UI = (() => {
     renderBrowseCollectionHeader,
     renderPlaylists,
     updatePlaylistSidebarCover,
+    setPlaylistSidebarCovers,
     updatePlaylistHomeCardCovers,
     setLibSearchPlaceholder,
     // Search

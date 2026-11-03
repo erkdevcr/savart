@@ -8150,6 +8150,36 @@ const App = (() => {
     });
   }
 
+  /**
+   * Hasta 4 portadas DISTINTAS para el mosaico 2×2 de una playlist.
+   * - Mismo criterio que el resto de la app (_resolveCoverUrl).
+   * - Nunca repite una URL, y prefiere canciones de álbumes distintos: si las
+   *   canciones 1 y 2 son del mismo disco (misma portada, aunque cada archivo
+   *   tenga su propio blob), el mosaico mostraba el mismo arte en dos celdas.
+   *   Las portadas "sobrantes" (mismo álbum) solo rellenan si no hay más variedad.
+   * Cota (fix M9): solo las primeras 24 canciones.
+   * @param {string[]} songIds
+   * @returns {Promise<string[]>}
+   */
+  async function _playlistMosaicCovers(songIds) {
+    const picked = [], spare = [];
+    const seenUrl = new Set(), seenAlbum = new Set();
+    const _n = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+    for (const sid of (songIds || []).slice(0, 24)) {
+      if (picked.length >= 4) break;
+      const m = await DB.getMeta(sid).catch(() => null);
+      const url = await _resolveCoverUrl(sid, m?.thumbnailUrl);
+      if (!url || seenUrl.has(url)) continue;
+      seenUrl.add(url);
+      const albumKey = m?.album ? _n(m.album) + '|' + _n(m.albumArtist || m.artist) : '';
+      if (albumKey && seenAlbum.has(albumKey)) { spare.push(url); continue; }
+      if (albumKey) seenAlbum.add(albumKey);
+      picked.push(url);
+    }
+    for (const url of spare) { if (picked.length >= 4) break; picked.push(url); }
+    return picked;
+  }
+
   async function _loadPlaylists() {
     try {
       const playlists = await DB.getPlaylists();
@@ -8161,7 +8191,7 @@ const App = (() => {
       if (_libInDetail && _currentLibTab === 'playlists') {
         // Keep existing coverUrls from DB (don't force [] — YT playlists have their
         // thumbnail stored, and _prefetchPlaylistCovers will fill user playlists up to 4).
-        const minimal = playlists.map(pl => ({ ...pl, songCount: (pl.songIds || []).length }));
+        const minimal = playlists.map(pl => ({ ...pl, songCount: (pl.songIds || []).length, coverUrls: [...new Set(pl.coverUrls || [])] }));
         _setLibTabCount('playlists', minimal.length);
         // If the two-col structure doesn't exist yet (e.g. arriving from a home card click),
         // render it NOW with minimal data so onPlaylistClick finds #lib-pl-detail-pane and
@@ -8175,15 +8205,7 @@ const App = (() => {
 
       const enriched = await Promise.all(playlists.map(async pl => {
         const songIds = pl.songIds || [];
-        const coverUrls = [];
-        // Cota (fix M9): solo las primeras 24 canciones — una playlist grande sin
-        // covers hacía un getMeta+resolve por CADA canción en cada render.
-        for (const sid of songIds.slice(0, 24)) {
-          if (coverUrls.length >= 4) break;
-          const m = await DB.getMeta(sid).catch(() => null);
-          const url = await _resolveCoverUrl(sid, m?.thumbnailUrl);
-          if (url) coverUrls.push(url);
-        }
+        const coverUrls = await _playlistMosaicCovers(songIds);
         return { ...pl, songCount: songIds.length, coverUrls };
       }));
       UI.renderPlaylists(enriched);
@@ -8227,35 +8249,16 @@ const App = (() => {
     // Stable URLs found here are also persisted to DB so the guard-path `minimal`
     // on the NEXT cold start already has them and renders covers without any scan.
     await Promise.all(playlists.map(async pl => {
-      const existing = (pl.coverUrls || []).length;
-      if (existing >= 4) return;
-      const needed  = 4 - existing;
-      const songIds = (pl.songIds || []).slice(0, Math.min(needed * 3 + 2, 12));
-      let added = 0;
-      let newStableCount = 0;
-      const stableUrls = [...(pl.coverUrls || []).filter(u => _isStableCoverUrl(u))];
-
-      for (const sid of songIds) {
-        if (added >= needed) break;
-        try {
-          const dbMeta = await DB.getMeta(sid).catch(() => null);
-          // Pass 1: coverBlob already in DB → blob: URL (instant, no network)
-          if (dbMeta?.coverBlob) {
-            const url = Meta.injectCover(sid, dbMeta.coverBlob);
-            if (url) { UI.updatePlaylistSidebarCover(pl.id, url); added++; continue; }
-          }
-          // Pass 1b: stable external URL already persisted (e.g. ytimg for sd_ songs)
-          if (_isStableCoverUrl(dbMeta?.thumbnailUrl)) {
-            UI.updatePlaylistSidebarCover(pl.id, dbMeta.thumbnailUrl);
-            stableUrls.push(dbMeta.thumbnailUrl);
-            newStableCount++;
-            added++; continue;
-          }
-        } catch (_) { /* non-fatal */ }
-      }
-
+      const shown = [...new Set(pl.coverUrls || [])];
+      if (shown.length >= 4) return;
+      // Misma resolución que el render inicial (sin red) → no puede devolver
+      // otra URL para la misma canción ni repetir portadas ya mostradas.
+      const urls = await _playlistMosaicCovers(pl.songIds || []).catch(() => []);
+      if (urls.length <= shown.length) return;
+      UI.setPlaylistSidebarCovers(pl.id, urls);
       // Persist stable URLs → guard-path minimal renders them on next cold start
-      if (newStableCount > 0) {
+      const stableUrls = urls.filter(u => _isStableCoverUrl(u));
+      if (stableUrls.length > 0) {
         DB.updatePlaylist(pl.id, { coverUrls: stableUrls.slice(0, 4) }).catch(() => {});
       }
     }));
