@@ -16231,16 +16231,17 @@ const App = (() => {
       const card = document.createElement('div');
       card.className = 'eq-custom-card';
       card.title = preset.name;
+      // v3.5.685: barras arriba (más altas) y debajo la fila nombre + papelera
       card.innerHTML = `
+        <svg class="eq-custom-sparkline" viewBox="0 0 120 34" preserveAspectRatio="none">
+          ${_gainsToBars(preset.gains)}
+        </svg>
         <div class="eq-custom-top-row">
           <div class="eq-custom-name">${UI.escHtml(preset.name)}</div>
           <button class="eq-custom-del-btn" data-action="del" data-id="${preset.id}" title="Eliminar">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
           </button>
         </div>
-        <svg class="eq-custom-sparkline" viewBox="0 0 120 20" preserveAspectRatio="none">
-          ${_gainsToBars(preset.gains)}
-        </svg>
       `;
       // Click anywhere on card (except delete) applies the preset
       card.addEventListener('click', (e) => {
@@ -16272,22 +16273,22 @@ const App = (() => {
   }
 
   /**
-   * v3.5.684: mini-gráfica de barras de un preset (una barra por banda, -12…+12 dB).
-   * Las barras nacen del borde inferior de la tarjeta (con ~1.5 px de margen) y su altura
-   * crece con la ganancia: -12 dB = marca mínima, 0 dB = mitad, +12 dB = altura completa.
-   * Devuelve el contenido interno del <svg viewBox="0 0 120 20"> (1 unidad ≈ 1 px de alto).
+   * v3.5.685: mini-gráfica de barras de un preset (una barra por banda, -12…+12 dB).
+   * Las barras nacen de la base de la gráfica y su altura crece con la ganancia:
+   * -12 dB = marca mínima, 0 dB = mitad, +12 dB = altura completa. Color gris.
+   * Devuelve el contenido interno del <svg viewBox="0 0 120 34"> (1 unidad ≈ 1 px de alto).
    */
   function _gainsToBars(gains) {
-    const W = 120, H = 20, BOTTOM = 1.5, TOP = 1;
+    const W = 120, H = 34, TOP = 1;
     const n = gains.length, slot = W / n, bw = slot * 0.62;
-    const maxH = H - BOTTOM - TOP;
+    const maxH = H - TOP;
     let out = '';
     gains.forEach((g, i) => {
       const clamped = Math.max(-12, Math.min(12, g));
       const h = Math.max(1, (clamped + 12) / 24 * maxH);   // mínimo 1: una banda a -12 dB sigue visible
       const x = (i * slot + (slot - bw) / 2).toFixed(2);
-      const y = (H - BOTTOM - h).toFixed(2);
-      out += `<rect x="${x}" y="${y}" width="${bw.toFixed(2)}" height="${h.toFixed(2)}" rx="0.8" fill="var(--accent)"/>`;
+      const y = (H - h).toFixed(2);
+      out += `<rect x="${x}" y="${y}" width="${bw.toFixed(2)}" height="${h.toFixed(2)}" rx="0.8" fill="var(--text-muted)"/>`;
     });
     return out;
   }

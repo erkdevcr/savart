@@ -6586,18 +6586,17 @@ body.queue-open #mini-player { z-index: 65; }
 }
 
 .eq-custom-sparkline {
-  height: 20px;   /* v3.5.684: coincide con el viewBox (1 unidad = 1 px de alto) */
+  height: 34px;   /* v3.5.685: más alto; coincide con el viewBox (1 unidad = 1 px) */
   display: block;
   width: 100%;
-  margin-bottom: 2px;
+  margin-bottom: 6px;
 }
 
 /* Top row: name (left) + delete icon (top-right) */
 .eq-custom-top-row {
   display: flex;
-  align-items: flex-start;
+  align-items: center;   /* v3.5.685: ahora va debajo de las barras */
   gap: 4px;
-  margin-bottom: 2px;
 }
 
 /* (eq-custom-bottom-row and eq-custom-load-btn removed — card is now directly clickable) */
