@@ -6302,20 +6302,6 @@ body.queue-open #mini-player { z-index: 65; }
   transition: opacity 0.2s;
 }
 
-/* EQ curve — visible on all screen sizes */
-.eq-curve-wrap {
-  display: block;
-  height: 76px;
-  padding: 4px 16px 8px;
-  box-sizing: border-box;
-}
-
-.eq-curve-wrap svg {
-  width: 100%;
-  height: 100%;
-  display: block;
-}
-
 /* ── Pre-amp & Balance row ───────────────────────────────── */
 .eq-preamp-balance-row {
   display: flex;
@@ -6561,7 +6547,7 @@ body.queue-open #mini-player { z-index: 65; }
 }
 
 .eq-custom-sparkline {
-  height: 16px;
+  height: 20px;   /* v3.5.681: barras en vez de línea */
   width: 100%;
   margin-bottom: 2px;
 }
@@ -6700,10 +6686,6 @@ body.queue-open #mini-player { z-index: 65; }
     height: auto;
   }
 
-  .eq-curve-wrap {
-    display: block;
-  }
-
   .eq-custom-section {
     padding: 10px 16px 16px;
   }
@@ -6730,10 +6712,6 @@ body.queue-open #mini-player { z-index: 65; }
     flex: none;
     height: 210px;
     overflow: hidden;
-  }
-
-  .eq-curve-wrap {
-    display: block;
   }
 
   .eq-custom-list {

@@ -872,7 +872,6 @@ const App = (() => {
           Player.setEQGains(new Array(CONFIG.EQ_BANDS.length).fill(0));
         }
 
-        _drawEQCurve();
       }
 
       // ── Restore custom presets (shared / synced) ───────────
@@ -16076,7 +16075,6 @@ const App = (() => {
         _currentPreset = null;
         document.querySelectorAll('.eq-preset-chip').forEach(c => c.classList.remove('active'));
         _updateEQPresetLabel();
-        _drawEQCurve();
         _saveSettings();
       });
     });
@@ -16122,51 +16120,7 @@ const App = (() => {
       c.classList.toggle('active', c.dataset.preset === preset);
     });
     _updateEQPresetLabel();
-    _drawEQCurve();
     _saveSettings();
-  }
-
-  function _drawEQCurve() {
-    const svg = document.getElementById('eq-curve-svg');
-    if (!svg) return;
-    // When EQ is bypassed (off), _eqBypassedGains holds the real user values;
-    // Player.getEQGains() would return zeros in that case — always draw the real shape.
-    const gains = _eqBypassedGains ?? Player.getEQGains();
-    const W = 900, H = 80, n = gains.length;
-
-    const pts = gains.map((g, i) => ({
-      x: (i / (n - 1)) * W,
-      y: H / 2 - (g / 12) * (H / 2 - 14),
-    }));
-
-    // Catmull-Rom → cubic Bezier (smooth curve through all points)
-    let line = `M${pts[0].x},${pts[0].y}`;
-    for (let i = 0; i < pts.length - 1; i++) {
-      const p0 = pts[i - 1] || pts[0];
-      const p1 = pts[i];
-      const p2 = pts[i + 1];
-      const p3 = pts[i + 2] || pts[pts.length - 1];
-      const cp1x = p1.x + (p2.x - p0.x) / 6;
-      const cp1y = p1.y + (p2.y - p0.y) / 6;
-      const cp2x = p2.x - (p3.x - p1.x) / 6;
-      const cp2y = p2.y - (p3.y - p1.y) / 6;
-      line += ` C${cp1x.toFixed(1)},${cp1y.toFixed(1)} ${cp2x.toFixed(1)},${cp2y.toFixed(1)} ${p2.x},${p2.y}`;
-    }
-
-    const fill = `${line} L${W},${H} L0,${H} Z`;
-
-    const eqOn    = document.getElementById('eq-toggle')?.classList.contains('on') ?? true;
-    const color   = eqOn ? '#4A88F5' : 'rgb(40,40,40)';
-    const opacity = eqOn ? '0.25'    : '0.10';
-
-    svg.innerHTML = `
-      <defs><linearGradient id="cg" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stop-color="${color}" stop-opacity="${opacity}"/>
-        <stop offset="100%" stop-color="${color}" stop-opacity="0"/>
-      </linearGradient></defs>
-      <path d="${fill}" fill="url(#cg)" stroke="none"/>
-      <path d="${line}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-    `;
   }
 
   function _loadCustomPresets() {
@@ -16284,9 +16238,8 @@ const App = (() => {
             <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
           </button>
         </div>
-        <svg class="eq-custom-sparkline" viewBox="0 0 120 24">
-          <path d="${_gainsToSparkline(preset.gains)}"
-            fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <svg class="eq-custom-sparkline" viewBox="0 0 120 24" preserveAspectRatio="none">
+          ${_gainsToBars(preset.gains)}
         </svg>
       `;
       // Click anywhere on card (except delete) applies the preset
@@ -16306,7 +16259,6 @@ const App = (() => {
         _currentPreset = preset.id;
         _lastPreset = { id: preset.id, name: preset.name, custom: true };
         _updateEQPresetLabel();
-        _drawEQCurve();
         _saveSettings();
         UI.showToast(`"${preset.name}" ${UI.t('toast_preset_loaded')}`);
       });
@@ -16319,25 +16271,23 @@ const App = (() => {
 
   }
 
-  function _gainsToSparkline(gains) {
-    const W = 120, H = 24, n = gains.length;
-    const pts = gains.map((g, i) => ({
-      x: (i / (n - 1)) * W,
-      y: H / 2 - (g / 12) * (H / 2 - 2),
-    }));
-    let d = `M${pts[0].x},${pts[0].y}`;
-    for (let i = 0; i < pts.length - 1; i++) {
-      const p0 = pts[i - 1] || pts[0];
-      const p1 = pts[i];
-      const p2 = pts[i + 1];
-      const p3 = pts[i + 2] || pts[pts.length - 1];
-      const cp1x = p1.x + (p2.x - p0.x) / 6;
-      const cp1y = p1.y + (p2.y - p0.y) / 6;
-      const cp2x = p2.x - (p3.x - p1.x) / 6;
-      const cp2y = p2.y - (p3.y - p1.y) / 6;
-      d += ` C${cp1x.toFixed(1)},${cp1y.toFixed(1)} ${cp2x.toFixed(1)},${cp2y.toFixed(1)} ${p2.x},${p2.y}`;
-    }
-    return d;
+  /**
+   * v3.5.681: mini-gráfica de barras de un preset (una barra por banda, ±12 dB).
+   * Parte de la línea central (0 dB): positivas hacia arriba, negativas hacia abajo.
+   * Devuelve el contenido interno del <svg viewBox="0 0 120 24">.
+   */
+  function _gainsToBars(gains) {
+    const W = 120, H = 24, n = gains.length, mid = H / 2;
+    const slot = W / n, bw = slot * 0.62;
+    let out = `<line x1="0" y1="${mid}" x2="${W}" y2="${mid}" stroke="var(--accent)" stroke-opacity="0.25" stroke-width="0.6"/>`;
+    gains.forEach((g, i) => {
+      const clamped = Math.max(-12, Math.min(12, g));
+      const h  = Math.max(1, Math.abs(clamped) / 12 * (mid - 1));   // mínimo 1: una banda a 0 dB sigue visible
+      const x  = (i * slot + (slot - bw) / 2).toFixed(2);
+      const y  = (clamped >= 0 ? mid - h : mid).toFixed(2);
+      out += `<rect x="${x}" y="${y}" width="${bw.toFixed(2)}" height="${h.toFixed(2)}" rx="0.8" fill="var(--accent)"${clamped < 0 ? ' fill-opacity="0.6"' : ''}/>`;
+    });
+    return out;
   }
 
   /* ── Ctrl sheet helpers ──────────────────────────────────── */
@@ -18134,7 +18084,6 @@ const App = (() => {
           _eqBypassedGains = null;
         }
       }
-      _drawEQCurve(); // redraw — bypassed state changed, curve must reflect real gains
       _saveSettings();
     });
 
