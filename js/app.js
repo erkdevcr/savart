@@ -1424,6 +1424,159 @@ const App = (() => {
   const _AI_HISTORY_MAX = 3;
   const _AI_HISTORY_TTL_MS = 15 * 60 * 1000;
 
+  // ── Bot IA · "éxitos" (v3.5.691) ──────────────────────────────────────────
+  // El Worker (Gemini + búsqueda web) devuelve [{artist,title}] de lo que es popular
+  // AHORA; acá cada uno se busca en YouTube (Soundrop) y se agrega al queue SIN repetir:
+  //   · no repite entre sí (mismo video o misma canción dos veces en la lista),
+  //   · no repite lo que YA está en el queue (por videoId o por título+artista).
+  // Interruptor: poner AI_HITS_ENABLED=false vuelve al comportamiento anterior (búsqueda
+  // por términos en Soundrop). Para revertir del todo: ver _backups/pre-3.5.691-hits.
+  const AI_HITS_ENABLED = true;
+  const _HITS_CACHE_KEY = 'savart_hits_cache';
+  const _HITS_CACHE_TTL = 7 * 24 * 3600 * 1000;
+  const _HITS_CACHE_MAX = 300;
+  let _aiHitsRun = 0; // token: una consulta nueva cancela la carga en curso
+
+  function _hitsCacheLoad() {
+    try { return JSON.parse(localStorage.getItem(_HITS_CACHE_KEY) || '{}') || {}; } catch (_) { return {}; }
+  }
+  function _hitsCacheSave(map) {
+    try {
+      const keys = Object.keys(map);
+      if (keys.length > _HITS_CACHE_MAX) {
+        keys.sort((x, y) => (map[x].t || 0) - (map[y].t || 0))
+            .slice(0, keys.length - _HITS_CACHE_MAX).forEach(k => delete map[k]);
+      }
+      localStorage.setItem(_HITS_CACHE_KEY, JSON.stringify(map));
+    } catch (_) {}
+  }
+
+  /** Primer artista de "Bad Bunny, Feid" / "A & B" / "A feat. B" / "A x B". */
+  function _hitFirstArtist(artist) {
+    return String(artist || '').split(/\s*(?:,|&|\bfeat\.?|\bft\.?|\bx\b|\by\b|\bcon\b)\s*/i)[0].trim() || String(artist || '');
+  }
+
+  /** Elige el mejor video de los resultados de YouTube para { artist, title } (o null). */
+  function _pickHitResult(results, hit) {
+    const a1 = _hitFirstArtist(hit.artist);
+    const BAD = /karaoke|\bcover\b|instrumental|reaction|reacci[oó]n|tutorial|nightcore|sped ?up|slowed|8d audio|tribute|tributo|\bmix\b|en vivo|\blive\b|letra|lyrics?\b/i;
+    const wantsBad = BAD.test(hit.title);
+    let best = null, bestScore = 0;
+    for (const r of results || []) {
+      const name = r.name || r.displayName || '';
+      const tScore = _fuzzyScore(hit.title, name, false);
+      if (tScore < 0.6) continue;
+      const aScore = _fuzzyScore(a1, `${name} ${r.channelTitle || ''}`, false);
+      if (aScore < 0.3) continue;
+      let sc = tScore * 2 + aScore;
+      if (/official|oficial|audio/i.test(name)) sc += 0.2;
+      if (!wantsBad && BAD.test(name)) sc -= 1;
+      const d = r.durationSec || 0;
+      if (d && (d < 60 || d > 600)) sc -= 1.2; // clips cortos o mixes largos
+      if (sc > bestScore) { bestScore = sc; best = r; }
+    }
+    return bestScore >= 1.5 ? best : null;
+  }
+
+  /** ¿Esta canción pedida ya está en la lista de items (queue)? */
+  function _hitInItems(hit, items) {
+    const a1 = _hitFirstArtist(hit.artist);
+    return items.some(it => {
+      const name = `${it.name || ''} ${it.displayName || ''}`;
+      return _fuzzyScore(hit.title, name, false) >= 0.99 &&
+             _fuzzyScore(a1, `${name} ${it.artist || ''} ${it.channelTitle || ''}`, false) >= 0.3;
+    });
+  }
+
+  /**
+   * Resuelve los éxitos en YouTube y los agrega al queue (o los reproduce si no suena nada).
+   * @param {{songs:{artist:string,title:string}[], explanation?:string}} data  respuesta del worker
+   * @param {(msg:string, cls?:string)=>void} setStatus
+   * @param {HTMLInputElement|null} inputEl
+   */
+  async function _aiLoadHits(data, setStatus, inputEl) {
+    const run = ++_aiHitsRun;
+    const hits = data.songs.slice(0, 30);
+    const expl = data.explanation || 'Éxitos';
+    const cache = _hitsCacheLoad();
+    const now = Date.now();
+
+    const playing = (typeof Player.isPlaying === 'function') && Player.isPlaying();
+    // Si ya suena algo → se AGREGA al final sin interrumpir. Si no suena nada → la primera
+    // que se resuelva arranca la reproducción y el resto se agrega detrás.
+    let started = playing;
+    const have = new Set();   // videoIds ya puestos (queue previa + esta tanda)
+    const seenHit = new Set();
+    let existing = [];
+    if (playing) {
+      existing = Player.getQueue().queue || [];
+      existing.forEach(it => { if (it.videoId) have.add(it.videoId); if (it.id) have.add(it.id); });
+    }
+    let added = 0, dups = 0, missing = 0, quotaOut = false;
+    const addedItems = [];
+
+    const resolveOne = async (hit) => {
+      const ck = norm(hit.title) + '|' + norm(_hitFirstArtist(hit.artist));
+      const c = cache[ck];
+      if (c && (now - (c.t || 0)) < _HITS_CACHE_TTL && c.s) return c.s;
+      const res = await Soundrop.search(`${hit.artist} ${hit.title}`, 8);
+      const pick = _pickHitResult(res, hit);
+      if (pick) { cache[ck] = { t: now, s: pick }; }
+      return pick;
+    };
+
+    let idx = 0;
+    const worker = async () => {
+      while (idx < hits.length && run === _aiHitsRun && !quotaOut) {
+        const i = idx++;
+        const hit = hits[i];
+        const hk = norm(hit.title) + '|' + norm(_hitFirstArtist(hit.artist));
+        if (seenHit.has(hk)) { dups++; continue; }
+        seenHit.add(hk);
+        if (existing.length && _hitInItems(hit, existing)) { dups++; continue; }
+        let song = null;
+        try { song = await resolveOne(hit); }
+        catch (e) {
+          if (/\b(403|429)\b/.test(String(e?.message))) { quotaOut = true; break; }
+        }
+        if (run !== _aiHitsRun) return;
+        if (!song) { missing++; continue; }
+        if (have.has(song.videoId) || have.has(song.id) || _hitInItems(hit, addedItems)) { dups++; continue; }
+        have.add(song.videoId); have.add(song.id);
+        addedItems.push(song);
+        if (!started) {
+          started = true;
+          _radioModeActive = false;
+          Player.setQueue([song], 0);
+        } else {
+          Player.appendToQueue([song]);
+        }
+        added++;
+        setStatus(`✦ ${expl} · ${added} agregadas (${Math.min(idx, hits.length)}/${hits.length})…`, 'thinking');
+      }
+    };
+    setStatus(`✦ ${expl} · buscando ${hits.length} canciones en YouTube…`, 'thinking');
+    await Promise.all([worker(), worker(), worker()]);
+    if (run !== _aiHitsRun) return; // llegó otra consulta: ella maneja el estado
+    _hitsCacheSave(cache);
+
+    if (!added) {
+      _aiBotForce('sad', 2600);
+      setStatus(quotaOut
+        ? '✦ Se agotó la cuota diaria de YouTube. Prueba mañana.'
+        : '✦ No logré encontrar esas canciones en YouTube', quotaOut ? 'error' : 'empty');
+      return;
+    }
+    if (inputEl) inputEl.value = '';
+    const extra = [];
+    if (dups)    extra.push(`${dups} ya estaban`);
+    if (missing) extra.push(`${missing} sin resultado`);
+    if (quotaOut) extra.push('cuota de YouTube agotada');
+    setStatus(`✦ ${expl} · ${added} ${playing ? 'agregadas al queue' : 'en cola'}${extra.length ? ' (' + extra.join(', ') + ')' : ''}`, 'found');
+    _aiBotForce('happy', 2600);
+    setTimeout(() => document.getElementById('ai-search-panel')?.classList.remove('open'), 2600);
+  }
+
   /**
    * @param {string} query
    * @param {{reuse?:Object, forceSoundrop?:boolean}} [opts] — reuse: respuesta del worker ya
@@ -1481,6 +1634,14 @@ const App = (() => {
         ..._aiHistory.filter(h => Date.now() - h.t < _AI_HISTORY_TTL_MS),
         { q: query.trim().slice(0, 200), t: Date.now(), r: { intent, terms: terms.slice(0, 6), exclude: exclude.slice(0, 4), track, folderName } },
       ].slice(-_AI_HISTORY_MAX);
+
+      // Intent "hits" (v3.5.691): el worker ya trajo la lista de éxitos actuales → YouTube → queue.
+      // Si no vino lista (falló la búsqueda web) cae al flujo normal de Soundrop por términos.
+      if (AI_HITS_ENABLED && intent === 'hits' && Array.isArray(data.songs) && data.songs.length
+          && typeof Soundrop !== 'undefined') {
+        await _aiLoadHits(data, setStatus, inputEl);
+        return;
+      }
 
       let songs = [];
 

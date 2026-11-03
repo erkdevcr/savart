@@ -21,14 +21,14 @@ const Soundrop = (() => {
    * @param {string} term
    * @returns {Promise<SoundropTrack[]>}
    */
-  async function search(term) {
+  async function search(term, maxResults = 50) {
     // 1. Search request
     const searchParams = new URLSearchParams({
       part: 'snippet',
       q: term,
       type: 'video',
       videoCategoryId: '10', // Music
-      maxResults: '50',
+      maxResults: String(maxResults),
       key: YT_KEY,
     });
     const searchRes = await fetch(`${YT_SEARCH}?${searchParams}`);
