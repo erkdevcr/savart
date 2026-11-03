@@ -7337,7 +7337,8 @@ const App = (() => {
     const label = item.type === 'folder' || item.isFolder ? UI.t('item_type_folder') : UI.t('item_type_song');
     UI.showToast(`${label} ${isNowPinned ? UI.t('toast_pinned') : UI.t('toast_unpinned')}`, 'default');
     _loadHomeData();
-    Sync.push('pinned');
+    // pushNow (v3.5.692): el unpin no puede perderse si se recarga antes del debounce.
+    Sync.pushNow('pinned');
   }
 
   async function onRemoveFromTopPlayed(item) {
@@ -17209,6 +17210,7 @@ const App = (() => {
             if (keep.length !== pinnedIds.length) {
               const pinnedMeta = await DB.getState('pinnedMeta') || {};
               idSet.forEach(id => delete pinnedMeta[id]);
+              await DB.addPinTombstones(pinnedIds.filter(id => idSet.has(id))).catch(() => {});
               await DB.setState('pinned', keep);
               await DB.setState('pinnedMeta', pinnedMeta);
               if (typeof Sync !== 'undefined') Sync.push('pinned');

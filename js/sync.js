@@ -271,7 +271,20 @@ const Sync = (() => {
     };
   }
 
-  function _mergePinned(localMeta, remoteMeta, remoteManifestTs) {
+  // Lápidas de unpin { id: removedAt }: unión con el más reciente por id; caducan a los 60 días.
+  function _mergePinTombs(a, b) {
+    const MAX = 60 * 24 * 60 * 60 * 1000, now = Date.now(), out = {};
+    for (const src of [a, b]) {
+      if (!src || typeof src !== 'object' || Array.isArray(src)) continue;
+      for (const [id, ts] of Object.entries(src)) {
+        const n = Number(ts) || 0;
+        if (n > 0 && now - n < MAX && n > (out[id] || 0)) out[id] = n;
+      }
+    }
+    return out;
+  }
+
+  function _mergePinned(localMeta, remoteMeta, remoteManifestTs, tombs) {
     // Remote is the authoritative base — remote deletions are respected.
     // LWW per-item using pinnedAt timestamp:
     //   • If a local-only item's pinnedAt > remoteManifestTs → pinned after the
@@ -287,6 +300,12 @@ const Sync = (() => {
         merged[id] = item; // pinned after remote snapshot → genuine offline addition
       }
       // else: remote knew about this item and chose to omit it → respect the deletion
+    }
+    // Unpin local/remoto más NUEVO que el pin → gana el borrado (v3.5.692).
+    if (tombs) {
+      for (const [id, ts] of Object.entries(tombs)) {
+        if (merged[id] && (merged[id].pinnedAt || 0) <= ts) delete merged[id];
+      }
     }
     return merged;
   }
@@ -544,12 +563,14 @@ const Sync = (() => {
         // lowered the inferred ts and resurrected it from this device's push.
         const pinnedTs    = remoteTs > 0 ? remoteTs
           : Math.max(0, ...Object.values(remoteMeta).map(v => v?.pinnedAt || 0));
-        const mergedPinned = _mergePinned(localMeta, remoteMeta, pinnedTs);
+        const pinTombs     = _mergePinTombs(await DB.getState('pinTombstones'), data?.tombstones);
+        const mergedPinned = _mergePinned(localMeta, remoteMeta, pinnedTs, pinTombs);
 
         // Preserve order: remote order first, then any local-only pins appended.
         const localOnlyIds = Object.keys(mergedPinned).filter(id => !remoteMeta[id]);
-        const finalOrder   = [...remoteOrder, ...localOnlyIds];
+        const finalOrder   = [...remoteOrder.filter(id => !remoteMeta[id] || mergedPinned[id]), ...localOnlyIds];
 
+        await DB.setState('pinTombstones', pinTombs);
         await DB.setState('pinnedMeta', mergedPinned);
         await DB.setState('pinned', finalOrder);
         break;
@@ -748,7 +769,7 @@ const Sync = (() => {
         const _snapshotTs   = (data || {}).ts || 0;
         if (_homeCleared > 0 && _snapshotTs > 0 && _snapshotTs <= _homeCleared) break;
 
-        const { pinned, pinnedOrder, recents, recentTombstones, playcounts, playlists, history } = data || {};
+        const { pinned, pinnedOrder, pinnedTombstones, recents, recentTombstones, playcounts, playlists, history } = data || {};
 
         if (pinned && typeof pinned === 'object') {
           // LWW per-item: remote wins for deletions & updates.
@@ -760,11 +781,13 @@ const Sync = (() => {
             localMeta = localMeta.meta || {};
           }
           const remoteHomeTs = data.ts || 0;
-          const mergedPinned = _mergePinned(localMeta, pinned, remoteHomeTs);
+          const pinTombs     = _mergePinTombs(await DB.getState('pinTombstones'), pinnedTombstones);
+          const mergedPinned = _mergePinned(localMeta, pinned, remoteHomeTs, pinTombs);
           const remoteOrder  = Array.isArray(pinnedOrder) ? pinnedOrder : Object.keys(pinned);
           const localOnlyIds = Object.keys(mergedPinned).filter(id => !pinned[id]);
+          await DB.setState('pinTombstones', pinTombs);
           await DB.setState('pinnedMeta', mergedPinned);
-          await DB.setState('pinned', [...remoteOrder, ...localOnlyIds]);
+          await DB.setState('pinned', [...remoteOrder.filter(id => !pinned[id] || mergedPinned[id]), ...localOnlyIds]);
         }
 
         if (Array.isArray(recents) && recents.length) {
@@ -1189,7 +1212,8 @@ const Sync = (() => {
     }
     // Include pinnedOrder so the receiving device can restore drag order.
     // Wrap as { meta, order } object — backward-compatible: old clients ignore order.
-    if (!(await _writeIfChanged('pinned', FILENAMES.pinned, { meta: clean, order }))) return false;
+    const tombstones = _mergePinTombs(await DB.getState('pinTombstones'), null);
+    if (!(await _writeIfChanged('pinned', FILENAMES.pinned, { meta: clean, order, tombstones }))) return false;
     console.log(`[Sync] Pushed pinned (${Object.keys(clean).length})`);
   }
 
@@ -1522,6 +1546,7 @@ const Sync = (() => {
       historyClearedAt:    _historyClearedTs    || 0,
       pinned:              pinnedMeta  || {},
       pinnedOrder:         pinnedOrder || [],
+      pinnedTombstones:    _mergePinTombs(await DB.getState('pinTombstones').catch(() => null), null),
       recents: recentsLive.map((r, i) => {
         const m = recentMetaRecords[i];
         const isSd = r.isSoundrop || m?.isSoundrop || false;

@@ -807,14 +807,34 @@ const DB = (() => {
       };
       await setState('pinned', pinned);
       await setState('pinnedMeta', stored);
+      // Volver a fijar anula la lápida de un unpin anterior
+      const tombs = await getPinTombstones();
+      if (tombs[item.id]) { delete tombs[item.id]; await setState('pinTombstones', tombs); }
       return true;
     } else {
       pinned.splice(idx, 1);
       delete stored[item.id];
       await setState('pinned', pinned);
       await setState('pinnedMeta', stored);
+      // Lápida (v3.5.692): sin ella, un snapshot remoto que todavía traía la card
+      // (el push del unpin aún no llegaba a Drive) la resucitaba al recargar.
+      await addPinTombstones([item.id]);
       return false;
     }
+  }
+
+  /** Lápidas de unpin { id: removedAt } — viajan por sync para que el borrado gane al merge. */
+  async function getPinTombstones() {
+    const t = await getState('pinTombstones');
+    return (t && typeof t === 'object' && !Array.isArray(t)) ? t : {};
+  }
+
+  /** Marca ids como "desfijados ahora". */
+  async function addPinTombstones(ids) {
+    const tombs = await getPinTombstones();
+    const now = Date.now();
+    for (const id of ids || []) if (id) tombs[id] = now;
+    await setState('pinTombstones', tombs);
   }
 
   /**
@@ -1550,6 +1570,8 @@ const DB = (() => {
     clearStarred,
     // Pins
     getPinned,
+    getPinTombstones,
+    addPinTombstones,
     togglePin,
     getPinnedFolders,
     // Radio Emisoras
