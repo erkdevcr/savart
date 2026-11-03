@@ -6416,10 +6416,18 @@ body.queue-open #mini-player { z-index: 65; }
 /* ── Normalizer row (below preamp/balance) ───────────────── */
 .eq-norm-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
+  justify-content: space-between;   /* v3.5.687: Normalizer a la izquierda, Live Gain al margen derecho */
   gap: 8px;
   padding: 0 16px 14px;
 }
+.eq-norm-group {
+  display: flex;
+  flex-direction: column;           /* título arriba, toggle debajo, valor bajo el toggle */
+  align-items: flex-start;
+  gap: 5px;
+}
+.eq-norm-group--right { align-items: flex-end; }
 .eq-norm-row .eq-pb-title {
   flex-shrink: 1;
   font-size: 10px;
@@ -6431,13 +6439,7 @@ body.queue-open #mini-player { z-index: 65; }
   font-size: 11px;
   font-variant-numeric: tabular-nums;
   min-width: 36px;
-  text-align: right;
-  flex-shrink: 0;
-}
-.eq-norm-sep {
-  color: var(--text-muted);
-  opacity: 0.3;
-  font-size: 14px;
+  text-align: left;
   flex-shrink: 0;
 }
 
