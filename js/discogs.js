@@ -95,10 +95,57 @@ const Discogs = (() => {
      (antes N llamadas simultáneas dormían en paralelo y disparaban a la vez). */
   let _fetchQueue = Promise.resolve();
 
+  /* ── v3.5.689: límite de uso (HTTP 429) ──────────────────────
+     El token de Discogs lo comparten todos los dispositivos (~60 consultas/min). Ante un 429:
+     un único reintento tras una pausa corta; si persiste, Discogs queda EN PAUSA un rato y las
+     consultas fallan al instante sin tocar la red (y sin cachearse como "no encontrado"). */
+  let _cooldownUntil = 0;
+  const COOLDOWN_MS  = 60 * 1000;
+  const _sleep = ms => new Promise(r => setTimeout(r, ms));
+  function _retryAfterSec(res) {
+    const n = parseInt(res.headers.get('Retry-After') || '', 10);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }
+  function _rateLimitedError() {
+    const e = new Error('Discogs HTTP 429');
+    e.rateLimited = true;
+    return e;
+  }
+
+  /* ── v3.5.689: cache persistente de búsquedas (localStorage) ─
+     Mismo artista/álbum/título → misma respuesta; evita volver a gastar cuota en cada sesión.
+     Solo búsquedas con resultados, campos recortados a los que usa esta app, TTL 14 días. */
+  const QC_KEY = 'savart_dg_qcache', QC_TTL = 14 * 24 * 3600 * 1000, QC_MAX = 150;
+  let _qc = null;
+  function _qcLoad() {
+    if (_qc) return _qc;
+    try { _qc = JSON.parse(localStorage.getItem(QC_KEY) || '{}') || {}; } catch (_) { _qc = {}; }
+    return _qc;
+  }
+  function _qcGet(path) {
+    if (!path.startsWith('/database/search')) return null;
+    const e = _qcLoad()[path];
+    return (e && Date.now() - e.t < QC_TTL) ? e.d : null;
+  }
+  function _qcSet(path, data) {
+    if (!path.startsWith('/database/search') || !Array.isArray(data?.results) || !data.results.length) return;
+    const qc = _qcLoad();
+    qc[path] = { t: Date.now(), d: { results: data.results.map(r => ({
+      type: r.type, title: r.title, year: r.year, cover_image: r.cover_image })) } };
+    const keys = Object.keys(qc);
+    if (keys.length > QC_MAX) {
+      keys.sort((a, b) => qc[a].t - qc[b].t).slice(0, keys.length - QC_MAX).forEach(k => delete qc[k]);
+    }
+    try { localStorage.setItem(QC_KEY, JSON.stringify(qc)); } catch (_) { /* cuota llena: se sigue sin persistir */ }
+  }
+
   function _fetch(path) {
     const run = async () => {
       const BASE = _base();
       if (!BASE) throw new Error('Discogs proxy no configurado (CONFIG.API_PROXY_URL)');
+      const _hit = _qcGet(path);
+      if (_hit) return _hit;                                   // sin red, sin cuota
+      if (Date.now() < _cooldownUntil) throw _rateLimitedError();
       const now  = Date.now();
       const wait = Math.max(0, RATE_MS - (now - _lastReqAt));
       if (wait > 0) await new Promise(r => setTimeout(r, wait));
@@ -110,12 +157,27 @@ const Discogs = (() => {
       const auth = _authHeader();
       if (auth) headers['Authorization'] = auth;
 
-      const res = await fetch(`${BASE}${path}`, {
-        headers,
-        signal: AbortSignal.timeout(8000),
-      });
+      const doFetch = () => fetch(`${BASE}${path}`, { headers, signal: AbortSignal.timeout(8000) });
+      let res = await doFetch();
+      if (res.status === 429) {
+        const ra = _retryAfterSec(res);
+        if (ra !== null && ra > 10) {                        // el servidor pide esperar mucho: no insistir
+          _cooldownUntil = Date.now() + ra * 1000;
+          throw _rateLimitedError();
+        }
+        await _sleep((ra ?? 5) * 1000);                      // un solo reintento tras una pausa corta
+        _lastReqAt = Date.now();
+        res = await doFetch();
+        if (res.status === 429) {
+          const ra2 = _retryAfterSec(res);
+          _cooldownUntil = Date.now() + (ra2 ? Math.max(ra2 * 1000, 30000) : COOLDOWN_MS);
+          throw _rateLimitedError();
+        }
+      }
       if (!res.ok) throw new Error(`Discogs HTTP ${res.status}`);
-      return res.json();
+      const data = await res.json();
+      _qcSet(path, data);
+      return data;
     };
     const p = _fetchQueue.then(run, run);
     _fetchQueue = p.catch(() => {});
@@ -196,7 +258,8 @@ const Discogs = (() => {
       return result;
 
     } catch (err) {
-      console.warn('[Discogs] lookup failed:', err.message);
+      // 429 / pausa: esperado y transitorio — no ensucia la consola como error real
+      (err.rateLimited ? console.info : console.warn)('[Discogs] lookup failed:', err.message);
       return null; // don't cache network errors
     }
   }
@@ -258,7 +321,11 @@ const Discogs = (() => {
   }
 
   /* ── clearCache ─────────────────────────────────────────── */
-  function clearCache() { _lookupCache.clear(); }
+  function clearCache() {
+    _lookupCache.clear();
+    _qc = {};
+    try { localStorage.removeItem(QC_KEY); } catch (_) {}
+  }
 
   /* ── Expose ─────────────────────────────────────────────── */
   return { lookup, fetchMetadataForLyrics, clearCache };
