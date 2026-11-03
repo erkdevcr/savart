@@ -1578,6 +1578,143 @@ const App = (() => {
   }
 
   /**
+   * "Éxitos de <artista>" (v3.5.693): el Worker trajo de la web los títulos más conocidos del
+   * artista; acá se buscan en la BIBLIOTECA (metadatos locales primero, luego Drive) y se
+   * cargan al queue en orden de popularidad, sin repetir. Lo que no está en Drive se ofrece
+   * buscarlo en YouTube. Sin cuota de YouTube.
+   */
+  async function _aiLoadArtistHits(data, statusEl, setStatus, inputEl) {
+    const run = ++_aiHitsRun;
+    const hits = data.songs.slice(0, 30);
+    const expl = data.explanation || 'Éxitos';
+    setStatus(`✦ ${expl} · buscándolas en tu biblioteca…`, 'thinking');
+
+    const ctx = await _buildSearchCtx();
+    const AUDIO_RE = /\.(mp3|m4a|flac|wav|ogg|opus|aac|wma)$/i;
+    const _hn = s => _searchNorm(s).replace(/[^a-z0-9ñ ]+/g, ' ').replace(/\s+/g, ' ').trim();
+    const BAD = /karaoke|\bcover\b|instrumental|tribute|tributo|\bmix\b|en vivo|\blive\b|remix|nightcore|sped ?up|slowed/i;
+    const lib = [];
+    for (const m of ctx.byId.values()) {
+      const nm = m?.name || m?.displayName || '';
+      if (!nm || !(AUDIO_RE.test(nm) || /^audio\//.test(m.mimeType || ''))) continue;
+      lib.push({ m, baseN: _hn(nm.replace(/\.[^.]+$/, '')), dispN: _hn(m.displayName || '') });
+    }
+    const mkItem = m => ({
+      id: m.id, name: m.name || m.displayName, displayName: m.displayName || m.name,
+      mimeType: m.mimeType || 'audio/mpeg', parents: m.folderId ? [m.folderId] : [],
+      thumbnailUrl: m.thumbnailUrl || null, isFolder: false, isAudio: true, isPlayable: true,
+      size: m.size || 0, durationMs: (m.durationSec || 0) * 1000, appProperties: null,
+    });
+    // Título "núcleo": sin paréntesis/corchetes ni sufijos " - Remastered" (el archivo rara vez los trae)
+    const coreOf = t => (String(t).replace(/[\(\[][^\)\]]*[\)\]]/g, ' ').replace(/\s+-\s+.*$/, '').replace(/\s+/g, ' ').trim()) || String(t);
+
+    const scoreCand = (item, hit, core) => {
+      const base = (item.name || item.displayName || '').replace(/\.[^.]+$/, '');
+      const tScore = Math.max(_fuzzyScore(core, base, false), _fuzzyScore(core, item.displayName || '', false));
+      if (tScore < 0.85) return 0;
+      const a1 = _hitFirstArtist(hit.artist);
+      const aScore = _fuzzyScore(a1, `${base} ${_searchExtras(item, ctx)}`, false);
+      if (aScore < 0.5) return 0;
+      let sc = tScore * 2 + aScore;
+      if (BAD.test(base) && !BAD.test(hit.title)) sc -= 1;
+      return sc;
+    };
+
+    const matchOne = async (hit) => {
+      const core = coreOf(hit.title), coreN = _hn(core);
+      if (!coreN) return null;
+      let best = null, bestSc = 0;
+      // 1) Biblioteca local (metadatos ya escaneados): título como palabras completas
+      const needle = ` ${coreN} `;
+      for (const e of lib) {
+        if (!(` ${e.baseN} `.includes(needle) || (e.dispN && ` ${e.dispN} `.includes(needle)))) continue;
+        const item = mkItem(e.m);
+        const sc = scoreCand(item, hit, core);
+        if (sc > bestSc) { bestSc = sc; best = item; }
+      }
+      if (best) return best;
+      // 2) Drive (tolera acentos/typos con el mismo ranking del buscador)
+      try {
+        const r = await Drive.searchFiles(core).then(_filterSearchToRoot).then(res => _fuzzyRank(core, res, ctx));
+        for (const f of (r.files || [])) {
+          if (f.isFolder || !(AUDIO_RE.test(f.name || '') || /^audio\//.test(f.mimeType || ''))) continue;
+          const sc = scoreCand(f, hit, core);
+          if (sc > bestSc) { bestSc = sc; best = f; }
+        }
+      } catch (_) {}
+      return best;
+    };
+
+    const results = new Array(hits.length).fill(null);
+    let next = 0, done = 0;
+    const worker = async () => {
+      while (next < hits.length && run === _aiHitsRun) {
+        const i = next++;
+        try { results[i] = await matchOne(hits[i]); } catch (_) {}
+        done++;
+        setStatus(`✦ ${expl} · buscándolas en tu biblioteca… ${done}/${hits.length}`, 'thinking');
+      }
+    };
+    await Promise.all([worker(), worker(), worker()]);
+    if (run !== _aiHitsRun) return;
+
+    // Ordenadas por popularidad (orden de la lista), sin repetir archivo
+    const seenIds = new Set();
+    const found = [], missing = [];
+    hits.forEach((h, i) => {
+      const it = results[i];
+      if (it && !seenIds.has(it.id)) { seenIds.add(it.id); found.push(it); }
+      else if (!it) missing.push(h);
+    });
+
+    const offerYt = () => {
+      if (!missing.length || typeof Soundrop === 'undefined' || !statusEl) return false;
+      statusEl.className = 'ai-search-status found';
+      statusEl.textContent = '';
+      const msg = document.createElement('span');
+      msg.textContent = `✦ ${found.length} de ${hits.length} en tu biblioteca. ¿Busco las ${missing.length} que faltan en YouTube? `;
+      const mkBtn = (label, onClick) => {
+        const b = document.createElement('button');
+        b.type = 'button'; b.className = 'ai-status-btn'; b.textContent = label;
+        b.addEventListener('click', onClick);
+        return b;
+      };
+      statusEl.append(
+        msg,
+        mkBtn('Sí', () => _aiLoadHits({ songs: missing, explanation: expl }, setStatus, inputEl)),
+        mkBtn('No', () => setStatus(`✦ ${expl} · ${found.length} de ${hits.length} en tu biblioteca`, 'found')),
+      );
+      return true;
+    };
+
+    if (!found.length) {
+      _aiBotForce('sad', 2600);
+      if (!offerYt()) setStatus('✦ No encontré esas canciones en tu biblioteca', 'empty');
+      return;
+    }
+
+    const playing = (typeof Player.isPlaying === 'function') && Player.isPlaying();
+    let toAdd = found;
+    if (playing) {
+      // Suena algo → se agregan al final sin interrumpir y sin repetir lo que ya está en el queue
+      const inQueue = new Set((Player.getQueue().queue || []).map(it => it.id));
+      toAdd = found.filter(it => !inQueue.has(it.id));
+      if (toAdd.length) Player.appendToQueue(toAdd);
+    } else {
+      _radioModeActive = false;
+      Player.setQueue(found, 0);
+    }
+    if (inputEl) inputEl.value = '';
+    _aiBotForce('happy', 2600);
+    const dupN = found.length - toAdd.length;
+    const tail = dupN ? ` (${dupN} ya estaban)` : '';
+    if (!offerYt()) {
+      setStatus(`✦ ${expl} · ${toAdd.length} ${playing ? 'agregadas al queue' : 'en cola'}${tail}`, 'found');
+      setTimeout(() => document.getElementById('ai-search-panel')?.classList.remove('open'), 2600);
+    }
+  }
+
+  /**
    * @param {string} query
    * @param {{reuse?:Object, forceSoundrop?:boolean}} [opts] — reuse: respuesta del worker ya
    *   obtenida (al contestar "Sí" a "¿La busco en Soundrop?" no se vuelve a llamar a Gemini);
@@ -1634,6 +1771,12 @@ const App = (() => {
         ..._aiHistory.filter(h => Date.now() - h.t < _AI_HISTORY_TTL_MS),
         { q: query.trim().slice(0, 200), t: Date.now(), r: { intent, terms: terms.slice(0, 6), exclude: exclude.slice(0, 4), track, folderName } },
       ].slice(-_AI_HISTORY_MAX);
+
+      // Intent "artist_hits" (v3.5.693): éxitos de un artista (web) → buscarlos en la biblioteca.
+      if (AI_HITS_ENABLED && intent === 'artist_hits' && Array.isArray(data.songs) && data.songs.length) {
+        await _aiLoadArtistHits(data, statusEl, setStatus, inputEl);
+        return;
+      }
 
       // Intent "hits" (v3.5.691): el worker ya trajo la lista de éxitos actuales → YouTube → queue.
       // Si no vino lista (falló la búsqueda web) cae al flujo normal de Soundrop por términos.
