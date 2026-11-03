@@ -876,7 +876,10 @@ const App = (() => {
 
       // ── Restore custom presets (shared / synced) ───────────
       const presets = shared.eqCustomPresets ?? loc.eqCustomPresets; // migration fallback
-      if (Array.isArray(presets) && presets.length > 0) {
+      if (Array.isArray(shared.eqPresetTombstones)) _presetTombs = shared.eqPresetTombstones;
+      // v3.5.686: una lista vacía también es válida cuando hay borrados registrados (si no,
+      // borrar el último preset en otro dispositivo nunca llegaba y este lo resucitaba).
+      if (Array.isArray(presets) && (presets.length > 0 || _presetTombs.length > 0)) {
         _customPresets = presets;
         try { localStorage.setItem('savart_eq_presets', JSON.stringify(_customPresets)); } catch (_) {}
         _renderCustomPresets();
@@ -942,12 +945,32 @@ const App = (() => {
       liveGainEnabled:   Player.getLiveGainEnabled?.()   ?? false,
     }).catch(() => {});
 
-    // Shared custom presets — synced across devices
-    DB.setState('settings', {
-      eqCustomPresets: _customPresets,
-      savedAt:         Date.now(),
+    // Shared custom presets — synced across devices.
+    // v3.5.686: se parte del estado compartido existente (antes se reemplazaba entero y se
+    // perdían rootFolderId/rootFolderName) y NO se toca savedAt (es el reloj de la carpeta
+    // raíz). Solo se escribe/sube si los presets o los borrados cambiaron de verdad.
+    DB.getState('settings').then(prev => {
+      const cur = prev || {};
+      // Se mezcla con lo que ya hay en el estado (p. ej. presets que la sync acaba de traer y
+      // que esta pantalla todavía no restauró) en vez de pisarlo con la lista en memoria.
+      const m = Sync.mergeEqPresets(_customPresets, _presetTombs, cur.eqCustomPresets, cur.eqPresetTombstones);
+      const memChanged = JSON.stringify([m.presets, m.tombs]) !== JSON.stringify([_customPresets, _presetTombs]);
+      if (memChanged) {
+        _customPresets = m.presets;
+        _presetTombs   = m.tombs;
+        try { localStorage.setItem('savart_eq_presets', JSON.stringify(_customPresets)); } catch (_) {}
+        _renderCustomPresets();
+      }
+      const same = JSON.stringify([cur.eqCustomPresets || [], cur.eqPresetTombstones || []]) ===
+                   JSON.stringify([m.presets, m.tombs]);
+      if (same) return;
+      return DB.setState('settings', {
+        ...cur,
+        eqCustomPresets:    m.presets,
+        eqPresetTombstones: m.tombs,
+        savedAt:            cur.savedAt || Date.now(),
+      }).then(() => Sync.push('settings'));
     }).catch(() => {});
-    Sync.push('settings');
   }
 
   /* ── Player state persistence ───────────────────────────── */
@@ -16029,6 +16052,7 @@ const App = (() => {
   // cuanto se mueve un slider, así que no sirve para sugerir nombre al guardar.
   let _lastPreset       = null;   // { id, name, custom:bool }
   let _customPresets    = [];  // loaded from DB
+  let _presetTombs      = [];  // v3.5.686: borrados de presets { id, deletedAt } — viajan con la sync
   let _eqBypassedGains  = null; // real gains stored while EQ is toggled off (module-scope so it survives between event handlers)
   let _eqGroupBars      = false; // true when all bands move together (same delta) on any drag
 
@@ -16169,8 +16193,9 @@ const App = (() => {
     // Mismo nombre que un preset custom existente → se sobrescribe en el sitio (conserva id y posición)
     const existing = _customPresets.find(p => (p.name || '').trim().toLowerCase() === name.trim().toLowerCase());
     if (existing) {
-      existing.gains   = gains;
-      existing.savedAt = new Date().toLocaleDateString();
+      existing.gains     = gains;
+      existing.savedAt   = new Date().toLocaleDateString();
+      existing.updatedAt = Date.now();   // v3.5.686: la sync mezcla por preset con este reloj
       _lastPreset = { id: existing.id, name: existing.name, custom: true };
       localStorage.setItem('savart_eq_presets', JSON.stringify(_customPresets));
       _renderCustomPresets();
@@ -16178,7 +16203,7 @@ const App = (() => {
       UI.showToast(`"${existing.name}" ${UI.t('toast_preset_updated')}`);
       return;
     }
-    const preset = { id: Date.now(), name, gains, savedAt: new Date().toLocaleDateString() };
+    const preset = { id: Date.now(), name, gains, savedAt: new Date().toLocaleDateString(), updatedAt: Date.now() };
     _customPresets.push(preset);
     _lastPreset = { id: preset.id, name, custom: true };
     localStorage.setItem('savart_eq_presets', JSON.stringify(_customPresets));
@@ -16188,6 +16213,9 @@ const App = (() => {
 
   function _deleteCustomPreset(id) {
     _customPresets = _customPresets.filter(p => p.id !== id);
+    // v3.5.686: tombstone para que el borrado llegue a los demás dispositivos (60 días)
+    _presetTombs = _presetTombs.filter(t => t.id !== id && Date.now() - t.deletedAt < 60 * 24 * 60 * 60 * 1000);
+    _presetTombs.push({ id, deletedAt: Date.now() });
     localStorage.setItem('savart_eq_presets', JSON.stringify(_customPresets));
     _renderCustomPresets();
     _saveSettings();

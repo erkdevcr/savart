@@ -386,10 +386,66 @@ const Sync = (() => {
     };
   }
 
+  /**
+   * v3.5.686: mezcla de presets personalizados del EQ POR PRESET (antes la lista entera
+   * ganaba o perdía según quién tuviera el savedAt más nuevo, y mover un slider en un
+   * dispositivo desactualizado pisaba la lista de los demás).
+   *  - Unión por id; si un id está en ambos lados gana el de updatedAt más nuevo
+   *    (presets antiguos sin updatedAt usan su id, que es Date.now() de la creación).
+   *  - Los borrados viajan como tombstones { id, deletedAt }: borrar gana a un preset
+   *    cuya última edición es anterior o igual al borrado; se podan a los 60 días.
+   *  - Dos presets vivos con el mismo nombre (creados por separado en dos dispositivos)
+   *    se reducen al más nuevo — mismo criterio que "mismo nombre = sobrescribir".
+   */
+  function _presetTs(p) { return Number(p?.updatedAt) || Number(p?.id) || 0; }
+  function _mergeEqPresets(localList, localTombs, remoteList, remoteTombs) {
+    const TOMB_MAX = 60 * 24 * 60 * 60 * 1000, now = Date.now();
+    const tombs = new Map();   // key(id) → { id, deletedAt }
+    for (const t of [...(Array.isArray(localTombs) ? localTombs : []), ...(Array.isArray(remoteTombs) ? remoteTombs : [])]) {
+      if (!t || t.id == null) continue;
+      const k = String(t.id), d = Number(t.deletedAt) || 0, ex = tombs.get(k);
+      if (!ex || d > ex.deletedAt) tombs.set(k, { id: t.id, deletedAt: d });
+    }
+    const L = Array.isArray(localList)  ? localList  : [];
+    const R = Array.isArray(remoteList) ? remoteList : [];
+    const live = new Map();
+    for (const p of [...R, ...L]) {            // local va después: gana los empates
+      if (!p || p.id == null || !Array.isArray(p.gains)) continue;
+      const k = String(p.id), ex = live.get(k);
+      if (!ex || _presetTs(p) >= _presetTs(ex)) live.set(k, p);
+    }
+    for (const [k, p] of [...live]) {          // borrado posterior a la última edición → muerto
+      const t = tombs.get(k);
+      if (t && t.deletedAt >= _presetTs(p)) live.delete(k);
+    }
+    const byName = new Map();                  // mismo nombre → el más nuevo, el otro queda tombstoneado
+    for (const p of [...live.values()].sort((a, b) => _presetTs(b) - _presetTs(a))) {
+      const n = String(p.name || '').trim().toLowerCase();
+      const win = byName.get(n);
+      if (win) {
+        live.delete(String(p.id));
+        const k = String(p.id), ex = tombs.get(k), d = _presetTs(win);
+        if (!ex || d > ex.deletedAt) tombs.set(k, { id: p.id, deletedAt: d });
+      } else byName.set(n, p);
+    }
+    const out = [], seen = new Set();          // orden: el local primero, luego lo nuevo del remoto
+    for (const p of [...L, ...R]) {
+      const k = String(p?.id);
+      if (p && live.has(k) && !seen.has(k)) { out.push(live.get(k)); seen.add(k); }
+    }
+    const outTombs = [...tombs.values()].filter(t => now - t.deletedAt < TOMB_MAX);
+    return { presets: out, tombs: outTombs };
+  }
+
   function _mergeSettings(local, remote) {
     if (!remote) return local;
     if (!local)  return remote;
-    return (remote.savedAt || 0) > (local.savedAt || 0) ? remote : local;
+    // Carpeta raíz y demás campos: LWW por savedAt, como antes
+    const base = (remote.savedAt || 0) > (local.savedAt || 0) ? remote : local;
+    // Presets del EQ: mezcla por preset (ver _mergeEqPresets)
+    const m = _mergeEqPresets(local.eqCustomPresets, local.eqPresetTombstones,
+                              remote.eqCustomPresets, remote.eqPresetTombstones);
+    return { ...base, eqCustomPresets: m.presets, eqPresetTombstones: m.tombs };
   }
 
   function _mergeHistory(local, remote) {
@@ -606,13 +662,21 @@ const Sync = (() => {
           const localTs    = current.savedAt || 0;
           // LWW: only overwrite root folder if remote is newer
           const useRemoteRoot = remoteTs > localTs && data.rootFolderId;
+          // v3.5.686: presets mezclados por preset (no "el remoto pisa la lista")
+          const m = _mergeEqPresets(current.eqCustomPresets, current.eqPresetTombstones,
+                                    data.eqCustomPresets,    data.eqPresetTombstones);
           await DB.setState('settings', {
             ...current,
-            eqCustomPresets: data.eqCustomPresets || current.eqCustomPresets || [],
+            eqCustomPresets:    m.presets,
+            eqPresetTombstones: m.tombs,
             rootFolderId:    useRemoteRoot ? data.rootFolderId  : (current.rootFolderId  || null),
             rootFolderName:  useRemoteRoot ? data.rootFolderName : (current.rootFolderName || null),
             savedAt:         data.savedAt || current.savedAt,
           });
+          // Si este dispositivo tenía algo que el remoto no (preset nuevo o borrado), se devuelve
+          if (JSON.stringify([m.presets, m.tombs]) !== JSON.stringify([data.eqCustomPresets || [], data.eqPresetTombstones || []])) {
+            setTimeout(() => { try { push('settings'); } catch (_) {} }, 1500);
+          }
         }
         break;
       }
@@ -1239,6 +1303,7 @@ const Sync = (() => {
     const s = (await DB.getState('settings')) || {};
     const payload = {
       eqCustomPresets: s.eqCustomPresets || [],
+      eqPresetTombstones: s.eqPresetTombstones || [],   // v3.5.686: borrados de presets (60 días)
       // Root folder — shared across devices (LWW by savedAt)
       rootFolderId:    s.rootFolderId   || null,
       rootFolderName:  s.rootFolderName || null,
@@ -1955,9 +2020,14 @@ const Sync = (() => {
         if (!remoteSettings || typeof remoteSettings !== 'object') return;
         const localSettings = (await DB.getState('settings')) || null;
         const merged = _mergeSettings(localSettings, remoteSettings);
-        if (merged !== localSettings) {
+        if (merged !== localSettings && JSON.stringify(merged) !== JSON.stringify(localSettings)) {
           await DB.setState('settings', merged);
           console.log('[Sync] Merged remote settings');
+        }
+        // v3.5.686: si el mezclado tiene presets/borrados que el remoto no, se sube de vuelta
+        if (merged && JSON.stringify([merged.eqCustomPresets || [], merged.eqPresetTombstones || []]) !==
+                      JSON.stringify([remoteSettings.eqCustomPresets || [], remoteSettings.eqPresetTombstones || []])) {
+          setTimeout(() => { try { push('settings'); } catch (_) {} }, 3000);
         }
       });
       _prog(68);
@@ -2378,6 +2448,7 @@ const Sync = (() => {
     return _poll();
   }
 
-  return { init, push, pushNow, pushHot, readHome, startLiveSync, stopLiveSync, getDbStats, pollNow };
+  return { init, push, pushNow, pushHot, readHome, startLiveSync, stopLiveSync, getDbStats, pollNow,
+           mergeEqPresets: _mergeEqPresets };
 
 })();
