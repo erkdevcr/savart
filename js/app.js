@@ -353,9 +353,58 @@ const App = (() => {
       if (btnLogin)     btnLogin.style.display     = '';
       if (disclaimer)   disclaimer.style.display   = '';
       if (reconnecting) reconnecting.style.display = 'none';
+      _maybeOfferOfflineEntry();
     }
 
     Auth.tryAutoLogin(_exitSilentReconnect);
+  }
+
+  /**
+   * v3.5.678: ¿hay internet DE VERDAD?
+   * navigator.onLine solo dice si existe una interfaz de red: un WiFi sin salida,
+   * datos sin señal o un portal cautivo también devuelven true. Se confirma con una
+   * petición cruzada al Worker — sw.js NO intercepta cross-origin, así que no puede
+   * contestarla desde caché: si resuelve (aunque sea 404), la red existe.
+   * @returns {Promise<boolean>}
+   */
+  async function _hasRealInternet(timeoutMs = 3500) {
+    if (!navigator.onLine) return false;          // el navegador ya lo descarta
+    const ctrl  = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      await fetch(`${CONFIG.AUTH_WORKER_URL}/health?_=${Date.now()}`, {
+        method: 'GET', mode: 'no-cors', cache: 'no-store', signal: ctrl.signal
+      });
+      return true;
+    } catch (_) {
+      return false;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /**
+   * v3.5.678: salida de emergencia del login.
+   * Si ya hubo sesión antes y no hay internet real, el botón de Google no puede
+   * funcionar y el usuario quedaba varado aunque tuviera música cacheada. El botón
+   * entra en modo offline (igual que el arranque sin red de init()) y SOLO aparece
+   * sin conexión: con red, el fallo es de autenticación y lo correcto es reentrar.
+   */
+  async function _maybeOfferOfflineEntry() {
+    const btn = document.getElementById('btn-login-offline');
+    if (!btn || !Auth.wasAuthenticated()) return;
+    if (await _hasRealInternet()) { btn.style.display = 'none'; return; }
+    if (btn.dataset.bound !== '1') {
+      btn.dataset.bound = '1';
+      btn.addEventListener('click', () => {
+        console.log('[App] Entrada offline manual desde el login.');
+        _setOfflineMode(true, false);   // manual=false → al volver la red se reintenta el login
+        _onTokenReady();
+      });
+    }
+    btn.style.display = '';
+    // Si vuelve la conexión mientras sigue en el login, el botón ya no hace falta.
+    window.addEventListener('online', () => { btn.style.display = 'none'; }, { once: true });
   }
 
   /**

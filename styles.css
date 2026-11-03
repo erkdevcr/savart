@@ -565,6 +565,31 @@ img { display: block; }
   height: 18px;
 }
 
+/* v3.5.678: botón "Entrar sin conexión" del login. Oculto por defecto (inline
+   style); app.js lo muestra solo cuando ya hubo sesión y la sonda de red falla. */
+.login-offline-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px 20px;
+  font-size: 13px;
+  font-family: inherit;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.login-offline-btn:hover {
+  color: var(--text-primary);
+  border-color: var(--accent);
+  background: var(--bg-hover);
+}
+
 .btn-secondary {
   display: flex;
   align-items: center;
@@ -9205,7 +9230,7 @@ body.on-login .ai-search-float {
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-pill);
-  padding: 4px 8px;
+  padding: 4px 6px;
 }
 
 .ai-search-input {
@@ -9225,8 +9250,8 @@ body.on-login .ai-search-float {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 36px;   /* v3.5.678: 28 → 36 px, eran muy pequeños para el dedo */
+  height: 36px;
   flex-shrink: 0;
   background: transparent;
   border: none;

@@ -167,6 +167,7 @@ const UI = (() => {
       login_tagline_2:  'donde quieras.',
       login_reconnecting: 'Reconectando…',
       login_btn:        'Continuar con Google',
+      login_offline_btn: 'Entrar sin conexión',
       // v3.5.641 (audit S6): el texto decía "solo lectura", pero la app pide el scope
       // drive.file y genuinamente crea/renombra/mueve/elimina archivos (Soundrop, deep
       // scan, edición de metadata) — la copia ahora refleja el acceso real.
@@ -672,6 +673,7 @@ const UI = (() => {
       login_tagline_2:  'anywhere.',
       login_reconnecting: 'Reconnecting…',
       login_btn:        'Continue with Google',
+      login_offline_btn: 'Continue offline',
       login_disclaimer: 'By continuing, Savart will access the Google Drive files you create or open with the app.',
       session_expiring: 'Session expiring soon.',
       renew:     'Renew',
