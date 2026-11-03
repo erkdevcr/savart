@@ -16026,6 +16026,9 @@ const App = (() => {
   };
 
   let _currentPreset    = 'flat';
+  // v3.5.679: último preset CARGADO (de fábrica o custom). _currentPreset se pone en null en
+  // cuanto se mueve un slider, así que no sirve para sugerir nombre al guardar.
+  let _lastPreset       = null;   // { id, name, custom:bool }
   let _customPresets    = [];  // loaded from DB
   let _eqBypassedGains  = null; // real gains stored while EQ is toggled off (module-scope so it survives between event handlers)
   let _eqGroupBars      = false; // true when all bands move together (same delta) on any drag
@@ -16104,6 +16107,10 @@ const App = (() => {
     const gains = EQ_PRESETS[preset];
     if (!gains) return;
     _currentPreset = preset;
+    {
+      const _chip = document.querySelector(`.eq-preset-chip[data-preset="${preset}"]`);
+      _lastPreset = { id: preset, name: (_chip?.textContent || '').trim(), custom: false };
+    }
     Player.setEQGains(gains);
     gains.forEach((g, i) => {
       const slider = document.getElementById(`eq-slider-${i}`);
@@ -16188,10 +16195,38 @@ const App = (() => {
     if (balanceLabel) balanceLabel.textContent = UI.t('eq_balance_center') || 'Centro';
   }
 
+  /**
+   * v3.5.679: nombre sugerido al guardar = el del preset cargado (de fábrica o custom),
+   * para poder pisarlo (mismo nombre) o renombrarlo (otro nombre).
+   */
+  function _suggestedPresetName() {
+    if (_lastPreset?.name) return _lastPreset.name;
+    if (_currentPreset) {   // restaurado de la sesión anterior (nunca pasó por una carga)
+      const custom = _customPresets.find(p => p.id === _currentPreset);
+      if (custom) return custom.name;
+      const chip = document.querySelector(`.eq-preset-chip[data-preset="${_currentPreset}"]`);
+      if (chip) return chip.textContent.trim();
+    }
+    return UI.t('prompt_eq_preset_default');
+  }
+
   function _saveCustomPreset(name) {
     const gains = Player.getEQGains();
+    // Mismo nombre que un preset custom existente → se sobrescribe en el sitio (conserva id y posición)
+    const existing = _customPresets.find(p => (p.name || '').trim().toLowerCase() === name.trim().toLowerCase());
+    if (existing) {
+      existing.gains   = gains;
+      existing.savedAt = new Date().toLocaleDateString();
+      _lastPreset = { id: existing.id, name: existing.name, custom: true };
+      localStorage.setItem('savart_eq_presets', JSON.stringify(_customPresets));
+      _renderCustomPresets();
+      _saveSettings();
+      UI.showToast(`"${existing.name}" ${UI.t('toast_preset_updated')}`);
+      return;
+    }
     const preset = { id: Date.now(), name, gains, savedAt: new Date().toLocaleDateString() };
     _customPresets.push(preset);
+    _lastPreset = { id: preset.id, name, custom: true };
     localStorage.setItem('savart_eq_presets', JSON.stringify(_customPresets));
     _renderCustomPresets();
     _saveSettings();
@@ -16269,6 +16304,7 @@ const App = (() => {
         document.querySelectorAll('.eq-custom-card').forEach(c => c.classList.remove('active'));
         card.classList.add('active');
         _currentPreset = preset.id;
+        _lastPreset = { id: preset.id, name: preset.name, custom: true };
         _updateEQPresetLabel();
         _drawEQCurve();
         _saveSettings();
@@ -18185,7 +18221,7 @@ const App = (() => {
 
     // EQ save custom preset
     document.getElementById('btn-eq-save')?.addEventListener('click', () => {
-      const name = prompt(UI.t('prompt_eq_preset_name'), UI.t('prompt_eq_preset_default'));
+      const name = prompt(UI.t('prompt_eq_preset_name'), _suggestedPresetName());
       if (name) _saveCustomPreset(name.trim() || UI.t('prompt_eq_preset_default'));
     });
 
