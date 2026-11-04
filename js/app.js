@@ -1307,9 +1307,11 @@ const App = (() => {
       _aiStopSpeaking();
     }
     ['speak', 'voice'].forEach(k => document.getElementById('bot-row-' + k)?.classList.toggle('bot-dim', !enabled));
+    // v3.5.700: 'micrófono al tocar' solo tiene sentido con el bot y los comandos de voz activos
+    document.getElementById('bot-row-automic')?.classList.toggle('bot-dim', !enabled || !_botPref('voice'));
   }
   function _initBotSettings() {
-    [['enabled', 'bot-toggle-enabled'], ['speak', 'bot-toggle-speak'], ['voice', 'bot-toggle-voice']].forEach(([k, id]) => {
+    [['enabled', 'bot-toggle-enabled'], ['speak', 'bot-toggle-speak'], ['voice', 'bot-toggle-voice'], ['automic', 'bot-toggle-automic']].forEach(([k, id]) => {
       const el = document.getElementById(id);
       if (!el) return;
       el.classList.toggle('on', _botPref(k));
@@ -1319,6 +1321,7 @@ const App = (() => {
         _botPrefSet(k, on);
         if (k === 'speak' && !on) _aiStopSpeaking();
         if (k === 'voice' && !on) { try { _aiVoiceStop(); } catch (_) {} }
+        if (k === 'voice') _applyBotPrefs();
       });
     });
   }
@@ -1433,7 +1436,8 @@ const App = (() => {
           _positionAiPanel();
           // v3.5.695: tocar el bot activa el micrófono de una vez (el toque es el gesto que
           // el navegador exige). Si no hay voz disponible → teclado como antes.
-          if (_voiceOn() && _startListening()) { /* escuchando: sin abrir el teclado */ }
+          // v3.5.700: solo si el ajuste 'Micrófono al tocar el bot' está activo; si no, se usa el botón 🎤 del panel
+          if (_voiceOn() && _botPref('automic') && _startListening()) { /* escuchando: sin abrir el teclado */ }
           else setTimeout(() => inputEl?.focus(), 50);
         } else {
           _stopListening();
