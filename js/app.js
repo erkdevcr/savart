@@ -1976,7 +1976,9 @@ const App = (() => {
   }
 
   /** Chips de seguimiento bajo la respuesta del bot. kind: 'music' (todas) | 'save' (solo guardar). */
+  const AI_CHIPS_ENABLED = false; // v3.5.699: el usuario no quiere botones de sugerencias (los comandos escritos/por voz siguen funcionando)
   function _aiShowChips(kind, query, expl) {
+    if (!AI_CHIPS_ENABLED) return false;
     const st = document.getElementById('ai-search-status');
     if (!st) return false;
     const en = document.documentElement.lang === 'en';
