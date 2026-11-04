@@ -2198,6 +2198,47 @@ const App = (() => {
    *   obtenida (al contestar "Sí" a "¿La busco en Soundrop?" no se vuelve a llamar a Gemini);
    *   forceSoundrop: buscar en YouTube/Soundrop aunque el usuario no lo haya pedido.
    */
+
+  /* ── Segunda revisión de artista (v3.5.701) ──────────────────────────────
+     Después de armar la cola con "artist_only" (p. ej. "Ana Gabriel"), se verifica canción por
+     canción que de verdad sea del artista pedido: la búsqueda de Drive/YouTube expande el término
+     en palabras sueltas y puede traer "Peter Gabriel" o "Gabriel Rios". Evidencia usada (todo
+     local, sin cuota): nombre del archivo, etiqueta de artista/álbum (metadatos y appProperties),
+     carpetas padre y, en YouTube, artista/canal. Coincidencia por FRASE completa de palabras.
+     Regla: coincide → se queda; hay etiqueta de artista y no coincide → se descarta; sin ninguna
+     información → se queda solo si venía de la búsqueda por título (canción puntual). */
+  const _vaNorm = s => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+    .replace(/[^a-z0-9ñ]+/g, ' ').trim();
+  function _aiArtistTerms(terms) {
+    const list = [...new Set((terms || []).map(t => _vaNorm(t)).filter(Boolean))];
+    // Quita términos redundantes: "gabriel" cuando ya viene "ana gabriel" (sería un falso positivo).
+    return list.filter(t => {
+      const w = new Set(t.split(' '));
+      return !list.some(o => o !== t && o.split(' ').length > w.size && [...w].every(x => o.split(' ').includes(x)));
+    });
+  }
+  function _aiVerifyArtist(songs, artistTerms, ctx, fromTrackIds, isYt) {
+    const artists = _aiArtistTerms(artistTerms);
+    if (!artists.length || !songs.length) return { kept: songs, dropped: 0 };
+    const hasPhrase = (hay, a) => (' ' + hay + ' ').includes(' ' + a + ' ');
+    const judge = (s, fuzzy) => {
+      const nm  = String(s.name || s.displayName || '').replace(/\.[^.]+$/, '');
+      const ap  = s.appProperties || {};
+      const m   = ctx?.byId?.get(s.id) || null;
+      const tag = [ap.s_artist, m?.artist, s.artist].filter(Boolean).join(' ');
+      const extra = isYt ? [s.artist, s.channelTitle].filter(Boolean).join(' ') : _searchExtras(s, ctx);
+      const hay = _vaNorm(nm + ' ' + tag + ' ' + extra);
+      const ok = artists.some(a => hasPhrase(hay, a) || (fuzzy && _fuzzyScore(a, hay, false) >= 0.85));
+      if (ok) return true;
+      if (isYt) return false;
+      if (tag.trim()) return false;                 // la etiqueta dice otro artista
+      return !!(fromTrackIds && fromTrackIds.has(s.id)); // sin información: solo si vino por título
+    };
+    let kept = songs.filter(s => judge(s, false));
+    if (!kept.length) kept = songs.filter(s => judge(s, true)); // tolera typos del artista
+    return { kept, dropped: songs.length - kept.length };
+  }
+
   async function _handleAiQuery(query, opts = {}) {
     if (!query?.trim()) return;
     const statusEl = document.getElementById('ai-search-status');
@@ -2392,12 +2433,26 @@ const App = (() => {
       // matchea por nombre de ARCHIVO, no por carpeta) → el pin fallaba y sonaba
       // "cualquier cosa". Ahora el título se busca aparte y se mergea.
       let pinnedSong = null;
+      const _fromTrackIds = new Set();
       if (track && typeof track === 'string' && track.trim() && !useSoundrop) {
         try {
           const trackHits = await _aiSearchDriveTerms([track.trim()]);
           const have = new Set(songs.map(s => s.id));
-          for (const t of trackHits) if (!have.has(t.id)) songs.push(t);
+          for (const t of trackHits) if (!have.has(t.id)) { songs.push(t); _fromTrackIds.add(t.id); }
         } catch (_) {}
+      }
+
+      // v3.5.701 — segunda revisión: que las canciones sean del artista pedido (no de otro con
+      // nombre parecido). Solo para "artist_only" con artista claro.
+      let _verifyDropped = 0, _verifyArtist = '';
+      if (intent === 'artist_only' && Array.isArray(terms) && terms.length && songs.length) {
+        try {
+          const ctxV = useSoundrop ? null : await _buildSearchCtx();
+          const v = _aiVerifyArtist(songs, terms, ctxV, _fromTrackIds, !!useSoundrop);
+          // En YouTube los títulos son muy variables: si el filtro vaciara todo, se deja lo original.
+          if (v.kept.length || !useSoundrop) { _verifyDropped = v.dropped; songs = v.kept; }
+          _verifyArtist = String(terms[0] || '').trim();
+        } catch (e) { console.warn('[AI] verify artist', e); }
       }
 
       if (!songs.length) {
@@ -2466,7 +2521,7 @@ const App = (() => {
       }
 
       if (inputEl) inputEl.value = '';
-      setStatus(`✦ ${explanation} · ${songs.length} canciones`, 'found');
+      setStatus(`✦ ${explanation} · ${songs.length} canciones${_verifyDropped ? ` (descarté ${_verifyDropped} de otros artistas)` : ''}`, 'found');
       _aiBotForce('happy', 2600);
       const _chips3 = _aiShowChips('music', query.trim(), explanation);
       setTimeout(() => document.getElementById('ai-search-panel')?.classList.remove('open'), _chips3 ? 12000 : 2000);
