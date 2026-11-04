@@ -1725,7 +1725,8 @@ const App = (() => {
    */
   async function _aiLoadHits(data, setStatus, inputEl) {
     const run = ++_aiHitsRun;
-    const hits = data.songs.slice(0, 30);
+    // Cada búsqueda en YouTube cuesta 100 de cuota: tope de 20 (30 si el usuario pidió una cantidad concreta)
+    const hits = data.songs.slice(0, data.limit ? 30 : 20);
     const expl = data.explanation || _aiL('Éxitos', 'Hits');
     const cache = _hitsCacheLoad();
     const now = Date.now();
@@ -1815,7 +1816,7 @@ const App = (() => {
    */
   async function _aiLoadArtistHits(data, statusEl, setStatus, inputEl) {
     const run = ++_aiHitsRun;
-    const hits = data.songs.slice(0, 30);
+    const hits = data.songs.slice(0, 100);
     const expl = data.explanation || _aiL('Éxitos', 'Hits');
     setStatus(`✦ ${expl} · ${_aiL('buscándolas en tu biblioteca', 'looking them up in your library')}`, 'thinking');
 
@@ -1885,7 +1886,7 @@ const App = (() => {
         setStatus(`✦ ${expl} · ${_aiL('buscándolas en tu biblioteca', 'looking them up in your library')} ${done}/${hits.length}`, 'thinking');
       }
     };
-    await Promise.all([worker(), worker(), worker()]);
+    await Promise.all([worker(), worker(), worker(), worker()]);
     if (run !== _aiHitsRun) return;
 
     // Ordenadas por popularidad (orden de la lista), sin repetir archivo
@@ -1896,6 +1897,57 @@ const App = (() => {
       if (it && !seenIds.has(it.id)) { seenIds.add(it.id); found.push(it); }
       else if (!it) missing.push(h);
     });
+
+    // v3.5.705 — 2ª pasada (solo éxitos de género/época): además de los títulos exactos, se suman canciones
+    // de tu biblioteca de los MISMOS ARTISTAS de la lista (máx. 5 por artista, 60 en total), después de los
+    // éxitos exactos y sin repetir. Así "éxitos salsa 90s" rinde aunque no tengas los títulos puntuales.
+    const extras = [];
+    if (data.intent === 'hits') {
+      const want = new Set();
+      for (const h of hits) {
+        String(h.artist || '').split(/\s*(?:,|&|\bfeat\.?|\bft\.?|\bx\b|\by\b|\bcon\b)\s*/i)
+          .map(_hn).filter(x => x.length >= 4).forEach(x => want.add(x));
+      }
+      const titleKey = it => _hn(cleanTitle(it.name || it.displayName || ''));
+      const taken = new Set(found.map(it => it.id));
+      const seenT = new Set(found.map(titleKey).filter(Boolean));
+      const byArtist = new Map();
+      for (const e of lib) {
+        const m = e.m;
+        if (taken.has(m.id)) continue;
+        const an = _hn([m.artist, m.albumArtist].filter(Boolean).join(' '));
+        if (!an) continue;
+        let hitA = null;
+        for (const w of want) { if ((' ' + an + ' ').includes(' ' + w + ' ')) { hitA = w; break; } }
+        if (!hitA) continue;
+        if (BAD.test(m.name || m.displayName || '')) continue;
+        if (!byArtist.has(hitA)) byArtist.set(hitA, []);
+        byArtist.get(hitA).push(m);
+      }
+      const groups = [...byArtist.values()].map(g => {
+        const out = [], used = new Set();
+        for (const m of g.sort(() => Math.random() - 0.5)) {
+          const it = mkItem(m), k = titleKey(it);
+          if (k && (seenT.has(k) || used.has(k))) continue;
+          if (k) used.add(k);
+          out.push(it);
+          if (out.length >= 5) break;
+        }
+        return out;
+      }).filter(g => g.length).sort(() => Math.random() - 0.5);
+      // Intercalado (1 de cada artista por ronda) para que no suenen 5 seguidas del mismo
+      for (let r = 0; r < 5 && extras.length < 60; r++) {
+        for (const g of groups) {
+          if (g[r] && extras.length < 60) {
+            const k = titleKey(g[r]);
+            if (k && seenT.has(k)) continue;
+            if (k) seenT.add(k);
+            extras.push(g[r]);
+          }
+        }
+      }
+    }
+    const queueList = found.concat(extras);
 
     const offerYt = () => {
       if (!missing.length || typeof Soundrop === 'undefined' || !statusEl) return false;
@@ -1917,27 +1969,28 @@ const App = (() => {
       return true;
     };
 
-    if (!found.length) {
+    if (!queueList.length) {
       _aiBotForce('sad', 2600);
       if (!offerYt()) setStatus(_aiL('✦ No encontré esas canciones en tu biblioteca', '✦ I couldn’t find those songs in your library'), 'empty');
       return;
     }
 
     const playing = (typeof Player.isPlaying === 'function') && Player.isPlaying();
-    let toAdd = found;
+    let toAdd = queueList;
     if (playing) {
       // Suena algo → se agregan al final sin interrumpir y sin repetir lo que ya está en el queue
       const inQueue = new Set((Player.getQueue().queue || []).map(it => it.id));
-      toAdd = found.filter(it => !inQueue.has(it.id));
+      toAdd = queueList.filter(it => !inQueue.has(it.id));
       if (toAdd.length) Player.appendToQueue(toAdd);
     } else {
       _radioModeActive = false;
-      Player.setQueue(found, 0);
+      Player.setQueue(queueList, 0);
     }
     if (inputEl) inputEl.value = '';
     _aiBotForce('happy', 2600);
-    const dupN = found.length - toAdd.length;
-    const tail = dupN ? _aiL(` (${dupN} ya estaban)`, ` (${dupN} already in queue)`) : '';
+    const dupN = queueList.length - toAdd.length;
+    const exTail = extras.length ? _aiL(` · ${found.length} éxitos + ${extras.length} más de los mismos artistas`, ` · ${found.length} hits + ${extras.length} more by the same artists`) : '';
+    const tail = exTail + (dupN ? _aiL(` (${dupN} ya estaban)`, ` (${dupN} already in queue)`) : '');
     if (!offerYt()) {
       setStatus(`✦ ${expl} · ${toAdd.length} ${playing ? _aiL('agregadas al queue', 'added to the queue') : _aiL('en cola', 'queued')}${tail}`, 'found');
       const _chips2 = _aiShowChips('save', '', expl);
