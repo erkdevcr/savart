@@ -9319,3 +9319,27 @@ body.bot-novoice #ai-search-mic { display: none !important; }
 
 /* v3.5.697 — chips de seguimiento del bot IA */
 .ai-chip-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+
+/* ── Bot IA: estado "pensando" (v3.5.702) ────────────────────────────────
+   Texto del cuadro en gris (como deshabilitado) y tres bolitas animadas junto al estado. */
+.ai-search-panel.is-thinking .ai-search-input { color: var(--text-disabled); -webkit-text-fill-color: var(--text-disabled); cursor: default; }
+.ai-search-panel.is-thinking .ai-search-input-row { opacity: .75; }
+.ai-search-panel.is-thinking .ai-search-send { opacity: .4; pointer-events: none; }
+.ai-search-status.thinking::after {
+  content: ''; display: inline-block; vertical-align: middle;
+  width: 24px; height: 10px; margin: 0 14px 1px 6px;
+  background-image:
+    radial-gradient(circle, currentColor 2.2px, transparent 2.6px),
+    radial-gradient(circle, currentColor 2.2px, transparent 2.6px),
+    radial-gradient(circle, currentColor 2.2px, transparent 2.6px);
+  background-size: 6px 6px; background-repeat: no-repeat;
+  background-position: 0 4px, 8px 4px, 16px 4px;
+  animation: ai-think-dots 1.1s ease-in-out infinite;
+}
+@keyframes ai-think-dots {
+  0%, 60%, 100% { background-position: 0 4px, 8px 4px, 16px 4px; }
+  15% { background-position: 0 0, 8px 4px, 16px 4px; }
+  30% { background-position: 0 4px, 8px 0, 16px 4px; }
+  45% { background-position: 0 4px, 8px 4px, 16px 0; }
+}
+@media (prefers-reduced-motion: reduce) { .ai-search-status.thinking::after { animation: none; } }

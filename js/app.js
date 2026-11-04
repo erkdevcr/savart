@@ -1288,6 +1288,23 @@ const App = (() => {
      Preferencias POR DISPOSITIVO (localStorage): activar el bot, respuestas habladas,
      comandos de voz. El bot habla (speechSynthesis del sistema: sin cuota) solo cuando
      el usuario le habló por voz, y baja la música mientras escucha/habla. */
+  // v3.5.702: idioma del bot = idioma de la app (UI.getLanguage); _aiL(es, en) elige el texto
+  // v3.5.703: idioma del bot = ajuste propio ('auto' sigue a la app, 'es', 'en'); afecta mensajes, voz y reconocimiento
+  function _botLangPref() { try { const v = localStorage.getItem('savart_bot_lang'); return v === 'es' || v === 'en' ? v : 'auto'; } catch (_) { return 'auto'; } }
+  const _aiEn = () => {
+    const p = _botLangPref();
+    if (p !== 'auto') return p === 'en';
+    try { return UI.getLanguage() === 'en'; } catch (_) { return false; }
+  };
+  const _AI_MSG = {
+    ai_listening:         ['Escuchando', 'Listening'],
+    ai_mic_waiting:       ['Esperando permiso del micrófono', 'Waiting for microphone permission'],
+    ai_mic_denied:        ['No pude usar el micrófono — escribe tu consulta', 'Couldn’t use the microphone — type your request'],
+    ai_no_speech:         ['No te escuché — habla de nuevo o escribe', 'Didn’t catch that — speak again or type'],
+    ai_mic_none:          ['No encontré un micrófono — escribe tu consulta', 'I couldn’t find a microphone — type your request'],
+    ai_voice_unsupported: ['Este navegador no ofrece reconocimiento de voz (Brave lo desactiva) — escribe tu consulta', 'This browser doesn’t offer speech recognition (Brave disables it) — type your request'],
+  };
+  const _aiL  = (es, en) => (_aiEn() ? en : es);
   function _botPref(k) {
     try { const v = localStorage.getItem('savart_bot_' + k); return v === null ? true : v !== '0'; }
     catch (_) { return true; }
@@ -1306,11 +1323,21 @@ const App = (() => {
       try { _aiVoiceStop(); } catch (_) {}
       _aiStopSpeaking();
     }
-    ['speak', 'voice'].forEach(k => document.getElementById('bot-row-' + k)?.classList.toggle('bot-dim', !enabled));
+    ['speak', 'voice', 'lang'].forEach(k => document.getElementById('bot-row-' + k)?.classList.toggle('bot-dim', !enabled));
     // v3.5.700: 'micrófono al tocar' solo tiene sentido con el bot y los comandos de voz activos
     document.getElementById('bot-row-automic')?.classList.toggle('bot-dim', !enabled || !_botPref('voice'));
   }
   function _initBotSettings() {
+    const langSel = document.getElementById('bot-select-lang');
+    if (langSel) {
+      langSel.value = _botLangPref();
+      langSel.addEventListener('change', () => {
+        try { localStorage.setItem('savart_bot_lang', langSel.value); } catch (_) {}
+        try { _aiVoiceStop(); } catch (_) {}   // el próximo reconocimiento usa el idioma nuevo
+        _aiStopSpeaking();
+        try { _aiApplyLang(); } catch (_) {}
+      });
+    }
     [['enabled', 'bot-toggle-enabled'], ['speak', 'bot-toggle-speak'], ['voice', 'bot-toggle-voice'], ['automic', 'bot-toggle-automic']].forEach(([k, id]) => {
       const el = document.getElementById(id);
       if (!el) return;
@@ -1355,7 +1382,7 @@ const App = (() => {
       const synth = window.speechSynthesis;
       synth.cancel();
       const u = new SpeechSynthesisUtterance(clean);
-      const en = document.documentElement.lang === 'en';
+      const en = _aiEn();
       u.lang = en ? 'en-US' : 'es-ES';
       const voices = synth.getVoices() || [];
       const pre = en ? 'en' : 'es';
@@ -1370,6 +1397,15 @@ const App = (() => {
       setTimeout(done, 20000);
       synth.speak(u);
     } catch (_) {}
+  }
+
+  function _aiApplyLang() {
+    const set = (id, es, en) => { const el = document.getElementById(id); if (el) { el.setAttribute('aria-label', _aiL(es, en)); if (el.hasAttribute('title')) el.title = _aiL(es, en); } };
+    set('ai-search-trigger', 'Búsqueda con IA', 'AI search');
+    set('ai-search-mic', 'Micrófono', 'Microphone');
+    set('ai-search-send', 'Buscar', 'Search');
+    const inp = document.getElementById('ai-search-input');
+    if (inp) inp.placeholder = _aiL('¿Qué quieres escuchar?', 'What do you want to hear?');
   }
 
   function _initAiSearch() {
@@ -1483,12 +1519,34 @@ const App = (() => {
 
     // Send
     sendBtn?.addEventListener('click', () => {
+      if (panel.classList.contains('is-thinking')) return;
       const q = inputEl?.value?.trim();
       if (q) _handleAiQuery(q);
     });
     inputEl?.addEventListener('keydown', e => {
-      if (e.key === 'Enter') { const q = inputEl.value.trim(); if (q) _handleAiQuery(q); }
+      if (e.key === 'Enter') {
+        if (panel.classList.contains('is-thinking')) return;
+        const q = inputEl.value.trim(); if (q) _handleAiQuery(q);
+      }
     });
+
+    // v3.5.702: mientras el bot piensa, el cuadro de texto se ve deshabilitado (texto gris, solo lectura).
+    // Se deriva de la clase del estado ('thinking' y no 'listening'); se suelta sola a los 25 s por seguridad.
+    const _stEl = document.getElementById('ai-search-status');
+    if (_stEl && window.MutationObserver) {
+      let _lockTimer = null;
+      const _syncLock = () => {
+        const busy = _stEl.classList.contains('thinking') && !_stEl.classList.contains('listening');
+        panel.classList.toggle('is-thinking', busy);
+        if (inputEl) inputEl.readOnly = busy;
+        clearTimeout(_lockTimer);
+        if (busy) _lockTimer = setTimeout(() => { panel.classList.remove('is-thinking'); if (inputEl) inputEl.readOnly = false; }, 25000);
+      };
+      new MutationObserver(_syncLock).observe(_stEl, { attributes: true, attributeFilter: ['class'] });
+    }
+
+    // Textos del panel según el idioma de la app (placeholder por data-i18n-placeholder)
+    _aiApplyLang();
 
     // ── Voz (Web Speech API) ────────────────────────────────
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -1498,8 +1556,9 @@ const App = (() => {
     const _setStatusMsg = (key, fallback, cls = 'empty') => {
       const st = document.getElementById('ai-search-status');
       if (!st) return;
-      st.className = 'ai-search-status ' + cls;
-      st.textContent = '✦ ' + (UI.t(key) || fallback);
+      st.className = 'ai-search-status ' + cls + (key === 'ai_listening' || key === 'ai_mic_waiting' ? ' listening' : '');
+      const _m = _AI_MSG[key];
+      st.textContent = '✦ ' + (_m ? _aiL(_m[0], _m[1]) : (UI.t(key) || fallback));
     };
     let _startToken = 0;       // invalida un arranque pendiente (esperando el permiso) si se cierra/cancela
     function _stopListening() {
@@ -1542,7 +1601,7 @@ const App = (() => {
     function _beginRecognition(token) {
       let rec;
       try { rec = new SR(); } catch (_) { micBtn?.classList.remove('listening'); setTimeout(() => inputEl?.focus(), 50); return; }
-      rec.lang = (document.documentElement.lang === 'en') ? 'en-US' : 'es-ES';
+      rec.lang = _aiEn() ? 'en-US' : 'es-ES';
       rec.interimResults = false;
       rec.maxAlternatives = 1;
       let gotResult = false, failed = false;
@@ -1667,7 +1726,7 @@ const App = (() => {
   async function _aiLoadHits(data, setStatus, inputEl) {
     const run = ++_aiHitsRun;
     const hits = data.songs.slice(0, 30);
-    const expl = data.explanation || 'Éxitos';
+    const expl = data.explanation || _aiL('Éxitos', 'Hits');
     const cache = _hitsCacheLoad();
     const now = Date.now();
 
@@ -1722,10 +1781,10 @@ const App = (() => {
           Player.appendToQueue([song]);
         }
         added++;
-        setStatus(`✦ ${expl} · ${added} agregadas (${Math.min(idx, hits.length)}/${hits.length})…`, 'thinking');
+        setStatus(`✦ ${expl} · ${added} ${_aiL('agregadas', 'added')} (${Math.min(idx, hits.length)}/${hits.length})`, 'thinking');
       }
     };
-    setStatus(`✦ ${expl} · buscando ${hits.length} canciones en YouTube…`, 'thinking');
+    setStatus(`✦ ${expl} · ${_aiL(`buscando ${hits.length} canciones en YouTube`, `searching ${hits.length} songs on YouTube`)}`, 'thinking');
     await Promise.all([worker(), worker(), worker()]);
     if (run !== _aiHitsRun) return; // llegó otra consulta: ella maneja el estado
     _hitsCacheSave(cache);
@@ -1733,16 +1792,16 @@ const App = (() => {
     if (!added) {
       _aiBotForce('sad', 2600);
       setStatus(quotaOut
-        ? '✦ Se agotó la cuota diaria de YouTube. Prueba mañana.'
-        : '✦ No logré encontrar esas canciones en YouTube', quotaOut ? 'error' : 'empty');
+        ? _aiL('✦ Se agotó la cuota diaria de YouTube. Prueba mañana.', '✦ YouTube’s daily quota is used up. Try again tomorrow.')
+        : _aiL('✦ No logré encontrar esas canciones en YouTube', '✦ I couldn’t find those songs on YouTube'), quotaOut ? 'error' : 'empty');
       return;
     }
     if (inputEl) inputEl.value = '';
     const extra = [];
-    if (dups)    extra.push(`${dups} ya estaban`);
-    if (missing) extra.push(`${missing} sin resultado`);
-    if (quotaOut) extra.push('cuota de YouTube agotada');
-    setStatus(`✦ ${expl} · ${added} ${playing ? 'agregadas al queue' : 'en cola'}${extra.length ? ' (' + extra.join(', ') + ')' : ''}`, 'found');
+    if (dups)    extra.push(_aiL(`${dups} ya estaban`, `${dups} already in queue`));
+    if (missing) extra.push(_aiL(`${missing} sin resultado`, `${missing} not found`));
+    if (quotaOut) extra.push(_aiL('cuota de YouTube agotada', 'YouTube quota used up'));
+    setStatus(`✦ ${expl} · ${added} ${playing ? _aiL('agregadas al queue', 'added to the queue') : _aiL('en cola', 'queued')}${extra.length ? ' (' + extra.join(', ') + ')' : ''}`, 'found');
     _aiBotForce('happy', 2600);
     const _chips1 = _aiShowChips('save', '', expl);
     setTimeout(() => document.getElementById('ai-search-panel')?.classList.remove('open'), _chips1 ? 12000 : 2600);
@@ -1757,8 +1816,8 @@ const App = (() => {
   async function _aiLoadArtistHits(data, statusEl, setStatus, inputEl) {
     const run = ++_aiHitsRun;
     const hits = data.songs.slice(0, 30);
-    const expl = data.explanation || 'Éxitos';
-    setStatus(`✦ ${expl} · buscándolas en tu biblioteca…`, 'thinking');
+    const expl = data.explanation || _aiL('Éxitos', 'Hits');
+    setStatus(`✦ ${expl} · ${_aiL('buscándolas en tu biblioteca', 'looking them up in your library')}`, 'thinking');
 
     const ctx = await _buildSearchCtx();
     const AUDIO_RE = /\.(mp3|m4a|flac|wav|ogg|opus|aac|wma)$/i;
@@ -1823,7 +1882,7 @@ const App = (() => {
         const i = next++;
         try { results[i] = await matchOne(hits[i]); } catch (_) {}
         done++;
-        setStatus(`✦ ${expl} · buscándolas en tu biblioteca… ${done}/${hits.length}`, 'thinking');
+        setStatus(`✦ ${expl} · ${_aiL('buscándolas en tu biblioteca', 'looking them up in your library')} ${done}/${hits.length}`, 'thinking');
       }
     };
     await Promise.all([worker(), worker(), worker()]);
@@ -1843,7 +1902,7 @@ const App = (() => {
       statusEl.className = 'ai-search-status found';
       statusEl.textContent = '';
       const msg = document.createElement('span');
-      msg.textContent = `✦ ${found.length} de ${hits.length} en tu biblioteca. ¿Busco las ${missing.length} que faltan en YouTube? `;
+      msg.textContent = _aiL(`✦ ${found.length} de ${hits.length} en tu biblioteca. ¿Busco las ${missing.length} que faltan en YouTube? `, `✦ ${found.length} of ${hits.length} in your library. Search the ${missing.length} missing ones on YouTube? `);
       const mkBtn = (label, onClick) => {
         const b = document.createElement('button');
         b.type = 'button'; b.className = 'ai-status-btn'; b.textContent = label;
@@ -1852,15 +1911,15 @@ const App = (() => {
       };
       statusEl.append(
         msg,
-        mkBtn('Sí', () => _aiLoadHits({ songs: missing, explanation: expl }, setStatus, inputEl)),
-        mkBtn('No', () => setStatus(`✦ ${expl} · ${found.length} de ${hits.length} en tu biblioteca`, 'found')),
+        mkBtn(_aiL('Sí', 'Yes'), () => _aiLoadHits({ songs: missing, explanation: expl }, setStatus, inputEl)),
+        mkBtn('No', () => setStatus(`✦ ${expl} · ${_aiL(`${found.length} de ${hits.length} en tu biblioteca`, `${found.length} of ${hits.length} in your library`)}`, 'found')),
       );
       return true;
     };
 
     if (!found.length) {
       _aiBotForce('sad', 2600);
-      if (!offerYt()) setStatus('✦ No encontré esas canciones en tu biblioteca', 'empty');
+      if (!offerYt()) setStatus(_aiL('✦ No encontré esas canciones en tu biblioteca', '✦ I couldn’t find those songs in your library'), 'empty');
       return;
     }
 
@@ -1878,9 +1937,9 @@ const App = (() => {
     if (inputEl) inputEl.value = '';
     _aiBotForce('happy', 2600);
     const dupN = found.length - toAdd.length;
-    const tail = dupN ? ` (${dupN} ya estaban)` : '';
+    const tail = dupN ? _aiL(` (${dupN} ya estaban)`, ` (${dupN} already in queue)`) : '';
     if (!offerYt()) {
-      setStatus(`✦ ${expl} · ${toAdd.length} ${playing ? 'agregadas al queue' : 'en cola'}${tail}`, 'found');
+      setStatus(`✦ ${expl} · ${toAdd.length} ${playing ? _aiL('agregadas al queue', 'added to the queue') : _aiL('en cola', 'queued')}${tail}`, 'found');
       const _chips2 = _aiShowChips('save', '', expl);
       setTimeout(() => document.getElementById('ai-search-panel')?.classList.remove('open'), _chips2 ? 12000 : 2600);
     }
@@ -1890,8 +1949,8 @@ const App = (() => {
    * Emisoras de radio por voz/texto (v3.5.696). Catálogo = RadioStations.STATIONS (local, sin cuota).
    * Coincidencia tolerante (acentos, typos), números exactos ("103", "88.2"), favoritas primero.
    */
-  const _AI_RADIO_RE = /\b(sintoniz\w*|emisoras?|estaci[oó]n(?:es)? de radio|dial)\b/i;
-  const _STATION_FILL = /\b(pon|pone|ponme|poner|ponla|ponlo|sintoniza|sintonizar|sintonizame|sintonízame|quiero|quisiera|escuchar|escucha|oir|oír|la|el|las|los|una|un|emisora|emisoras|estacion|estación|estaciones|de|del|radio|fm|am|en|por|favor|dial|frecuencia|me|que|suene|al|a|mi)\b/gi;
+  const _AI_RADIO_RE = /\b(sintoniz\w*|emisoras?|estaci[oó]n(?:es)? de radio|dial|tune\s+(?:in|to)|radio\s+stations?)\b/i;
+  const _STATION_FILL = /\b(pon|pone|ponme|poner|ponla|ponlo|sintoniza|sintonizar|sintonizame|sintonízame|quiero|quisiera|escuchar|escucha|oir|oír|la|el|las|los|una|un|emisora|emisoras|estacion|estación|estaciones|de|del|radio|fm|am|en|por|favor|dial|frecuencia|me|que|suene|al|a|mi|tune|play|put|listen|to|the|station|stations|please|can|you|i|want|on|in)\b/gi;
   function _stationCore(str) {
     return _searchNorm(str).replace(/[.\-_\/,:;]+/g, ' ').replace(_STATION_FILL, ' ').replace(/\s+/g, ' ').trim();
   }
@@ -1927,17 +1986,17 @@ const App = (() => {
     if (inputEl) inputEl.value = '';
     _aiBotForce('happy', 2600);
     const label = pick.st.name + (pick.st.city ? ` (${pick.st.city})` : '');
-    setStatus(`✦ Sintonizando ${label}`, 'found');
+    setStatus(`✦ ${_aiL('Sintonizando', 'Tuning in to')} ${label}`, 'found');
     if (alts.length && statusEl) {
       const sp = document.createElement('span');
-      sp.textContent = ' · ¿Otra? ';
+      sp.textContent = _aiL(' · ¿Otra? ', ' · Another one? ');
       statusEl.appendChild(sp);
       alts.forEach(x => {
         const b = document.createElement('button');
         b.type = 'button'; b.className = 'ai-status-btn'; b.textContent = x.st.name;
         b.addEventListener('click', () => {
           onRadioStationClick(x.st);
-          setStatus(`✦ Sintonizando ${x.st.name}`, 'found');
+          setStatus(`✦ ${_aiL('Sintonizando', 'Tuning in to')} ${x.st.name}`, 'found');
         });
         statusEl.appendChild(b);
       });
@@ -1952,7 +2011,7 @@ const App = (() => {
      control del player, "lo que suena ahora", agregar a playlist/favoritos, temporizador, EQ.
      Solo se activan si TODA la frase es el comando (no confunde "pon la siguiente de Shakira"). */
   const _cmdNorm = q => _searchNorm(q).replace(/[¿?¡!.,;:]+/g, ' ')
-    .replace(/\b(por favor|porfa|ahora|ya|bot|oye|hey|asistente|gracias|puedes|podrias|me puedes|quiero que)\b/g, ' ')
+    .replace(/\b(por favor|porfa|ahora|ya|bot|oye|hey|asistente|gracias|puedes|podrias|me puedes|quiero que|please|now|thanks|thank you|can you|could you|would you|assistant)\b/g, ' ')
     .replace(/\s+/g, ' ').trim();
 
   function _aiSetVolumePct(pct) {
@@ -1966,7 +2025,7 @@ const App = (() => {
 
   async function _aiSaveQueueAsPlaylist(nameHint) {
     const items = (Player.getQueue().queue || []).filter(it => !it.isRadio);
-    if (!items.length) { UI.showToast('No hay canciones en el queue', 'error'); return; }
+    if (!items.length) { UI.showToast(_aiL('No hay canciones en el queue', 'There are no songs in the queue'), 'error'); return; }
     let name = String(nameHint || '').replace(/^✦\s*/, '').replace(/\s*·.*$/, '').trim().slice(0, 40) || 'Bot IA';
     name = name.charAt(0).toUpperCase() + name.slice(1);
     const have = new Set((await DB.getPlaylists().catch(() => [])).map(p => p.name));
@@ -1985,7 +2044,7 @@ const App = (() => {
     if (!AI_CHIPS_ENABLED) return false;
     const st = document.getElementById('ai-search-status');
     if (!st) return false;
-    const en = document.documentElement.lang === 'en';
+    const en = _aiEn();
     const defs = [];
     if (kind === 'music') {
       defs.push([en ? 'More upbeat' : 'Más movidas', () => _handleAiQuery(en ? 'something more upbeat' : 'algo más movido')]);
@@ -2008,8 +2067,42 @@ const App = (() => {
     return true;
   }
 
+  // v3.5.702: comandos en inglés → forma canónica en español (así un solo juego de reglas atiende ambos idiomas)
+  function _cmdEn(q) {
+    const R = [
+      [/^(next|next song|next track|skip|skip this|skip song|skip this song)$/, 'siguiente'],
+      [/^(previous|previous song|previous track|prev|go back|back|last song)$/, 'anterior'],
+      [/^(pause|pause music|pause the music|stop|stop music|stop the music|hold on)$/, 'pausa'],
+      [/^(play|resume|resume music|continue|keep playing|unpause)$/, 'play'],
+      [/^(?:set |put )?(?:the )?volume (?:to |at )?(\d{1,3}) ?(?:%|percent)?$/, 'volumen $1'],
+      [/^(max volume|maximum volume|full volume|volume max|volume to max)$/, 'volumen maximo'],
+      [/^(mute|silence|volume zero|no sound)$/, 'silencio'],
+      [/^(volume up|turn it up|turn up the volume|louder|raise the volume|increase the volume)$/, 'sube volumen'],
+      [/^(volume down|turn it down|turn down the volume|quieter|lower|lower the volume|decrease the volume|softer)$/, 'baja volumen'],
+      [/^(shuffle|shuffle on|turn on shuffle|shuffle the queue|shuffle songs)$/, 'aleatorio'],
+      [/^(shuffle off|turn off shuffle|no shuffle|stop shuffle|normal order)$/, 'sin aleatorio'],
+      [/^(clear the queue|empty the queue|clear queue|empty queue|clear the playlist|remove what is next|clear what is next)$/, 'borra la cola'],
+      [/^(?:cancel|remove|turn off|stop) (?:the )?(?:sleep )?timer$|^no timer$/, 'cancela el temporizador'],
+      [/^(?:sleep timer|timer|sleep|turn off|stop|stop the music|stop music) (?:in |for )?(\d+) ?(?:m|min|mins|minutes?)$/, 'temporizador $1 min'],
+      [/^(?:sleep timer|timer|sleep|turn off|stop|stop the music|stop music) (?:in |for )?(\d+) ?(?:h|hr|hrs|hours?)$/, 'temporizador $1 h'],
+      [/^(?:sleep timer|timer|sleep|turn off|stop|stop the music) (?:in |for )?(?:an|1|one) hour$/, 'temporizador una hora'],
+      [/^(?:sleep timer|timer|sleep|turn off|stop|stop the music) (?:in |for )?half an hour$/, 'temporizador media hora'],
+      [/^(?:set |use |put )?(?:the )?(?:equalizer|eq) (?:to |at |on )?(rock|pop|jazz|classical|bass|vocal|flat)s?$/, 'ecualizador $1'],
+      [/^(bass boost|more bass|boost the bass|boost bass)$/, 'mas bajos'],
+      [/^(?:turn off|reset|remove) (?:the )?(?:equalizer|eq)$/, 'quita el ecualizador'],
+      [/^(who sings this|who sings this song|who is this|who is singing|whats playing|what is playing|what song is this|what is this song|what is this|whats this song|tell me what is playing|song name)$/, 'quien canta'],
+      [/^(more like this|more like this one|something similar|similar songs|songs like this|similar|play similar songs)$/, 'algo parecido'],
+      [/^(more from this artist|more by this artist|more from them|more by them|more from him|more from her)$/, 'mas de este artista'],
+      [/^(same album|more from this album|more from the same album|play this album|play the album|the whole album|play the whole album)$/, 'del mismo album'],
+      [/^(?:add|save|put) (?:this|this song|it) to (?:my )?(?:favorites|favourites|liked songs|likes)$|^(?:like this song|like this|i like this|i like this song|heart this song)$/, 'agrega a favoritas'],
+      [/^(?:add|save|put) (?:this|this song|it) to (?:my |the )?(?:playlist )?(.+)$/, 'agrega a la playlist $1'],
+    ];
+    for (const [re, to] of R) if (re.test(q)) return q.replace(re, to);
+    return q;
+  }
+
   async function _aiTryCommand(query, h) {
-    const q = _cmdNorm(query);
+    const q = _cmdEn(_cmdNorm(query).replace(/['’]/g, ''));
     if (!q) return false;
     const { statusEl, setStatus, inputEl } = h;
     const track = Player.getCurrentTrack();
@@ -2021,39 +2114,39 @@ const App = (() => {
       setTimeout(() => document.getElementById('ai-search-panel')?.classList.remove('open'), 1800);
       return true;
     };
-    const noTrack = () => { _aiBotForce('sad', 2000); setStatus('✦ No hay nada sonando', 'empty'); return true; };
+    const noTrack = () => { _aiBotForce('sad', 2000); setStatus(_aiL('✦ No hay nada sonando', '✦ Nothing is playing'), 'empty'); return true; };
     let m;
 
     // ── Control del player ──
     if (/^(siguiente|sig|next|pasa|pasa a la siguiente|pasa a la siguiente cancion|salta|salta esta|salta esta cancion|siguiente cancion|cambia de cancion|adelante)$/.test(q)) {
-      if (!track) return noTrack(); Player.next(); return done('Siguiente');
+      if (!track) return noTrack(); Player.next(); return done(_aiL('Siguiente', 'Next'));
     }
     if (/^(anterior|previa|atras|cancion anterior|vuelve|vuelve a la anterior|regresa|la anterior)$/.test(q)) {
-      if (!track) return noTrack(); Player.prev(); return done('Anterior');
+      if (!track) return noTrack(); Player.prev(); return done(_aiL('Anterior', 'Previous'));
     }
     if (/^(pausa|pausar|pausa la musica|pon pausa|para|para la musica|detente|detener|deten|stop|callate)$/.test(q)) {
-      if (!track) return noTrack(); Player.pause(); return done('En pausa');
+      if (!track) return noTrack(); Player.pause(); return done(_aiL('En pausa', 'Paused'));
     }
     if (/^(play|continua|continuar|reanuda|reanudar|sigue|sigue la musica|dale play|reproduce|reproducir|pon play)$/.test(q)) {
-      if (!track) return noTrack(); if (!Player.isPlaying()) Player.togglePlayPause(); return done('Reproduciendo');
+      if (!track) return noTrack(); if (!Player.isPlaying()) Player.togglePlayPause(); return done(_aiL('Reproduciendo', 'Playing'));
     }
 
     // ── Volumen ──
     if ((m = q.match(/^(?:pon el |ajusta el |sube el |baja el |el )?volumen (?:al |a |en )?(\d{1,3}) ?(?:%|por ciento)?$/))) {
-      return done(`Volumen al ${_aiSetVolumePct(parseInt(m[1], 10))}%`);
+      return done(`${_aiL('Volumen al', 'Volume at')} ${_aiSetVolumePct(parseInt(m[1], 10))}%`);
     }
-    if (/^(volumen maximo|volumen al maximo|maximo volumen|todo el volumen)$/.test(q)) return done(`Volumen al ${_aiSetVolumePct(100)}%`);
-    if (/^(silencio|mute|silencia|silencia la musica|sin sonido|volumen a cero)$/.test(q)) return done(`Volumen al ${_aiSetVolumePct(0)}%`);
+    if (/^(volumen maximo|volumen al maximo|maximo volumen|todo el volumen)$/.test(q)) return done(`${_aiL('Volumen al', 'Volume at')} ${_aiSetVolumePct(100)}%`);
+    if (/^(silencio|mute|silencia|silencia la musica|sin sonido|volumen a cero)$/.test(q)) return done(`${_aiL('Volumen al', 'Volume at')} ${_aiSetVolumePct(0)}%`);
     if (/^(sube|subir|aumenta|aumentar|mas) (?:el )?volumen(?: un poco| mas)?$|^(?:mas fuerte|mas alto|mas volumen)$/.test(q)) {
-      return done(`Volumen al ${_aiSetVolumePct(Player.getVolume() * 100 + 15)}%`);
+      return done(`${_aiL('Volumen al', 'Volume at')} ${_aiSetVolumePct(Player.getVolume() * 100 + 15)}%`);
     }
     if (/^(baja|bajar|disminuye|disminuir|menos) (?:el )?volumen(?: un poco| mas)?$|^(?:mas bajo|mas suave|menos volumen)$/.test(q)) {
-      return done(`Volumen al ${_aiSetVolumePct(Player.getVolume() * 100 - 15)}%`);
+      return done(`${_aiL('Volumen al', 'Volume at')} ${_aiSetVolumePct(Player.getVolume() * 100 - 15)}%`);
     }
 
     // ── Temporizador de apagado ──
     if (/\b(cancela|quita|desactiva|elimina|apaga) (?:el )?(?:temporizador|timer)\b|\bsin temporizador\b/.test(q)) {
-      _setSleepTimer('off'); return done('Temporizador desactivado');
+      _setSleepTimer('off'); return done(_aiL('Temporizador desactivado', 'Sleep timer off'));
     }
     if (/\b(apagalo|apaga|apagar|duermete|temporizador|timer|sleep)\b/.test(q)) {
       let mins = 0;
@@ -2062,21 +2155,21 @@ const App = (() => {
       else if ((m = q.match(/(\d+)\s*(?:h|hr|hrs|hora|horas)\b/))) mins = parseInt(m[1], 10) * 60;
       else if ((m = q.match(/(\d+)\s*(?:m|min|mins|minuto|minutos)\b/))) mins = parseInt(m[1], 10);
       else if ((m = q.match(/\ben (\d+)$/))) mins = parseInt(m[1], 10);
-      if (mins > 0 && mins <= 600) { _setSleepTimer(mins); return done(`La música se apagará en ${mins >= 60 && mins % 60 === 0 ? (mins / 60) + ' h' : mins + ' min'}`); }
+      if (mins > 0 && mins <= 600) { _setSleepTimer(mins); return done(`${_aiL('La música se apagará en', 'Music will stop in')} ${mins >= 60 && mins % 60 === 0 ? (mins / 60) + ' h' : mins + ' min'}`); }
     }
 
     // ── Aleatorio / cola ──
     if (/^(mezcla|mezclar|mezcla la cola|mezcla las canciones|aleatorio|activa aleatorio|activa el aleatorio|shuffle|pon aleatorio|modo aleatorio)$/.test(q)) {
-      if (!Player.isShuffled()) Player.toggleShuffle(); return done('Aleatorio activado');
+      if (!Player.isShuffled()) Player.toggleShuffle(); return done(_aiL('Aleatorio activado', 'Shuffle on'));
     }
     if (/^(desactiva aleatorio|desactiva el aleatorio|sin aleatorio|orden normal|quita aleatorio|quita el aleatorio)$/.test(q)) {
-      if (Player.isShuffled()) Player.toggleShuffle(); return done('Aleatorio desactivado');
+      if (Player.isShuffled()) Player.toggleShuffle(); return done(_aiL('Aleatorio desactivado', 'Shuffle off'));
     }
     if (/^(borra|vacia|limpia|quita|elimina)( la| el)? (cola|queue|lista de reproduccion)$|^quita lo que sigue$|^borra lo que sigue$/.test(q)) {
       const { queue, index } = Player.getQueue();
       const n = Math.max(0, queue.length - index - 1);
       for (let i = queue.length - 1; i > index; i--) Player.removeFromQueue(i);
-      return done(n ? `Quité ${n} canciones de la cola` : 'La cola ya estaba vacía');
+      return done(n ? _aiL(`Quité ${n} canciones de la cola`, `Removed ${n} songs from the queue`) : _aiL('La cola ya estaba vacía', 'The queue was already empty'));
     }
 
     // ── Ecualizador ──
@@ -2086,9 +2179,9 @@ const App = (() => {
     else if (/^(?:mas|refuerza(?: los)?|sube(?: los)?|ponle(?: mas)?|dame mas) (?:los )?bajos$|^bass boost$/.test(q)) eqKey = 'bass';
     else if (/^(?:quita|desactiva|resetea|reinicia) (?:el )?(?:ecualizador|eq)$/.test(q)) eqKey = 'flat';
     if (eqKey) {
-      if (track?.isRadio) { setStatus('✦ El ecualizador no se puede usar mientras suena una emisora', 'empty'); return true; }
+      if (track?.isRadio) { setStatus(_aiL('✦ El ecualizador no se puede usar mientras suena una emisora', '✦ The equalizer can’t be used while a radio station is playing'), 'empty'); return true; }
       _applyEQPreset(eqKey);
-      return done(`Ecualizador: ${eqKey === 'flat' ? 'plano' : eqKey === 'bass' ? 'bajos' : eqKey === 'classical' ? 'clásica' : eqKey}`);
+      return done(`${_aiL('Ecualizador', 'Equalizer')}: ${_aiEn() ? (eqKey === 'bass' ? 'bass' : eqKey === 'classical' ? 'classical' : eqKey) : (eqKey === 'flat' ? 'plano' : eqKey === 'bass' ? 'bajos' : eqKey === 'classical' ? 'clásica' : eqKey)}`);
     }
 
     // ── Lo que suena ahora ──
@@ -2099,20 +2192,20 @@ const App = (() => {
       const artist = track.artist || meta?.artist || '';
       const album  = meta?.album || track.albumName || '';
       const msg = track.isRadio
-        ? `Suena ${track.stationName || track.name}${track.displayName && track.displayName !== track.stationName ? ': ' + track.displayName + (artist ? ' de ' + artist : '') : ''}`
-        : `Suena "${String(title).replace(/\.[^.]+$/, '')}"${artist ? ' de ' + artist : ''}${album ? ', del álbum ' + album : ''}`;
+        ? `${_aiL('Suena', 'Now playing')} ${track.stationName || track.name}${track.displayName && track.displayName !== track.stationName ? ': ' + track.displayName + (artist ? _aiL(' de ', ' by ') + artist : '') : ''}`
+        : `${_aiL('Suena', 'Now playing')} "${String(title).replace(/\.[^.]+$/, '')}"${artist ? _aiL(' de ', ' by ') + artist : ''}${album ? _aiL(', del álbum ', ', from the album ') + album : ''}`;
       return done(msg, true);
     }
     if ((m = q.match(/^(mas como (?:esta|esto|esta cancion)|algo parecido|algo similar|parecidas?|similares?|canciones parecidas|canciones similares|mas de (?:este artista|este grupo|el|ella|ellos))$/))) {
       if (!track || track.isRadio) return noTrack();
       const meta = await DB.getMeta(track.id).catch(() => null);
       const artist = track.artist || meta?.artist || '';
-      if (!artist) { setStatus('✦ No sé quién canta esta canción, no puedo buscar parecidas', 'empty'); return true; }
+      if (!artist) { setStatus(_aiL('✦ No sé quién canta esta canción, no puedo buscar parecidas', '✦ I don’t know who sings this song, so I can’t look for similar ones'), 'empty'); return true; }
       const similar = /como|parecid|similar/.test(m[1]);
       _handleAiQuery(query, { reuse: {
         intent: similar ? 'radio' : 'artist_only', terms: [artist], exclude: [], track: '', folderName: '',
         useSoundrop: !!track.isSoundrop, limit: null,
-        explanation: similar ? `Más como ${artist}` : `Más de ${artist}`,
+        explanation: similar ? _aiL(`Más como ${artist}`, `More like ${artist}`) : _aiL(`Más de ${artist}`, `More from ${artist}`),
       } });
       return true;
     }
@@ -2134,7 +2227,7 @@ const App = (() => {
           : (!!cur.folderId && mm.folderId === cur.folderId);
         if (okAlbum) same.push(mm);
       }
-      if (!same.length) { _aiBotForce('sad', 2000); setStatus('✦ No encontré más canciones de ese álbum en tu biblioteca', 'empty'); return true; }
+      if (!same.length) { _aiBotForce('sad', 2000); setStatus(_aiL('✦ No encontré más canciones de ese álbum en tu biblioteca', '✦ I couldn’t find more songs from that album in your library'), 'empty'); return true; }
       same.sort((x, y) => (x.name || '').localeCompare(y.name || '', 'es', { numeric: true }));
       Player.insertNext(same.map(mm => ({
         id: mm.id, name: mm.name || mm.displayName, displayName: mm.displayName || mm.name,
@@ -2142,7 +2235,7 @@ const App = (() => {
         thumbnailUrl: mm.thumbnailUrl || null, isFolder: false, isAudio: true, isPlayable: true,
         size: mm.size || 0, durationMs: (mm.durationSec || 0) * 1000, appProperties: null,
       })));
-      return done(`${same.length} canciones del mismo álbum a continuación`, true);
+      return done(_aiL(`${same.length} canciones del mismo álbum a continuación`, `${same.length} songs from the same album up next`), true);
     }
 
     // ── Favoritos / playlist con la canción actual ──
@@ -2150,7 +2243,7 @@ const App = (() => {
       if (!track || track.isRadio) return noTrack();
       const starred = (await DB.getStarred().catch(() => [])).some(s => s.id === track.id);
       if (!starred) await onToggleStar(track);
-      return done(starred ? 'Ya estaba en tus favoritas' : 'Agregada a tus favoritas', true);
+      return done(starred ? _aiL('Ya estaba en tus favoritas', 'Already in your favorites') : _aiL('Agregada a tus favoritas', 'Added to your favorites'), true);
     }
     if ((m = q.match(/^(?:(?:agrega|agregar|anade|anadir|guarda|guardar|mete|meter)(?: esta| esto| esta cancion| la cancion)?|pon (?:esta|esto|esta cancion|la cancion)) (?:a|en|al) (?:mi |la |el )?(?:playlist |lista )?(.+)$/))) {
       if (!track || track.isRadio) return noTrack();
@@ -2165,7 +2258,7 @@ const App = (() => {
         await DB.addToPlaylist(best.id, track.id);
         await _saveItemMeta(track);
         Sync.push('playlists');
-        return done(`"${(track.displayName || track.name || '').replace(/\.[^.]+$/, '')}" agregada a "${best.name}"`, true);
+        return done(_aiL(`"${(track.displayName || track.name || '').replace(/\.[^.]+$/, '')}" agregada a "${best.name}"`, `"${(track.displayName || track.name || '').replace(/\.[^.]+$/, '')}" added to "${best.name}"`), true);
       }
       // No existe → ofrecer crearla
       const nm = want.charAt(0).toUpperCase() + want.slice(1);
@@ -2173,19 +2266,19 @@ const App = (() => {
         statusEl.className = 'ai-search-status found';
         statusEl.textContent = '';
         const msg = document.createElement('span');
-        msg.textContent = `✦ No tienes una playlist "${nm}". ¿La creo y agrego esta canción? `;
+        msg.textContent = _aiL(`✦ No tienes una playlist "${nm}". ¿La creo y agrego esta canción? `, `✦ You don’t have a playlist "${nm}". Create it and add this song? `);
         const mk = (label, fn) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'ai-status-btn'; b.textContent = label; b.addEventListener('click', fn); return b; };
         statusEl.append(msg,
-          mk('Sí', async () => {
+          mk(_aiL('Sí', 'Yes'), async () => {
             try {
               const pl = await DB.createPlaylist(nm);
               await DB.addToPlaylist(pl.id, track.id);
               await _saveItemMeta(track);
               _loadPlaylists(); Sync.push('playlists');
-              setStatus(`✦ Playlist "${nm}" creada con la canción`, 'found');
-            } catch (_) { setStatus('✦ No pude crear la playlist', 'error'); }
+              setStatus(_aiL(`✦ Playlist "${nm}" creada con la canción`, `✦ Playlist "${nm}" created with the song`), 'found');
+            } catch (_) { setStatus(_aiL('✦ No pude crear la playlist', '✦ I couldn’t create the playlist'), 'error'); }
           }),
-          mk('No', () => setStatus('✦ Listo, no la creo', 'empty')));
+          mk('No', () => setStatus(_aiL('✦ Listo, no la creo', '✦ OK, I won’t create it'), 'empty')));
       }
       return true;
     }
@@ -2248,7 +2341,7 @@ const App = (() => {
     const setStatus = (msg, cls = '') => {
       // v3.5.695: si el usuario habló por voz, el bot responde en voz alta (si está activado en Ajustes)
       if (opts.viaVoice && (cls === 'found' || cls === 'empty' || cls === 'error')) {
-        _aiSpeak(cls === 'error' ? (UI.t('ai_spoken_error') || 'Tuve un problema con eso.') : msg);
+        _aiSpeak(cls === 'error' ? _aiL('Tuve un problema con eso.', 'I had a problem with that.') : msg);
       }
       if (!statusEl) return;
       statusEl.textContent = msg;
@@ -2265,7 +2358,7 @@ const App = (() => {
       try { if (await _aiTryStation(query, statusEl, setStatus, inputEl)) return; } catch (_) {}
     }
 
-    setStatus('✦ Pensando…', 'thinking');
+    setStatus(_aiL('✦ Pensando', '✦ Thinking'), 'thinking');
     _aiBotForce('thinking', 15000);
 
     try {
@@ -2297,7 +2390,7 @@ const App = (() => {
       const { intent, terms = [], exclude = [], track = '', folderName = '', useSoundrop: _aiUseSd = false, explanation = '', limit = null } = data;
       const useSoundrop = !!opts.forceSoundrop || !!_aiUseSd;
 
-      setStatus(`✦ ${explanation || 'Buscando…'}`, 'thinking');
+      setStatus(`✦ ${explanation || _aiL('Buscando', 'Searching')}`, 'thinking');
 
       // Recordar este turno (lo interpretado, no el resultado) para la siguiente consulta
       if (!opts.reuse) _aiHistory = [
@@ -2308,7 +2401,7 @@ const App = (() => {
       // Intent "station" (v3.5.696): emisora de radio por nombre/frecuencia/género
       if (intent === 'station') {
         const ok = await _aiTryStation((terms || []).join(' ') || query, statusEl, setStatus, inputEl);
-        if (!ok) { _aiBotForce('sad', 2600); setStatus('✦ No encontré esa emisora', 'empty'); }
+        if (!ok) { _aiBotForce('sad', 2600); setStatus(_aiL('✦ No encontré esa emisora', '✦ I couldn’t find that station'), 'empty'); }
         return;
       }
 
@@ -2463,7 +2556,7 @@ const App = (() => {
           statusEl.className = 'ai-search-status empty';
           statusEl.textContent = '';
           const msg = document.createElement('span');
-          msg.textContent = '✦ No lo encontré en tu Drive. ¿La busco en Soundrop? ';
+          msg.textContent = _aiL('✦ No lo encontré en tu Drive. ¿La busco en Soundrop? ', '✦ I couldn’t find it in your Drive. Search Soundrop? ');
           const mkBtn = (label, onClick) => {
             const b = document.createElement('button');
             b.type = 'button'; b.className = 'ai-status-btn'; b.textContent = label;
@@ -2472,12 +2565,12 @@ const App = (() => {
           };
           statusEl.append(
             msg,
-            mkBtn('Sí', () => _handleAiQuery(query, { reuse: data, forceSoundrop: true })),
-            mkBtn('No', () => setStatus('✦ Listo, no la busco en Soundrop', 'empty')),
+            mkBtn(_aiL('Sí', 'Yes'), () => _handleAiQuery(query, { reuse: data, forceSoundrop: true })),
+            mkBtn('No', () => setStatus(_aiL('✦ Listo, no la busco en Soundrop', '✦ OK, I won’t search Soundrop'), 'empty')),
           );
           return;
         }
-        setStatus('✦ No encontré canciones para eso', 'empty');
+        setStatus(_aiL('✦ No encontré canciones para eso', '✦ I couldn’t find songs for that'), 'empty');
         return;
       }
 
@@ -2521,7 +2614,7 @@ const App = (() => {
       }
 
       if (inputEl) inputEl.value = '';
-      setStatus(`✦ ${explanation} · ${songs.length} canciones${_verifyDropped ? ` (descarté ${_verifyDropped} de otros artistas)` : ''}`, 'found');
+      setStatus(`✦ ${explanation} · ${songs.length} ${_aiL('canciones', 'songs')}${_verifyDropped ? _aiL(` (descarté ${_verifyDropped} de otros artistas)`, ` (skipped ${_verifyDropped} by other artists)`) : ''}`, 'found');
       _aiBotForce('happy', 2600);
       const _chips3 = _aiShowChips('music', query.trim(), explanation);
       setTimeout(() => document.getElementById('ai-search-panel')?.classList.remove('open'), _chips3 ? 12000 : 2000);
@@ -2529,8 +2622,8 @@ const App = (() => {
     } catch (err) {
       console.error('[AI]', err);
       const msg = err.message === 'no_worker'
-        ? '✦ Worker no configurado'
-        : `✦ ${err.message || 'Error al procesar la consulta'}`;
+        ? _aiL('✦ Worker no configurado', '✦ Worker not configured')
+        : `✦ ${err.message || _aiL('Error al procesar la consulta', 'Error processing the request')}`;
       setStatus(msg, 'error');
       _aiBotForce('angry', 2600);
     }
@@ -16849,6 +16942,7 @@ const App = (() => {
 
   function onLanguageChange(lang) {
     UI.setLanguage(lang);
+    try { _aiApplyLang(); } catch (_) {}
     localStorage.setItem('savart_lang', lang);
     // Sync both lang toggles (sidebar + settings)
     document.querySelectorAll('.lang-btn, [data-lang]').forEach(el => {
