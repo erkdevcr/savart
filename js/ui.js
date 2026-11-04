@@ -249,6 +249,9 @@ const UI = (() => {
       ai_mic_denied:             'No pude usar el micrófono — escribe tu consulta',
       ai_no_speech:              'No te escuché — habla de nuevo o escribe',
       ai_spoken_error:           'Tuve un problema con eso.',
+      ai_mic_waiting:            'Esperando permiso del micrófono…',
+      ai_mic_none:               'No encontré un micrófono — escribe tu consulta',
+      ai_voice_unsupported:      'Este navegador no ofrece reconocimiento de voz (Brave lo desactiva) — escribe tu consulta',
       settings_account:     'Cuenta',
       settings_drive_linked:'Google Drive vinculado',
       // ── Settings library rows ──────────────────────────────
@@ -764,6 +767,9 @@ const UI = (() => {
       ai_mic_denied:             "Couldn't use the microphone — type your request",
       ai_no_speech:              "Didn't catch that — speak again or type",
       ai_spoken_error:           'I had a problem with that.',
+      ai_mic_waiting:            'Waiting for microphone permission…',
+      ai_mic_none:               "I couldn't find a microphone — type your request",
+      ai_voice_unsupported:      "This browser doesn't offer speech recognition (Brave disables it) — type your request",
       settings_account:     'Account',
       settings_drive_linked:'Google Drive linked',
       // ── Settings library rows ──────────────────────────────

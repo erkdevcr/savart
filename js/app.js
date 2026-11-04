@@ -1497,17 +1497,47 @@ const App = (() => {
       st.className = 'ai-search-status ' + cls;
       st.textContent = '✦ ' + (UI.t(key) || fallback);
     };
+    let _startToken = 0;       // invalida un arranque pendiente (esperando el permiso) si se cierra/cancela
     function _stopListening() {
+      _startToken++;
       const r = _rec; _rec = null;
       micBtn?.classList.remove('listening');
       if (r) { try { r.abort(); } catch (_) {} _aiUnduck(); }
     }
     _aiVoiceStop = _stopListening;
+
+    // v3.5.698: el permiso del micrófono se pide ANTES y se espera a que el usuario decida.
+    // Antes se arrancaba el reconocimiento con el aviso de permiso abierto y el bot mostraba
+    // el error sin esperar. Además se distingue "sin permiso" de "este navegador no tiene
+    // motor de voz" (Brave lo desactiva → error 'network').
     function _startListening() {
       if (!SR || _rec) return false;
-      let rec;
-      try { rec = new SR(); } catch (_) { return false; }
+      const token = ++_startToken;
+      micBtn?.classList.add('listening');
       _aiStopSpeaking(); // que el micrófono no oiga al bot
+      (async () => {
+        if (navigator.mediaDevices?.getUserMedia) {
+          _setStatusMsg('ai_mic_waiting', 'Esperando permiso del micrófono…', 'thinking');
+          try {
+            const s = await navigator.mediaDevices.getUserMedia({ audio: true });
+            s.getTracks().forEach(t => t.stop());
+          } catch (e) {
+            if (token !== _startToken) return;
+            micBtn?.classList.remove('listening');
+            if (e?.name === 'NotFoundError' || e?.name === 'DevicesNotFoundError') _setStatusMsg('ai_mic_none', 'No encontré un micrófono — escribe tu consulta', 'error');
+            else _setStatusMsg('ai_mic_denied', 'No pude usar el micrófono — escribe tu consulta', 'error');
+            setTimeout(() => inputEl?.focus(), 50);
+            return;
+          }
+          if (token !== _startToken) return; // el usuario cerró el bot mientras decidía
+        }
+        _beginRecognition(token);
+      })();
+      return true;
+    }
+    function _beginRecognition(token) {
+      let rec;
+      try { rec = new SR(); } catch (_) { micBtn?.classList.remove('listening'); setTimeout(() => inputEl?.focus(), 50); return; }
       rec.lang = (document.documentElement.lang === 'en') ? 'en-US' : 'es-ES';
       rec.interimResults = false;
       rec.maxAlternatives = 1;
@@ -1523,10 +1553,11 @@ const App = (() => {
         const err = ev?.error;
         if (err === 'aborted') return;
         if (err === 'no-speech') _setStatusMsg('ai_no_speech', 'No te escuché — habla de nuevo o escribe');
-        else {
-          if (err === 'not-allowed' || err === 'service-not-allowed' || err === 'network' || err === 'audio-capture') _srBroken = true;
-          _setStatusMsg('ai_mic_denied', 'No pude usar el micrófono — escribe tu consulta', 'error');
-        }
+        else if (err === 'network' || err === 'service-not-allowed') {
+          _srBroken = true; // el navegador no tiene motor de voz (Brave) → texto directo la próxima vez
+          _setStatusMsg('ai_voice_unsupported', 'Este navegador no ofrece reconocimiento de voz — escribe tu consulta', 'error');
+        } else if (err === 'audio-capture') _setStatusMsg('ai_mic_none', 'No encontré un micrófono — escribe tu consulta', 'error');
+        else _setStatusMsg('ai_mic_denied', 'No pude usar el micrófono — escribe tu consulta', 'error');
         setTimeout(() => inputEl?.focus(), 50);
       };
       rec.onend = () => {
@@ -1535,12 +1566,10 @@ const App = (() => {
         if (!gotResult && !failed) setTimeout(() => inputEl?.focus(), 50); // se cerró sin oír nada → teclado
       };
       _rec = rec;
-      micBtn?.classList.add('listening');
       _aiDuck(); // bajar la música para poder oírte
       try { rec.start(); }
-      catch (_) { _rec = null; micBtn?.classList.remove('listening'); _aiUnduck(); return false; }
+      catch (_) { _rec = null; micBtn?.classList.remove('listening'); _aiUnduck(); setTimeout(() => inputEl?.focus(), 50); return; }
       _setStatusMsg('ai_listening', 'Escuchando…', 'thinking');
-      return true;
     }
     if (!SR) {
       if (micBtn) micBtn.style.display = 'none';
