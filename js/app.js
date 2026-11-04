@@ -225,6 +225,8 @@ const App = (() => {
 
     // AI Search floating button (v3.5.619)
     _initAiSearch();
+    _applyBotPrefs();
+    _initBotSettings();
 
     // 3. Root folder — resolve from DB (synced) first, fall back to localStorage,
     // then default to Drive root so the app works for ANY Google account.
@@ -1282,6 +1284,91 @@ const App = (() => {
     }
   }
 
+  /* ── Bot IA: preferencias, voz y ducking (v3.5.695) ──────────────────────
+     Preferencias POR DISPOSITIVO (localStorage): activar el bot, respuestas habladas,
+     comandos de voz. El bot habla (speechSynthesis del sistema: sin cuota) solo cuando
+     el usuario le habló por voz, y baja la música mientras escucha/habla. */
+  function _botPref(k) {
+    try { const v = localStorage.getItem('savart_bot_' + k); return v === null ? true : v !== '0'; }
+    catch (_) { return true; }
+  }
+  function _botPrefSet(k, on) {
+    try { localStorage.setItem('savart_bot_' + k, on ? '1' : '0'); } catch (_) {}
+    _applyBotPrefs();
+  }
+  let _aiVoiceStop = () => {};   // lo reemplaza _initAiSearch (detiene el reconocimiento en curso)
+  function _applyBotPrefs() {
+    const enabled = _botPref('enabled');
+    document.body.classList.toggle('bot-disabled', !enabled);
+    document.body.classList.toggle('bot-novoice', !_botPref('voice'));
+    if (!enabled) {
+      document.getElementById('ai-search-panel')?.classList.remove('open');
+      try { _aiVoiceStop(); } catch (_) {}
+      _aiStopSpeaking();
+    }
+    ['speak', 'voice'].forEach(k => document.getElementById('bot-row-' + k)?.classList.toggle('bot-dim', !enabled));
+  }
+  function _initBotSettings() {
+    [['enabled', 'bot-toggle-enabled'], ['speak', 'bot-toggle-speak'], ['voice', 'bot-toggle-voice']].forEach(([k, id]) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.classList.toggle('on', _botPref(k));
+      el.addEventListener('click', () => {
+        const on = !el.classList.contains('on');
+        el.classList.toggle('on', on);
+        _botPrefSet(k, on);
+        if (k === 'speak' && !on) _aiStopSpeaking();
+        if (k === 'voice' && !on) { try { _aiVoiceStop(); } catch (_) {} }
+      });
+    });
+  }
+
+  // Ducking: baja el volumen del player mientras el bot escucha/habla (con contador para anidar).
+  let _aiDuckOrig = null, _aiDuckN = 0, _aiDuckTimer = null;
+  function _aiDuck() {
+    if (_aiDuckN++ === 0) {
+      try { _aiDuckOrig = Player.getVolume(); Player.setVolume(Math.min(_aiDuckOrig, 0.12)); }
+      catch (_) { _aiDuckOrig = null; }
+    }
+    clearTimeout(_aiDuckTimer);
+    _aiDuckTimer = setTimeout(() => { _aiDuckN = 1; _aiUnduck(); }, 30000); // seguro: nunca dejar la música baja
+  }
+  function _aiUnduck() {
+    if (_aiDuckN > 0 && --_aiDuckN === 0) {
+      clearTimeout(_aiDuckTimer);
+      if (_aiDuckOrig != null) { try { Player.setVolume(_aiDuckOrig); } catch (_) {} }
+      _aiDuckOrig = null;
+    }
+  }
+
+  function _aiStopSpeaking() {
+    try { if ('speechSynthesis' in window) window.speechSynthesis.cancel(); } catch (_) {}
+  }
+  function _aiSpeak(text) {
+    if (!_botPref('speak') || !('speechSynthesis' in window)) return;
+    const clean = String(text || '').replace(/[✦•]/g, '').replace(/\s·\s/g, ', ').replace(/\s+/g, ' ').trim().slice(0, 220);
+    if (!clean) return;
+    try {
+      const synth = window.speechSynthesis;
+      synth.cancel();
+      const u = new SpeechSynthesisUtterance(clean);
+      const en = document.documentElement.lang === 'en';
+      u.lang = en ? 'en-US' : 'es-ES';
+      const voices = synth.getVoices() || [];
+      const pre = en ? 'en' : 'es';
+      const v = voices.find(x => (x.lang || '').toLowerCase() === u.lang.toLowerCase())
+             || voices.find(x => (x.lang || '').toLowerCase().startsWith(pre));
+      if (v) u.voice = v;
+      u.rate = 1.02;
+      let ducked = true;
+      _aiDuck();
+      const done = () => { if (ducked) { ducked = false; _aiUnduck(); } };
+      u.onend = done; u.onerror = done;
+      setTimeout(done, 20000);
+      synth.speak(u);
+    } catch (_) {}
+  }
+
   function _initAiSearch() {
     const floatEl  = document.getElementById('ai-search-float');
     const trigger  = document.getElementById('ai-search-trigger');
@@ -1344,7 +1431,12 @@ const App = (() => {
         const isOpen = panel.classList.toggle('open');
         if (isOpen) {
           _positionAiPanel();
-          setTimeout(() => inputEl?.focus(), 50);
+          // v3.5.695: tocar el bot activa el micrófono de una vez (el toque es el gesto que
+          // el navegador exige). Si no hay voz disponible → teclado como antes.
+          if (_voiceOn() && _startListening()) { /* escuchando: sin abrir el teclado */ }
+          else setTimeout(() => inputEl?.focus(), 50);
+        } else {
+          _stopListening();
         }
       }
     }
@@ -1382,7 +1474,7 @@ const App = (() => {
 
     // Close on click outside
     document.addEventListener('click', e => {
-      if (!floatEl.contains(e.target)) panel.classList.remove('open');
+      if (!floatEl.contains(e.target)) { panel.classList.remove('open'); _stopListening(); }
     });
 
     // Send
@@ -1394,26 +1486,69 @@ const App = (() => {
       if (e.key === 'Enter') { const q = inputEl.value.trim(); if (q) _handleAiQuery(q); }
     });
 
-    // Mic (Web Speech API)
+    // ── Voz (Web Speech API) ────────────────────────────────
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let _rec = null;           // reconocimiento en curso
+    let _srBroken = false;     // el motor falló (permiso/red, p. ej. Brave) → no auto-iniciar más esta sesión
+    const _voiceOn = () => !!SR && _botPref('voice') && !_srBroken;
+    const _setStatusMsg = (key, fallback, cls = 'empty') => {
+      const st = document.getElementById('ai-search-status');
+      if (!st) return;
+      st.className = 'ai-search-status ' + cls;
+      st.textContent = '✦ ' + (UI.t(key) || fallback);
+    };
+    function _stopListening() {
+      const r = _rec; _rec = null;
+      micBtn?.classList.remove('listening');
+      if (r) { try { r.abort(); } catch (_) {} _aiUnduck(); }
+    }
+    _aiVoiceStop = _stopListening;
+    function _startListening() {
+      if (!SR || _rec) return false;
+      let rec;
+      try { rec = new SR(); } catch (_) { return false; }
+      _aiStopSpeaking(); // que el micrófono no oiga al bot
+      rec.lang = (document.documentElement.lang === 'en') ? 'en-US' : 'es-ES';
+      rec.interimResults = false;
+      rec.maxAlternatives = 1;
+      let gotResult = false, failed = false;
+      rec.onresult = ev => {
+        gotResult = true;
+        const q = ev.results[0][0].transcript;
+        if (inputEl) inputEl.value = q;
+        _handleAiQuery(q, { viaVoice: true });
+      };
+      rec.onerror = ev => {
+        failed = true;
+        const err = ev?.error;
+        if (err === 'aborted') return;
+        if (err === 'no-speech') _setStatusMsg('ai_no_speech', 'No te escuché — habla de nuevo o escribe');
+        else {
+          if (err === 'not-allowed' || err === 'service-not-allowed' || err === 'network' || err === 'audio-capture') _srBroken = true;
+          _setStatusMsg('ai_mic_denied', 'No pude usar el micrófono — escribe tu consulta', 'error');
+        }
+        setTimeout(() => inputEl?.focus(), 50);
+      };
+      rec.onend = () => {
+        if (_rec === rec) { _rec = null; _aiUnduck(); }
+        micBtn?.classList.remove('listening');
+        if (!gotResult && !failed) setTimeout(() => inputEl?.focus(), 50); // se cerró sin oír nada → teclado
+      };
+      _rec = rec;
+      micBtn?.classList.add('listening');
+      _aiDuck(); // bajar la música para poder oírte
+      try { rec.start(); }
+      catch (_) { _rec = null; micBtn?.classList.remove('listening'); _aiUnduck(); return false; }
+      _setStatusMsg('ai_listening', 'Escuchando…', 'thinking');
+      return true;
+    }
     if (!SR) {
       if (micBtn) micBtn.style.display = 'none';
     } else {
       micBtn?.addEventListener('click', () => {
-        const rec = new SR();
-        rec.lang = (document.documentElement.lang === 'en') ? 'en-US' : 'es-ES';
-        rec.interimResults = false;
-        rec.maxAlternatives = 1;
-        micBtn.classList.add('listening');
-        try { rec.start(); } catch (_) { micBtn.classList.remove('listening'); return; }
-        rec.onresult = ev => {
-          const q = ev.results[0][0].transcript;
-          if (inputEl) inputEl.value = q;
-          micBtn.classList.remove('listening');
-          _handleAiQuery(q);
-        };
-        rec.onerror = () => micBtn.classList.remove('listening');
-        rec.onend   = () => micBtn.classList.remove('listening');
+        if (_rec) { _stopListening(); return; }
+        _srBroken = false; // intento manual: reintenta aunque antes haya fallado
+        _startListening();
       });
     }
   }
@@ -1432,6 +1567,8 @@ const App = (() => {
   // Interruptor: poner AI_HITS_ENABLED=false vuelve al comportamiento anterior (búsqueda
   // por términos en Soundrop). Para revertir del todo: ver _backups/pre-3.5.691-hits.
   const AI_HITS_ENABLED = true;
+  // Pedido EXPLÍCITO de buscar en YouTube/Internet (v3.5.694) — red de seguridad por si Gemini no marca useSoundrop.
+  const _AI_YT_RE = /\b(yt|ye\s*te|you\s*tube|youtube|internet|la\s+web|sound\s*drop|soundrop)\b/i;
   const _HITS_CACHE_KEY = 'savart_hits_cache';
   const _HITS_CACHE_TTL = 7 * 24 * 3600 * 1000;
   const _HITS_CACHE_MAX = 300;
@@ -1574,7 +1711,8 @@ const App = (() => {
     if (quotaOut) extra.push('cuota de YouTube agotada');
     setStatus(`✦ ${expl} · ${added} ${playing ? 'agregadas al queue' : 'en cola'}${extra.length ? ' (' + extra.join(', ') + ')' : ''}`, 'found');
     _aiBotForce('happy', 2600);
-    setTimeout(() => document.getElementById('ai-search-panel')?.classList.remove('open'), 2600);
+    const _chips1 = _aiShowChips('save', '', expl);
+    setTimeout(() => document.getElementById('ai-search-panel')?.classList.remove('open'), _chips1 ? 12000 : 2600);
   }
 
   /**
@@ -1710,8 +1848,313 @@ const App = (() => {
     const tail = dupN ? ` (${dupN} ya estaban)` : '';
     if (!offerYt()) {
       setStatus(`✦ ${expl} · ${toAdd.length} ${playing ? 'agregadas al queue' : 'en cola'}${tail}`, 'found');
+      const _chips2 = _aiShowChips('save', '', expl);
+      setTimeout(() => document.getElementById('ai-search-panel')?.classList.remove('open'), _chips2 ? 12000 : 2600);
+    }
+  }
+
+  /**
+   * Emisoras de radio por voz/texto (v3.5.696). Catálogo = RadioStations.STATIONS (local, sin cuota).
+   * Coincidencia tolerante (acentos, typos), números exactos ("103", "88.2"), favoritas primero.
+   */
+  const _AI_RADIO_RE = /\b(sintoniz\w*|emisoras?|estaci[oó]n(?:es)? de radio|dial)\b/i;
+  const _STATION_FILL = /\b(pon|pone|ponme|poner|ponla|ponlo|sintoniza|sintonizar|sintonizame|sintonízame|quiero|quisiera|escuchar|escucha|oir|oír|la|el|las|los|una|un|emisora|emisoras|estacion|estación|estaciones|de|del|radio|fm|am|en|por|favor|dial|frecuencia|me|que|suene|al|a|mi)\b/gi;
+  function _stationCore(str) {
+    return _searchNorm(str).replace(/[.\-_\/,:;]+/g, ' ').replace(_STATION_FILL, ' ').replace(/\s+/g, ' ').trim();
+  }
+
+  async function _aiTryStation(text, statusEl, setStatus, inputEl) {
+    const catalog = (typeof RadioStations !== 'undefined') ? RadioStations.STATIONS : [];
+    if (!catalog.length) return false;
+    const qCore = _stationCore(text);
+    if (!qCore) return false;
+    const qTokens = qCore.split(' ');
+    const qNums = qTokens.filter(t => /^\d+$/.test(t));
+    let favs = new Set();
+    try { favs = new Set(Object.keys((await DB.getState('radioFavoritesMeta')) || {})); } catch (_) {}
+
+    const scored = [];
+    for (const st of catalog) {
+      let sCore = _stationCore(st.name);
+      if (!sCore) sCore = _searchNorm(st.name).replace(/[.\-_\/]+/g, ' ').trim();
+      const sTokens = sCore.split(' ');
+      if (qNums.length && !qNums.every(n => sTokens.includes(n))) continue; // "103" ≠ "1030"
+      const sc = _fuzzyScore(qCore, sCore, false);
+      if (sc >= 0.8) scored.push({ st, sc: sc + (sCore === qCore ? 0.2 : 0) + (favs.has(st.id) ? 0.03 : 0), len: sCore.length });
+    }
+    if (!scored.length) return false;
+    scored.sort((x, y) => (y.sc - x.sc) || (x.len - y.len));
+    // Género ("una emisora de jazz": 4+ empatadas) → una al azar; pocas empatadas → la de nombre más corto
+    const top = scored[0].sc;
+    const tied = scored.filter(x => x.sc >= top - 0.001);
+    const pick = tied.length >= 4 && !qNums.length ? tied[Math.floor(Math.random() * tied.length)] : scored[0];
+    const alts = scored.filter(x => x.st.id !== pick.st.id && x.sc >= top - 0.12).slice(0, 2);
+
+    onRadioStationClick(pick.st);
+    if (inputEl) inputEl.value = '';
+    _aiBotForce('happy', 2600);
+    const label = pick.st.name + (pick.st.city ? ` (${pick.st.city})` : '');
+    setStatus(`✦ Sintonizando ${label}`, 'found');
+    if (alts.length && statusEl) {
+      const sp = document.createElement('span');
+      sp.textContent = ' · ¿Otra? ';
+      statusEl.appendChild(sp);
+      alts.forEach(x => {
+        const b = document.createElement('button');
+        b.type = 'button'; b.className = 'ai-status-btn'; b.textContent = x.st.name;
+        b.addEventListener('click', () => {
+          onRadioStationClick(x.st);
+          setStatus(`✦ Sintonizando ${x.st.name}`, 'found');
+        });
+        statusEl.appendChild(b);
+      });
+    } else {
       setTimeout(() => document.getElementById('ai-search-panel')?.classList.remove('open'), 2600);
     }
+    return true;
+  }
+
+  /* ── Bot IA: comandos locales + sugerencias rápidas (v3.5.697) ───────────────────────
+     Los comandos simples se resuelven SIN llamar a Gemini (instantáneo, sin cuota, offline):
+     control del player, "lo que suena ahora", agregar a playlist/favoritos, temporizador, EQ.
+     Solo se activan si TODA la frase es el comando (no confunde "pon la siguiente de Shakira"). */
+  const _cmdNorm = q => _searchNorm(q).replace(/[¿?¡!.,;:]+/g, ' ')
+    .replace(/\b(por favor|porfa|ahora|ya|bot|oye|hey|asistente|gracias|puedes|podrias|me puedes|quiero que)\b/g, ' ')
+    .replace(/\s+/g, ' ').trim();
+
+  function _aiSetVolumePct(pct) {
+    pct = Math.max(0, Math.min(100, Math.round(pct)));
+    try { Player.setVolume(pct / 100); } catch (_) {}
+    ['mini-volume-slider', 'pexp-volume-slider'].forEach(id => { const el = document.getElementById(id); if (el) el.value = pct; });
+    const lab = document.getElementById('pexp-vol-label'); if (lab) lab.textContent = pct + '%';
+    document.getElementById('pexp-volume-slider')?.style.setProperty('--vol-pct', pct + '%');
+    return pct;
+  }
+
+  async function _aiSaveQueueAsPlaylist(nameHint) {
+    const items = (Player.getQueue().queue || []).filter(it => !it.isRadio);
+    if (!items.length) { UI.showToast('No hay canciones en el queue', 'error'); return; }
+    let name = String(nameHint || '').replace(/^✦\s*/, '').replace(/\s*·.*$/, '').trim().slice(0, 40) || 'Bot IA';
+    name = name.charAt(0).toUpperCase() + name.slice(1);
+    const have = new Set((await DB.getPlaylists().catch(() => [])).map(p => p.name));
+    let n = name, i = 2;
+    while (have.has(n)) n = `${name} (${i++})`;
+    const pl = await DB.createPlaylist(n);
+    await _bulkAddSongsToPlaylist(pl.id, items);
+    _loadPlaylists();
+    Sync.push('playlists');
+    UI.showToast(`"${n}" — ${UI.t('toast_pl_created')} (${items.length})`);
+  }
+
+  /** Chips de seguimiento bajo la respuesta del bot. kind: 'music' (todas) | 'save' (solo guardar). */
+  function _aiShowChips(kind, query, expl) {
+    const st = document.getElementById('ai-search-status');
+    if (!st) return false;
+    const en = document.documentElement.lang === 'en';
+    const defs = [];
+    if (kind === 'music') {
+      defs.push([en ? 'More upbeat' : 'Más movidas', () => _handleAiQuery(en ? 'something more upbeat' : 'algo más movido')]);
+      defs.push([en ? 'No ballads' : 'Sin baladas', () => _handleAiQuery(en ? 'no ballads' : 'sin baladas')]);
+      defs.push([en ? 'Another batch' : 'Otra tanda', () => _handleAiQuery(query)]);
+    }
+    defs.push([en ? 'Save as playlist' : 'Guardar como playlist', async function () {
+      this.disabled = true;
+      try { await _aiSaveQueueAsPlaylist(expl || query); this.textContent = '✓'; } catch (_) { this.disabled = false; }
+    }]);
+    const row = document.createElement('div');
+    row.className = 'ai-chip-row';
+    defs.forEach(([label, fn]) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'ai-status-btn'; b.textContent = label;
+      b.addEventListener('click', function () { fn.call(this); });
+      row.appendChild(b);
+    });
+    st.appendChild(row);
+    return true;
+  }
+
+  async function _aiTryCommand(query, h) {
+    const q = _cmdNorm(query);
+    if (!q) return false;
+    const { statusEl, setStatus, inputEl } = h;
+    const track = Player.getCurrentTrack();
+    const done = (msg, speak = false) => {
+      if (inputEl) inputEl.value = '';
+      _aiBotForce('happy', 1800);
+      if (speak) setStatus(`✦ ${msg}`, 'found');
+      else if (statusEl) { statusEl.className = 'ai-search-status found'; statusEl.textContent = `✦ ${msg}`; }
+      setTimeout(() => document.getElementById('ai-search-panel')?.classList.remove('open'), 1800);
+      return true;
+    };
+    const noTrack = () => { _aiBotForce('sad', 2000); setStatus('✦ No hay nada sonando', 'empty'); return true; };
+    let m;
+
+    // ── Control del player ──
+    if (/^(siguiente|sig|next|pasa|pasa a la siguiente|pasa a la siguiente cancion|salta|salta esta|salta esta cancion|siguiente cancion|cambia de cancion|adelante)$/.test(q)) {
+      if (!track) return noTrack(); Player.next(); return done('Siguiente');
+    }
+    if (/^(anterior|previa|atras|cancion anterior|vuelve|vuelve a la anterior|regresa|la anterior)$/.test(q)) {
+      if (!track) return noTrack(); Player.prev(); return done('Anterior');
+    }
+    if (/^(pausa|pausar|pausa la musica|pon pausa|para|para la musica|detente|detener|deten|stop|callate)$/.test(q)) {
+      if (!track) return noTrack(); Player.pause(); return done('En pausa');
+    }
+    if (/^(play|continua|continuar|reanuda|reanudar|sigue|sigue la musica|dale play|reproduce|reproducir|pon play)$/.test(q)) {
+      if (!track) return noTrack(); if (!Player.isPlaying()) Player.togglePlayPause(); return done('Reproduciendo');
+    }
+
+    // ── Volumen ──
+    if ((m = q.match(/^(?:pon el |ajusta el |sube el |baja el |el )?volumen (?:al |a |en )?(\d{1,3}) ?(?:%|por ciento)?$/))) {
+      return done(`Volumen al ${_aiSetVolumePct(parseInt(m[1], 10))}%`);
+    }
+    if (/^(volumen maximo|volumen al maximo|maximo volumen|todo el volumen)$/.test(q)) return done(`Volumen al ${_aiSetVolumePct(100)}%`);
+    if (/^(silencio|mute|silencia|silencia la musica|sin sonido|volumen a cero)$/.test(q)) return done(`Volumen al ${_aiSetVolumePct(0)}%`);
+    if (/^(sube|subir|aumenta|aumentar|mas) (?:el )?volumen(?: un poco| mas)?$|^(?:mas fuerte|mas alto|mas volumen)$/.test(q)) {
+      return done(`Volumen al ${_aiSetVolumePct(Player.getVolume() * 100 + 15)}%`);
+    }
+    if (/^(baja|bajar|disminuye|disminuir|menos) (?:el )?volumen(?: un poco| mas)?$|^(?:mas bajo|mas suave|menos volumen)$/.test(q)) {
+      return done(`Volumen al ${_aiSetVolumePct(Player.getVolume() * 100 - 15)}%`);
+    }
+
+    // ── Temporizador de apagado ──
+    if (/\b(cancela|quita|desactiva|elimina|apaga) (?:el )?(?:temporizador|timer)\b|\bsin temporizador\b/.test(q)) {
+      _setSleepTimer('off'); return done('Temporizador desactivado');
+    }
+    if (/\b(apagalo|apaga|apagar|duermete|temporizador|timer|sleep)\b/.test(q)) {
+      let mins = 0;
+      if (/\bmedia hora\b/.test(q)) mins = 30;
+      else if (/\buna hora\b/.test(q)) mins = 60;
+      else if ((m = q.match(/(\d+)\s*(?:h|hr|hrs|hora|horas)\b/))) mins = parseInt(m[1], 10) * 60;
+      else if ((m = q.match(/(\d+)\s*(?:m|min|mins|minuto|minutos)\b/))) mins = parseInt(m[1], 10);
+      else if ((m = q.match(/\ben (\d+)$/))) mins = parseInt(m[1], 10);
+      if (mins > 0 && mins <= 600) { _setSleepTimer(mins); return done(`La música se apagará en ${mins >= 60 && mins % 60 === 0 ? (mins / 60) + ' h' : mins + ' min'}`); }
+    }
+
+    // ── Aleatorio / cola ──
+    if (/^(mezcla|mezclar|mezcla la cola|mezcla las canciones|aleatorio|activa aleatorio|activa el aleatorio|shuffle|pon aleatorio|modo aleatorio)$/.test(q)) {
+      if (!Player.isShuffled()) Player.toggleShuffle(); return done('Aleatorio activado');
+    }
+    if (/^(desactiva aleatorio|desactiva el aleatorio|sin aleatorio|orden normal|quita aleatorio|quita el aleatorio)$/.test(q)) {
+      if (Player.isShuffled()) Player.toggleShuffle(); return done('Aleatorio desactivado');
+    }
+    if (/^(borra|vacia|limpia|quita|elimina)( la| el)? (cola|queue|lista de reproduccion)$|^quita lo que sigue$|^borra lo que sigue$/.test(q)) {
+      const { queue, index } = Player.getQueue();
+      const n = Math.max(0, queue.length - index - 1);
+      for (let i = queue.length - 1; i > index; i--) Player.removeFromQueue(i);
+      return done(n ? `Quité ${n} canciones de la cola` : 'La cola ya estaba vacía');
+    }
+
+    // ── Ecualizador ──
+    const EQ_MAP = { rock: 'rock', pop: 'pop', jazz: 'jazz', clasica: 'classical', clasico: 'classical', classical: 'classical', bajo: 'bass', bajos: 'bass', bass: 'bass', vocal: 'vocal', vocales: 'vocal', plano: 'flat', flat: 'flat' };
+    let eqKey = null;
+    if ((m = q.match(/^(?:pon|ponle|activa|usa|cambia|cambia el|pon el|pon un)?\s*(?:el |la |un )?(?:ecualizador|eq|preset)\s*(?:en |a |de |tipo )?(rock|pop|jazz|clasic[ao]|classical|bajos?|bass|vocal(?:es)?|plano|flat)$/))) eqKey = EQ_MAP[m[1].replace(/^clasic[ao]$/, 'clasica')];
+    else if (/^(?:mas|refuerza(?: los)?|sube(?: los)?|ponle(?: mas)?|dame mas) (?:los )?bajos$|^bass boost$/.test(q)) eqKey = 'bass';
+    else if (/^(?:quita|desactiva|resetea|reinicia) (?:el )?(?:ecualizador|eq)$/.test(q)) eqKey = 'flat';
+    if (eqKey) {
+      if (track?.isRadio) { setStatus('✦ El ecualizador no se puede usar mientras suena una emisora', 'empty'); return true; }
+      _applyEQPreset(eqKey);
+      return done(`Ecualizador: ${eqKey === 'flat' ? 'plano' : eqKey === 'bass' ? 'bajos' : eqKey === 'classical' ? 'clásica' : eqKey}`);
+    }
+
+    // ── Lo que suena ahora ──
+    if (/^(quien canta|quien canta esto|quien canta esta|quien canta esta cancion|que suena|que es esto|que cancion es|que cancion es esta|como se llama|como se llama esta cancion|dime que suena|dime la cancion|dime quien canta|nombre de la cancion)$/.test(q)) {
+      if (!track) return noTrack();
+      const meta = track.isRadio ? null : await DB.getMeta(track.id).catch(() => null);
+      const title  = track.isRadio ? (track.displayName || track.name) : (meta?.displayName || track.displayName || track.name || '');
+      const artist = track.artist || meta?.artist || '';
+      const album  = meta?.album || track.albumName || '';
+      const msg = track.isRadio
+        ? `Suena ${track.stationName || track.name}${track.displayName && track.displayName !== track.stationName ? ': ' + track.displayName + (artist ? ' de ' + artist : '') : ''}`
+        : `Suena "${String(title).replace(/\.[^.]+$/, '')}"${artist ? ' de ' + artist : ''}${album ? ', del álbum ' + album : ''}`;
+      return done(msg, true);
+    }
+    if ((m = q.match(/^(mas como (?:esta|esto|esta cancion)|algo parecido|algo similar|parecidas?|similares?|canciones parecidas|canciones similares|mas de (?:este artista|este grupo|el|ella|ellos))$/))) {
+      if (!track || track.isRadio) return noTrack();
+      const meta = await DB.getMeta(track.id).catch(() => null);
+      const artist = track.artist || meta?.artist || '';
+      if (!artist) { setStatus('✦ No sé quién canta esta canción, no puedo buscar parecidas', 'empty'); return true; }
+      const similar = /como|parecid|similar/.test(m[1]);
+      _handleAiQuery(query, { reuse: {
+        intent: similar ? 'radio' : 'artist_only', terms: [artist], exclude: [], track: '', folderName: '',
+        useSoundrop: !!track.isSoundrop, limit: null,
+        explanation: similar ? `Más como ${artist}` : `Más de ${artist}`,
+      } });
+      return true;
+    }
+    if (/^((?:otra|otras|mas|algo)(?: cancion| canciones)? del mismo (?:album|disco)|pon (?:el|este) (?:album|disco)(?: completo)?|(?:el|este) (?:album|disco)(?: completo)?|(?:mas )?del mismo (?:album|disco))$/.test(q)) {
+      if (!track || track.isRadio) return noTrack();
+      const ctx = await _buildSearchCtx();
+      const cur = ctx.byId.get(track.id) || {};
+      const albumN = _searchNorm(cur.album || '').trim();
+      const artistN = _searchNorm(cur.albumArtist || cur.artist || '').trim();
+      const AUDIO_RE = /\.(mp3|m4a|flac|wav|ogg|opus|aac|wma)$/i;
+      const inQ = new Set((Player.getQueue().queue || []).map(it => it.id));
+      const same = [];
+      for (const mm of ctx.byId.values()) {
+        if (!mm?.id || mm.id === track.id || inQ.has(mm.id)) continue;
+        const nm = mm.name || mm.displayName || '';
+        if (!(AUDIO_RE.test(nm) || /^audio\//.test(mm.mimeType || ''))) continue;
+        const okAlbum = albumN
+          ? (_searchNorm(mm.album || '').trim() === albumN && (!artistN || _searchNorm(mm.albumArtist || mm.artist || '').trim() === artistN || !mm.artist))
+          : (!!cur.folderId && mm.folderId === cur.folderId);
+        if (okAlbum) same.push(mm);
+      }
+      if (!same.length) { _aiBotForce('sad', 2000); setStatus('✦ No encontré más canciones de ese álbum en tu biblioteca', 'empty'); return true; }
+      same.sort((x, y) => (x.name || '').localeCompare(y.name || '', 'es', { numeric: true }));
+      Player.insertNext(same.map(mm => ({
+        id: mm.id, name: mm.name || mm.displayName, displayName: mm.displayName || mm.name,
+        mimeType: mm.mimeType || 'audio/mpeg', parents: mm.folderId ? [mm.folderId] : [],
+        thumbnailUrl: mm.thumbnailUrl || null, isFolder: false, isAudio: true, isPlayable: true,
+        size: mm.size || 0, durationMs: (mm.durationSec || 0) * 1000, appProperties: null,
+      })));
+      return done(`${same.length} canciones del mismo álbum a continuación`, true);
+    }
+
+    // ── Favoritos / playlist con la canción actual ──
+    if (/^((?:agrega|guarda|anade|marca)(?: esta| esto| esta cancion)? (?:a|en|como) (?:mis )?(?:favoritas?|favoritos|me gusta)|me gusta(?: esta)?(?: cancion)?|dale (?:like|corazon))$/.test(q)) {
+      if (!track || track.isRadio) return noTrack();
+      const starred = (await DB.getStarred().catch(() => [])).some(s => s.id === track.id);
+      if (!starred) await onToggleStar(track);
+      return done(starred ? 'Ya estaba en tus favoritas' : 'Agregada a tus favoritas', true);
+    }
+    if ((m = q.match(/^(?:(?:agrega|agregar|anade|anadir|guarda|guardar|mete|meter)(?: esta| esto| esta cancion| la cancion)?|pon (?:esta|esto|esta cancion|la cancion)) (?:a|en|al) (?:mi |la |el )?(?:playlist |lista )?(.+)$/))) {
+      if (!track || track.isRadio) return noTrack();
+      const want = m[1].trim().replace(/^de /, '');
+      const pls = await DB.getPlaylists().catch(() => []);
+      let best = null, bestSc = 0;
+      for (const p of pls) {
+        const sc = _fuzzyScore(want, p.name || '', false);
+        if (sc > bestSc) { bestSc = sc; best = p; }
+      }
+      if (best && bestSc >= 0.8) {
+        await DB.addToPlaylist(best.id, track.id);
+        await _saveItemMeta(track);
+        Sync.push('playlists');
+        return done(`"${(track.displayName || track.name || '').replace(/\.[^.]+$/, '')}" agregada a "${best.name}"`, true);
+      }
+      // No existe → ofrecer crearla
+      const nm = want.charAt(0).toUpperCase() + want.slice(1);
+      if (statusEl) {
+        statusEl.className = 'ai-search-status found';
+        statusEl.textContent = '';
+        const msg = document.createElement('span');
+        msg.textContent = `✦ No tienes una playlist "${nm}". ¿La creo y agrego esta canción? `;
+        const mk = (label, fn) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'ai-status-btn'; b.textContent = label; b.addEventListener('click', fn); return b; };
+        statusEl.append(msg,
+          mk('Sí', async () => {
+            try {
+              const pl = await DB.createPlaylist(nm);
+              await DB.addToPlaylist(pl.id, track.id);
+              await _saveItemMeta(track);
+              _loadPlaylists(); Sync.push('playlists');
+              setStatus(`✦ Playlist "${nm}" creada con la canción`, 'found');
+            } catch (_) { setStatus('✦ No pude crear la playlist', 'error'); }
+          }),
+          mk('No', () => setStatus('✦ Listo, no la creo', 'empty')));
+      }
+      return true;
+    }
+    return false;
   }
 
   /**
@@ -1727,10 +2170,24 @@ const App = (() => {
     const workerUrl = CONFIG.API_PROXY_URL || CONFIG.AUTH_WORKER_URL;
 
     const setStatus = (msg, cls = '') => {
+      // v3.5.695: si el usuario habló por voz, el bot responde en voz alta (si está activado en Ajustes)
+      if (opts.viaVoice && (cls === 'found' || cls === 'empty' || cls === 'error')) {
+        _aiSpeak(cls === 'error' ? (UI.t('ai_spoken_error') || 'Tuve un problema con eso.') : msg);
+      }
       if (!statusEl) return;
       statusEl.textContent = msg;
       statusEl.className   = 'ai-search-status' + (cls ? ' ' + cls : '');
     };
+
+    // v3.5.697: comandos simples (control, "lo que suena", playlist/favoritos, temporizador, EQ) — sin Gemini
+    if (!opts.reuse) {
+      try { if (await _aiTryCommand(query, { statusEl, setStatus, inputEl })) return; } catch (e) { console.warn('[AI cmd]', e); }
+    }
+
+    // v3.5.696: pedido claro de emisora ("sintoniza…", "pon la emisora…") → catálogo local, sin llamar a Gemini
+    if (!opts.reuse && _AI_RADIO_RE.test(query)) {
+      try { if (await _aiTryStation(query, statusEl, setStatus, inputEl)) return; } catch (_) {}
+    }
 
     setStatus('✦ Pensando…', 'thinking');
     _aiBotForce('thinking', 15000);
@@ -1772,17 +2229,22 @@ const App = (() => {
         { q: query.trim().slice(0, 200), t: Date.now(), r: { intent, terms: terms.slice(0, 6), exclude: exclude.slice(0, 4), track, folderName } },
       ].slice(-_AI_HISTORY_MAX);
 
-      // Intent "artist_hits" (v3.5.693): éxitos de un artista (web) → buscarlos en la biblioteca.
-      if (AI_HITS_ENABLED && intent === 'artist_hits' && Array.isArray(data.songs) && data.songs.length) {
-        await _aiLoadArtistHits(data, statusEl, setStatus, inputEl);
+      // Intent "station" (v3.5.696): emisora de radio por nombre/frecuencia/género
+      if (intent === 'station') {
+        const ok = await _aiTryStation((terms || []).join(' ') || query, statusEl, setStatus, inputEl);
+        if (!ok) { _aiBotForce('sad', 2600); setStatus('✦ No encontré esa emisora', 'empty'); }
         return;
       }
 
-      // Intent "hits" (v3.5.691): el worker ya trajo la lista de éxitos actuales → YouTube → queue.
-      // Si no vino lista (falló la búsqueda web) cae al flujo normal de Soundrop por términos.
-      if (AI_HITS_ENABLED && intent === 'hits' && Array.isArray(data.songs) && data.songs.length
-          && typeof Soundrop !== 'undefined') {
-        await _aiLoadHits(data, setStatus, inputEl);
+      // "Éxitos" (hits / artist_hits): el worker trajo de la web la lista [{artist,title}].
+      // v3.5.694: por defecto se buscan en la BIBLIOTECA (metadatos locales + Drive) y lo que falta
+      // se ofrece buscar en YouTube con Sí/No. YouTube directo SOLO si el usuario lo pidió de forma
+      // explícita ("yt", "ye te", "youtube", "internet", "la web", "soundrop") — sin cuota si no.
+      if (AI_HITS_ENABLED && (intent === 'hits' || intent === 'artist_hits')
+          && Array.isArray(data.songs) && data.songs.length) {
+        const ytAsked = useSoundrop || _AI_YT_RE.test(query);
+        if (ytAsked && typeof Soundrop !== 'undefined') await _aiLoadHits(data, setStatus, inputEl);
+        else await _aiLoadArtistHits(data, statusEl, setStatus, inputEl);
         return;
       }
 
@@ -1971,7 +2433,8 @@ const App = (() => {
       if (inputEl) inputEl.value = '';
       setStatus(`✦ ${explanation} · ${songs.length} canciones`, 'found');
       _aiBotForce('happy', 2600);
-      setTimeout(() => document.getElementById('ai-search-panel')?.classList.remove('open'), 2000);
+      const _chips3 = _aiShowChips('music', query.trim(), explanation);
+      setTimeout(() => document.getElementById('ai-search-panel')?.classList.remove('open'), _chips3 ? 12000 : 2000);
 
     } catch (err) {
       console.error('[AI]', err);

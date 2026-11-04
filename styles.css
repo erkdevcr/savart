@@ -9311,3 +9311,11 @@ body.on-login .ai-search-float {
   border: none; border-radius: 999px; cursor: pointer;
 }
 .ai-status-btn:hover { background: color-mix(in srgb, var(--accent) 25%, transparent); }
+
+/* v3.5.695 — preferencias del bot IA (Ajustes → Asistente IA) */
+body.bot-disabled .ai-search-float { display: none !important; }
+body.bot-novoice #ai-search-mic { display: none !important; }
+#sec-bot .settings-row.bot-dim { opacity: .45; pointer-events: none; }
+
+/* v3.5.697 — chips de seguimiento del bot IA */
+.ai-chip-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
