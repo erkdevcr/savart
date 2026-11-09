@@ -1297,7 +1297,9 @@ const App = (() => {
     try { return UI.getLanguage() === 'en'; } catch (_) { return false; }
   };
   const _AI_MSG = {
-    ai_listening:         ['Escuchando', 'Listening'],
+    ai_preparing:         ['Preparando micrófono', 'Getting the microphone ready'],
+    ai_listening:         ['Habla ahora', 'Speak now'],
+    ai_hearing:           ['Te escucho', 'I’m listening'],
     ai_mic_waiting:       ['Esperando permiso del micrófono', 'Waiting for microphone permission'],
     ai_mic_denied:        ['No pude usar el micrófono — escribe tu consulta', 'Couldn’t use the microphone — type your request'],
     ai_no_speech:         ['No te escuché — habla de nuevo o escribe', 'Didn’t catch that — speak again or type'],
@@ -1556,10 +1558,11 @@ const App = (() => {
     const _setStatusMsg = (key, fallback, cls = 'empty') => {
       const st = document.getElementById('ai-search-status');
       if (!st) return;
-      st.className = 'ai-search-status ' + cls + (key === 'ai_listening' || key === 'ai_mic_waiting' ? ' listening' : '');
+      st.className = 'ai-search-status ' + cls + (key === 'ai_listening' || key === 'ai_mic_waiting' || key === 'ai_preparing' || key === 'ai_hearing' ? ' listening' : '');
       const _m = _AI_MSG[key];
       st.textContent = '✦ ' + (_m ? _aiL(_m[0], _m[1]) : (UI.t(key) || fallback));
     };
+    let _micOk = false;        // permiso de micrófono ya confirmado en esta sesión
     let _startToken = 0;       // invalida un arranque pendiente (esperando el permiso) si se cierra/cancela
     function _stopListening() {
       _startToken++;
@@ -1578,12 +1581,19 @@ const App = (() => {
       const token = ++_startToken;
       micBtn?.classList.add('listening');
       _aiStopSpeaking(); // que el micrófono no oiga al bot
+      _setStatusMsg('ai_preparing', 'Preparando micrófono', 'thinking'); // feedback inmediato (antes había un hueco sin nada)
       (async () => {
-        if (navigator.mediaDevices?.getUserMedia) {
+        // v3.5.706: si el permiso ya está concedido no se pide otra vez (getUserMedia tardaba cientos de ms en cada toque)
+        if (!_micOk) {
+          try { const pm = await navigator.permissions?.query({ name: 'microphone' }); if (pm?.state === 'granted') _micOk = true; } catch (_) {}
+        }
+        if (token !== _startToken) return;
+        if (!_micOk && navigator.mediaDevices?.getUserMedia) {
           _setStatusMsg('ai_mic_waiting', 'Esperando permiso del micrófono…', 'thinking');
           try {
             const s = await navigator.mediaDevices.getUserMedia({ audio: true });
             s.getTracks().forEach(t => t.stop());
+            _micOk = true;
           } catch (e) {
             if (token !== _startToken) return;
             micBtn?.classList.remove('listening');
@@ -1605,6 +1615,18 @@ const App = (() => {
       rec.interimResults = false;
       rec.maxAlternatives = 1;
       let gotResult = false, failed = false;
+      const _stEl2 = () => document.getElementById('ai-search-status');
+      rec.onaudiostart = () => {   // el micrófono ya está capturando → ahora sí "Habla ahora" + barritas quietas
+        if (_rec !== rec) return;
+        _setStatusMsg('ai_listening', 'Habla ahora', 'thinking');
+        _stEl2()?.classList.add('ready');
+      };
+      rec.onspeechstart = () => {  // detectó voz → barritas en movimiento
+        if (_rec !== rec) return;
+        _setStatusMsg('ai_hearing', 'Te escucho', 'thinking');
+        const s = _stEl2(); s?.classList.add('ready'); s?.classList.add('hearing');
+      };
+      rec.onspeechend = () => { _stEl2()?.classList.remove('hearing'); };
       rec.onresult = ev => {
         gotResult = true;
         const q = ev.results[0][0].transcript;
@@ -1632,7 +1654,6 @@ const App = (() => {
       _aiDuck(); // bajar la música para poder oírte
       try { rec.start(); }
       catch (_) { _rec = null; micBtn?.classList.remove('listening'); _aiUnduck(); setTimeout(() => inputEl?.focus(), 50); return; }
-      _setStatusMsg('ai_listening', 'Escuchando…', 'thinking');
     }
     if (!SR) {
       if (micBtn) micBtn.style.display = 'none';

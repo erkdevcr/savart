@@ -9342,4 +9342,23 @@ body.bot-novoice #ai-search-mic { display: none !important; }
   30% { background-position: 0 4px, 8px 0, 16px 4px; }
   45% { background-position: 0 4px, 8px 4px, 16px 0; }
 }
-@media (prefers-reduced-motion: reduce) { .ai-search-status.thinking::after { animation: none; } }
+/* v3.5.706: micrófono — barritas tipo EQ: quietas al estar listo ("Habla ahora"), en movimiento al detectar voz.
+   (Se quitó el apagado por prefers-reduced-motion: en el móvil dejaba las bolitas inmóviles.) */
+.ai-search-status.listening.ready::after {
+  width: 24px; height: 14px; margin: 0 14px 1px 8px; opacity: .65;
+  background-image:
+    linear-gradient(currentColor, currentColor), linear-gradient(currentColor, currentColor),
+    linear-gradient(currentColor, currentColor), linear-gradient(currentColor, currentColor),
+    linear-gradient(currentColor, currentColor);
+  background-repeat: no-repeat;
+  background-position: 0 100%, 5px 100%, 10px 100%, 15px 100%, 20px 100%;
+  background-size: 3px 4px, 3px 4px, 3px 4px, 3px 4px, 3px 4px;
+  animation: none;
+}
+.ai-search-status.listening.ready.hearing::after { opacity: 1; animation: ai-eq-bars .75s ease-in-out infinite; }
+@keyframes ai-eq-bars {
+  0%, 100% { background-size: 3px 4px, 3px 10px, 3px 6px, 3px 12px, 3px 5px; }
+  25%      { background-size: 3px 12px, 3px 5px, 3px 11px, 3px 4px, 3px 9px; }
+  50%      { background-size: 3px 6px, 3px 13px, 3px 4px, 3px 10px, 3px 12px; }
+  75%      { background-size: 3px 10px, 3px 7px, 3px 13px, 3px 8px, 3px 4px; }
+}
