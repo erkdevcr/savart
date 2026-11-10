@@ -99,6 +99,7 @@ const DB = (() => {
 
       req.onsuccess = (event) => {
         _db = event.target.result;
+        _metaInvalidate();
         _db.onerror = (e) => console.error('[DB] Unhandled error:', e.target.error);
         // v3.5.641 (audit M8): otra pestaña/sesión pidió una versión más nueva
         // de la DB (bump de DB_VERSION) — esta conexión bloquea su upgrade.
@@ -134,7 +135,49 @@ const DB = (() => {
 
   function _tx(storeName, mode = 'readonly') {
     if (!_db) throw new Error('[DB] Database not open. Call DB.open() first.');
-    return _db.transaction(storeName, mode).objectStore(storeName);
+    const tx = _db.transaction(storeName, mode);
+    if (storeName === 'metadata' && mode === 'readwrite') _metaChanged(tx);
+    return tx.objectStore(storeName);
+  }
+
+  /* ── Caché en memoria de la tabla metadata (v3.5.738) ─────────────────────
+     La biblioteca puede tener decenas de miles de canciones (71k en la de Erick):
+     cada getAll() de 'metadata' costaba ~300 ms en una Mac (1-2 s en un teléfono)
+     y 17 pantallas lo hacían en cada entrada (pestaña Álbumes, artista, álbum…).
+     Ahora se lee una vez y se guarda en memoria hasta la próxima escritura:
+     - toda transacción readwrite sobre 'metadata' invalida la caché al abrirse
+       y otra vez al terminar (así una lectura que corría en paralelo no la deja vieja);
+     - otras pestañas de la app avisan sus escrituras por BroadcastChannel;
+     - cada llamada recibe COPIAS de los registros: si quien llama los modifica
+       sin guardarlos, la caché no se contamina. */
+  let _metaCache = null, _metaVer = 0, _metaLoad = null, _metaLoadVer = -1;
+  const _metaBC = (typeof BroadcastChannel !== 'undefined') ? new BroadcastChannel('savart-meta') : null;
+  if (_metaBC) _metaBC.onmessage = () => { _metaVer++; _metaCache = null; };
+  function _metaInvalidate() { _metaVer++; _metaCache = null; }
+  function _metaChanged(tx) {
+    _metaInvalidate();
+    const done = () => { _metaInvalidate(); try { _metaBC?.postMessage(1); } catch (_) {} };
+    try {
+      tx.addEventListener('complete', done);
+      tx.addEventListener('abort', done);
+    } catch (_) { done(); }
+  }
+  function _metaTxRW() {
+    const tx = _db.transaction('metadata', 'readwrite');
+    _metaChanged(tx);
+    return tx;
+  }
+  function _loadAllMetaRaw() {
+    if (_metaCache) return Promise.resolve(_metaCache);
+    if (_metaLoad && _metaLoadVer === _metaVer) return _metaLoad;
+    const ver = _metaVer;
+    const p = _promisify(_tx('metadata').getAll()).then(all => {
+      all = all || [];
+      if (ver === _metaVer) _metaCache = all;   // solo si nada se escribió mientras se leía
+      return all;
+    }).finally(() => { if (_metaLoad === p) _metaLoad = null; });
+    _metaLoad = p; _metaLoadVer = ver;
+    return p;
   }
 
   function _promisify(request) {
@@ -276,8 +319,8 @@ const DB = (() => {
    * @returns {Promise<Object[]>}
    */
   async function getAllMeta() {
-    const store = _tx('metadata');
-    return _promisify(store.getAll());
+    const all = await _loadAllMetaRaw();
+    return all.map(m => ({ ...m }));
   }
 
   /**
@@ -311,10 +354,9 @@ const DB = (() => {
    * @returns {Promise<Object[]>}
    */
   async function getAllMetaLight() {
-    const store = _tx('metadata');
-    const all   = await _promisify(store.getAll());
-    return (all || []).map(m => {
-      if (!m.coverBlob) return m;
+    const all = await _loadAllMetaRaw();
+    return all.map(m => {
+      if (!m.coverBlob) return { ...m };
       // eslint-disable-next-line no-unused-vars
       const { coverBlob, ...rest } = m;
       return { ...rest, hasCoverBlob: true };
@@ -513,7 +555,7 @@ const DB = (() => {
     const valid = (items || []).filter(r => r && r.id);
     if (!valid.length) return;
     await new Promise((resolve, reject) => {
-      const tx    = _db.transaction('metadata', 'readwrite');
+      const tx    = _metaTxRW();
       const store = tx.objectStore('metadata');
       tx.oncomplete = resolve;
       tx.onerror    = () => reject(tx.error);
@@ -558,7 +600,7 @@ const DB = (() => {
     const valid = (items || []).filter(r => r && r.id);
     if (!valid.length) return;
     await new Promise((resolve, reject) => {
-      const tx    = _db.transaction('metadata', 'readwrite');
+      const tx    = _metaTxRW();
       const store = tx.objectStore('metadata');
       tx.oncomplete = resolve;
       tx.onerror    = () => reject(tx.error);
@@ -608,7 +650,7 @@ const DB = (() => {
   async function bulkWriteMeta(records) {
     if (!_db || !records?.length) return;
     await new Promise((resolve, reject) => {
-      const tx    = _db.transaction('metadata', 'readwrite');
+      const tx    = _metaTxRW();
       const store = tx.objectStore('metadata');
       tx.oncomplete = resolve;
       tx.onerror    = () => reject(tx.error);
@@ -1376,7 +1418,7 @@ const DB = (() => {
     let changed = 0;
 
     await new Promise((resolve, reject) => {
-      const tx    = _db.transaction('metadata', 'readwrite');
+      const tx    = _metaTxRW();
       const store = tx.objectStore('metadata');
       tx.oncomplete = resolve;
       tx.onerror    = () => reject(tx.error);

@@ -4668,7 +4668,7 @@ const UI = (() => {
     grid.className = 'lib-album-grid';
 
     albums.forEach(album => {
-      grid.appendChild(_buildAlbumCard(album));
+      grid.appendChild(_buildAlbumCard(album, artist));
     });
 
     container.appendChild(grid);
@@ -5176,7 +5176,8 @@ const UI = (() => {
   }
 
   /** Build a single home-card-style album card. */
-  function _buildAlbumCard(album) {
+  function _buildAlbumCard(album, fromArtist) {
+    // v3.5.738: fromArtist = artista desde cuya página se abrió → "Atrás" vuelve a ese artista
     const ALBUM_COLORS = ['#1A1635','#0D2A1E','#0D1F35','#2A150D','#1A1220','#1A2A10','#2A1A10'];
     const hash  = [...(album.name || '')].reduce((a, c) => a + c.charCodeAt(0), 0);
     const albBg = ALBUM_COLORS[Math.abs(hash) % ALBUM_COLORS.length];
@@ -5205,13 +5206,13 @@ const UI = (() => {
     // Art area → drill into album detail
     card.querySelector('.home-card-art').addEventListener('click', (e) => {
       e.stopPropagation();
-      if (typeof App !== 'undefined') App.onAlbumClick?.(album);
+      if (typeof App !== 'undefined') App.onAlbumClick?.(album, fromArtist || null);
     });
 
     // Text area → also drill in (clicking anywhere except the 3-dot)
     card.addEventListener('click', (e) => {
       if (e.target.closest('.album-card-more')) return;
-      if (typeof App !== 'undefined') App.onAlbumClick?.(album);
+      if (typeof App !== 'undefined') App.onAlbumClick?.(album, fromArtist || null);
     });
 
     // 3-dot → context menu

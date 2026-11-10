@@ -1,4 +1,4 @@
-window.SAVART_JS_VERSION = '3.5.736'; // debe coincidir con window.SAVART_VERSION de index.html (autocorrección de caché, ver index.html)
+window.SAVART_JS_VERSION = '3.5.738'; // debe coincidir con window.SAVART_VERSION de index.html (autocorrección de caché, ver index.html)
 /* ============================================================
    Savart — App entry point
    Wires Auth, Drive, DB, Player, and UI together.
@@ -487,7 +487,8 @@ const App = (() => {
 
     // 3. Library drill-down (artist or album detail)?
     if (typeof UI !== 'undefined' && UI.getCurrentView() === 'library' && _libInDetail) {
-      // Go back to whichever parent tab triggered the detail
+      // Go back to whichever parent triggered the detail (v3.5.738: álbum abierto desde un artista → ese artista)
+      if (_libBackArtist) { const ar = _libBackArtist; _libBackArtist = null; onArtistClick(ar); return; }
       _libGoBack(_currentLibTab === 'artists' ? 'artists' : 'albums');
       return;
     }
@@ -2160,7 +2161,7 @@ const App = (() => {
         '<div class="ds-modal-card ds-modal-card--sm">' +
           `<div class="ds-modal-header"><span class="ds-modal-title">${esc(UI.t('zip_limit_title'))}</span></div>` +
           '<div class="ds-modal-body zip-limit-body">' +
-            `<p>${esc(UI.t('zip_limit_body').replace('{n}', songs.length).replace('{size}', formatBytes(total)).replace('{max}', formatBytes(_ZIP_MAX)))}</p>` +
+            `<p>${esc(UI.t('zip_limit_body').replace('{n}', songs.length).replace('{size}', formatBytes(total)).replace('{max}', '200 MB'))}</p>` +
             `<div class="zip-limit-sub">${esc(UI.t('zip_limit_heaviest'))}</div>` +
             '<ul class="zip-limit-list">' + heavy.map(f => `<li><span>${nm(f)}</span><b>${esc(formatBytes(sz(f)))}</b></li>`).join('') + '</ul>' +
             `<p>${esc(pick.length
@@ -10097,7 +10098,9 @@ const App = (() => {
    * Used by all back-buttons inside drill-down views (album detail, artist detail).
    * After re-rendering the list, re-applies whatever is currently in the search bar.
    */
+  let _libBackArtist = null; // artista desde el que se abrió el álbum actual (v3.5.738)
   function _libGoBack(tab) {
+    _libBackArtist      = null;
     _currentLibTab      = tab;
     _libInDetail        = false;
     _libDetailRestoreFn = null;  // user pressed Back — no restore needed
@@ -15444,9 +15447,11 @@ const App = (() => {
    * Show albums for a given artist (drill-down from artist grid).
    */
   async function onArtistClick(artist) {
-    // Save scroll position before drilling into artist detail
+    // Save scroll position before drilling into artist detail — solo desde el LISTADO:
+    // al volver de un álbum al artista no hay que pisar el scroll guardado del listado.
     const libPane = _libDetailPane();
-    if (libPane) _libScrollBeforeDetail = libPane.scrollTop;
+    if (libPane && !_libInDetail) _libScrollBeforeDetail = libPane.scrollTop;
+    _libBackArtist = null;
     try {
       const all = await DB.getAllMeta();
       const artistKey = artist.name.toLowerCase();
@@ -15525,9 +15530,10 @@ const App = (() => {
    * Show songs for a given album (drill-down from album grid or artist detail).
    */
   async function onAlbumClick(album, fromArtist) {
-    // Save scroll position before drilling into album detail
+    // Save scroll position before drilling into album detail (solo desde un listado, ver onArtistClick)
     const libPane = _libDetailPane();
-    if (libPane) _libScrollBeforeDetail = libPane.scrollTop;
+    if (libPane && !_libInDetail) _libScrollBeforeDetail = libPane.scrollTop;
+    _libBackArtist = fromArtist || null;   // v3.5.738: gesto/tecla Atrás vuelve a este artista
     try {
       const all = await DB.getAllMeta();
 
