@@ -1,4 +1,4 @@
-window.SAVART_JS_VERSION = '3.5.722'; // debe coincidir con window.SAVART_VERSION de index.html (autocorrección de caché, ver index.html)
+window.SAVART_JS_VERSION = '3.5.723'; // debe coincidir con window.SAVART_VERSION de index.html (autocorrección de caché, ver index.html)
 /* ============================================================
    Savart — App entry point
    Wires Auth, Drive, DB, Player, and UI together.
@@ -1916,6 +1916,11 @@ const App = (() => {
         let clip = rr((r.left - left) / s, (r.top - top) / s, r.width / s, r.height / s, rad / s);
         for (const el of a.querySelectorAll('.pexp-video-btn, .sd-thumb-chip--exp')) {
           if (el.style.display === 'none' || !el.offsetWidth) continue;
+          // oculto (desvanecido) → sin hueco; mientras aparece/desaparece el hueco sigue la opacidad
+          const op = parseFloat(getComputedStyle(el).opacity);
+          if (!(op > 0.02)) continue;
+          const pc = el.closest('.pexp-video-ctrls');
+          if (pc && !(parseFloat(getComputedStyle(pc).opacity) > 0.02)) continue;
           const b = el.getBoundingClientRect();
           clip += rr((b.left - left) / s, (b.top - top) / s, b.width / s, b.height / s, 8 / s);
         }
@@ -1934,6 +1939,15 @@ const App = (() => {
       park();
     }
     function toggle() { if (on) off(); else if (isYtTrack()) onMode(); }
+    // Tocar la portada muestra botones + chip unos segundos (solo tiene efecto con el video a la vista)
+    let ctrlsTimer = 0;
+    function showCtrls() {
+      const a = art(); if (!a) return;
+      a.classList.add('ctrls-show');
+      clearTimeout(ctrlsTimer);
+      ctrlsTimer = setTimeout(() => a.classList.remove('ctrls-show'), 3000);
+    }
+    art()?.addEventListener('pointerdown', showCtrls);
     function toggleFit() {
       fit = fit === 'cover' ? 'contain' : 'cover';
       try { localStorage.setItem('savart_yt_fit', fit); } catch (_) {}

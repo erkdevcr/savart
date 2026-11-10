@@ -9316,3 +9316,16 @@ body.bot-novoice #ai-search-mic { display: none !important; }
 .pexp-video-btn .pexp-fit-ic-orig { display: none; }
 #btn-pexp-video-fit[aria-pressed="true"] .pexp-fit-ic-fill { display: none; }
 #btn-pexp-video-fit[aria-pressed="true"] .pexp-fit-ic-orig { display: block; }
+
+/* v3.5.723 — Con el video a la vista, botones y chip SD se ocultan: aparecen al tocar la
+   portada (y en hover en escritorio) y se desvanecen solos. En miniatura quedan fijos. */
+.pexp-art.yt-video-on .pexp-video-ctrls,
+.pexp-art.yt-video-on .sd-thumb-chip--exp { opacity: 0; pointer-events: none; transition: opacity .35s ease; }
+.pexp-art.yt-video-on.ctrls-show .pexp-video-ctrls,
+.pexp-art.yt-video-on.ctrls-show .sd-thumb-chip--exp { opacity: 1; }
+.pexp-art.yt-video-on.ctrls-show .pexp-video-ctrls { pointer-events: auto; }
+@media (hover: hover) {
+  .pexp-art.yt-video-on:hover .pexp-video-ctrls,
+  .pexp-art.yt-video-on:hover .sd-thumb-chip--exp { opacity: 1; }
+  .pexp-art.yt-video-on:hover .pexp-video-ctrls { pointer-events: auto; }
+}
