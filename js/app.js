@@ -1,4 +1,4 @@
-window.SAVART_JS_VERSION = '3.5.723'; // debe coincidir con window.SAVART_VERSION de index.html (autocorrección de caché, ver index.html)
+window.SAVART_JS_VERSION = '3.5.726'; // debe coincidir con window.SAVART_VERSION de index.html (autocorrección de caché, ver index.html)
 /* ============================================================
    Savart — App entry point
    Wires Auth, Drive, DB, Player, and UI together.
@@ -1841,8 +1841,10 @@ const App = (() => {
   const _ytVideo = (() => {
     const LW = 16, LH = 9;   // tamaño de layout del iframe en modo video (16:9)
     let on = false, raf = 0, origStyle = null, shown = false;
-    // v3.5.722: 'contain' = tamaño original (franjas) · 'cover' = recortado al tamaño de la portada
-    let fit = (() => { try { return localStorage.getItem('savart_yt_fit') === 'cover' ? 'cover' : 'contain'; } catch (_) { return 'contain'; } })();
+    // 'contain' = tamaño original (dentro de la portada, franjas) · 'wide' = ancho completo del
+    // reproductor, de borde a borde, sin recortar (v3.5.725 reemplaza al modo recorte 'cover')
+    // v3.5.726: por defecto 'wide' (el mayor tamaño posible); 'contain' solo si el usuario lo eligió
+    let fit = (() => { try { return localStorage.getItem('savart_yt_fit') === 'contain' ? 'contain' : 'wide'; } catch (_) { return 'wide'; } })();
     const iframe = () => { try { return Soundrop.yt.iframe(); } catch (_) { return null; } };
     const art = () => document.getElementById('pexp-art');
     const isYtTrack = () => {
@@ -1859,8 +1861,8 @@ const App = (() => {
       const fb = document.getElementById('btn-pexp-video-fit');
       if (fb) {
         fb.style.display = (on && shown) ? '' : 'none';
-        fb.setAttribute('aria-pressed', fit === 'cover' ? 'true' : 'false');
-        const fl = UI.t(fit === 'cover' ? 'player_video_orig' : 'player_video_fill');
+        fb.setAttribute('aria-pressed', fit === 'wide' ? 'true' : 'false');
+        const fl = UI.t(fit === 'wide' ? 'player_video_orig' : 'player_video_fill');
         fb.setAttribute('aria-label', fl); fb.title = fl;
       }
     }
@@ -1899,21 +1901,43 @@ const App = (() => {
       if (f && a && Player.isSdActive?.()) {
         r = a.getBoundingClientRect();
         if (r.width > 20 && r.height > 20 && r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth) {
-          const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
-          visible = !!(hit && a.contains(hit));
+          // 5 puntos (centro + 4 interiores): algo pequeño encima (p. ej. el bot IA arrastrado
+          // al centro) no apaga el video; solo una capa grande (letra, cola…) que tape la mayoría.
+          let hits = 0;
+          for (const [fx, fy] of [[0.5, 0.5], [0.25, 0.25], [0.75, 0.25], [0.25, 0.75], [0.75, 0.75]]) {
+            const el = document.elementFromPoint(r.left + r.width * fx, r.top + r.height * fy);
+            if (el && a.contains(el)) hits++;
+          }
+          visible = hits >= 3;
         }
       }
       if (visible) {
         if (!shown) { origStyle = f.getAttribute('style'); shown = true; syncBtn(); }
         a.classList.add('yt-video-on');
-        // contain: video completo, franjas negras arriba/abajo · cover: llena la portada (recorta los lados)
-        const s = fit === 'cover' ? Math.max(r.width / LW, r.height / LH) : Math.min(r.width / LW, r.height / LH);
-        const w = LW * s, hh = LH * s;
-        const left = r.left + (r.width - w) / 2, top = r.top + (r.height - hh) / 2;
-        // Recorte (coordenadas locales, antes del scale): la portada con sus esquinas redondeadas,
-        // con "huecos" donde están los botones y el chip SD para que queden visibles encima del video.
+        // contain: video completo dentro de la portada, franjas negras arriba/abajo.
+        // wide: video completo (16:9, sin recortar) a todo el ancho del reproductor, de borde a borde,
+        // centrado sobre la portada; sin pasar del alto de la portada.
+        let s, left, top, clip;
         const rad = parseFloat(getComputedStyle(a).borderTopLeftRadius) || 0;
-        let clip = rr((r.left - left) / s, (r.top - top) / s, r.width / s, r.height / s, rad / s);
+        if (fit === 'wide') {
+          // El mayor 16:9 posible: de borde a borde del reproductor y, en alto, todo el panel
+          // de la portada (no solo la portada) — sin tapar título ni controles.
+          const pr = (document.getElementById('player-expanded') || a).getBoundingClientRect();
+          const ap = (a.closest('.pexp-art-panel') || a).getBoundingClientRect();
+          const vTop = Math.min(ap.top, r.top), vBot = Math.max(ap.bottom, r.bottom);
+          const pw = Math.max(r.width, Math.min(pr.width, (vBot - vTop) * LW / LH));
+          s = pw / LW;
+          const ph = LH * s;
+          left = Math.max(pr.left, Math.min(r.left + r.width / 2 - pw / 2, pr.right - pw));
+          top = Math.max(vTop, Math.min(r.top + r.height / 2 - ph / 2, vBot - ph));
+          clip = rr(0, 0, LW, LH, 0);
+        } else {
+          s = Math.min(r.width / LW, r.height / LH);
+          left = r.left + (r.width - LW * s) / 2; top = r.top + (r.height - LH * s) / 2;
+          // la portada con sus esquinas redondeadas (coordenadas locales, antes del scale)
+          clip = rr((r.left - left) / s, (r.top - top) / s, r.width / s, r.height / s, rad / s);
+        }
+        // "huecos" donde están los botones y el chip SD para que queden visibles encima del video
         for (const el of a.querySelectorAll('.pexp-video-btn, .sd-thumb-chip--exp')) {
           if (el.style.display === 'none' || !el.offsetWidth) continue;
           // oculto (desvanecido) → sin hueco; mientras aparece/desaparece el hueco sigue la opacidad
@@ -1949,7 +1973,7 @@ const App = (() => {
     }
     art()?.addEventListener('pointerdown', showCtrls);
     function toggleFit() {
-      fit = fit === 'cover' ? 'contain' : 'cover';
+      fit = fit === 'wide' ? 'contain' : 'wide';
       try { localStorage.setItem('savart_yt_fit', fit); } catch (_) {}
       syncBtn();
     }
