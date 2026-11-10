@@ -1,4 +1,4 @@
-window.SAVART_JS_VERSION = '3.5.721'; // debe coincidir con window.SAVART_VERSION de index.html (autocorrección de caché, ver index.html)
+window.SAVART_JS_VERSION = '3.5.722'; // debe coincidir con window.SAVART_VERSION de index.html (autocorrección de caché, ver index.html)
 /* ============================================================
    Savart — App entry point
    Wires Auth, Drive, DB, Player, and UI together.
@@ -1841,6 +1841,8 @@ const App = (() => {
   const _ytVideo = (() => {
     const LW = 16, LH = 9;   // tamaño de layout del iframe en modo video (16:9)
     let on = false, raf = 0, origStyle = null, shown = false;
+    // v3.5.722: 'contain' = tamaño original (franjas) · 'cover' = recortado al tamaño de la portada
+    let fit = (() => { try { return localStorage.getItem('savart_yt_fit') === 'cover' ? 'cover' : 'contain'; } catch (_) { return 'contain'; } })();
     const iframe = () => { try { return Soundrop.yt.iframe(); } catch (_) { return null; } };
     const art = () => document.getElementById('pexp-art');
     const isYtTrack = () => {
@@ -1849,18 +1851,36 @@ const App = (() => {
     };
     function syncBtn() {
       const b = document.getElementById('btn-pexp-video');
-      if (!b) return;
-      b.setAttribute('aria-pressed', on ? 'true' : 'false');
-      const lbl = UI.t(on ? 'player_video_hide' : 'player_video_show');
-      b.setAttribute('aria-label', lbl); b.title = lbl;
+      if (b) {
+        b.setAttribute('aria-pressed', on ? 'true' : 'false');
+        const lbl = UI.t(on ? 'player_video_hide' : 'player_video_show');
+        b.setAttribute('aria-label', lbl); b.title = lbl;
+      }
+      const fb = document.getElementById('btn-pexp-video-fit');
+      if (fb) {
+        fb.style.display = (on && shown) ? '' : 'none';
+        fb.setAttribute('aria-pressed', fit === 'cover' ? 'true' : 'false');
+        const fl = UI.t(fit === 'cover' ? 'player_video_orig' : 'player_video_fill');
+        fb.setAttribute('aria-label', fl); fb.title = fl;
+      }
+    }
+    // Rectángulo redondeado como subpath SVG (coordenadas locales del iframe)
+    function rr(x, y, w, h, rad) {
+      const q = Math.max(0, Math.min(rad, w / 2, h / 2));
+      const f = n => n.toFixed(4);
+      return `M${f(x + q)} ${f(y)}H${f(x + w - q)}A${f(q)} ${f(q)} 0 0 1 ${f(x + w)} ${f(y + q)}V${f(y + h - q)}` +
+             `A${f(q)} ${f(q)} 0 0 1 ${f(x + w - q)} ${f(y + h)}H${f(x + q)}A${f(q)} ${f(q)} 0 0 1 ${f(x)} ${f(y + h - q)}` +
+             `V${f(y + q)}A${f(q)} ${f(q)} 0 0 1 ${f(x + q)} ${f(y)}Z`;
     }
     function park() {
       const f = iframe();
       if (f && shown) {
         if (origStyle === null || origStyle === '') f.removeAttribute('style'); else f.setAttribute('style', origStyle);
       }
+      const was = shown;
       shown = false;
       art()?.classList.remove('yt-video-on');
+      if (was) syncBtn();
     }
     function zAbove(el) {
       let z = 0;
@@ -1884,16 +1904,24 @@ const App = (() => {
         }
       }
       if (visible) {
-        if (!shown) { origStyle = f.getAttribute('style'); shown = true; }
+        if (!shown) { origStyle = f.getAttribute('style'); shown = true; syncBtn(); }
         a.classList.add('yt-video-on');
-        // Video completo (contain): ancho total y franjas negras arriba/abajo
-        let w = r.width, hh = w * LH / LW;
-        if (hh > r.height) { hh = r.height; w = hh * LW / LH; }
-        const s = w / LW;
+        // contain: video completo, franjas negras arriba/abajo · cover: llena la portada (recorta los lados)
+        const s = fit === 'cover' ? Math.max(r.width / LW, r.height / LH) : Math.min(r.width / LW, r.height / LH);
+        const w = LW * s, hh = LH * s;
         const left = r.left + (r.width - w) / 2, top = r.top + (r.height - hh) / 2;
+        // Recorte (coordenadas locales, antes del scale): la portada con sus esquinas redondeadas,
+        // con "huecos" donde están los botones y el chip SD para que queden visibles encima del video.
+        const rad = parseFloat(getComputedStyle(a).borderTopLeftRadius) || 0;
+        let clip = rr((r.left - left) / s, (r.top - top) / s, r.width / s, r.height / s, rad / s);
+        for (const el of a.querySelectorAll('.pexp-video-btn, .sd-thumb-chip--exp')) {
+          if (el.style.display === 'none' || !el.offsetWidth) continue;
+          const b = el.getBoundingClientRect();
+          clip += rr((b.left - left) / s, (b.top - top) / s, b.width / s, b.height / s, 8 / s);
+        }
         f.style.cssText = `position:fixed;left:${left}px;top:${top}px;width:${LW}px;height:${LH}px;` +
           `margin:0;border:0;pointer-events:none;background:#000;transform-origin:0 0;` +
-          `transform:scale(${s});z-index:${zAbove(a)};`;
+          `transform:scale(${s});z-index:${zAbove(a)};clip-path:path(evenodd,'${clip}');`;
       } else {
         park();
       }
@@ -1906,7 +1934,12 @@ const App = (() => {
       park();
     }
     function toggle() { if (on) off(); else if (isYtTrack()) onMode(); }
-    return { toggle, off, syncBtn };
+    function toggleFit() {
+      fit = fit === 'cover' ? 'contain' : 'cover';
+      try { localStorage.setItem('savart_yt_fit', fit); } catch (_) {}
+      syncBtn();
+    }
+    return { toggle, toggleFit, off, syncBtn };
   })();
 
   /* ── Descargar copia al dispositivo (canciones de Drive, no Soundrop) ─────
@@ -19175,6 +19208,10 @@ const App = (() => {
     document.getElementById('btn-pexp-video')?.addEventListener('click', (e) => {
       e.stopPropagation();
       _ytVideo.toggle();
+    });
+    document.getElementById('btn-pexp-video-fit')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      _ytVideo.toggleFit();
     });
     _ytVideo.syncBtn();
     document.getElementById('btn-mini-sd-download')?.addEventListener('click', (e) => {

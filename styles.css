@@ -9298,8 +9298,8 @@ body.bot-novoice #ai-search-mic { display: none !important; }
 
 /* v3.5.721 — Botón Video ⇄ Miniatura sobre la portada (esquina inferior izquierda,
    misma línea que el chip SD) + fondo negro (franjas) mientras se ve el video */
+.pexp-video-ctrls { position: absolute; left: 18px; bottom: 18px; z-index: 3; display: flex; gap: 8px; }
 .pexp-video-btn {
-  position: absolute; left: 18px; bottom: 18px; z-index: 3;
   height: 34px; min-width: 40px; padding: 0 10px;
   display: inline-flex; align-items: center; justify-content: center;
   border: 0; border-radius: 8px; cursor: pointer;
@@ -9311,3 +9311,8 @@ body.bot-novoice #ai-search-mic { display: none !important; }
 .pexp-video-btn[aria-pressed="true"] .pexp-video-ic-video { display: none; }
 .pexp-video-btn[aria-pressed="true"] .pexp-video-ic-thumb { display: block; }
 .pexp-art.yt-video-on::after { content: ''; position: absolute; inset: 0; background: #000; z-index: 1; pointer-events: none; }
+
+/* v3.5.722 — Botón recorte (llenar portada) ⇄ tamaño original */
+.pexp-video-btn .pexp-fit-ic-orig { display: none; }
+#btn-pexp-video-fit[aria-pressed="true"] .pexp-fit-ic-fill { display: none; }
+#btn-pexp-video-fit[aria-pressed="true"] .pexp-fit-ic-orig { display: block; }
