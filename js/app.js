@@ -1,4 +1,4 @@
-window.SAVART_JS_VERSION = '3.5.726'; // debe coincidir con window.SAVART_VERSION de index.html (autocorrección de caché, ver index.html)
+window.SAVART_JS_VERSION = '3.5.728'; // debe coincidir con window.SAVART_VERSION de index.html (autocorrección de caché, ver index.html)
 /* ============================================================
    Savart — App entry point
    Wires Auth, Drive, DB, Player, and UI together.
@@ -1828,43 +1828,37 @@ const App = (() => {
     _aiBotChar = _createAiBotChar(svg);
   }
 
-  /* ── Video de YouTube en el reproductor (v3.5.720 · v3.5.721) ──────────────
+  /* ── Video de YouTube en el reproductor (v3.5.720 → v3.5.727) ──────────────
      Las pistas Soundrop suenan por el iframe de YouTube (1×1 px, fuera de vista).
      Moverlo en el DOM lo recargaría (corta la canción), así que en modo video se
-     deja donde está y se POSICIONA encima de la portada con position:fixed +
-     transform:scale(). Mientras se ve, su tamaño de layout pasa a 16×9 px (para
-     que el video quede completo, sin recortes a los lados) — sigue siendo
-     diminuto para YouTube, así que no sube la calidad: misma resolución, sin
-     gasto extra de datos. La portada se cubre de negro (franjas arriba/abajo).
-     Se esconde si algo tapa la portada (letra, cola, menús) o al cerrar el
+     deja donde está y se POSICIONA con position:fixed + transform:scale(). Su
+     tamaño de layout pasa a 16×9 px (video completo, sin recortes) — sigue siendo
+     diminuto para YouTube, así que no sube la calidad (sin gasto extra de datos).
+     Siempre ocupa el mayor tamaño posible: de borde a borde del reproductor y, en
+     alto, el panel de la portada, sin tapar título ni controles.
+     El botón imagen/video va en la esquina inferior izquierda del video y el chip SD
+     en la inferior derecha (siguen al video según lo estirado que esté). Como el
+     iframe está por encima del reproductor, su recorte deja "huecos" donde están
+     el botón y el chip para que se vean encima.
+     Se esconde si algo grande tapa la portada (letra, cola…) o al cerrar el
      reproductor; se apaga al pasar a una pista que no es de YouTube. */
   const _ytVideo = (() => {
-    const LW = 16, LH = 9;   // tamaño de layout del iframe en modo video (16:9)
+    const LW = 16, LH = 9, M = 12;   // layout del iframe (16:9) · margen de botón/chip al borde del video
     let on = false, raf = 0, origStyle = null, shown = false;
-    // 'contain' = tamaño original (dentro de la portada, franjas) · 'wide' = ancho completo del
-    // reproductor, de borde a borde, sin recortar (v3.5.725 reemplaza al modo recorte 'cover')
-    // v3.5.726: por defecto 'wide' (el mayor tamaño posible); 'contain' solo si el usuario lo eligió
-    let fit = (() => { try { return localStorage.getItem('savart_yt_fit') === 'contain' ? 'contain' : 'wide'; } catch (_) { return 'wide'; } })();
     const iframe = () => { try { return Soundrop.yt.iframe(); } catch (_) { return null; } };
     const art = () => document.getElementById('pexp-art');
+    const ctrls = () => art()?.querySelector('.pexp-video-ctrls');
+    const chip = () => art()?.querySelector('.sd-thumb-chip--exp');
     const isYtTrack = () => {
       const t = Player.getCurrentTrack();
       return !!(t?.isSoundrop && String(t.id || '').startsWith('sd_'));
     };
     function syncBtn() {
       const b = document.getElementById('btn-pexp-video');
-      if (b) {
-        b.setAttribute('aria-pressed', on ? 'true' : 'false');
-        const lbl = UI.t(on ? 'player_video_hide' : 'player_video_show');
-        b.setAttribute('aria-label', lbl); b.title = lbl;
-      }
-      const fb = document.getElementById('btn-pexp-video-fit');
-      if (fb) {
-        fb.style.display = (on && shown) ? '' : 'none';
-        fb.setAttribute('aria-pressed', fit === 'wide' ? 'true' : 'false');
-        const fl = UI.t(fit === 'wide' ? 'player_video_orig' : 'player_video_fill');
-        fb.setAttribute('aria-label', fl); fb.title = fl;
-      }
+      if (!b) return;
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      const lbl = UI.t(on ? 'player_video_hide' : 'player_video_show');
+      b.setAttribute('aria-label', lbl); b.title = lbl;
     }
     // Rectángulo redondeado como subpath SVG (coordenadas locales del iframe)
     function rr(x, y, w, h, rad) {
@@ -1874,15 +1868,20 @@ const App = (() => {
              `A${f(q)} ${f(q)} 0 0 1 ${f(x + w - q)} ${f(y + h)}H${f(x + q)}A${f(q)} ${f(q)} 0 0 1 ${f(x)} ${f(y + h - q)}` +
              `V${f(y + q)}A${f(q)} ${f(q)} 0 0 1 ${f(x + q)} ${f(y)}Z`;
     }
+    function clearPos() {
+      for (const el of [ctrls(), chip()]) {
+        if (!el) continue;
+        el.style.left = el.style.top = el.style.right = el.style.bottom = '';
+      }
+    }
     function park() {
       const f = iframe();
       if (f && shown) {
         if (origStyle === null || origStyle === '') f.removeAttribute('style'); else f.setAttribute('style', origStyle);
       }
-      const was = shown;
       shown = false;
       art()?.classList.remove('yt-video-on');
-      if (was) syncBtn();
+      clearPos();
     }
     function zAbove(el) {
       let z = 0;
@@ -1892,6 +1891,7 @@ const App = (() => {
       }
       return z + 1;
     }
+    const opq = el => parseFloat(getComputedStyle(el).opacity) > 0.02;
     function place() {
       raf = 0;
       if (!on) return;
@@ -1912,39 +1912,35 @@ const App = (() => {
         }
       }
       if (visible) {
-        if (!shown) { origStyle = f.getAttribute('style'); shown = true; syncBtn(); }
+        if (!shown) { origStyle = f.getAttribute('style'); shown = true; }
         a.classList.add('yt-video-on');
-        // contain: video completo dentro de la portada, franjas negras arriba/abajo.
-        // wide: video completo (16:9, sin recortar) a todo el ancho del reproductor, de borde a borde,
-        // centrado sobre la portada; sin pasar del alto de la portada.
-        let s, left, top, clip;
-        const rad = parseFloat(getComputedStyle(a).borderTopLeftRadius) || 0;
-        if (fit === 'wide') {
-          // El mayor 16:9 posible: de borde a borde del reproductor y, en alto, todo el panel
-          // de la portada (no solo la portada) — sin tapar título ni controles.
-          const pr = (document.getElementById('player-expanded') || a).getBoundingClientRect();
-          const ap = (a.closest('.pexp-art-panel') || a).getBoundingClientRect();
-          const vTop = Math.min(ap.top, r.top), vBot = Math.max(ap.bottom, r.bottom);
-          const pw = Math.max(r.width, Math.min(pr.width, (vBot - vTop) * LW / LH));
-          s = pw / LW;
-          const ph = LH * s;
-          left = Math.max(pr.left, Math.min(r.left + r.width / 2 - pw / 2, pr.right - pw));
-          top = Math.max(vTop, Math.min(r.top + r.height / 2 - ph / 2, vBot - ph));
-          clip = rr(0, 0, LW, LH, 0);
-        } else {
-          s = Math.min(r.width / LW, r.height / LH);
-          left = r.left + (r.width - LW * s) / 2; top = r.top + (r.height - LH * s) / 2;
-          // la portada con sus esquinas redondeadas (coordenadas locales, antes del scale)
-          clip = rr((r.left - left) / s, (r.top - top) / s, r.width / s, r.height / s, rad / s);
+        // El mayor 16:9 posible: ancho del reproductor; alto, todo el panel de la portada
+        const pr = (document.getElementById('player-expanded') || a).getBoundingClientRect();
+        const ap = (a.closest('.pexp-art-panel') || a).getBoundingClientRect();
+        const vTop = Math.min(ap.top, r.top), vBot = Math.max(ap.bottom, r.bottom);
+        const vw = Math.max(r.width, Math.min(pr.width, (vBot - vTop) * LW / LH));
+        const s = vw / LW, vh = LH * s;
+        const left = Math.max(pr.left, Math.min(r.left + r.width / 2 - vw / 2, pr.right - vw));
+        const top = Math.max(vTop, Math.min(r.top + r.height / 2 - vh / 2, vBot - vh));
+        // Botón: esquina inferior izquierda del video · chip SD: inferior derecha
+        // (coordenadas relativas a la portada, que en modo video deja ver lo que sale de ella)
+        const c = ctrls(), ch = chip();
+        if (c) {
+          c.style.right = c.style.bottom = 'auto';
+          c.style.left = `${left + M - r.left}px`;
+          c.style.top = `${top + vh - M - c.offsetHeight - r.top}px`;
         }
-        // "huecos" donde están los botones y el chip SD para que queden visibles encima del video
+        if (ch) {
+          ch.style.right = ch.style.bottom = 'auto';
+          ch.style.left = `${left + vw - M - ch.offsetWidth - r.left}px`;
+          ch.style.top = `${top + vh - M - ch.offsetHeight - r.top}px`;
+        }
+        // Recorte: el video entero + "huecos" donde están el botón y el chip (si se ven)
+        let clip = rr(0, 0, LW, LH, 0);
         for (const el of a.querySelectorAll('.pexp-video-btn, .sd-thumb-chip--exp')) {
-          if (el.style.display === 'none' || !el.offsetWidth) continue;
-          // oculto (desvanecido) → sin hueco; mientras aparece/desaparece el hueco sigue la opacidad
-          const op = parseFloat(getComputedStyle(el).opacity);
-          if (!(op > 0.02)) continue;
+          if (el.style.display === 'none' || !el.offsetWidth || !opq(el)) continue;
           const pc = el.closest('.pexp-video-ctrls');
-          if (pc && !(parseFloat(getComputedStyle(pc).opacity) > 0.02)) continue;
+          if (pc && !opq(pc)) continue;
           const b = el.getBoundingClientRect();
           clip += rr((b.left - left) / s, (b.top - top) / s, b.width / s, b.height / s, 8 / s);
         }
@@ -1963,7 +1959,7 @@ const App = (() => {
       park();
     }
     function toggle() { if (on) off(); else if (isYtTrack()) onMode(); }
-    // Tocar la portada muestra botones + chip unos segundos (solo tiene efecto con el video a la vista)
+    // Tocar el área de la portada muestra botón + chip unos segundos (solo cuenta con el video a la vista)
     let ctrlsTimer = 0;
     function showCtrls() {
       const a = art(); if (!a) return;
@@ -1971,13 +1967,8 @@ const App = (() => {
       clearTimeout(ctrlsTimer);
       ctrlsTimer = setTimeout(() => a.classList.remove('ctrls-show'), 3000);
     }
-    art()?.addEventListener('pointerdown', showCtrls);
-    function toggleFit() {
-      fit = fit === 'wide' ? 'contain' : 'wide';
-      try { localStorage.setItem('savart_yt_fit', fit); } catch (_) {}
-      syncBtn();
-    }
-    return { toggle, toggleFit, off, syncBtn };
+    (art()?.closest('.pexp-art-panel') || art())?.addEventListener('pointerdown', showCtrls);
+    return { toggle, off, syncBtn };
   })();
 
   /* ── Descargar copia al dispositivo (canciones de Drive, no Soundrop) ─────
@@ -19247,10 +19238,7 @@ const App = (() => {
       e.stopPropagation();
       _ytVideo.toggle();
     });
-    document.getElementById('btn-pexp-video-fit')?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      _ytVideo.toggleFit();
-    });
+
     _ytVideo.syncBtn();
     document.getElementById('btn-mini-sd-download')?.addEventListener('click', (e) => {
       e.stopPropagation();

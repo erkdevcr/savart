@@ -9325,7 +9325,16 @@ body.bot-novoice #ai-search-mic { display: none !important; }
 .pexp-art.yt-video-on.ctrls-show .sd-thumb-chip--exp { opacity: 1; }
 .pexp-art.yt-video-on.ctrls-show .pexp-video-ctrls { pointer-events: auto; }
 @media (hover: hover) {
-  .pexp-art.yt-video-on:hover .pexp-video-ctrls,
-  .pexp-art.yt-video-on:hover .sd-thumb-chip--exp { opacity: 1; }
-  .pexp-art.yt-video-on:hover .pexp-video-ctrls { pointer-events: auto; }
+  .pexp-art-panel:hover .pexp-art.yt-video-on .pexp-video-ctrls,
+  .pexp-art-panel:hover .pexp-art.yt-video-on .sd-thumb-chip--exp { opacity: 1; }
+  .pexp-art-panel:hover .pexp-art.yt-video-on .pexp-video-ctrls { pointer-events: auto; }
 }
+
+/* v3.5.727/728 — Botón imagen/video abajo a la IZQUIERDA y chip SD abajo a la DERECHA (portada).
+   En modo video ambos siguen las esquinas del video (posición por JS), que puede ser más
+   ancho que la portada: la portada deja de recortar su contenido (overflow visible) y
+   oculta la imagen para que sus esquinas no asomen. */
+.pexp-art.yt-video-on { overflow: visible; }
+.pexp-art.yt-video-on::after { border-radius: inherit; }
+.pexp-art.yt-video-on > img,
+.pexp-art.yt-video-on > .pexp-art-placeholder { visibility: hidden; }
