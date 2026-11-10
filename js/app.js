@@ -1,3 +1,4 @@
+window.SAVART_JS_VERSION = '3.5.709'; // debe coincidir con window.SAVART_VERSION de index.html (autocorrección de caché, ver index.html)
 /* ============================================================
    Savart — App entry point
    Wires Auth, Drive, DB, Player, and UI together.
