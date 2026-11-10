@@ -1,4 +1,4 @@
-window.SAVART_JS_VERSION = '3.5.740'; // debe coincidir con window.SAVART_VERSION de index.html (autocorrección de caché, ver index.html)
+window.SAVART_JS_VERSION = '3.5.741'; // debe coincidir con window.SAVART_VERSION de index.html (autocorrección de caché, ver index.html)
 /* ============================================================
    Savart — App entry point
    Wires Auth, Drive, DB, Player, and UI together.
@@ -591,6 +591,7 @@ const App = (() => {
     const _bootShowTime = Date.now();
     if (bootToast) {
       bootToast.style.display = 'flex';
+      document.body.classList.add('boot-on');   // v3.5.741: la franja empuja la app hacia abajo
       requestAnimationFrame(() => { bootToast.style.opacity = '1'; });
     }
     // Show Drive DB size in the boot toast — same method as Settings "Estado de la DB"
@@ -609,6 +610,7 @@ const App = (() => {
       const delay   = Math.max(0, 1200 - elapsed);
       setTimeout(() => {
         bootToast.classList.add('hidden');
+        document.body.classList.remove('boot-on'); // la app sube junto con la franja
         setTimeout(() => { if (bootToast.parentNode) bootToast.remove(); }, 400);
       }, delay);
     };

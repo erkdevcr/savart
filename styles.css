@@ -2509,63 +2509,73 @@ img { display: block; }
   box-shadow: 0 0 0 2px rgba(76,175,80,0.25);
 }
 
-/* ── Boot loading toast ──────────────────────────────────────── */
+/* ── Boot loading header (v3.5.741) ───────────────────────────────
+   Antes era un toast flotante; ahora es una franja de lado a lado arriba,
+   apenas del alto del texto, que EMPUJA la app hacia abajo mientras se
+   muestra (body.boot-on). Barra de progreso pegada al borde inferior,
+   de lado a lado, sin separación. Al terminar se recoge y la app sube. */
+:root { --boot-h: calc(30px + env(safe-area-inset-top, 0px)); }
 #boot-toast {
   position: fixed;
-  top: 16.67vh;
-  left: 50%;
-  transform: translateX(-50%);
+  top: 0; left: 0; right: 0;
+  height: var(--boot-h);
   z-index: 9999;
   /* display is set to 'none' in HTML; JS switches to 'flex' at auth time */
   flex-direction: column;
-  gap: 8px;
+  justify-content: center;
+  padding: env(safe-area-inset-top, 0px) max(16px, env(safe-area-inset-right, 0px)) 2px max(16px, env(safe-area-inset-left, 0px));
+  box-sizing: border-box;
   background: #08101f;
-  border: 1px solid #1e3a6e;
-  padding: 10px 20px 10px;
-  border-radius: 14px;   /* slightly less pill so bar fits naturally */
   font-size: 12px;
   color: #4A88F5;
-  box-shadow: 0 0 12px rgba(74, 136, 245, 0.25), 0 0 4px rgba(74, 136, 245, 0.15);
   white-space: nowrap;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 0.35s ease;
+  transform: translateY(0);
+  transition: opacity 0.35s ease, transform 0.35s ease;
   overflow: hidden;
 }
 .boot-toast-body {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 9px;
+  min-width: 0;
 }
-/* Wave icon inside the boot toast — mirrors .savart-wave-wrap exactly.
+/* Wave icon inside the boot header — mirrors .savart-wave-wrap exactly.
    No height on the SVG so aspect-ratio stays intact and the scroll loop is seamless. */
 .boot-toast-wave {
-  width: 28px;          /* container width — natural SVG height ≈ 28*(32/144)*3 ≈ 19px */
+  width: 28px;
   flex-shrink: 0;
   overflow: hidden;
   -webkit-mask-image: linear-gradient(to right, transparent 0%, black 18%, black 82%, transparent 100%);
   mask-image: linear-gradient(to right, transparent 0%, black 18%, black 82%, transparent 100%);
 }
 /* .savart-wave-svg already provides: width:300%, height:auto, display:block, animation */
-/* indeterminate loading bar track */
+/* barra de progreso: pegada al borde inferior, de lado a lado */
 .boot-toast-bar-track {
-  width: 100%;
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
   height: 2px;
   background: rgba(74, 136, 245, 0.18);
-  border-radius: 2px;
   overflow: hidden;
-  margin: 0 -2px; /* bleed to pill edges */
 }
 /* real progress fill — width driven by JS */
 .boot-toast-bar-fill {
   height: 100%;
   width: 0%;
   background: #4A88F5;
-  border-radius: 2px;
   transition: width 0.35s ease;
 }
 #boot-toast.hidden {
   opacity: 0 !important;
+  transform: translateY(-100%);
+}
+/* La app baja mientras la franja está visible y sube al ocultarse */
+#app { transition: margin-top 0.35s ease, height 0.35s ease; }
+body.boot-on #app {
+  margin-top: var(--boot-h);
+  height: calc(100% - var(--boot-h));
 }
 
 /* ── Library: back header (artist/album drill-down) ─────── */
