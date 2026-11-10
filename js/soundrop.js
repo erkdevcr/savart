@@ -479,6 +479,7 @@ const Soundrop = (() => {
       currentTime(){ return (_p && _ready) ? (_p.getCurrentTime() || 0) : 0; },
       duration()   { return (_p && _ready) ? (_p.getDuration()    || 0) : 0; },
       isPaused()   { return _paused; },
+      iframe()     { try { return (_p && _p.getIframe) ? _p.getIframe() : null; } catch (_) { return null; } },
     };
   })();
 

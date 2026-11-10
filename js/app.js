@@ -1,4 +1,4 @@
-window.SAVART_JS_VERSION = '3.5.719'; // debe coincidir con window.SAVART_VERSION de index.html (autocorrección de caché, ver index.html)
+window.SAVART_JS_VERSION = '3.5.720'; // debe coincidir con window.SAVART_VERSION de index.html (autocorrección de caché, ver index.html)
 /* ============================================================
    Savart — App entry point
    Wires Auth, Drive, DB, Player, and UI together.
@@ -1827,6 +1827,83 @@ const App = (() => {
     if (!svg) return;
     _aiBotChar = _createAiBotChar(svg);
   }
+
+  /* ── Video de YouTube en el reproductor (v3.5.720) ────────────────────────
+     Las pistas Soundrop suenan por el iframe de YouTube (1×1 px, fuera de vista).
+     Mover el iframe en el DOM lo recargaría (corta la canción), así que en modo
+     video se deja donde está y solo se POSICIONA encima de la portada con
+     position:fixed + transform:scale(). El transform no cambia el tamaño de
+     layout del iframe, así que YouTube no sube la calidad: se ve la misma
+     resolución que ya se está bajando (sin gasto extra de datos).
+     Se esconde solo si algo tapa la portada (letra, cola, menús) o si se cierra
+     el reproductor expandido; se apaga al pasar a una pista que no es de YouTube. */
+  const _ytVideo = (() => {
+    let on = false, raf = 0, origStyle = null, shown = false;
+    const iframe = () => { try { return Soundrop.yt.iframe(); } catch (_) { return null; } };
+    const isYtTrack = () => {
+      const t = Player.getCurrentTrack();
+      return !!(t?.isSoundrop && String(t.id || '').startsWith('sd_'));
+    };
+    function syncBtn() {
+      const b = document.getElementById('btn-pexp-video');
+      if (!b) return;
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      const lbl = UI.t(on ? 'player_video_hide' : 'player_video_show');
+      b.setAttribute('aria-label', lbl); b.title = lbl;
+    }
+    function park() {
+      const f = iframe();
+      if (f && shown) {
+        if (origStyle === null || origStyle === '') f.removeAttribute('style'); else f.setAttribute('style', origStyle);
+      }
+      shown = false;
+    }
+    function zAbove(el) {
+      let z = 0;
+      for (let n = el; n && n !== document.body; n = n.parentElement) {
+        const v = parseInt(getComputedStyle(n).zIndex, 10);
+        if (!isNaN(v)) z = Math.max(z, v);
+      }
+      return z + 1;
+    }
+    function place() {
+      raf = 0;
+      if (!on) return;
+      if (!isYtTrack()) { off(); return; }
+      const f = iframe(), art = document.getElementById('pexp-art');
+      let visible = false, r = null;
+      if (f && art && Player.isSdActive?.()) {
+        r = art.getBoundingClientRect();
+        if (r.width > 20 && r.height > 20 && r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth) {
+          const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+          visible = !!(hit && art.contains(hit));
+        }
+      }
+      if (visible) {
+        if (!shown) { origStyle = f.getAttribute('style'); shown = true; }
+        // tamaño de layout actual del iframe (lo que YouTube "cree" que mide) — NO se cambia
+        const w0 = parseFloat(f.getAttribute('width')) || f.offsetWidth || 1;
+        const h0 = parseFloat(f.getAttribute('height')) || f.offsetHeight || 1;
+        const sx = r.width / w0, sy = r.height / h0;
+        const rad = parseFloat(getComputedStyle(art).borderTopLeftRadius) || 0;
+        f.style.cssText = `position:fixed;left:${r.left}px;top:${r.top}px;width:${w0}px;height:${h0}px;` +
+          `margin:0;border:0;pointer-events:none;background:#000;transform-origin:0 0;` +
+          `transform:scale(${sx},${sy});z-index:${zAbove(art)};` +
+          `clip-path:inset(0 round ${(rad / sx).toFixed(4)}px / ${(rad / sy).toFixed(4)}px);`;
+      } else {
+        park();
+      }
+      raf = requestAnimationFrame(place);
+    }
+    function onMode() { on = true; syncBtn(); if (!raf) raf = requestAnimationFrame(place); }
+    function off() {
+      on = false; syncBtn();
+      if (raf) { cancelAnimationFrame(raf); raf = 0; }
+      park();
+    }
+    function toggle() { if (on) off(); else if (isYtTrack()) onMode(); }
+    return { toggle, off, syncBtn };
+  })();
 
   /* ── Descargar copia al dispositivo (canciones de Drive, no Soundrop) ─────
      Reusa el blob ya cacheado en IDB (mismo cache que usa el player para
@@ -19091,6 +19168,11 @@ const App = (() => {
       e.stopPropagation();
       _openSdSaveModal();
     });
+    document.getElementById('btn-pexp-video')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      _ytVideo.toggle();
+    });
+    _ytVideo.syncBtn();
     document.getElementById('btn-mini-sd-download')?.addEventListener('click', (e) => {
       e.stopPropagation();
       _openSdSaveModal();

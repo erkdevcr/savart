@@ -9295,3 +9295,10 @@ body.bot-novoice #ai-search-mic { display: none !important; }
 .bot-shape-sw.selected { color: var(--text-primary); }
 .bot-shape-sw.selected .bot-shape-ring { opacity: 1; }
 .bot-shape-sw:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* v3.5.720 — Botón Video ⇄ Miniatura del reproductor (pistas de YouTube) */
+.pexp-video-btn { padding: 4px 6px; }
+.pexp-video-btn .pexp-video-ic-thumb { display: none; }
+.pexp-video-btn[aria-pressed="true"] { background: var(--accent-soft); }
+.pexp-video-btn[aria-pressed="true"] .pexp-video-ic-video { display: none; }
+.pexp-video-btn[aria-pressed="true"] .pexp-video-ic-thumb { display: block; }

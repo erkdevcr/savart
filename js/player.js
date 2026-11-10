@@ -2166,6 +2166,7 @@ const Player = (() => {
     resetEQ,
     // State
     isPlaying,
+    isSdActive: () => _sdActive, // v3.5.720: true mientras la pista Soundrop suena por el iframe de YouTube
     getCurrentTime,
     getDuration,
     getCurrentTrack,

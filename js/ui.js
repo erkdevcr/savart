@@ -302,6 +302,8 @@ const UI = (() => {
       player_speed:       'Velocidad',
       player_timer:       'Tiempo',
       player_lyrics:      'LETRA',
+      player_video_show:  'Ver video',
+      player_video_hide:  'Ver miniatura',
       player_show_album:  'MOSTRAR ÁLBUM',
       lyrics_loading:     'Buscando letra…',
       lyrics_not_found:   'Letra no encontrada',
@@ -844,6 +846,8 @@ const UI = (() => {
       player_speed:       'Speed',
       player_timer:       'Timer',
       player_lyrics:      'LYRIC',
+      player_video_show:  'Show video',
+      player_video_hide:  'Show thumbnail',
       player_show_album:  'SHOW ALBUM',
       lyrics_loading:     'Fetching lyrics…',
       lyrics_not_found:   'Lyrics not found',
@@ -1472,6 +1476,9 @@ const UI = (() => {
     // Show/hide SD download button (expanded player header)
     const btnSdExp = document.getElementById('btn-pexp-sd-download');
     if (btnSdExp) btnSdExp.style.display = track?.isSoundrop ? '' : 'none';
+    // v3.5.720: botón Video/Miniatura — solo pistas YouTube (Soundrop sin guardar en Drive)
+    const btnVid = document.getElementById('btn-pexp-video');
+    if (btnVid) btnVid.style.display = (track?.isSoundrop && String(track.id || '').startsWith('sd_')) ? '' : 'none';
   }
 
   /**
