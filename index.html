@@ -19,10 +19,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&family=Baskervville:ital@0;1&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="styles.css?v=3.5.715">
+  <link rel="stylesheet" href="styles.css?v=3.5.719">
   <!-- Version global — fallback para Android donde el SW no se registra.
        IMPORTANTE: mantener sincronizada con APP_VERSION de sw.js en cada bump. -->
-  <script>window.SAVART_VERSION = '3.5.715';</script>
+  <script>window.SAVART_VERSION = '3.5.719';</script>
   <!-- Tema (v3.5.552): aplicar ANTES del primer paint para evitar flash del tema default -->
   <script>try{var _th=localStorage.getItem('savart_theme');if(_th&&_th!=='blue')document.documentElement.dataset.theme=_th;}catch(e){}</script>
 </head>
@@ -63,7 +63,7 @@
       </svg>
       <span data-i18n="login_btn">Continuar con Google</span>
     </button>
-    <!-- v3.5.715: salida de emergencia — solo se muestra si NO hay internet real -->
+    <!-- v3.5.719: salida de emergencia — solo se muestra si NO hay internet real -->
     <button id="btn-login-offline" class="login-offline-btn" style="display:none">
       <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M3 3l18 18"/>
@@ -603,7 +603,7 @@
             </div>
           </div><!-- /Apariencia -->
 
-          <!-- ASISTENTE IA (v3.5.715) — preferencias por dispositivo (localStorage) -->
+          <!-- ASISTENTE IA (v3.5.719) — preferencias por dispositivo (localStorage) -->
           <div class="settings-section" id="sec-bot">
             <div class="settings-section-title" data-i18n="settings_bot">Asistente IA</div>
             <div class="settings-row">
@@ -896,7 +896,7 @@
     </div>
   </div>
 
-  <!-- Color del bot (v3.5.715) -->
+  <!-- Color del bot (v3.5.719) -->
   <div id="bot-color-modal" class="ds-modal" style="display:none">
     <div class="ds-modal-backdrop" id="bot-color-backdrop"></div>
     <div class="ds-modal-card ds-modal-card--sm" style="max-height:92vh">
@@ -1812,7 +1812,7 @@
     </div>
     <!-- Normalizer + Live Gain — single row -->
     <div class="eq-norm-row">
-      <!-- v3.5.715: título arriba, toggle debajo y (Normalizer) el valor bajo el toggle -->
+      <!-- v3.5.719: título arriba, toggle debajo y (Normalizer) el valor bajo el toggle -->
       <div class="eq-norm-group">
         <span class="eq-pb-title" data-i18n="normalizer">Normalizer</span>
         <div class="toggle" id="eq-norm-toggle"></div>
@@ -1878,29 +1878,29 @@
 </script>
 
 <!-- Savart modules -->
-<script src="js/config.js?v=3.5.715"></script>
-<script src="js/radio-stations.js?v=3.5.715"></script>
-<script src="js/icy-metadata.js?v=3.5.715"></script>
-<script src="js/radio-dvr.js?v=3.5.715"></script>
-<script src="js/auth.js?v=3.5.715"></script>
-<script src="js/drive.js?v=3.5.715"></script>
-<script src="js/db.js?v=3.5.715"></script>
-<script src="js/sync.js?v=3.5.715"></script>
-<script src="js/player.js?v=3.5.715"></script>
-<script src="js/meta.js?v=3.5.715"></script>
-<script src="js/lastfm.js?v=3.5.715"></script>
-<script src="js/audd.js?v=3.5.715"></script>
-<script src="js/musicbrainz.js?v=3.5.715"></script>
-<script src="js/discogs.js?v=3.5.715"></script>
-<script src="js/lyrics.js?v=3.5.715"></script>
-<script src="js/soundrop.js?v=3.5.715"></script>
-<script src="js/yt-auth.js?v=3.5.715"></script>
-<script src="js/yt-playlists.js?v=3.5.715"></script>
-<script src="js/ui.js?v=3.5.715"></script>
-<script src="js/app.js?v=3.5.715"></script>
-<script src="js/bg.js?v=3.5.715"></script>
+<script src="js/config.js?v=3.5.719"></script>
+<script src="js/radio-stations.js?v=3.5.719"></script>
+<script src="js/icy-metadata.js?v=3.5.719"></script>
+<script src="js/radio-dvr.js?v=3.5.719"></script>
+<script src="js/auth.js?v=3.5.719"></script>
+<script src="js/drive.js?v=3.5.719"></script>
+<script src="js/db.js?v=3.5.719"></script>
+<script src="js/sync.js?v=3.5.719"></script>
+<script src="js/player.js?v=3.5.719"></script>
+<script src="js/meta.js?v=3.5.719"></script>
+<script src="js/lastfm.js?v=3.5.719"></script>
+<script src="js/audd.js?v=3.5.719"></script>
+<script src="js/musicbrainz.js?v=3.5.719"></script>
+<script src="js/discogs.js?v=3.5.719"></script>
+<script src="js/lyrics.js?v=3.5.719"></script>
+<script src="js/soundrop.js?v=3.5.719"></script>
+<script src="js/yt-auth.js?v=3.5.719"></script>
+<script src="js/yt-playlists.js?v=3.5.719"></script>
+<script src="js/ui.js?v=3.5.719"></script>
+<script src="js/app.js?v=3.5.719"></script>
+<script src="js/bg.js?v=3.5.719"></script>
 
-<!-- v3.5.715 — Autocorrección de caché: si index.html y app.js son de versiones distintas (p. ej. durante un deploy
+<!-- v3.5.719 — Autocorrección de caché: si index.html y app.js son de versiones distintas (p. ej. durante un deploy
      el CDN sirvió una mezcla y el service worker la guardó), se vacía la caché del shell y se recarga UNA vez. -->
 <script>
   (function () {
@@ -2011,7 +2011,7 @@
       // despues de abrir la app, cada vez que se publicaba una version nueva
       // (skipWaiting() en sw.js la activa de inmediato). Si hay reproduccion en
       // curso, se muestra un aviso clickeable en vez de recargar.
-      // v3.5.715 (fix "la app se reinicia al desbloquear"): la red de seguridad
+      // v3.5.719 (fix "la app se reinicia al desbloquear"): la red de seguridad
       // que recargaba en cuanto la musica paraba disparaba justo al volver a
       // primer plano — los timers se congelan con la pantalla bloqueada y, al
       // desbloquear, el intervalo corria con la reproduccion ya interrumpida y

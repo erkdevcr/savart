@@ -1,4 +1,4 @@
-window.SAVART_JS_VERSION = '3.5.715'; // debe coincidir con window.SAVART_VERSION de index.html (autocorrección de caché, ver index.html)
+window.SAVART_JS_VERSION = '3.5.719'; // debe coincidir con window.SAVART_VERSION de index.html (autocorrección de caché, ver index.html)
 /* ============================================================
    Savart — App entry point
    Wires Auth, Drive, DB, Player, and UI together.
@@ -1676,7 +1676,6 @@ const App = (() => {
       { id: 'trebol', es: 'Trébol', en: 'Clover', pts: unionCircles([[0.4, 0.4, 0.5], [-0.4, 0.4, 0.5], [0.4, -0.4, 0.5], [-0.4, -0.4, 0.5], [0, 0, 0.55]]) },
       { id: 'corazon', es: 'Corazón', en: 'Heart', y: -0.06, s: 0.92, pts: soften(param(t => [16 * Math.pow(Math.sin(t), 3), -(13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t))]), 9) },
       { id: 'flor', es: 'Flor', en: 'Flower', pts: unionCircles([[0, 0, 0.7], ...Array.from({ length: 8 }, (_, i) => [Math.cos(i * Math.PI / 4) * 0.62, Math.sin(i * Math.PI / 4) * 0.62, 0.38])]) },
-      { id: 'gota', es: 'Gota', en: 'Drop', y: 0.14, pts: polar(t => 0.78 + 0.5 * Math.pow((1 + Math.cos(t + Math.PI / 2)) / 2, 4)) },
       { id: 'capsula', es: 'Cápsula', en: 'Capsule', s: 0.88, pts: roundedPoly([[-1.25, -0.74], [1.25, -0.74], [1.25, 0.74], [-1.25, 0.74]], 0.735) },
       { id: 'triangulo', es: 'Triángulo', en: 'Triangle', y: 0.18, s: 0.8, pts: roundedPoly([[0, -1.05], [1.05, 0.7], [-1.05, 0.7]], 0.36) },
       { id: 'casita', es: 'Casita', en: 'House', y: 0.12, pts: roundedPoly([[-0.9, 0.95], [0.9, 0.95], [0.9, -0.12], [0, -0.98], [-0.9, -0.12]], [0.3, 0.3, 0.16, 0.3, 0.16]) },
@@ -1715,18 +1714,22 @@ const App = (() => {
   }
 
   const _BOT_COLORS = [
-    ['#fcfcfc', 'Blanco', 'White'], ['#1c1c1e', 'Negro', 'Black'], ['#ef4444', 'Rojo', 'Red'], ['#f97316', 'Naranja', 'Orange'],
+    ['#fcfcfc', 'Blanco', 'White'], ['#ef4444', 'Rojo', 'Red'], ['#f97316', 'Naranja', 'Orange'],
     ['#facc15', 'Amarillo', 'Yellow'], ['#22c55e', 'Verde', 'Green'], ['#14b8a6', 'Turquesa', 'Teal'], ['#06b6d4', 'Cian', 'Cyan'],
     ['#3b82f6', 'Azul', 'Blue'], ['#8b5cf6', 'Violeta', 'Violet'], ['#ec4899', 'Rosa', 'Pink'],
   ];
-  const _botColorPref = () => { try { const v = localStorage.getItem('savart_bot_color') || ''; return /^#[0-9a-f]{6}$/i.test(v) ? v : ''; } catch (_) { return ''; } };
-  // Ojos claros si el cuerpo es oscuro (si no, no se verían)
+  // Solo colores de la paleta (v3.5.718: sin color personalizado — uno guardado antes vuelve a Predeterminado)
+  const _botColorPref = () => { try { const v = (localStorage.getItem('savart_bot_color') || '').toLowerCase(); return _BOT_COLORS.some(c => c[0].toLowerCase() === v) ? v : ''; } catch (_) { return ''; } };
+  // Ojos siempre negros; solo claros si el cuerpo es negro (o casi negro), si no no se verían
   function _botEyeFor(hex) {
     const n = parseInt(hex.slice(1), 16), r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
-    return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 < 0.42 ? '#fcfcfc' : '#0a0a0a';
+    return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 < 0.15 ? '#fcfcfc' : '#0a0a0a';
   }
-  function _botColorVars(el, hex) {
+  // preview=true (modal): "Predeterminado" se fija explícito al acento — si solo se quitaran
+  // las variables, la vista previa heredaría el color ya guardado en <html>.
+  function _botColorVars(el, hex, preview = false) {
     if (hex) { el.style.setProperty('--ai-bot-color', hex); el.style.setProperty('--ai-bot-eye', _botEyeFor(hex)); }
+    else if (preview) { el.style.setProperty('--ai-bot-color', 'var(--accent)'); el.style.setProperty('--ai-bot-eye', '#0a0a0a'); }
     else { el.style.removeProperty('--ai-bot-color'); el.style.removeProperty('--ai-bot-eye'); }
   }
   const _applyBotColor = () => _botColorVars(document.documentElement, _botColorPref());
@@ -1771,22 +1774,18 @@ const App = (() => {
       if (hex) b.style.background = hex; else b.classList.add('is-default');
       return b;
     };
-    const custom = document.createElement('label');
-    custom.className = 'bot-color-sw is-custom'; custom.title = _aiL('Personalizado', 'Custom');
-    const inp = document.createElement('input'); inp.type = 'color'; inp.value = sel || '#3b82f6';
-    custom.appendChild(inp);
     const refresh = () => {
-      _botColorVars(stage, sel);
-      _botColorVars(sgrid, sel);
+      _botColorVars(stage, sel, true);
+      _botColorVars(sgrid, sel, true);
       sgrid.querySelectorAll('.bot-shape-sw').forEach(el => el.classList.toggle('selected', el.dataset.id === selShape));
       grid.querySelectorAll('.bot-color-sw').forEach(el => {
         const h = el.dataset?.hex;
-        const isOn = el.classList.contains('is-custom') ? (!!sel && !_BOT_COLORS.some(c => c[0].toLowerCase() === sel.toLowerCase())) : (h || '') === (sel || '');
+        const isOn = (h || '').toLowerCase() === (sel || '').toLowerCase();
         el.classList.toggle('selected', isOn);
       });
       if (cap) {
         const named = _BOT_COLORS.find(c => sel && c[0].toLowerCase() === sel.toLowerCase());
-        const colorTxt = !sel ? _aiL('Predeterminado (color de acento)', 'Default (accent color)') : named ? _aiL(named[1], named[2]) : _aiL('Personalizado', 'Custom') + ' · ' + sel.toUpperCase();
+        const colorTxt = !sel || !named ? _aiL('Predeterminado (color de acento)', 'Default (accent color)') : _aiL(named[1], named[2]);
         const sh = _botShapeById(selShape);
         cap.textContent = _aiL(sh.es, sh.en) + ' · ' + colorTxt;
       }
@@ -1794,12 +1793,10 @@ const App = (() => {
     grid.innerHTML = '';
     grid.appendChild(mk('', _aiL('Predeterminado', 'Default')));
     _BOT_COLORS.forEach(c => grid.appendChild(mk(c[0], _aiL(c[1], c[2]))));
-    grid.appendChild(custom);
     grid.onclick = e => {
       const b = e.target.closest('button.bot-color-sw'); if (!b) return;
       sel = b.dataset.hex || ''; refresh();
     };
-    inp.addEventListener('input', () => { sel = inp.value; refresh(); });
     refresh();
     modal.style.display = 'flex';
 
