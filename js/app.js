@@ -1,4 +1,4 @@
-window.SAVART_JS_VERSION = '3.5.710'; // debe coincidir con window.SAVART_VERSION de index.html (autocorrección de caché, ver index.html)
+window.SAVART_JS_VERSION = '3.5.711'; // debe coincidir con window.SAVART_VERSION de index.html (autocorrección de caché, ver index.html)
 /* ============================================================
    Savart — App entry point
    Wires Auth, Drive, DB, Player, and UI together.
@@ -1480,7 +1480,8 @@ const App = (() => {
       randNext -= dt;
       if (randNext <= 0) {
         const r = Math.random();
-        play(r < 0.22 ? 'glance' : r < 0.42 ? 'lookShrink' : r < 0.62 ? 'happy' : r < 0.78 ? 'spin' : r < 0.86 ? 'lookDown' : r < 0.93 ? 'lookUp' : r < 0.97 ? 'surprised' : (Math.random() < 0.5 ? 'angry' : 'sad'));
+        // glance 18 · lookShrink 16 · happy 16 · spin 13 · lookDown 11 · lookUp 10 · surprised 8 · angry 4 · sad 4 (%)
+        play(r < 0.18 ? 'glance' : r < 0.34 ? 'lookShrink' : r < 0.50 ? 'happy' : r < 0.63 ? 'spin' : r < 0.74 ? 'lookDown' : r < 0.84 ? 'lookUp' : r < 0.92 ? 'surprised' : r < 0.96 ? 'angry' : 'sad');
         randNext = opts.fast ? 1.6 + Math.random() * 1.6 : 3 + Math.random() * 4;
       }
     }
