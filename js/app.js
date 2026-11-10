@@ -1,4 +1,4 @@
-window.SAVART_JS_VERSION = '3.5.714'; // debe coincidir con window.SAVART_VERSION de index.html (autocorrección de caché, ver index.html)
+window.SAVART_JS_VERSION = '3.5.715'; // debe coincidir con window.SAVART_VERSION de index.html (autocorrección de caché, ver index.html)
 /* ============================================================
    Savart — App entry point
    Wires Auth, Drive, DB, Player, and UI together.
@@ -1192,6 +1192,7 @@ const App = (() => {
     if (!elBody || !elClip || !elEyes) return null;
     const VB = 1528.33, CX = VB / 2, CY = VB / 2, R0 = 540;
     const N = 22;
+    let shape = _botShapeById(opts.shape || _botShapePref()), lastShape = null;
     const PILL = (x, y, r = 0, w = 0.24, h = 0.55) => [x, y, w, h, r, 0, 0, 0];
     const EYE = (x, y, w, h, r, ell, cut) => [x, y, w, h, r, 0, ell, cut];
     const DOT = (x, y, w, h, r = 0) => [x, y, w, h, r, 0, 1, 0];
@@ -1325,7 +1326,7 @@ const App = (() => {
           if (c < 0.04) { x = Math.sign(sn) * 1.5; w = 0.02; }
           p.push(x, -0.01, Math.max(w, 0.02), h, -sn * 6 * Math.max(c, 0), 0, 0, 0);
         }
-        p.push(0);
+        p.push(phi > 0 ? 1 - Math.abs(Math.cos(phi)) : 0); // de canto: aplana las formas no redondas al girar
         const b = smooth(Math.min(1, t / 0.16));
         for (let c = 0; c < N; c++) out[c] = start[c] + (p[c] - start[c]) * b;
         return out;
@@ -1482,16 +1483,26 @@ const App = (() => {
       const [bx, by, s, sx, sy] = p;
       const R = R0 * s;
       bodyNow.x = bx * R0; bodyNow.y = by * R0;
-      const key = [CX + bodyNow.x, CY + bodyNow.y, R * sx, R * sy].map(v => v.toFixed(1)).join(',');
+      const L = p.slice(5, 13), Rt = p.slice(13, 21);
+      // Formas no redondas: el cuerpo gira un poco con la mirada y se aplana al dar la vuelta
+      let rot = 0, thin = 1;
+      if (!shape.round) {
+        const tilt = Math.max(-35, Math.min(35, (L[4] + Rt[4]) / 2));
+        const ecx = Math.max(-0.3, Math.min(0.5, (L[0] + Rt[0]) / 2));
+        const spinning = track && track.proc;
+        rot = Math.max(-24, Math.min(24, tilt * 0.9 + (spinning ? 0 : (ecx - 0.13) * 30)));
+        thin = 1 - 0.55 * Math.max(0, Math.min(1, p[21] || 0));
+      }
+      if (shape !== lastShape) { lastShape = shape; elBody.setAttribute('d', shape.d); elClip.setAttribute('d', shape.d); lastBodyKey = ''; }
+      const key = `translate(${(CX + bodyNow.x).toFixed(1)} ${(CY + bodyNow.y).toFixed(1)}) rotate(${rot.toFixed(2)}) scale(${(R * sx * thin).toFixed(1)} ${(R * sy).toFixed(1)})`;
       if (key !== lastBodyKey) {
         lastBodyKey = key;
-        const [ecx, ecy, erx, ery] = key.split(',');
-        for (const el of [elBody, elClip]) {
-          el.setAttribute('cx', ecx); el.setAttribute('cy', ecy);
-          el.setAttribute('rx', erx); el.setAttribute('ry', ery);
-        }
+        elBody.setAttribute('transform', key);
+        elClip.setAttribute('transform', key);
       }
-      const L = p.slice(5, 13), Rt = p.slice(13, 21);
+      for (const e of [L, Rt]) {
+        e[0] *= shape.eyeS; e[1] = e[1] * shape.eyeS + shape.eyeY; e[2] *= shape.eyeS; e[3] *= shape.eyeS;
+      }
       for (const e of [L, Rt]) {
         if (blink > 0 && e[5] < 0.5 && e[3] > e[2]) {
           e[2] += (0.21 - e[2]) * blink;
@@ -1598,11 +1609,111 @@ const App = (() => {
         gazeUntil = performance.now() + 2500;
       },
       gazeOff() { gaze = null; },
+      setShape(id) { shape = _botShapeById(id); },
       destroy() { dead = true; },
     };
   }
 
   /* ── Color del bot (v3.5.708): por dispositivo (localStorage 'savart_bot_color'); '' = color de acento ── */
+  /* ── Formas del bot (v3.5.715) ───────────────────────────────────────────
+     Cada forma es un contorno cerrado en unidades del radio (área ≈ círculo,
+     así todas se ven del mismo "peso"). es/ey: tamaño y altura de los ojos en
+     esa forma; round = el giro no se nota (bolita). Preferencia por dispositivo
+     en localStorage 'savart_bot_shape'. */
+  let _BOT_SHAPES_CACHE = null;
+  function _botShapes() {
+    if (_BOT_SHAPES_CACHE) return _BOT_SHAPES_CACHE;
+    const polar = (f, n = 360) => Array.from({ length: n }, (_, i) => { const t = i / n * Math.PI * 2; const r = f(t); return [r * Math.cos(t), r * Math.sin(t)]; });
+    const param = (f, n = 360) => Array.from({ length: n }, (_, i) => f(i / n * Math.PI * 2));
+    const nrm = v => { const l = Math.hypot(v[0], v[1]) || 1; return [v[0] / l, v[1] / l]; };
+    const unionCircles = (cs, n = 420) => polar(t => {
+      const dx = Math.cos(t), dy = Math.sin(t); let best = 0;
+      for (const [cx, cy, r] of cs) {
+        const b = dx * cx + dy * cy, disc = b * b - (cx * cx + cy * cy) + r * r;
+        if (disc >= 0) best = Math.max(best, b + Math.sqrt(disc));
+      }
+      return best;
+    }, n);
+    const roundedPoly = (vs, rc, seg = 28) => {
+      const pts = [], n = vs.length;
+      for (let i = 0; i < n; i++) {
+        const V = vs[i], P = vs[(i + n - 1) % n], Nx = vs[(i + 1) % n];
+        const r = Array.isArray(rc) ? rc[i] : rc;
+        const a = nrm([P[0] - V[0], P[1] - V[1]]), b = nrm([Nx[0] - V[0], Nx[1] - V[1]]);
+        const th = Math.acos(Math.max(-1, Math.min(1, a[0] * b[0] + a[1] * b[1])));
+        const t = r / Math.tan(th / 2);
+        const T1 = [V[0] + a[0] * t, V[1] + a[1] * t], T2 = [V[0] + b[0] * t, V[1] + b[1] * t];
+        const bis = nrm([a[0] + b[0], a[1] + b[1]]), dc = r / Math.sin(th / 2);
+        const C = [V[0] + bis[0] * dc, V[1] + bis[1] * dc];
+        const a1 = Math.atan2(T1[1] - C[1], T1[0] - C[0]), a2 = Math.atan2(T2[1] - C[1], T2[0] - C[0]);
+        let da = a2 - a1; while (da > Math.PI) da -= 2 * Math.PI; while (da < -Math.PI) da += 2 * Math.PI;
+        for (let k = 0; k <= seg; k++) { const aa = a1 + da * k / seg; pts.push([C[0] + Math.cos(aa) * r, C[1] + Math.sin(aa) * r]); }
+      }
+      return pts;
+    };
+    const soften = (pts, k) => pts.map((_, i) => {
+      let x = 0, y = 0;
+      for (let j = -k; j <= k; j++) { const q = pts[(i + j + pts.length) % pts.length]; x += q[0]; y += q[1]; }
+      return [x / (2 * k + 1), y / (2 * k + 1)];
+    });
+    const normalize = (pts, area) => {
+      let A = 0, cx = 0, cy = 0;
+      for (let i = 0; i < pts.length; i++) {
+        const [x0, y0] = pts[i], [x1, y1] = pts[(i + 1) % pts.length], c = x0 * y1 - x1 * y0;
+        A += c; cx += (x0 + x1) * c; cy += (y0 + y1) * c;
+      }
+      A /= 2; cx /= 6 * A; cy /= 6 * A;
+      const k = Math.sqrt(area / Math.abs(A));
+      return pts.map(([x, y]) => [(x - cx) * k, (y - cy) * k]);
+    };
+    const toD = pts => pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(4) + ' ' + p[1].toFixed(4)).join('') + 'Z';
+    const hexV = Array.from({ length: 6 }, (_, i) => [Math.cos(i * Math.PI / 3), Math.sin(i * Math.PI / 3)]);
+    const list = [
+      { id: 'bolita', es: 'Bolita', en: 'Ball', round: true, pts: polar(() => 1), area: Math.PI },
+      { id: 'nube', es: 'Nube', en: 'Cloud', pts: unionCircles([[-0.46, 0.14, 0.5], [0.44, 0.12, 0.52], [-0.06, -0.3, 0.56], [0.02, 0.34, 0.5], [0.4, -0.3, 0.34]]) },
+      { id: 'cuadrado', es: 'Cuadrado', en: 'Square', pts: roundedPoly([[-1, -1], [1, -1], [1, 1], [-1, 1]], 0.42) },
+      { id: 'estrella', es: 'Estrella', en: 'Star', s: 0.85, pts: polar(t => 0.62 + 0.5 * Math.pow(0.5 + 0.5 * Math.cos(4 * t), 2.0)).map(([x, y]) => [x * 1.12, y]) },
+      { id: 'trebol', es: 'Trébol', en: 'Clover', pts: unionCircles([[0.4, 0.4, 0.5], [-0.4, 0.4, 0.5], [0.4, -0.4, 0.5], [-0.4, -0.4, 0.5], [0, 0, 0.55]]) },
+      { id: 'corazon', es: 'Corazón', en: 'Heart', y: -0.06, s: 0.92, pts: soften(param(t => [16 * Math.pow(Math.sin(t), 3), -(13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t))]), 9) },
+      { id: 'flor', es: 'Flor', en: 'Flower', pts: unionCircles([[0, 0, 0.7], ...Array.from({ length: 8 }, (_, i) => [Math.cos(i * Math.PI / 4) * 0.62, Math.sin(i * Math.PI / 4) * 0.62, 0.38])]) },
+      { id: 'gota', es: 'Gota', en: 'Drop', y: 0.14, pts: polar(t => 0.78 + 0.5 * Math.pow((1 + Math.cos(t + Math.PI / 2)) / 2, 4)) },
+      { id: 'capsula', es: 'Cápsula', en: 'Capsule', s: 0.88, pts: roundedPoly([[-1.25, -0.74], [1.25, -0.74], [1.25, 0.74], [-1.25, 0.74]], 0.735) },
+      { id: 'triangulo', es: 'Triángulo', en: 'Triangle', y: 0.18, s: 0.8, pts: roundedPoly([[0, -1.05], [1.05, 0.7], [-1.05, 0.7]], 0.36) },
+      { id: 'casita', es: 'Casita', en: 'House', y: 0.12, pts: roundedPoly([[-0.9, 0.95], [0.9, 0.95], [0.9, -0.12], [0, -0.98], [-0.9, -0.12]], [0.3, 0.3, 0.16, 0.3, 0.16]) },
+      { id: 'chispa', es: 'Chispa', en: 'Spark', s: 0.85, pts: polar(t => 0.66 + 0.36 * Math.pow(0.5 + 0.5 * Math.cos(7 * t + Math.PI / 2), 1.6)) },
+      { id: 'hexagono', es: 'Hexágono', en: 'Hexagon', pts: roundedPoly(hexV, 0.3) },
+    ];
+    _BOT_SHAPES_CACHE = list.map(sh => ({
+      id: sh.id, es: sh.es, en: sh.en, round: !!sh.round,
+      d: toD(normalize(sh.pts, sh.area || Math.PI * 0.82)),
+      eyeS: sh.s || 1, eyeY: sh.y || 0,
+    }));
+    return _BOT_SHAPES_CACHE;
+  }
+  const _botShapePref = () => { try { return localStorage.getItem('savart_bot_shape') || 'bolita'; } catch (_) { return 'bolita'; } };
+  const _botShapeById = id => _botShapes().find(s => s.id === id) || _botShapes()[0];
+  // Ícono del botón de Ajustes: silueta de la forma elegida, en el color del bot
+  function _applyBotShapeBtn() {
+    const btn = document.getElementById('bot-color-btn');
+    if (!btn) return;
+    const sh = _botShapeById(_botShapePref());
+    btn.innerHTML = `<svg viewBox="-1.25 -1.25 2.5 2.5" aria-hidden="true"><path d="${sh.d}" fill="var(--ai-bot-color, var(--accent))"></path></svg>`;
+  }
+  // Miniatura de la galería: el bot mirando de lado (forma girada un poco)
+  function _botShapeThumb(sh) {
+    const tilt = sh.round ? 0 : 16;
+    const ex = 0.13 * sh.eyeS, ey = -0.1 * sh.eyeS + sh.eyeY, w = 0.17 * sh.eyeS, h = 0.36 * sh.eyeS, gap = 0.19 * sh.eyeS;
+    return `<svg viewBox="-1.55 -1.55 3.1 3.1" aria-hidden="true">
+      <path class="bot-shape-ring" d="${sh.d}" transform="rotate(${tilt}) scale(1.3)" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"></path>
+      <g transform="rotate(${tilt})">
+        <path d="${sh.d}" fill="var(--ai-bot-color, var(--accent))"></path>
+        <g transform="rotate(${sh.round ? 16 : 0} ${ex} ${ey})" fill="var(--ai-bot-eye, #0a0a0a)">
+          <rect x="${(ex - gap - w / 2).toFixed(3)}" y="${(ey - h / 2).toFixed(3)}" width="${w.toFixed(3)}" height="${h.toFixed(3)}" rx="${(w / 2).toFixed(3)}"></rect>
+          <rect x="${(ex + gap - w / 2).toFixed(3)}" y="${(ey - h / 2).toFixed(3)}" width="${w.toFixed(3)}" height="${h.toFixed(3)}" rx="${(w / 2).toFixed(3)}"></rect>
+        </g>
+      </g></svg>`;
+  }
+
   const _BOT_COLORS = [
     ['#fcfcfc', 'Blanco', 'White'], ['#1c1c1e', 'Negro', 'Black'], ['#ef4444', 'Rojo', 'Red'], ['#f97316', 'Naranja', 'Orange'],
     ['#facc15', 'Amarillo', 'Yellow'], ['#22c55e', 'Verde', 'Green'], ['#14b8a6', 'Turquesa', 'Teal'], ['#06b6d4', 'Cian', 'Cyan'],
@@ -1622,19 +1733,38 @@ const App = (() => {
 
   let _botColorPv = null;   // personaje de la vista previa (modal)
   function _openBotColorModal() {
-    const modal = document.getElementById('bot-color-modal');
-    const stage = document.getElementById('bot-color-stage');
-    const grid  = document.getElementById('bot-color-grid');
-    const cap   = document.getElementById('bot-color-caption');
-    if (!modal || !stage || !grid) return;
+    const modal  = document.getElementById('bot-color-modal');
+    const stage  = document.getElementById('bot-color-stage');
+    const grid   = document.getElementById('bot-color-grid');
+    const sgrid  = document.getElementById('bot-shape-grid');
+    const cap    = document.getElementById('bot-color-caption');
+    if (!modal || !stage || !grid || !sgrid) return;
     let sel = _botColorPref();
+    let selShape = _botShapeById(_botShapePref()).id;
     stage.innerHTML = '<svg class="ai-bot-svg" viewBox="114 114 1300 1300" aria-hidden="true" focusable="false">' +
-      '<defs><clipPath id="ai-bot-clip-pv"><ellipse data-bot="clip" cx="764.165" cy="764.165" rx="540" ry="540"></ellipse></clipPath></defs>' +
-      '<ellipse data-bot="body" cx="764.165" cy="764.165" rx="540" ry="540"></ellipse>' +
+      '<defs><clipPath id="ai-bot-clip-pv"><path data-bot="clip" d=""></path></clipPath></defs>' +
+      '<path data-bot="body" d=""></path>' +
       '<path data-bot="eyes" d="" clip-path="url(#ai-bot-clip-pv)"></path></svg>';
     try { _botColorPv?.destroy(); } catch (_) {}
-    _botColorPv = _createAiBotChar(stage.querySelector('svg'), { always: true, fast: true });
+    _botColorPv = _createAiBotChar(stage.querySelector('svg'), { always: true, fast: true, shape: selShape });
 
+    // ── Formas ──
+    sgrid.innerHTML = '';
+    for (const sh of _botShapes()) {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'bot-shape-sw'; b.dataset.id = sh.id;
+      const nm = _aiL(sh.es, sh.en); b.title = nm; b.setAttribute('aria-label', nm);
+      b.innerHTML = _botShapeThumb(sh);
+      sgrid.appendChild(b);
+    }
+    sgrid.onclick = e => {
+      const b = e.target.closest('button.bot-shape-sw'); if (!b) return;
+      selShape = b.dataset.id;
+      try { _botColorPv?.setShape(selShape); _botColorPv?.force('happy', 1800); } catch (_) {}
+      refresh();
+    };
+
+    // ── Colores ──
     const mk = (hex, label) => {
       const b = document.createElement('button');
       b.type = 'button'; b.className = 'bot-color-sw'; b.dataset.hex = hex; b.title = label; b.setAttribute('aria-label', label);
@@ -1647,15 +1777,18 @@ const App = (() => {
     custom.appendChild(inp);
     const refresh = () => {
       _botColorVars(stage, sel);
-      let on = false;
+      _botColorVars(sgrid, sel);
+      sgrid.querySelectorAll('.bot-shape-sw').forEach(el => el.classList.toggle('selected', el.dataset.id === selShape));
       grid.querySelectorAll('.bot-color-sw').forEach(el => {
         const h = el.dataset?.hex;
         const isOn = el.classList.contains('is-custom') ? (!!sel && !_BOT_COLORS.some(c => c[0].toLowerCase() === sel.toLowerCase())) : (h || '') === (sel || '');
-        el.classList.toggle('selected', isOn); if (isOn) on = true;
+        el.classList.toggle('selected', isOn);
       });
       if (cap) {
         const named = _BOT_COLORS.find(c => sel && c[0].toLowerCase() === sel.toLowerCase());
-        cap.textContent = !sel ? _aiL('Predeterminado (color de acento)', 'Default (accent color)') : named ? _aiL(named[1], named[2]) : _aiL('Personalizado', 'Custom') + ' · ' + sel.toUpperCase();
+        const colorTxt = !sel ? _aiL('Predeterminado (color de acento)', 'Default (accent color)') : named ? _aiL(named[1], named[2]) : _aiL('Personalizado', 'Custom') + ' · ' + sel.toUpperCase();
+        const sh = _botShapeById(selShape);
+        cap.textContent = _aiL(sh.es, sh.en) + ' · ' + colorTxt;
       }
     };
     grid.innerHTML = '';
@@ -1678,8 +1811,13 @@ const App = (() => {
     document.getElementById('bot-color-cancel').onclick = close;
     document.getElementById('bot-color-backdrop').onclick = close;
     document.getElementById('bot-color-accept').onclick = () => {
-      try { if (sel) localStorage.setItem('savart_bot_color', sel); else localStorage.removeItem('savart_bot_color'); } catch (_) {}
+      try {
+        if (sel) localStorage.setItem('savart_bot_color', sel); else localStorage.removeItem('savart_bot_color');
+        localStorage.setItem('savart_bot_shape', selShape);
+      } catch (_) {}
       _applyBotColor();
+      _applyBotShapeBtn();
+      try { _aiBotChar?.setShape(selShape); } catch (_) {}
       close();
     };
   }
@@ -1904,6 +2042,7 @@ const App = (() => {
   function _initBotSettings() {
     document.getElementById('bot-color-btn')?.addEventListener('click', () => _openBotColorModal());
     _applyBotColor();
+    _applyBotShapeBtn();
     const langSel = document.getElementById('bot-select-lang');
     if (langSel) {
       langSel.value = _botLangPref();

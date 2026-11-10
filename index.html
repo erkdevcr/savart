@@ -19,10 +19,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&family=Baskervville:ital@0;1&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="styles.css?v=3.5.714">
+  <link rel="stylesheet" href="styles.css?v=3.5.715">
   <!-- Version global — fallback para Android donde el SW no se registra.
        IMPORTANTE: mantener sincronizada con APP_VERSION de sw.js en cada bump. -->
-  <script>window.SAVART_VERSION = '3.5.714';</script>
+  <script>window.SAVART_VERSION = '3.5.715';</script>
   <!-- Tema (v3.5.552): aplicar ANTES del primer paint para evitar flash del tema default -->
   <script>try{var _th=localStorage.getItem('savart_theme');if(_th&&_th!=='blue')document.documentElement.dataset.theme=_th;}catch(e){}</script>
 </head>
@@ -63,7 +63,7 @@
       </svg>
       <span data-i18n="login_btn">Continuar con Google</span>
     </button>
-    <!-- v3.5.714: salida de emergencia — solo se muestra si NO hay internet real -->
+    <!-- v3.5.715: salida de emergencia — solo se muestra si NO hay internet real -->
     <button id="btn-login-offline" class="login-offline-btn" style="display:none">
       <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M3 3l18 18"/>
@@ -603,7 +603,7 @@
             </div>
           </div><!-- /Apariencia -->
 
-          <!-- ASISTENTE IA (v3.5.714) — preferencias por dispositivo (localStorage) -->
+          <!-- ASISTENTE IA (v3.5.715) — preferencias por dispositivo (localStorage) -->
           <div class="settings-section" id="sec-bot">
             <div class="settings-section-title" data-i18n="settings_bot">Asistente IA</div>
             <div class="settings-row">
@@ -647,10 +647,10 @@
             </div>
                       <div class="settings-row" id="bot-row-color" style="border-bottom:none">
               <div>
-                <div class="settings-row-label" data-i18n="settings_bot_color">Color del bot</div>
-                <div class="settings-row-cat" data-i18n="settings_bot_color_desc">Predeterminado (color de acento) o uno a tu gusto</div>
+                <div class="settings-row-label" data-i18n="settings_bot_color">Color y forma</div>
+                <div class="settings-row-cat" data-i18n="settings_bot_color_desc">Elige la forma y el color del bot</div>
               </div>
-              <button type="button" id="bot-color-btn" class="bot-color-btn" aria-label="Color del bot"><span class="bot-color-btn-dot"></span></button>
+              <button type="button" id="bot-color-btn" class="bot-color-btn" aria-label="Color y forma"><span class="bot-color-btn-dot"></span></button>
             </div>
           </div><!-- /Asistente IA -->
 
@@ -896,15 +896,18 @@
     </div>
   </div>
 
-  <!-- Color del bot (v3.5.714) -->
+  <!-- Color del bot (v3.5.715) -->
   <div id="bot-color-modal" class="ds-modal" style="display:none">
     <div class="ds-modal-backdrop" id="bot-color-backdrop"></div>
     <div class="ds-modal-card ds-modal-card--sm" style="max-height:92vh">
       <div class="ds-modal-header">
-        <span class="ds-modal-title" data-i18n="settings_bot_color">Color del bot</span>
+        <span class="ds-modal-title" data-i18n="settings_bot_color">Color y forma</span>
       </div>
       <div class="bot-color-stage" id="bot-color-stage"></div>
       <div class="bot-color-body">
+        <div class="bot-color-label" data-i18n="bot_shape_label">Forma</div>
+        <div class="bot-shape-grid" id="bot-shape-grid"></div>
+        <div class="bot-color-label" data-i18n="bot_color_label">Color</div>
         <div class="bot-color-grid" id="bot-color-grid"></div>
         <div class="bot-color-caption" id="bot-color-caption"></div>
       </div>
@@ -1809,7 +1812,7 @@
     </div>
     <!-- Normalizer + Live Gain — single row -->
     <div class="eq-norm-row">
-      <!-- v3.5.714: título arriba, toggle debajo y (Normalizer) el valor bajo el toggle -->
+      <!-- v3.5.715: título arriba, toggle debajo y (Normalizer) el valor bajo el toggle -->
       <div class="eq-norm-group">
         <span class="eq-pb-title" data-i18n="normalizer">Normalizer</span>
         <div class="toggle" id="eq-norm-toggle"></div>
@@ -1875,29 +1878,29 @@
 </script>
 
 <!-- Savart modules -->
-<script src="js/config.js?v=3.5.714"></script>
-<script src="js/radio-stations.js?v=3.5.714"></script>
-<script src="js/icy-metadata.js?v=3.5.714"></script>
-<script src="js/radio-dvr.js?v=3.5.714"></script>
-<script src="js/auth.js?v=3.5.714"></script>
-<script src="js/drive.js?v=3.5.714"></script>
-<script src="js/db.js?v=3.5.714"></script>
-<script src="js/sync.js?v=3.5.714"></script>
-<script src="js/player.js?v=3.5.714"></script>
-<script src="js/meta.js?v=3.5.714"></script>
-<script src="js/lastfm.js?v=3.5.714"></script>
-<script src="js/audd.js?v=3.5.714"></script>
-<script src="js/musicbrainz.js?v=3.5.714"></script>
-<script src="js/discogs.js?v=3.5.714"></script>
-<script src="js/lyrics.js?v=3.5.714"></script>
-<script src="js/soundrop.js?v=3.5.714"></script>
-<script src="js/yt-auth.js?v=3.5.714"></script>
-<script src="js/yt-playlists.js?v=3.5.714"></script>
-<script src="js/ui.js?v=3.5.714"></script>
-<script src="js/app.js?v=3.5.714"></script>
-<script src="js/bg.js?v=3.5.714"></script>
+<script src="js/config.js?v=3.5.715"></script>
+<script src="js/radio-stations.js?v=3.5.715"></script>
+<script src="js/icy-metadata.js?v=3.5.715"></script>
+<script src="js/radio-dvr.js?v=3.5.715"></script>
+<script src="js/auth.js?v=3.5.715"></script>
+<script src="js/drive.js?v=3.5.715"></script>
+<script src="js/db.js?v=3.5.715"></script>
+<script src="js/sync.js?v=3.5.715"></script>
+<script src="js/player.js?v=3.5.715"></script>
+<script src="js/meta.js?v=3.5.715"></script>
+<script src="js/lastfm.js?v=3.5.715"></script>
+<script src="js/audd.js?v=3.5.715"></script>
+<script src="js/musicbrainz.js?v=3.5.715"></script>
+<script src="js/discogs.js?v=3.5.715"></script>
+<script src="js/lyrics.js?v=3.5.715"></script>
+<script src="js/soundrop.js?v=3.5.715"></script>
+<script src="js/yt-auth.js?v=3.5.715"></script>
+<script src="js/yt-playlists.js?v=3.5.715"></script>
+<script src="js/ui.js?v=3.5.715"></script>
+<script src="js/app.js?v=3.5.715"></script>
+<script src="js/bg.js?v=3.5.715"></script>
 
-<!-- v3.5.714 — Autocorrección de caché: si index.html y app.js son de versiones distintas (p. ej. durante un deploy
+<!-- v3.5.715 — Autocorrección de caché: si index.html y app.js son de versiones distintas (p. ej. durante un deploy
      el CDN sirvió una mezcla y el service worker la guardó), se vacía la caché del shell y se recarga UNA vez. -->
 <script>
   (function () {
@@ -2008,7 +2011,7 @@
       // despues de abrir la app, cada vez que se publicaba una version nueva
       // (skipWaiting() en sw.js la activa de inmediato). Si hay reproduccion en
       // curso, se muestra un aviso clickeable en vez de recargar.
-      // v3.5.714 (fix "la app se reinicia al desbloquear"): la red de seguridad
+      // v3.5.715 (fix "la app se reinicia al desbloquear"): la red de seguridad
       // que recargaba en cuanto la musica paraba disparaba justo al volver a
       // primer plano — los timers se congelan con la pantalla bloqueada y, al
       // desbloquear, el intervalo corria con la reproduccion ya interrumpida y
@@ -2055,8 +2058,8 @@
 <div id="ai-search-float" class="ai-search-float">
   <button id="ai-search-trigger" class="ai-search-trigger" aria-label="Búsqueda con IA">
     <svg id="ai-bot-svg" class="ai-bot-svg" xmlns="http://www.w3.org/2000/svg" viewBox="114 114 1300 1300" aria-hidden="true" focusable="false">
-      <defs><clipPath id="ai-bot-clip"><ellipse data-bot="clip" id="ai-bot-clip-shape" cx="764.165" cy="764.165" rx="540" ry="540"></ellipse></clipPath></defs>
-      <ellipse data-bot="body" id="ai-bot-body" cx="764.165" cy="764.165" rx="540" ry="540"></ellipse>
+      <defs><clipPath id="ai-bot-clip"><path data-bot="clip" id="ai-bot-clip-shape" d=""></path></clipPath></defs>
+      <path data-bot="body" id="ai-bot-body" d=""></path>
       <path data-bot="eyes" id="ai-bot-eyes-path" d="" clip-path="url(#ai-bot-clip)"></path>
     </svg>
     <span class="ai-search-trigger-label" data-i18n="ai_btn_label">IA</span>
