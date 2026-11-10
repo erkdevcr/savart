@@ -9090,137 +9090,29 @@ body.on-login .ai-search-float {
   align-items: center;
   justify-content: center;
   position: relative;
-  overflow: hidden;
-  width: 44px;
-  height: 44px;
+  overflow: visible;
+  width: 56px;
+  height: 56px;
   padding: 0;
-  background: var(--accent);
+  background: transparent;
   border: none;
   border-radius: 50%;
   color: #fff;
   font-family: inherit;
   cursor: grab;
   touch-action: none;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.3), 0 2px 12px rgba(0,0,0,0.35);
-  transition: opacity 0.15s, box-shadow 0.15s, transform 0.4s ease;
+  -webkit-tap-highlight-color: transparent;
+  transition: opacity 0.15s;
 }
 .ai-search-trigger:active { cursor: grabbing; }
-.ai-search-trigger:hover  { box-shadow: 0 1px 2px rgba(0,0,0,0.3), 0 4px 18px rgba(0,0,0,0.45); }
 .ai-search-trigger-label { display: none; }
 
-/* ── Bot face — reemplaza las 3 estrellitas con el personaje de Erick
-   (character.html). El botón circular ES la "cabeza"; data-mood en el
-   propio botón dispara las variantes de .ai-bot-eye. Motor de moods/
-   blink/glance en app.js (_initAiBot). overflow:hidden en .ai-search-trigger
-   recorta los ojos al círculo cuando glance/tracking los desplaza — no
-   afecta el box-shadow (se pinta fuera del border-box, no lo recorta su
-   propio overflow). ────────────────────────────────────────────────── */
-.ai-search-trigger.idle { animation: ai-bot-bob 4s ease-in-out infinite; }
-
-@keyframes ai-bot-bob {
-  0%, 100% { transform: translateY(0) scale(1, 1); }
-  25%       { transform: translateY(-1px) scale(0.95, 1.06); }
-  50%       { transform: translateY(-2px) scale(1, 1); }
-  75%       { transform: translateY(-1px) scale(1.06, 0.95); }
-}
-@keyframes ai-bot-pop { 0%, 100% { transform: scale(1); } 45% { transform: scale(1.07); } 70% { transform: scale(0.97); } }
-
-.ai-bot-eyes {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  display: flex;
-  gap: 18%;
-  width: 46%;
-  height: 32%;
-  align-items: center;
-  justify-content: center;
-  transform: translate(-50%, -52%);
-  will-change: transform;
-  pointer-events: none;
-}
-.ai-bot-eye {
-  position: relative;
-  flex: 1;
-  max-width: 36%;
-  height: 100%;
-  aspect-ratio: 0.45;
-  background: #0a0a0a;
-  border-radius: 999px;
-  transform-origin: center center;
-  transition:
-    width 0.25s ease,
-    height 0.25s ease,
-    border-radius 0.25s ease,
-    transform 0.25s ease,
-    opacity 0.25s ease,
-    max-width 0.25s ease;
-}
-
-/* happy — ✦ encontró canciones */
-.ai-search-trigger[data-mood="happy"] .ai-bot-eye {
-  height: 40%;
-  border-radius: 40% 40% 55% 55% / 35% 35% 65% 65%;
-  transform: translateY(10%);
-}
-.ai-search-trigger[data-mood="happy"] { animation: ai-bot-pop 0.55s ease; }
-
-/* surprised — ojos grandes y perfectamente redondos. Tamaño fijo en px
-   (el botón es circular de tamaño fijo, 44px): dejarlo en %/aspect-ratio
-   dentro del flex de .ai-bot-eyes hacía que max-width angostara el ancho
-   mientras el alto seguía creciendo, dando un óvalo alto en vez de un
-   círculo. flex:none + width fijo evita que el flex los vuelva a angostar. */
-.ai-search-trigger[data-mood="surprised"] .ai-bot-eye {
-  flex: none;
-  width: 16px;
-  height: 16px;
-  max-width: 16px;
-  border-radius: 50%;
-  aspect-ratio: 1;
-}
-.ai-search-trigger[data-mood="surprised"] { animation: ai-bot-pop 0.45s ease; }
-
-/* thinking — ✦ Pensando… (asimétrico + cabeza inclinada) */
-.ai-search-trigger[data-mood="thinking"] .ai-bot-eye.left {
-  height: 68%;
-  transform: translateY(-6%) rotate(-5deg);
-}
-.ai-search-trigger[data-mood="thinking"] .ai-bot-eye.right {
-  height: 96%;
-  transform: translate(5%, 2%) rotate(4deg);
-}
-.ai-search-trigger[data-mood="thinking"] { transform: rotate(-7deg); animation: none; }
-
-/* sad — ✦ no encontró nada */
-.ai-search-trigger[data-mood="sad"] .ai-bot-eye {
-  height: 46%;
-  border-radius: 55% 55% 40% 40% / 65% 65% 35% 35%;
-  transform: translateY(20%);
-  opacity: 0.88;
-}
-.ai-search-trigger[data-mood="sad"] { transform: translateY(3px) scale(0.98); animation: none; }
-
-/* wink */
-.ai-search-trigger[data-mood="wink"] .ai-bot-eye.left { height: 22%; border-radius: 999px; }
-.ai-search-trigger[data-mood="wink"] .ai-bot-eye.right { height: 100%; }
-
-/* angry — ✦ error en la consulta */
-.ai-search-trigger[data-mood="angry"] .ai-bot-eye {
-  height: 52%;
-  border-radius: 30% 30% 45% 45% / 40% 40% 60% 60%;
-}
-.ai-search-trigger[data-mood="angry"] .ai-bot-eye.left  { transform: rotate(15deg) translateY(-4%); }
-.ai-search-trigger[data-mood="angry"] .ai-bot-eye.right { transform: rotate(-15deg) translateY(-4%); }
-.ai-search-trigger[data-mood="angry"] { transform: scale(1.03); animation: none; }
-
-/* blink override */
-.ai-search-trigger.blinking .ai-bot-eye {
-  height: 8% !important;
-  border-radius: 999px !important;
-  transform: none !important;
-  max-width: 36% !important;
-  opacity: 1 !important;
-}
+/* ── Bot: personaje "bolita" (v3.5.707) — SVG animado desde app.js (_createAiBotChar).
+   Cuerpo = color de acento de la app; ojos oscuros recortados al cuerpo. ──────────── */
+.ai-bot-svg { width: 100%; height: 100%; display: block; overflow: visible; pointer-events: none;
+  filter: drop-shadow(0 2px 5px rgba(0,0,0,.4)); }
+#ai-bot-body { fill: var(--accent); }
+#ai-bot-eyes-path { fill: #0a0a0a; }
 
 /* Expanded panel — position:fixed (JS calcula left/top con clamp, ver
    _positionAiPanel en app.js) para que nunca quede cortada por el borde

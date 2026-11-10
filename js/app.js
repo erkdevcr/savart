@@ -1126,129 +1126,430 @@ const App = (() => {
 
   /* ── AI Search ─────────────────────────────────────────── */
 
-  /* ── AI Bot face — reemplaza las 3 estrellitas (character.html subido por
-     Erick). El botón circular #ai-search-trigger ES la "cabeza"; su propio
-     data-mood dispara las variantes CSS de .ai-bot-eye (ver styles.css).
-     Mismo motor de moods/blink/glance/tracking que el personaje standalone.
-     _aiBotForce() lo usa _handleAiQuery para que la carita refleje el
-     estado real de la búsqueda IA (thinking mientras corre, happy/sad/angry
-     al resolver) en vez de solo ciclar moods al azar. ──────────────────── */
-  const _AI_BOT_MOODS = ['happy', 'surprised', 'thinking', 'sad', 'wink', 'angry', 'idle'];
-  let _aiBotStage = null, _aiBotEyes = null;
-  let _aiBotMoodTimer = null, _aiBotGlanceTimer = null, _aiBotBlinkTimer = null;
-  let _aiBotTracking = false, _aiBotCurrentMood = 'idle', _aiBotForcedUntil = 0;
+  /* ── Bot IA: personaje "bolita" (v3.5.707) ────────────────────────────────
+     Reemplaza la carita anterior. SVG: cuerpo (elipse, color de acento) + ojos como un solo path
+     dibujado con puntos (morphing continuo entre gestos), recortados al cuerpo. Gestos medidos del
+     video de referencia (parpadear, mirar, encoger, feliz, girar, mirar abajo/arriba, sorpresa, enojo,
+     tristeza). Reposo con micro-movimientos y gestos AL AZAR cada pocos segundos.
+     API: _aiBotForce(mood, ms) (lo usa la lógica de búsqueda), y para escribir: gaze('down'|'up'). */
+  function _createAiBotChar(svg) {
+    const elBody = svg.querySelector('#ai-bot-body');
+    const elClip = svg.querySelector('#ai-bot-clip-shape');
+    const elEyes = svg.querySelector('#ai-bot-eyes-path');
+    if (!elBody || !elClip || !elEyes) return null;
+    const VB = 1528.33, CX = VB / 2, CY = VB / 2, R0 = 540;
+    const N = 22;
+    const PILL = (x, y, r = 0, w = 0.24, h = 0.55) => [x, y, w, h, r, 0, 0, 0];
+    const EYE = (x, y, w, h, r, ell, cut) => [x, y, w, h, r, 0, ell, cut];
+    const DOT = (x, y, w, h, r = 0) => [x, y, w, h, r, 0, 1, 0];
+    const ARCH = (x, y, r = 0, w = 0.37, h = 0.29) => {
+      const kx = w / 0.37, ky = h / 0.29;
+      return [x, y, 0.484 * kx, 0.17 * ky, r, 10 / kx, 0, 0];
+    };
+    const BODY = (o = {}) => [o.bx || 0, o.by || 0, o.s ?? 1, o.sx ?? 1, o.sy ?? 1];
 
-  function _aiBotApplyMood(mood) {
-    _aiBotCurrentMood = mood;
-    _aiBotStage.dataset.mood = mood;
-    _aiBotStage.classList.toggle('idle', mood === 'idle');
-    if (mood !== 'idle') {
-      _aiBotEyes.style.transition = 'transform 0.35s ease';
-      _aiBotEyes.style.transform = 'translate(-50%, -52%) rotate(0deg)';
+    const GESTURES = {
+      glance: [
+        [0.14, { L: DOT(-0.24, -0.05, 0.27, 0.27), R: DOT(0.30, -0.05, 0.27, 0.30) }],
+        [0.85, { L: DOT(-0.22, -0.05, 0.27, 0.27), R: DOT(0.32, -0.05, 0.27, 0.30) }],
+        [1.05, { L: PILL(-0.18, 0), R: PILL(0.40, 0) }],
+      ],
+      lookShrink: [
+        [0.12,  { L: PILL(-0.16, -0.02, -8, 0.24, 0.50), R: PILL(0.44, -0.02, -8, 0.24, 0.50) }],
+        [0.25,  { L: PILL(-0.18, -0.08, 0, 0.28, 0.36), R: PILL(0.46, -0.08, 0, 0.34, 0.44) }],
+        [0.40,  { L: DOT(-0.20, -0.11, 0.30, 0.30), R: DOT(0.48, -0.11, 0.38, 0.46) }],
+        [1.10,  { L: DOT(-0.23, -0.12, 0.30, 0.30), R: DOT(0.45, -0.12, 0.38, 0.46) }],
+        [1.27,  { body: BODY({ s: 0.86 }), L: DOT(-0.26, -0.24, 0.34, 0.30, -30), R: DOT(0.30, 0.02, 0.30, 0.30) }],
+        [1.50,  { body: BODY({ s: 0.73 }), L: DOT(-0.30, -0.31, 0.37, 0.30, -30), R: DOT(0.26, 0.06, 0.30, 0.30) }],
+        [2.25,  { body: BODY({ s: 0.74 }), L: DOT(-0.30, -0.30, 0.37, 0.30, -30), R: DOT(0.27, 0.07, 0.30, 0.30) }],
+        [2.40,  { body: BODY({ s: 0.84 }), L: DOT(-0.18, -0.09, 0.29, 0.31, -12), R: DOT(0.33, -0.02, 0.30, 0.36) }],
+        [2.55,  { body: BODY({ s: 0.90 }), L: DOT(-0.02, -0.13, 0.24, 0.24), R: DOT(0.46, -0.22, 0.33, 0.45, -26) }],
+        [2.80,  { body: BODY({ s: 0.93 }), L: DOT(0.00, -0.17, 0.24, 0.24), R: DOT(0.53, -0.36, 0.32, 0.52, -35) }],
+        [3.25,  { body: BODY({ s: 0.98 }), L: DOT(0.02, -0.20, 0.24, 0.24), R: DOT(0.58, -0.42, 0.33, 0.55, -38) }],
+        [3.50,  { body: BODY({ s: 1.02 }), L: DOT(0.04, -0.21, 0.24, 0.24), R: DOT(0.62, -0.44, 0.33, 0.55, -38) }],
+        [3.72,  { body: BODY({ s: 1.02 }), L: DOT(0.12, -0.20, 0.22, 0.26), R: DOT(0.68, -0.38, 0.26, 0.52, -32) }],
+        [3.90,  { body: BODY({ s: 1.00 }), L: PILL(-0.08, 0.00, -14), R: PILL(0.45, 0.02, -14) }],
+        [4.45,  { L: PILL(-0.15, 0, -6), R: PILL(0.42, 0, -4) }],
+      ],
+      surprised: [
+        [0.08,  { body: BODY({ sx: 1.03, sy: 0.97, by: 0.02 }), L: PILL(-0.17, 0.02, 0, 0.24, 0.44), R: PILL(0.41, 0.02, 0, 0.24, 0.44) }],
+        [0.18,  { body: BODY({ sx: 0.93, sy: 1.09, by: -0.08 }), L: DOT(-0.22, -0.12, 0.40, 0.44), R: DOT(0.42, -0.12, 0.40, 0.44) }],
+        [0.32,  { body: BODY({ sx: 1.03, sy: 0.98, by: 0.01 }), L: DOT(-0.23, -0.13, 0.45, 0.47), R: DOT(0.43, -0.13, 0.45, 0.47) }],
+        [0.46,  { body: BODY(), L: DOT(-0.23, -0.12, 0.42, 0.45), R: DOT(0.43, -0.12, 0.42, 0.45) }],
+        [0.95,  { L: DOT(-0.21, -0.12, 0.42, 0.45), R: DOT(0.45, -0.12, 0.42, 0.45) }],
+        [1.30,  { L: DOT(-0.23, -0.11, 0.41, 0.44), R: DOT(0.43, -0.11, 0.41, 0.44) }],
+        [1.50,  { L: DOT(-0.20, -0.07, 0.33, 0.36), R: DOT(0.42, -0.07, 0.33, 0.36) }],
+        [1.68,  { L: PILL(-0.16, -0.02), R: PILL(0.42, -0.02) }],
+        [1.95,  { L: PILL(-0.15, 0), R: PILL(0.42, 0) }],
+      ],
+      lookUp: [
+        [0.16,  { body: BODY({ by: -0.015 }), L: PILL(-0.17, -0.14, 0, 0.24, 0.50), R: PILL(0.39, -0.14, 0, 0.24, 0.50) }],
+        [0.34,  { body: BODY({ sx: 0.98, sy: 1.03, by: -0.035 }), L: PILL(-0.18, -0.40, 0, 0.25, 0.37), R: PILL(0.36, -0.42, 0, 0.25, 0.37) }],
+        [0.52,  { body: BODY({ sx: 0.99, sy: 1.015, by: -0.025 }), L: PILL(-0.19, -0.47, 0, 0.25, 0.31), R: PILL(0.35, -0.49, 0, 0.25, 0.31) }],
+        [1.05,  { L: PILL(-0.27, -0.46, 5, 0.25, 0.30), R: PILL(0.27, -0.50, 5, 0.24, 0.30) }],
+        [1.55,  { L: PILL(-0.11, -0.50, -4, 0.24, 0.30), R: PILL(0.43, -0.47, -4, 0.25, 0.30) }],
+        [1.95,  { L: PILL(-0.13, -0.49, -2, 0.24, 0.31), R: PILL(0.41, -0.48, -2, 0.25, 0.31) }],
+        [2.15,  { body: BODY({ by: 0.015 }), L: PILL(-0.16, -0.13, 0, 0.24, 0.50), R: PILL(0.40, -0.13, 0, 0.24, 0.50) }],
+        [2.45,  { body: BODY(), L: PILL(-0.15, 0, 0), R: PILL(0.42, 0, 0) }],
+      ],
+      angry: [
+        [0.10,  { body: BODY({ sx: 1.02, sy: 0.98, by: 0.015 }), L: PILL(-0.17, 0.02, 0, 0.25, 0.40), R: PILL(0.39, 0.02, 0, 0.25, 0.40) }],
+        [0.24,  { body: BODY({ sx: 1.07, sy: 0.93, by: 0.05 }), L: EYE(-0.20, 0.03, 0.31, 0.36, -4, 1, 0.75), R: EYE(0.28, 0.03, 0.31, 0.36, 4, 1, -0.75) }],
+        [0.38,  { body: BODY({ sx: 0.98, sy: 1.02, by: -0.01 }) }],
+        [0.50,  { body: BODY(), L: EYE(-0.21, 0.02, 0.30, 0.36, -4, 1, 0.8), R: EYE(0.27, 0.02, 0.30, 0.36, 4, 1, -0.8) }],
+        [0.80,  { body: BODY({ sx: 1.045, sy: 0.955, by: 0.03 }), L: EYE(-0.20, 0.04, 0.31, 0.34, -6, 1, 0.9), R: EYE(0.28, 0.04, 0.31, 0.34, 6, 1, -0.9) }],
+        [0.95,  { body: BODY() }],
+        [1.30,  { body: BODY({ sx: 1.045, sy: 0.955, by: 0.03 }), L: EYE(-0.21, 0.04, 0.31, 0.34, -6, 1, 0.9), R: EYE(0.27, 0.04, 0.31, 0.34, 6, 1, -0.9) }],
+        [1.45,  { body: BODY() }],
+        [1.95,  { L: EYE(-0.20, 0.02, 0.30, 0.36, -4, 1, 0.8), R: EYE(0.28, 0.02, 0.30, 0.36, 4, 1, -0.8) }],
+        [2.20,  { L: PILL(-0.16, 0, 0), R: PILL(0.41, 0, 0) }],
+      ],
+      sad: [
+        [0.30,  { body: BODY({ sx: 1.02, sy: 0.98, by: 0.02 }), L: EYE(-0.18, 0.08, 0.26, 0.44, 0, 0.5, -0.4), R: EYE(0.38, 0.08, 0.26, 0.44, 0, 0.5, 0.4) }],
+        [0.75,  { body: BODY({ sx: 1.05, sy: 0.94, by: 0.055 }), L: EYE(-0.18, 0.18, 0.26, 0.38, 6, 0.8, -0.75), R: EYE(0.36, 0.20, 0.26, 0.38, -6, 0.8, 0.75) }],
+        [1.40,  { L: EYE(-0.20, 0.22, 0.25, 0.36, 6, 0.8, -0.8), R: EYE(0.34, 0.24, 0.25, 0.36, -6, 0.8, 0.8) }],
+        [1.80,  { body: BODY({ sx: 1.03, sy: 0.965, by: 0.035 }) }],
+        [2.20,  { body: BODY({ sx: 1.06, sy: 0.93, by: 0.065 }), L: EYE(-0.19, 0.23, 0.25, 0.35, 6, 0.8, -0.8), R: EYE(0.35, 0.25, 0.25, 0.35, -6, 0.8, 0.8) }],
+        [2.70,  { L: EYE(-0.19, 0.22, 0.25, 0.36, 5, 0.8, -0.8), R: EYE(0.35, 0.24, 0.25, 0.36, -5, 0.8, 0.8) }],
+        [3.10,  { body: BODY(), L: PILL(-0.16, 0.04, 0), R: PILL(0.41, 0.04, 0) }],
+        [3.50,  { L: PILL(-0.15, 0, 0), R: PILL(0.42, 0, 0) }],
+      ],
+      lookDown: [
+        [0.16,  { body: BODY({ by: 0.015 }), L: PILL(-0.17, 0.12, 0, 0.24, 0.50), R: PILL(0.39, 0.12, 0, 0.24, 0.50) }],
+        [0.34,  { body: BODY({ sx: 1.02, sy: 0.97, by: 0.03 }), L: PILL(-0.18, 0.36, 0, 0.25, 0.36), R: PILL(0.36, 0.38, 0, 0.25, 0.36) }],
+        [0.52,  { body: BODY({ sx: 1.01, sy: 0.985, by: 0.02 }), L: PILL(-0.19, 0.42, 0, 0.25, 0.30), R: PILL(0.35, 0.44, 0, 0.25, 0.30) }],
+        [1.05,  { L: PILL(-0.27, 0.43, -5, 0.25, 0.29), R: PILL(0.27, 0.46, -5, 0.24, 0.29) }],
+        [1.55,  { L: PILL(-0.11, 0.45, 4, 0.24, 0.29), R: PILL(0.43, 0.43, 4, 0.25, 0.29) }],
+        [1.95,  { L: PILL(-0.13, 0.44, 2, 0.24, 0.30), R: PILL(0.41, 0.43, 2, 0.25, 0.30) }],
+        [2.15,  { body: BODY({ by: -0.015 }), L: PILL(-0.16, 0.12, 0, 0.24, 0.50), R: PILL(0.40, 0.12, 0, 0.24, 0.50) }],
+        [2.45,  { body: BODY(), L: PILL(-0.15, 0, 0), R: PILL(0.42, 0, 0) }],
+      ],
+      happy: [
+        [0.09,  { L: ARCH(-0.20, -0.12, -18), R: ARCH(0.42, -0.12, -10) }],
+        [0.18,  { L: ARCH(-0.18, -0.18, 0), R: ARCH(0.50, -0.18, 0) }],
+        [0.417, { body: BODY({ sx: 1.04, sy: 0.96, by: 0.04 }) }],
+        [0.50,  { body: BODY({ sx: 1.12, sy: 0.88, by: 0.10 }) }],
+        [0.583, { body: BODY({ sx: 0.92, sy: 1.10, by: -0.14 }), L: ARCH(-0.15, -0.28, -5), R: ARCH(0.42, -0.32, -5) }],
+        [0.667, { body: BODY({ sx: 0.96, sy: 1.06, by: -0.14 }), L: ARCH(-0.26, -0.33, -10), R: ARCH(0.30, -0.42, -12) }],
+        [0.75,  { body: BODY({ sx: 1.00, sy: 1.02, by: -0.10 }), L: ARCH(-0.32, -0.40, -15), R: ARCH(0.25, -0.52, -15) }],
+        [0.917, { body: BODY({ by: -0.04 }), L: ARCH(-0.38, -0.44, -20), R: ARCH(0.24, -0.64, -20) }],
+        [1.00,  { body: BODY(), L: ARCH(-0.40, -0.42, -22), R: ARCH(0.25, -0.66, -18) }],
+        [1.083, { body: BODY({ sx: 1.08, sy: 0.90, by: 0.08 }), L: ARCH(-0.42, -0.34, -28), R: ARCH(0.18, -0.60, -15) }],
+        [1.167, { body: BODY({ sx: 1.05, sy: 0.96, by: 0.04 }), L: ARCH(-0.25, -0.50, -8), R: ARCH(0.35, -0.60, 5) }],
+        [1.25,  { body: BODY(), L: ARCH(-0.10, -0.55, 0), R: ARCH(0.47, -0.52, 22) }],
+        [1.333, { L: ARCH(-0.20, -0.50, 8), R: ARCH(0.62, -0.33, 60, 0.30) }],
+        [1.417, { L: ARCH(-0.10, -0.48, 10), R: ARCH(0.66, -0.18, 70, 0.28) }],
+        [1.50,  { L: ARCH(0.03, -0.40, 15), R: ARCH(0.65, -0.05, 78, 0.25) }],
+        [1.60,  { body: BODY({ sx: 1.06, sy: 0.92, by: 0.06 }), L: PILL(0.07, -0.12, 28, 0.18, 0.30), R: PILL(0.60, 0.08, 12, 0.16, 0.36) }],
+        [1.70,  { body: BODY(), L: PILL(0.00, -0.30, 14, 0.22, 0.48), R: PILL(0.45, -0.22, 14, 0.20, 0.48) }],
+        [1.95,  { L: PILL(-0.04, -0.14, 8, 0.24, 0.52), R: PILL(0.43, -0.08, 8, 0.24, 0.52) }],
+        [2.30,  { L: PILL(-0.12, -0.02, 2), R: PILL(0.42, 0, 2) }],
+      ],
+    };
+
+    const smooth = t => t * t * (3 - 2 * t);
+    const easeIO = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    const PROCS = {
+      spin: { dur: 1.6, fn(t, start, out) {
+        const T0 = 0.24, T1 = 1.14, D = 1.6, TAU = Math.PI * 2;
+        let phi, bx = 0, by = 0, sx = 1, sy = 1;
+        if (t < T0) {
+          const a = smooth(t / T0);
+          phi = -0.28 * a; sx = 1 + 0.06 * a; sy = 1 - 0.06 * a; by = 0.05 * a;
+        } else if (t < T1) {
+          const u = (t - T0) / (T1 - T0), arc = Math.sin(Math.PI * u), a = 1 - smooth(Math.min(1, u * 4));
+          phi = -0.28 + (TAU + 0.28) * easeIO(u);
+          sx = 1 + 0.06 * a - 0.04 * arc; sy = 1 - 0.06 * a + 0.05 * arc; by = 0.05 * a - 0.09 * arc;
+        } else {
+          const v = Math.min(1, (t - T1) / (D - T1)), k = Math.sin(Math.PI * Math.min(1, v * 1.6)) * (1 - v);
+          phi = TAU + 0.1 * Math.sin(v * Math.PI * 2) * (1 - v);
+          sx = 1 + 0.08 * k; sy = 1 - 0.08 * k; by = 0.06 * k;
+        }
+        const p = [bx, by, 1, sx, sy];
+        for (const side of [-1, 1]) {
+          const lon = phi + side * 0.31, c = Math.cos(lon), sn = Math.sin(lon);
+          let x = sn * 0.97 + 0.06, w = 0.24 * Math.max(c, 0), h = 0.55 * (0.88 + 0.12 * Math.max(c, 0));
+          if (c < 0.04) { x = Math.sign(sn) * 1.5; w = 0.02; }
+          p.push(x, -0.01, Math.max(w, 0.02), h, -sn * 6 * Math.max(c, 0), 0, 0, 0);
+        }
+        p.push(0);
+        const b = smooth(Math.min(1, t / 0.16));
+        for (let c = 0; c < N; c++) out[c] = start[c] + (p[c] - start[c]) * b;
+        return out;
+      } },
+    };
+
+    function buildTrack(name, start, startVel) {
+      if (PROCS[name]) return { proc: PROCS[name].fn, start: start.slice(), t: 0, dur: PROCS[name].dur };
+      const times = [0], vals = [start.slice()];
+      let prev = start.slice();
+      for (const [t, part] of GESTURES[name]) {
+        const p = prev.slice();
+        if (part.body) p.splice(0, 5, ...part.body);
+        if (part.L) p.splice(5, 8, ...part.L);
+        if (part.R) p.splice(13, 8, ...part.R);
+        times.push(t); vals.push(p); prev = p;
+      }
+      const n = times.length;
+      const tang = [];
+      for (let c = 0; c < N; c++) {
+        const d = [], m = new Array(n).fill(0);
+        for (let i = 0; i < n - 1; i++) d.push((vals[i + 1][c] - vals[i][c]) / (times[i + 1] - times[i]));
+        for (let i = 1; i < n - 1; i++) m[i] = (d[i - 1] * d[i] <= 0) ? 0 : (d[i - 1] + d[i]) / 2;
+        for (let i = 0; i < n - 1; i++) {
+          if (d[i] === 0) { m[i] = 0; m[i + 1] = 0; continue; }
+          const a = m[i] / d[i], b = m[i + 1] / d[i], s = a * a + b * b;
+          if (s > 9) { const k = 3 / Math.sqrt(s); m[i] = k * a * d[i]; m[i + 1] = k * b * d[i]; }
+        }
+        const v0 = startVel[c], lim = Math.abs(d[0]) * 3;
+        m[0] = Math.max(-lim, Math.min(lim, v0));
+        m[n - 1] = 0;
+        tang.push(m);
+      }
+      return { times, vals, tang, t: 0, dur: times[n - 1] };
     }
-  }
-
-  function _aiBotPickRandomMood() {
-    const pool = _AI_BOT_MOODS.concat(['idle', 'idle']);
-    let next = pool[Math.floor(Math.random() * pool.length)];
-    if (next === _aiBotCurrentMood && pool.length > 1) {
-      next = pool[(pool.indexOf(next) + 1) % pool.length];
+    function sampleTrack(tr, out) {
+      if (tr.proc) return tr.proc(Math.min(tr.t, tr.dur), tr.start, out);
+      const { times, vals, tang } = tr;
+      const t = Math.min(tr.t, tr.dur);
+      let i = 0;
+      while (i < times.length - 2 && times[i + 1] < t) i++;
+      const h = times[i + 1] - times[i], u = (t - times[i]) / h;
+      const u2 = u * u, u3 = u2 * u;
+      const h00 = 2 * u3 - 3 * u2 + 1, h10 = u3 - 2 * u2 + u, h01 = -2 * u3 + 3 * u2, h11 = u3 - u2;
+      for (let c = 0; c < N; c++)
+        out[c] = h00 * vals[i][c] + h10 * h * tang[c][i] + h01 * vals[i + 1][c] + h11 * h * tang[c][i + 1];
+      return out;
     }
-    _aiBotApplyMood(next);
-  }
 
-  function _aiBotScheduleMood() {
-    if (_aiBotMoodTimer) clearTimeout(_aiBotMoodTimer);
-    if (Date.now() < _aiBotForcedUntil) return; // una búsqueda real está mostrando su mood — no interrumpir
-    let hold = 1800 + Math.random() * 2000;
-    if (_aiBotCurrentMood === 'wink') hold = 700 + Math.random() * 500;
-    if (_aiBotCurrentMood === 'surprised') hold = 1200 + Math.random() * 800;
-    if (_aiBotCurrentMood === 'idle') hold = 2200 + Math.random() * 1800;
-    _aiBotMoodTimer = setTimeout(() => {
-      if (Date.now() < _aiBotForcedUntil) return;
-      _aiBotPickRandomMood();
-      _aiBotScheduleMood();
-    }, hold);
-  }
-
-  function _aiBotRandomGlance() {
-    if (_aiBotTracking || _aiBotCurrentMood !== 'idle') return;
-    // Rango amplio para que se note claramente que mira hacia un lado
-    // (antes ±10%, casi imperceptible); leve rotación hacia ese lado.
-    const x = (Math.random() - 0.5) * 38;
-    const y = (Math.random() - 0.5) * 14;
-    const rot = (x / 19) * 5;
-    _aiBotEyes.style.transition = 'transform 0.75s ease';
-    _aiBotEyes.style.transform = `translate(calc(-50% + ${x.toFixed(1)}%), calc(-52% + ${y.toFixed(1)}%)) rotate(${rot.toFixed(1)}deg)`;
-  }
-
-  function _aiBotScheduleGlance() {
-    if (_aiBotGlanceTimer) clearTimeout(_aiBotGlanceTimer);
-    const delay = 1200 + Math.random() * 2400;
-    _aiBotGlanceTimer = setTimeout(() => { _aiBotRandomGlance(); _aiBotScheduleGlance(); }, delay);
-  }
-
-  function _aiBotBlink() {
-    if (_aiBotStage.classList.contains('blinking')) return;
-    if (_aiBotCurrentMood === 'wink') return;
-    _aiBotStage.classList.add('blinking');
-    setTimeout(() => _aiBotStage.classList.remove('blinking'), 110);
-  }
-
-  function _aiBotScheduleBlink() {
-    if (_aiBotBlinkTimer) clearTimeout(_aiBotBlinkTimer);
-    const delay = 2000 + Math.random() * 3800;
-    _aiBotBlinkTimer = setTimeout(() => {
-      _aiBotBlink();
-      if (Math.random() < 0.18) setTimeout(_aiBotBlink, 180); // doble parpadeo ocasional
-      _aiBotScheduleBlink();
-    }, delay);
-  }
-
-  function _aiBotOnPointer(e) {
-    if (!_aiBotStage) return;
-    const rect = _aiBotStage.getBoundingClientRect();
-    const cx = rect.left + rect.width / 2;
-    const cy = rect.top + rect.height / 2;
-    const dx = e.clientX - cx;
-    const dy = e.clientY - cy;
-    const dist = Math.hypot(dx, dy);
-    const maxDist = rect.width * 1.5;
-
-    if (dist < maxDist && _aiBotCurrentMood === 'idle') {
-      _aiBotTracking = true;
-      const nx = Math.max(-1, Math.min(1, dx / (rect.width * 0.75)));
-      const ny = Math.max(-1, Math.min(1, dy / (rect.height * 0.75)));
-      _aiBotEyes.style.transition = 'transform 0.14s ease-out';
-      _aiBotEyes.style.transform = `translate(calc(-50% + ${nx * 12}%), calc(-52% + ${ny * 10}%))`;
-    } else if (_aiBotTracking) {
-      _aiBotTracking = false;
-      if (_aiBotCurrentMood === 'idle') {
-        _aiBotEyes.style.transition = 'transform 0.5s ease';
-        _aiBotEyes.style.transform = 'translate(-50%, -52%) rotate(0deg)';
+    // ── reposo: sacadas con resorte, inclinación; "gaze" = mirar hacia abajo/arriba mientras se escribe ──
+    const idle = { cx: 0.1, cy: 0, tilt: 0, next: 0.8 };
+    let gaze = null, gazeUntil = 0;   // 'down' | 'up'
+    function idleTarget(out) {
+      if (gaze) {
+        const dn = gaze === 'down', wob = (idle.cx - 0.04) * 0.6;   // pequeño vaivén lateral mientras "lee"
+        out.splice(0, N,
+          ...(dn ? BODY({ by: 0.02, sx: 1.01, sy: 0.985 }) : BODY({ by: -0.025, sx: 0.99, sy: 1.015 })),
+          ...PILL(-0.19 + wob, dn ? 0.42 : -0.47, 0, 0.25, 0.30),
+          ...PILL(0.35 + wob, dn ? 0.44 : -0.49, 0, 0.25, 0.30), 0);
+        return out;
+      }
+      const half = 0.30, a = idle.tilt * Math.PI / 180 * 0.35;
+      const ox = Math.cos(a) * half, oy = Math.sin(a) * half;
+      out.splice(0, N,
+        0, 0, 1, 1, 1,
+        ...PILL(idle.cx - ox, idle.cy - oy, idle.tilt, 0.24, 0.55),
+        ...PILL(idle.cx + ox, idle.cy + oy, idle.tilt + 2, 0.23, 0.55), 0);
+      return out;
+    }
+    function updateIdle(dt) {
+      idle.next -= dt;
+      if (idle.next <= 0) {
+        idle.cx = -0.06 + Math.random() * 0.2;
+        idle.cy = -0.04 + Math.random() * 0.08;
+        idle.tilt = -12 + Math.random() * 18;
+        idle.next = 0.7 + Math.random() * 1.6;
       }
     }
+
+    let blinkT = -1;
+    const BLINK_IN = 0.09, BLINK_HOLD = 0.05, BLINK_OUT = 0.13;
+    function blinkAmount() {
+      if (blinkT < 0) return 0;
+      if (blinkT < BLINK_IN) return smooth(blinkT / BLINK_IN);
+      if (blinkT < BLINK_IN + BLINK_HOLD) return 1;
+      const u = (blinkT - BLINK_IN - BLINK_HOLD) / BLINK_OUT;
+      return u >= 1 ? 0 : 1 - smooth(u);
+    }
+
+    // ── geometría: cada ojo es un contorno de puntos ──
+    const SAMPLES = 104;
+    function stadiumPoints(w, h) {
+      const r = Math.min(w, h) / 2, sx = w / 2 - r, sy = h / 2 - r;
+      const segs = [
+        ['l', -0, -h / 2, 1, 0, sx], ['a', sx, -sy, -Math.PI / 2, r], ['l', w / 2, -sy, 0, 1, 2 * sy],
+        ['a', sx, sy, 0, r], ['l', sx, h / 2, -1, 0, 2 * sx], ['a', -sx, sy, Math.PI / 2, r],
+        ['l', -w / 2, sy, 0, -1, 2 * sy], ['a', -sx, -sy, Math.PI, r], ['l', -sx, -h / 2, 1, 0, sx],
+      ];
+      const lens = segs.map(s => s[0] === 'l' ? s[5] : s[4] * Math.PI / 2);
+      const total = lens.reduce((a, b) => a + b, 0);
+      const pts = [];
+      for (let k = 0; k < SAMPLES; k++) {
+        let d = k / SAMPLES * total, j = 0;
+        while (j < segs.length - 1 && d > lens[j]) { d -= lens[j]; j++; }
+        const s = segs[j];
+        if (s[0] === 'l') pts.push([s[1] + s[3] * d, s[2] + s[4] * d]);
+        else { const a = s[3] + d / s[4]; pts.push([s[1] + Math.cos(a) * s[4], s[2] + Math.sin(a) * s[4]]); }
+      }
+      return pts;
+    }
+    const bodyNow = { x: 0, y: 0 };
+    let lastBodyKey = '';
+    function eyePath(e, R, sxB, syB) {
+      let [x, y, w, h, rot, bend, ell, cut] = e;
+      const cutK = Math.min(1, Math.abs(cut) * 4);
+      ell = Math.max(0, Math.min(1, ell));
+      w = Math.max(w, 0.01); h = Math.max(h, 0.01);
+      const pts = stadiumPoints(w, h);
+      const hl = Math.max(0, (w - h) / 2);
+      const k = Math.abs(bend) < 1e-4 ? 0 : bend;
+      const oy = k ? -0.65 * (1 - Math.cos(hl * k)) / k : 0;
+      const cr = Math.cos(rot * Math.PI / 180), sr = Math.sin(rot * Math.PI / 180);
+      let d = '';
+      for (let i = 0; i < pts.length; i++) {
+        let [px, py] = pts[i];
+        if (ell > 0) {
+          const th = Math.atan2(py / (h / 2), px / (w / 2));
+          px += (Math.cos(th) * w / 2 - px) * ell;
+          py += (Math.sin(th) * h / 2 - py) * ell;
+        }
+        if (k) {
+          const xc = Math.max(-hl, Math.min(hl, px)), ext = px - xc;
+          const a = xc * k, dist = 1 / k - py;
+          const ca = Math.cos(a), sa = Math.sin(a);
+          px = dist * sa + ext * ca;
+          py = 1 / k - dist * ca + ext * sa;
+        }
+        if (cutK > 0) {
+          const yl = -h / 2 + cutK * (0.14 * h + cut * px);
+          if (py < yl) py = yl;
+        }
+        py += oy;
+        const rx = px * cr - py * sr, ry = px * sr + py * cr;
+        const X = CX + bodyNow.x + (x + rx) * R * sxB;
+        const Y = CY + bodyNow.y + (y + ry) * R * syB;
+        d += (i ? 'L' : 'M') + X.toFixed(1) + ' ' + Y.toFixed(1);
+      }
+      return d + 'Z';
+    }
+    function render(p, blink) {
+      const [bx, by, s, sx, sy] = p;
+      const R = R0 * s;
+      bodyNow.x = bx * R0; bodyNow.y = by * R0;
+      const key = [CX + bodyNow.x, CY + bodyNow.y, R * sx, R * sy].map(v => v.toFixed(1)).join(',');
+      if (key !== lastBodyKey) {
+        lastBodyKey = key;
+        const [ecx, ecy, erx, ery] = key.split(',');
+        for (const el of [elBody, elClip]) {
+          el.setAttribute('cx', ecx); el.setAttribute('cy', ecy);
+          el.setAttribute('rx', erx); el.setAttribute('ry', ery);
+        }
+      }
+      const L = p.slice(5, 13), Rt = p.slice(13, 21);
+      for (const e of [L, Rt]) {
+        if (blink > 0 && e[5] < 0.5 && e[3] > e[2]) {
+          e[2] += (0.21 - e[2]) * blink;
+          e[3] += (0.085 - e[3]) * blink;
+          e[4] *= 1 - 0.6 * blink;
+        }
+      }
+      elEyes.setAttribute('d', eyePath(L, R, sx, sy) + eyePath(Rt, R, sx, sy));
+    }
+
+    // ── director: gestos al azar ──
+    const pose = idleTarget(new Array(N).fill(0));
+    const vel = new Array(N).fill(0);
+    const target = new Array(N).fill(0);
+    const tmp = new Array(N).fill(0);
+    let track = null, randNext = 2 + Math.random() * 2, randBlink = 1.5;
+    let forcedUntil = 0, thinkingUntil = 0, thinkGap = 0;
+
+    function play(name) {
+      if (name === 'blink') { if (!track) blinkT = 0; return; }
+      blinkT = -1;
+      track = buildTrack(name, pose, vel);
+    }
+    function stepDirector(dt) {
+      const now = performance.now();
+      if (gaze && now > gazeUntil) gaze = null;
+      if (thinkingUntil > now) {
+        // pensando: mira de lado a lado una y otra vez
+        if (track) return;
+        thinkGap -= dt;
+        if (thinkGap <= 0) { play('glance'); thinkGap = 0.2 + Math.random() * 0.5; }
+        return;
+      }
+      randBlink -= dt;
+      if (!track && randBlink <= 0) { play('blink'); randBlink = 1.8 + Math.random() * 2.8; }
+      if (gaze || now < forcedUntil || track) return;
+      randNext -= dt;
+      if (randNext <= 0) {
+        const r = Math.random();
+        play(r < 0.22 ? 'glance' : r < 0.42 ? 'lookShrink' : r < 0.62 ? 'happy' : r < 0.78 ? 'spin' : r < 0.86 ? 'lookDown' : r < 0.93 ? 'lookUp' : r < 0.97 ? 'surprised' : (Math.random() < 0.5 ? 'angry' : 'sad'));
+        randNext = 3 + Math.random() * 4;
+      }
+    }
+
+    let last = performance.now(), time = 0;
+    const hiddenNow = () => document.hidden || document.body.classList.contains('bot-disabled') || document.body.classList.contains('on-login');
+    function frame(now) {
+      requestAnimationFrame(frame);
+      if (hiddenNow()) { last = now; return; }
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now; time += dt;
+      updateIdle(dt);
+      stepDirector(dt);
+      if (track) {
+        track.t += dt;
+        sampleTrack(track, tmp);
+        for (let c = 0; c < N; c++) { vel[c] = (tmp[c] - pose[c]) / Math.max(dt, 1e-3); pose[c] = tmp[c]; }
+        if (track.t >= track.dur) {
+          track = null;
+          for (let c = 0; c < 5; c++) vel[c] = 0;
+          idle.cx = (pose[5] + pose[13]) / 2; idle.cy = (pose[6] + pose[14]) / 2;
+          idle.tilt = pose[9]; idle.next = 0.6;
+        }
+      } else {
+        idleTarget(target);
+        const w = 15;
+        const steps = Math.ceil(dt / (1 / 240));
+        const h = dt / steps;
+        for (let k = 0; k < steps; k++)
+          for (let c = 0; c < N; c++) {
+            const a = w * w * (target[c] - pose[c]) - 2 * w * vel[c];
+            vel[c] += a * h; pose[c] += vel[c] * h;
+          }
+        for (let c = 0; c < 5; c++)
+          if (Math.abs(target[c] - pose[c]) < 2e-4 && Math.abs(vel[c]) < 2e-3) { pose[c] = target[c]; vel[c] = 0; }
+        if (blinkT >= 0) { blinkT += dt; if (blinkT > BLINK_IN + BLINK_HOLD + BLINK_OUT) blinkT = -1; }
+      }
+      render(pose, track ? 0 : blinkAmount());
+    }
+    requestAnimationFrame(frame);
+
+    const MOOD_TO_GESTURE = { happy: 'happy', wink: 'happy', sad: 'sad', angry: 'angry', surprised: 'surprised' };
+    return {
+      // mood: 'happy'|'sad'|'angry'|'surprised'|'wink' (gesto ya) · 'thinking' (mira de lado a lado hasta ms) · 'idle' (suelta)
+      force(mood, ms) {
+        const now = performance.now();
+        gaze = null;
+        if (mood === 'thinking') { thinkingUntil = now + (ms || 15000); thinkGap = 0; return; }
+        thinkingUntil = 0;
+        if (mood === 'idle') { forcedUntil = 0; return; }
+        const g = MOOD_TO_GESTURE[mood];
+        if (!g) return;
+        forcedUntil = now + (ms || 2000);
+        track = null; blinkT = -1;
+        play(g);
+      },
+      // mirar hacia la ventana mientras se escribe; se suelta solo 2.5 s después de la última tecla
+      gaze(dir) {
+        if (thinkingUntil > performance.now()) return;
+        if (!gaze) track = null;
+        gaze = dir === 'up' ? 'up' : 'down';
+        gazeUntil = performance.now() + 2500;
+      },
+      gazeOff() { gaze = null; },
+    };
   }
 
-  // mood = 'thinking'|'happy'|'sad'|'angry'|...; holdMs = cuánto bloquea el
-  // ciclo random antes de retomarlo solo.
-  function _aiBotForce(mood, holdMs) {
-    if (!_aiBotStage) return;
-    _aiBotForcedUntil = Date.now() + holdMs;
-    _aiBotApplyMood(mood);
-    if (_aiBotMoodTimer) clearTimeout(_aiBotMoodTimer);
-    _aiBotMoodTimer = setTimeout(_aiBotScheduleMood, holdMs);
-  }
-
+  let _aiBotChar = null;
+  // mood = 'thinking'|'happy'|'sad'|'angry'|...; ms = cuánto bloquea los gestos al azar
+  function _aiBotForce(mood, holdMs) { try { _aiBotChar?.force(mood, holdMs); } catch (_) {} }
   function _initAiBot(stage) {
-    _aiBotStage = stage;
-    _aiBotEyes  = stage.querySelector('#ai-bot-eyes');
-    if (!_aiBotEyes) return;
-    window.addEventListener('pointermove', _aiBotOnPointer, { passive: true });
-    _aiBotApplyMood('idle');
-    _aiBotScheduleMood();
-    _aiBotScheduleGlance();
-    _aiBotScheduleBlink();
+    const svg = stage.querySelector('#ai-bot-svg');
+    if (!svg) return;
+    _aiBotChar = _createAiBotChar(svg);
   }
 
   /* ── Descargar copia al dispositivo (canciones de Drive, no Soundrop) ─────
@@ -1471,6 +1772,7 @@ const App = (() => {
         // Click: toggle panel
         const isOpen = panel.classList.toggle('open');
         if (isOpen) {
+          _aiBotForce('happy', 1800);   // v3.5.707: al tocarlo se pone feliz y muestra la ventana
           _positionAiPanel();
           // v3.5.695: tocar el bot activa el micrófono de una vez (el toque es el gesto que
           // el navegador exige). Si no hay voz disponible → teclado como antes.
@@ -1524,6 +1826,12 @@ const App = (() => {
       if (panel.classList.contains('is-thinking')) return;
       const q = inputEl?.value?.trim();
       if (q) _handleAiQuery(q);
+    });
+    // v3.5.707: mientras se escribe, el personaje mira hacia la ventana (abajo si está debajo, arriba si está encima)
+    inputEl?.addEventListener('input', () => {
+      if (!_aiBotChar) return;
+      const below = panel.getBoundingClientRect().top > trigger.getBoundingClientRect().top;
+      _aiBotChar.gaze(below ? 'down' : 'up');
     });
     inputEl?.addEventListener('keydown', e => {
       if (e.key === 'Enter') {
