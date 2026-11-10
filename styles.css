@@ -9347,3 +9347,8 @@ body.sd-track-active #btn-pexp-eq-open { opacity: 0.35; }
 
 /* v3.5.733 — chip de calidad de video: '144p' en minúscula (los demás chips van en mayúsculas) */
 #pexp-badge-ytq { text-transform: none; }
+
+/* v3.5.734 — En modo video la portada desaparece por completo (sin el cuadro negro que
+   asomaba arriba/abajo del video): sin fondo, sin sombra, sin la capa negra. */
+.pexp-art.yt-video-on { background: transparent; box-shadow: none; }
+.pexp-art.yt-video-on::after { display: none; }
