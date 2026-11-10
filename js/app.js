@@ -1,4 +1,4 @@
-window.SAVART_JS_VERSION = '3.5.711'; // debe coincidir con window.SAVART_VERSION de index.html (autocorrección de caché, ver index.html)
+window.SAVART_JS_VERSION = '3.5.712'; // debe coincidir con window.SAVART_VERSION de index.html (autocorrección de caché, ver index.html)
 /* ============================================================
    Savart — App entry point
    Wires Auth, Drive, DB, Player, and UI together.
@@ -2832,7 +2832,7 @@ const App = (() => {
       try { if (await _aiTryStation(query, statusEl, setStatus, inputEl)) return; } catch (_) {}
     }
 
-    setStatus(_aiL('✦ Pensando', '✦ Thinking'), 'thinking');
+    setStatus(_aiL('Trabajando', 'Working'), 'thinking');
     _aiBotForce('thinking', 15000);
 
     try {
