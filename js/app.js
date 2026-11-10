@@ -1,4 +1,4 @@
-window.SAVART_JS_VERSION = '3.5.734'; // debe coincidir con window.SAVART_VERSION de index.html (autocorrección de caché, ver index.html)
+window.SAVART_JS_VERSION = '3.5.735'; // debe coincidir con window.SAVART_VERSION de index.html (autocorrección de caché, ver index.html)
 /* ============================================================
    Savart — App entry point
    Wires Auth, Drive, DB, Player, and UI together.
@@ -1007,11 +1007,31 @@ const App = (() => {
     if (_queueSyncArmed) _playerStateSavedAt = Date.now();
     DB.setState('player_state', { queue: cleanQueue, queueIndex: index, savedAt: _playerStateSavedAt }).catch(() => {});
     if (_queueSyncArmed && typeof Sync !== 'undefined' && Sync.pushQueue) {
-      // Ventana de hasta 500 canciones alrededor de la actual (colas de radio enormes)
-      const from = Math.max(0, index - 50), to = Math.min(cleanQueue.length, from + 500);
-      Sync.pushQueue({ queue: cleanQueue.slice(from, to), queueIndex: index - from,
+      // v3.5.735: ventana de 300 canciones (30 antes + la actual y las siguientes) y cada
+      // canción aligerada (_queueItemForSync) — antes podía subir ~0.5 MB en cada cambio.
+      const from = Math.max(0, index - 30), to = Math.min(cleanQueue.length, from + 300);
+      Sync.pushQueue({ queue: cleanQueue.slice(from, to).map(_queueItemForSync), queueIndex: index - from,
                        savedAt: _playerStateSavedAt, deviceId: _queueDeviceId() });
     }
+  }
+  // Copia liviana de una canción para la cola compartida: solo valores simples; fuera los
+  // campos pesados de Drive (thumbnailLink caduca igual, metadatos de video, appProperties),
+  // blobs, data: URLs largas y objetos anidados. Lo que falte se completa desde la DB local.
+  const _QSYNC_DROP = new Set(['thumbnailLink', 'videoMediaMetadata', 'appProperties', 'coverBlob', 'lyrics', 'lyricsLrc']);
+  function _queueItemForSync(q) {
+    const o = {};
+    for (const [k, v] of Object.entries(q || {})) {
+      if (_QSYNC_DROP.has(k) || v == null) continue;
+      if (typeof v === 'string') {
+        if (v.startsWith('blob:') || (v.startsWith('data:') && v.length > 200) || v.length > 1500) continue;
+        o[k] = v;
+      } else if (typeof v === 'number' || typeof v === 'boolean') {
+        o[k] = v;
+      } else if (Array.isArray(v) && v.length <= 20 && v.every(x => typeof x === 'string' && x.length < 400)) {
+        o[k] = v; // parents, urls de emisoras…
+      }
+    }
+    return o;
   }
 
   /**
@@ -1844,7 +1864,9 @@ const App = (() => {
      reproductor; se apaga al pasar a una pista que no es de YouTube. */
   const _ytVideo = (() => {
     const LW = 16, LH = 9, M = 12;   // layout del iframe (16:9) · margen de botón/chip al borde del video
-    let on = false, raf = 0, origStyle = null, shown = false;
+    let on = false, raf = 0, slowT = 0, origStyle = null, shown = false;
+    // v3.5.735: caché de lo último escrito — solo se toca el DOM cuando algo cambia
+    let lastCss = '', lastCL = '', lastCT = '', zTop = 0, vidRect = null;
     const iframe = () => { try { return Soundrop.yt.iframe(); } catch (_) { return null; } };
     const art = () => document.getElementById('pexp-art');
     const ctrls = () => art()?.querySelector('.pexp-video-ctrls');
@@ -1873,15 +1895,24 @@ const App = (() => {
         if (!el) continue;
         el.style.left = el.style.top = el.style.right = el.style.bottom = '';
       }
+      lastCL = lastCT = '';
     }
     function park() {
+      if (!shown) return; // ya estaba guardado — nada que tocar
       const f = iframe();
-      if (f && shown) {
+      if (f) {
         if (origStyle === null || origStyle === '') f.removeAttribute('style'); else f.setAttribute('style', origStyle);
       }
-      shown = false;
+      shown = false; lastCss = ''; vidRect = null;
       art()?.classList.remove('yt-video-on');
       clearPos();
+    }
+    // Siguiente vuelta: cada cuadro mientras el video se ve; si no se ve (reproductor
+    // cerrado, portada tapada…) basta revisar ~3 veces por segundo.
+    function next(fast) {
+      if (!on) return;
+      if (fast) raf = requestAnimationFrame(place);
+      else slowT = setTimeout(() => { slowT = 0; raf = requestAnimationFrame(place); }, 350);
     }
     function zAbove(el) {
       let z = 0;
@@ -1918,8 +1949,8 @@ const App = (() => {
         }
       }
       if (visible) {
-        if (!shown) { origStyle = f.getAttribute('style'); shown = true; }
-        a.classList.add('yt-video-on');
+        if (!shown) { origStyle = f.getAttribute('style'); shown = true; zTop = zAbove(a); lastCss = ''; }
+        if (!a.classList.contains('yt-video-on')) a.classList.add('yt-video-on');
         // El mayor 16:9 posible: ancho del reproductor; alto, todo el panel de la portada
         const pr = (document.getElementById('player-expanded') || a).getBoundingClientRect();
         const ap = (a.closest('.pexp-art-panel') || a).getBoundingClientRect();
@@ -1930,11 +1961,15 @@ const App = (() => {
         const top = Math.max(vTop, Math.min(r.top + r.height / 2 - vh / 2, vBot - vh));
         // Grupo [botón imagen/video][chip SD]: esquina inferior derecha del video
         // (coordenadas relativas a la portada, que en modo video deja ver lo que sale de ella)
+        vidRect = { left, top, right: left + vw, bottom: top + vh };
         const c = ctrls();
         if (c) {
-          c.style.right = c.style.bottom = 'auto';
-          c.style.left = `${left + vw - M - c.offsetWidth - r.left}px`;
-          c.style.top = `${top + vh - M - c.offsetHeight - r.top}px`;
+          const cl = `${Math.round(left + vw - M - c.offsetWidth - r.left)}px`;
+          const ct = `${Math.round(top + vh - M - c.offsetHeight - r.top)}px`;
+          if (cl !== lastCL || ct !== lastCT) {
+            c.style.right = c.style.bottom = 'auto';
+            c.style.left = cl; c.style.top = ct; lastCL = cl; lastCT = ct;
+          }
         }
         // Recorte: el video entero + "huecos" donde están el botón y el chip (si se ven)
         let clip = rr(0, 0, LW, LH, 0);
@@ -1945,18 +1980,21 @@ const App = (() => {
           const b = el.getBoundingClientRect();
           clip += rr((b.left - left) / s, (b.top - top) / s, b.width / s, b.height / s, 8 / s);
         }
-        f.style.cssText = `position:fixed;left:${left}px;top:${top}px;width:${LW}px;height:${LH}px;` +
+        const css = `position:fixed;left:${left.toFixed(1)}px;top:${top.toFixed(1)}px;width:${LW}px;height:${LH}px;` +
           `margin:0;border:0;pointer-events:none;background:#000;transform-origin:0 0;` +
-          `transform:scale(${s});z-index:${zAbove(a)};clip-path:path(evenodd,'${clip}');`;
+          `transform:scale(${s.toFixed(4)});z-index:${zTop};clip-path:path(evenodd,'${clip}');`;
+        if (css !== lastCss) { f.style.cssText = css; lastCss = css; }
       } else {
         park();
       }
-      raf = requestAnimationFrame(place);
+      next(visible);
     }
     function onMode() { on = true; syncBtn(); if (!raf) raf = requestAnimationFrame(place); }
     function off() {
+      if (!on && !shown) return;
       on = false; syncBtn();
       if (raf) { cancelAnimationFrame(raf); raf = 0; }
+      if (slowT) { clearTimeout(slowT); slowT = 0; }
       park();
     }
     function toggle() { if (on) off(); else if (isYtTrack()) onMode(); }
@@ -1968,7 +2006,13 @@ const App = (() => {
       clearTimeout(ctrlsTimer);
       ctrlsTimer = setTimeout(() => a.classList.remove('ctrls-show'), 3000);
     }
-    (art()?.closest('.pexp-art-panel') || art())?.addEventListener('pointerdown', showCtrls);
+    const panel = art()?.closest('.pexp-art-panel') || art();
+    panel?.addEventListener('pointerdown', showCtrls);
+    // Escritorio: pasar el mouse por encima del VIDEO (no de todo el panel) muestra los controles
+    panel?.addEventListener('pointermove', e => {
+      if (e.pointerType !== 'mouse' || !shown || !vidRect) return;
+      if (e.clientX >= vidRect.left && e.clientX <= vidRect.right && e.clientY >= vidRect.top && e.clientY <= vidRect.bottom) showCtrls();
+    });
     return { toggle, off, syncBtn };
   })();
 
@@ -1985,6 +2029,15 @@ const App = (() => {
     const label = q && q !== 'unknown' ? (_YT_Q[q] || q) : '';
     if (label) { const txt = label; if (el.textContent !== txt) el.textContent = txt; el.style.display = ''; }
     else el.style.display = 'none';
+    // v3.5.735: si la canción de Soundrop cayó al respaldo MP3 (YouTube falló), ya no suena por el
+    // iframe: el EQ vuelve a funcionar y el botón de video se oculta (no hay video).
+    const ytOn = isSd && !!Player.isSdActive?.();
+    document.body.classList.toggle('sd-track-active', ytOn);
+    if (isSd) {
+      const vb = document.getElementById('btn-pexp-video');
+      if (vb) vb.style.display = ytOn ? '' : 'none';
+      if (!ytOn) _ytVideo.off();
+    }
   }
   setInterval(_ytQualityTick, 1500);
 
@@ -2087,19 +2140,68 @@ const App = (() => {
     container?.appendChild(el);
     return { el, set: (s) => { txt.textContent = s; }, onCancel: (fn) => btn.addEventListener('click', fn), remove: () => el.remove() };
   }
+  // v3.5.735: límite de 200 MB por ZIP (todo se arma en memoria: en el móvil más que esto
+  // puede cerrar el navegador). Si la carpeta pasa del límite, se explica cuántas canciones
+  // tiene, cuánto pesa y cuáles son las más pesadas, y se ofrece bajar las que quepan.
+  const _ZIP_MAX = 200 * 1024 * 1024;
+  function _zipLimitDialog(songs, total) {
+    return new Promise(resolve => {
+      const sz = f => Number(f.size) || 0;
+      // las primeras (en orden de la carpeta) que quepan en el límite
+      const pick = []; let acc = 0;
+      for (const f of songs) { const s = sz(f); if (s > 0 && acc + s <= _ZIP_MAX) { pick.push(f); acc += s; } }
+      const heavy = [...songs].sort((x, y) => sz(y) - sz(x)).slice(0, 3);
+      const modal = document.createElement('div');
+      modal.className = 'ds-modal zip-limit-modal'; modal.style.display = 'flex';
+      const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+      const nm = f => esc((f.displayName || f.name || '').replace(/\.[a-z0-9]{2,4}$/i, ''));
+      modal.innerHTML =
+        '<div class="ds-modal-backdrop"></div>' +
+        '<div class="ds-modal-card ds-modal-card--sm">' +
+          `<div class="ds-modal-header"><span class="ds-modal-title">${esc(UI.t('zip_limit_title'))}</span></div>` +
+          '<div class="ds-modal-body zip-limit-body">' +
+            `<p>${esc(UI.t('zip_limit_body').replace('{n}', songs.length).replace('{size}', formatBytes(total)).replace('{max}', formatBytes(_ZIP_MAX)))}</p>` +
+            `<div class="zip-limit-sub">${esc(UI.t('zip_limit_heaviest'))}</div>` +
+            '<ul class="zip-limit-list">' + heavy.map(f => `<li><span>${nm(f)}</span><b>${esc(formatBytes(sz(f)))}</b></li>`).join('') + '</ul>' +
+            `<p>${esc(pick.length
+              ? UI.t('zip_limit_partial').replace('{k}', pick.length).replace('{n}', songs.length).replace('{size}', formatBytes(acc))
+              : UI.t('zip_limit_none'))}</p>` +
+          '</div>' +
+          '<div class="ds-modal-footer">' +
+            `<button type="button" class="btn-sort-toggle" data-act="no">${esc(UI.t('cancel_btn'))}</button>` +
+            (pick.length ? `<button type="button" class="btn-primary" data-act="yes">${esc(UI.t('zip_limit_accept').replace('{k}', pick.length))}</button>` : '') +
+          '</div>' +
+        '</div>';
+      const done = v => { modal.remove(); resolve(v); };
+      modal.addEventListener('click', e => {
+        if (e.target.classList.contains('ds-modal-backdrop')) return done(null);
+        const act = e.target.closest('button')?.dataset.act;
+        if (act === 'no') done(null); else if (act === 'yes') done(pick);
+      });
+      document.body.appendChild(modal);
+    });
+  }
   async function _downloadFolderZip(folder) {
     if (!folder || !folder.id) return;
     if (_zipJob) { UI.showToast(UI.t('zip_busy')); return; }
     const job = _zipJob = { cancelled: false };
-    const prog = _zipProgressToast();
+    let prog = _zipProgressToast();
     prog.onCancel(() => { job.cancelled = true; prog.set(UI.t('zip_cancelling')); });
     prog.set(UI.t('zip_preparing'));
     try {
       const { files } = await Drive.listFolderAll(folder.id);
-      const songs = files.filter(f => f.isPlayable && !String(f.id || '').startsWith('sd_'));
+      let songs = files.filter(f => f.isPlayable && !String(f.id || '').startsWith('sd_'));
       if (!songs.length) { prog.remove(); UI.showToast(UI.t('toast_folder_no_songs'), 'error'); return; }
-      const total = songs.reduce((s, f) => s + (Number(f.size) || 0), 0);
-      if (total > 1.8 * 1024 ** 3) { prog.remove(); UI.showToast(UI.t('zip_too_big'), 'error'); return; }
+      let total = songs.reduce((s, f) => s + (Number(f.size) || 0), 0);
+      if (total > _ZIP_MAX) {
+        prog.remove();
+        const pick = await _zipLimitDialog(songs, total);
+        if (!pick) return;
+        songs = pick;
+        total = songs.reduce((s, f) => s + (Number(f.size) || 0), 0);
+        prog = _zipProgressToast();
+        prog.onCancel(() => { job.cancelled = true; prog.set(UI.t('zip_cancelling')); });
+      }
       const mb = total ? ` · ${Math.round(total / 1048576)} MB` : '';
       const results = new Array(songs.length);
       let next = 0, done = 0, failed = 0;
@@ -3131,7 +3233,7 @@ const App = (() => {
     else if (/^(?:quita|desactiva|resetea|reinicia) (?:el )?(?:ecualizador|eq)$/.test(q)) eqKey = 'flat';
     if (eqKey) {
       if (track?.isRadio) { setStatus(_aiL('✦ El ecualizador no se puede usar mientras suena una emisora', '✦ The equalizer can’t be used while a radio station is playing'), 'empty'); return true; }
-      if (track?.isSoundrop && String(track.id || '').startsWith('sd_')) { setStatus(_aiL('✦ El ecualizador no tiene efecto en canciones de Soundrop', '✦ The equalizer has no effect on Soundrop songs'), 'empty'); return true; }
+      if (track?.isSoundrop && String(track.id || '').startsWith('sd_') && Player.isSdActive?.()) { setStatus(_aiL('✦ El ecualizador no tiene efecto en canciones de Soundrop', '✦ The equalizer has no effect on Soundrop songs'), 'empty'); return true; }
       _applyEQPreset(eqKey);
       return done(`${_aiL('Ecualizador', 'Equalizer')}: ${_aiEn() ? (eqKey === 'bass' ? 'bass' : eqKey === 'classical' ? 'classical' : eqKey) : (eqKey === 'flat' ? 'plano' : eqKey === 'bass' ? 'bajos' : eqKey === 'classical' ? 'clásica' : eqKey)}`);
     }
@@ -17680,7 +17782,7 @@ const App = (() => {
         confirmEl.style.background = 'var(--accent)';
         confirmEl.style.border     = 'none';
       }
-      if (cancelEl) cancelEl.textContent = UI.t('cancel') || 'Cancelar';
+      if (cancelEl) cancelEl.textContent = UI.t('cancel_btn') || 'Cancelar';
       modal.style.display = 'flex';
 
       const close = () => { modal.style.display = 'none'; };

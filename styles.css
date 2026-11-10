@@ -9324,11 +9324,6 @@ body.bot-novoice #ai-search-mic { display: none !important; }
 .pexp-art.yt-video-on.ctrls-show .pexp-video-ctrls,
 .pexp-art.yt-video-on.ctrls-show .sd-thumb-chip--exp { opacity: 1; }
 .pexp-art.yt-video-on.ctrls-show .pexp-video-ctrls { pointer-events: auto; }
-@media (hover: hover) {
-  .pexp-art-panel:hover .pexp-art.yt-video-on .pexp-video-ctrls,
-  .pexp-art-panel:hover .pexp-art.yt-video-on .sd-thumb-chip--exp { opacity: 1; }
-  .pexp-art-panel:hover .pexp-art.yt-video-on .pexp-video-ctrls { pointer-events: auto; }
-}
 
 /* v3.5.727/728 — Botón imagen/video abajo a la IZQUIERDA y chip SD abajo a la DERECHA (portada).
    En modo video ambos siguen las esquinas del video (posición por JS), que puede ser más
@@ -9352,3 +9347,12 @@ body.sd-track-active #btn-pexp-eq-open { opacity: 0.35; }
    asomaba arriba/abajo del video): sin fondo, sin sombra, sin la capa negra. */
 .pexp-art.yt-video-on { background: transparent; box-shadow: none; }
 .pexp-art.yt-video-on::after { display: none; }
+
+/* v3.5.735 — Aviso de límite del ZIP (200 MB) */
+.zip-limit-body { padding: 4px 18px 8px; font-size: 13px; color: var(--text-secondary, var(--text-primary)); line-height: 1.45; }
+.zip-limit-body p { margin: 8px 0; }
+.zip-limit-sub { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--text-muted); margin-top: 10px; }
+.zip-limit-list { list-style: none; margin: 6px 0 4px; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.zip-limit-list li { display: flex; justify-content: space-between; gap: 12px; }
+.zip-limit-list li span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.zip-limit-list li b { font-weight: 600; flex-shrink: 0; color: var(--text-primary); }
