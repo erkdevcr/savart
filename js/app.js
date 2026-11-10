@@ -1,4 +1,4 @@
-window.SAVART_JS_VERSION = '3.5.713'; // debe coincidir con window.SAVART_VERSION de index.html (autocorrección de caché, ver index.html)
+window.SAVART_JS_VERSION = '3.5.714'; // debe coincidir con window.SAVART_VERSION de index.html (autocorrección de caché, ver index.html)
 /* ============================================================
    Savart — App entry point
    Wires Auth, Drive, DB, Player, and UI together.
@@ -665,7 +665,7 @@ const App = (() => {
     // Restore EQ + tempo from DB before first render
     _restoreSettings();
     // Restore last queue so the user can resume where they left off (no auto-play)
-    _restorePlayerState();
+    const _bootRestore = _restorePlayerState();
 
     // Populate collection cache early so context menus on home/player/browse
     // correctly show "Ir a la colección" without requiring a library visit first.
@@ -680,6 +680,8 @@ const App = (() => {
     const _onBootProgress = (pct) => {
       if (_bootBarFill) _bootBarFill.style.width = pct + '%';
     };
+    // Queue compartido: leer la cola del último dispositivo (solo al abrir)
+    _accountCheckDone.then(() => _bootRestore).then(() => _bootSharedQueue());
     _accountCheckDone.then(() => Sync.readHome())
       // debounce (fix M10): colapsa con el render del boot si llegan casi juntos
       .then(data => { if (data) _loadHomeData({ debounce: true }); })
@@ -983,6 +985,18 @@ const App = (() => {
    * Called on every track change and queue structural change so the
    * user can resume from the same spot after closing and re-opening.
    */
+  // v3.5.714 — Queue compartido entre dispositivos. savedAt solo avanza con
+  // actividad real (después del chequeo de arranque): restaurar la cola al abrir
+  // NO cuenta como "más nuevo", si no el dispositivo que abre pisaría al otro.
+  let _playerStateSavedAt = 0;
+  let _queueSyncArmed     = false;
+  function _queueDeviceId() {
+    try {
+      let id = localStorage.getItem('savart_device_id');
+      if (!id) { id = Math.random().toString(36).slice(2) + Date.now().toString(36); localStorage.setItem('savart_device_id', id); }
+      return id;
+    } catch (_) { return 'unknown'; }
+  }
   function _savePlayerState() {
     const { queue, index } = Player.getQueue();
     if (!queue.length) return;
@@ -990,7 +1004,43 @@ const App = (() => {
     // player mostraba placeholder en la cola restaurada (onerror ocultaba el img).
     const cleanQueue = queue.map(q =>
       q?.thumbnailUrl?.startsWith('blob:') ? { ...q, thumbnailUrl: null } : q);
-    DB.setState('player_state', { queue: cleanQueue, queueIndex: index }).catch(() => {});
+    if (_queueSyncArmed) _playerStateSavedAt = Date.now();
+    DB.setState('player_state', { queue: cleanQueue, queueIndex: index, savedAt: _playerStateSavedAt }).catch(() => {});
+    if (_queueSyncArmed && typeof Sync !== 'undefined' && Sync.pushQueue) {
+      // Ventana de hasta 500 canciones alrededor de la actual (colas de radio enormes)
+      const from = Math.max(0, index - 50), to = Math.min(cleanQueue.length, from + 500);
+      Sync.pushQueue({ queue: cleanQueue.slice(from, to), queueIndex: index - from,
+                       savedAt: _playerStateSavedAt, deviceId: _queueDeviceId() });
+    }
+  }
+
+  /**
+   * Al abrir la app: si otro dispositivo dejó una cola más reciente que la local
+   * y aquí no está sonando nada, se carga esa cola en la misma posición (pausada,
+   * desde el inicio de la canción). Después de esto ya no se aplica más en vivo.
+   */
+  async function _bootSharedQueue() {
+    try {
+      const remote = await Sync.readQueue();
+      if (!remote?.queue?.length) return;
+      if (remote.deviceId === _queueDeviceId()) return;
+      const local = await DB.getState('player_state').catch(() => null);
+      if ((Number(remote.savedAt) || 0) <= (Number(local?.savedAt) || 0)) return;
+      if (Player.isPlaying()) return;                           // ya está sonando algo aquí
+      const cur = Player.getCurrentTrack();
+      const localCur = local?.queue?.[local.queueIndex || 0];
+      if (cur && localCur && cur.id !== localCur.id) return;   // el usuario ya cambió de canción
+      if (cur && !localCur) return;
+      const idx = Math.max(0, Math.min(Number(remote.queueIndex) || 0, remote.queue.length - 1));
+      _playerStateSavedAt = Number(remote.savedAt) || 0;
+      await DB.setState('player_state', { queue: remote.queue, queueIndex: idx, savedAt: _playerStateSavedAt });
+      await _restorePlayerState();
+      UI.showToast(UI.t('toast_queue_synced'));
+    } catch (err) {
+      console.warn('[Queue] sync al abrir falló:', err?.message || err);
+    } finally {
+      _queueSyncArmed = true;
+    }
   }
 
   /**
@@ -1035,6 +1085,7 @@ const App = (() => {
       }
 
       const { queue, queueIndex = 0 } = state;
+      _playerStateSavedAt = Number(state.savedAt) || _playerStateSavedAt;
       Player.loadState(queue, queueIndex);
 
       // Show the track in the mini-player (no auto-play)
@@ -19545,6 +19596,7 @@ const App = (() => {
     // una canción recién reproducida) tardaban "minutos" en aparecer. Ahora:
     // poll inmediato + refresco del Home si es la vista activa.
     document.addEventListener('visibilitychange', () => {
+      if (document.hidden) { try { Sync.flushQueue?.(); } catch (_) {} } // v3.5.714: subir la cola al salir
       if (document.hidden || _isOffline) return;
       if (typeof Sync !== 'undefined' && Auth.isAuthenticated()) {
         Sync.pollNow?.()?.catch?.(() => {});

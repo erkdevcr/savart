@@ -2467,13 +2467,43 @@ const Sync = (() => {
    * sin esperar el próximo tick (hasta 30 s en background, minutos si Android
    * congeló los timers).
    */
+  /* ── Queue compartido (v3.5.714) ──────────────────────────
+     savart_queue.json = { queue, queueIndex, savedAt, deviceId }. Va FUERA de
+     FILENAMES/manifest a propósito: el poll en vivo y el merge de init() nunca lo
+     tocan — el otro dispositivo solo lo lee al ABRIR la app (readQueue). Se escribe
+     con debounce de 4 s en cada cambio de canción/cola, y al instante (flushQueue)
+     cuando la app pasa a segundo plano. */
+  const QUEUE_FILE = 'savart_queue.json';
+  let _queuePending = null, _queueTimer = null;
+  async function _writeQueueNow() {
+    if (_queueTimer) { clearTimeout(_queueTimer); _queueTimer = null; }
+    const data = _queuePending; _queuePending = null;
+    if (!data || !Auth.isAuthenticated()) return;
+    try {
+      if (!_fileIds[QUEUE_FILE]) await _refreshFileList(); // evita crear un duplicado
+      await _writeFile(QUEUE_FILE, data);
+    } catch (err) {
+      if (!err?.isScope) console.warn('[Sync] pushQueue failed:', err?.message || err);
+    }
+  }
+  function pushQueue(data) {
+    _queuePending = data;
+    if (_queueTimer) clearTimeout(_queueTimer);
+    _queueTimer = setTimeout(_writeQueueNow, 4000);
+  }
+  function flushQueue() { return _queuePending ? _writeQueueNow() : Promise.resolve(); }
+  async function readQueue() {
+    try { return await _readFile(QUEUE_FILE); }
+    catch (err) { if (!err?.isScope) console.warn('[Sync] readQueue failed:', err?.message || err); return null; }
+  }
+
   function pollNow() {
     _pollSkipUntil  = 0;
     _pollHiddenTick = 0;
     return _poll();
   }
 
-  return { init, push, pushNow, pushHot, readHome, startLiveSync, stopLiveSync, getDbStats, pollNow,
+  return { init, push, pushNow, pushHot, readHome, pushQueue, flushQueue, readQueue, startLiveSync, stopLiveSync, getDbStats, pollNow,
            mergeEqPresets: _mergeEqPresets };
 
 })();
