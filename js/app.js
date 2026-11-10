@@ -1,4 +1,4 @@
-window.SAVART_JS_VERSION = '3.5.709'; // debe coincidir con window.SAVART_VERSION de index.html (autocorrección de caché, ver index.html)
+window.SAVART_JS_VERSION = '3.5.710'; // debe coincidir con window.SAVART_VERSION de index.html (autocorrección de caché, ver index.html)
 /* ============================================================
    Savart — App entry point
    Wires Auth, Drive, DB, Player, and UI together.
@@ -1387,8 +1387,11 @@ const App = (() => {
     }
     const bodyNow = { x: 0, y: 0 };
     let lastBodyKey = '';
+    // Ojos un poco más juntos: se acerca cada ojo al punto medio entre ambos (0.135) en todas las poses
+    const EYE_MID = 0.135, EYE_SQZ = 0.85;
     function eyePath(e, R, sxB, syB) {
       let [x, y, w, h, rot, bend, ell, cut] = e;
+      x = EYE_MID + (x - EYE_MID) * EYE_SQZ;
       const cutK = Math.min(1, Math.abs(cut) * 4);
       ell = Math.max(0, Math.min(1, ell));
       w = Math.max(w, 0.01); h = Math.max(h, 0.01);
