@@ -9111,8 +9111,8 @@ body.on-login .ai-search-float {
    Cuerpo = color de acento de la app; ojos oscuros recortados al cuerpo. ──────────── */
 .ai-bot-svg { width: 100%; height: 100%; display: block; overflow: visible; pointer-events: none;
   filter: drop-shadow(0 2px 5px rgba(0,0,0,.4)); }
-#ai-bot-body { fill: var(--accent); }
-#ai-bot-eyes-path { fill: #0a0a0a; }
+.ai-bot-svg [data-bot="body"] { fill: var(--ai-bot-color, var(--accent)); }
+.ai-bot-svg [data-bot="eyes"] { fill: var(--ai-bot-eye, #0a0a0a); }
 
 /* Expanded panel — position:fixed (JS calcula left/top con clamp, ver
    _positionAiPanel en app.js) para que nunca quede cortada por el borde
@@ -9254,3 +9254,23 @@ body.bot-novoice #ai-search-mic { display: none !important; }
   50%      { background-size: 3px 6px, 3px 13px, 3px 4px, 3px 10px, 3px 12px; }
   75%      { background-size: 3px 10px, 3px 7px, 3px 13px, 3px 8px, 3px 4px; }
 }
+
+/* ── Color del bot: botón en Ajustes + modal con vista previa (v3.5.708) ── */
+.bot-color-btn { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--border); background: var(--bg-card);
+  display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; }
+.bot-color-btn:hover { border-color: var(--accent); }
+.bot-color-btn-dot { width: 20px; height: 20px; border-radius: 50%; background: var(--ai-bot-color, var(--accent)); }
+.bot-color-stage { height: 150px; display: flex; align-items: center; justify-content: center; background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.bot-color-stage .ai-bot-svg { width: 130px; height: 130px; }
+.bot-color-body { padding: 14px 16px 6px; overflow-y: auto; }
+.bot-color-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(38px, 1fr)); gap: 10px; justify-items: center; }
+.bot-color-sw { width: 34px; height: 34px; border-radius: 50%; border: 2px solid transparent; padding: 0; cursor: pointer; position: relative;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.18); transition: transform .12s; }
+.bot-color-sw:hover { transform: scale(1.08); }
+.bot-color-sw.selected { border-color: var(--text-primary); box-shadow: 0 0 0 2px var(--bg-surface) inset; }
+.bot-color-sw.is-default { background: var(--accent); }
+.bot-color-sw.is-default::after { content: ''; position: absolute; inset: 11px; border-radius: 50%; background: rgba(0,0,0,.55); }
+.bot-color-sw.is-custom { background: conic-gradient(#ef4444, #facc15, #22c55e, #06b6d4, #3b82f6, #8b5cf6, #ec4899, #ef4444); overflow: hidden; }
+.bot-color-sw.is-custom input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; border: 0; padding: 0; }
+.bot-color-caption { text-align: center; font-size: 12px; color: var(--text-muted); padding: 10px 0 8px; min-height: 18px; }

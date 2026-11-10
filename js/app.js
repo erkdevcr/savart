@@ -1132,10 +1132,11 @@ const App = (() => {
      video de referencia (parpadear, mirar, encoger, feliz, girar, mirar abajo/arriba, sorpresa, enojo,
      tristeza). Reposo con micro-movimientos y gestos AL AZAR cada pocos segundos.
      API: _aiBotForce(mood, ms) (lo usa la lógica de búsqueda), y para escribir: gaze('down'|'up'). */
-  function _createAiBotChar(svg) {
-    const elBody = svg.querySelector('#ai-bot-body');
-    const elClip = svg.querySelector('#ai-bot-clip-shape');
-    const elEyes = svg.querySelector('#ai-bot-eyes-path');
+  function _createAiBotChar(svg, opts = {}) {
+    // opts.always: anima aunque el bot esté oculto/desactivado (vista previa de Ajustes) · opts.fast: gestos más seguidos
+    const elBody = svg.querySelector('[data-bot="body"]');
+    const elClip = svg.querySelector('[data-bot="clip"]');
+    const elEyes = svg.querySelector('[data-bot="eyes"]');
     if (!elBody || !elClip || !elEyes) return null;
     const VB = 1528.33, CX = VB / 2, CY = VB / 2, R0 = 540;
     const N = 22;
@@ -1451,7 +1452,7 @@ const App = (() => {
     const vel = new Array(N).fill(0);
     const target = new Array(N).fill(0);
     const tmp = new Array(N).fill(0);
-    let track = null, randNext = 2 + Math.random() * 2, randBlink = 1.5;
+    let track = null, randNext = opts.fast ? 0.6 : 2 + Math.random() * 2, randBlink = 1.5, dead = false;
     let forcedUntil = 0, thinkingUntil = 0, thinkGap = 0;
 
     function play(name) {
@@ -1476,13 +1477,14 @@ const App = (() => {
       if (randNext <= 0) {
         const r = Math.random();
         play(r < 0.22 ? 'glance' : r < 0.42 ? 'lookShrink' : r < 0.62 ? 'happy' : r < 0.78 ? 'spin' : r < 0.86 ? 'lookDown' : r < 0.93 ? 'lookUp' : r < 0.97 ? 'surprised' : (Math.random() < 0.5 ? 'angry' : 'sad'));
-        randNext = 3 + Math.random() * 4;
+        randNext = opts.fast ? 1.6 + Math.random() * 1.6 : 3 + Math.random() * 4;
       }
     }
 
     let last = performance.now(), time = 0;
-    const hiddenNow = () => document.hidden || document.body.classList.contains('bot-disabled') || document.body.classList.contains('on-login');
+    const hiddenNow = () => document.hidden || (!opts.always && (document.body.classList.contains('bot-disabled') || document.body.classList.contains('on-login')));
     function frame(now) {
+      if (dead) return;
       requestAnimationFrame(frame);
       if (hiddenNow()) { last = now; return; }
       const dt = Math.min(0.05, (now - last) / 1000);
@@ -1540,6 +1542,89 @@ const App = (() => {
         gazeUntil = performance.now() + 2500;
       },
       gazeOff() { gaze = null; },
+      destroy() { dead = true; },
+    };
+  }
+
+  /* ── Color del bot (v3.5.708): por dispositivo (localStorage 'savart_bot_color'); '' = color de acento ── */
+  const _BOT_COLORS = [
+    ['#fcfcfc', 'Blanco', 'White'], ['#1c1c1e', 'Negro', 'Black'], ['#ef4444', 'Rojo', 'Red'], ['#f97316', 'Naranja', 'Orange'],
+    ['#facc15', 'Amarillo', 'Yellow'], ['#22c55e', 'Verde', 'Green'], ['#14b8a6', 'Turquesa', 'Teal'], ['#06b6d4', 'Cian', 'Cyan'],
+    ['#3b82f6', 'Azul', 'Blue'], ['#8b5cf6', 'Violeta', 'Violet'], ['#ec4899', 'Rosa', 'Pink'],
+  ];
+  const _botColorPref = () => { try { const v = localStorage.getItem('savart_bot_color') || ''; return /^#[0-9a-f]{6}$/i.test(v) ? v : ''; } catch (_) { return ''; } };
+  // Ojos claros si el cuerpo es oscuro (si no, no se verían)
+  function _botEyeFor(hex) {
+    const n = parseInt(hex.slice(1), 16), r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+    return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 < 0.42 ? '#fcfcfc' : '#0a0a0a';
+  }
+  function _botColorVars(el, hex) {
+    if (hex) { el.style.setProperty('--ai-bot-color', hex); el.style.setProperty('--ai-bot-eye', _botEyeFor(hex)); }
+    else { el.style.removeProperty('--ai-bot-color'); el.style.removeProperty('--ai-bot-eye'); }
+  }
+  const _applyBotColor = () => _botColorVars(document.documentElement, _botColorPref());
+
+  let _botColorPv = null;   // personaje de la vista previa (modal)
+  function _openBotColorModal() {
+    const modal = document.getElementById('bot-color-modal');
+    const stage = document.getElementById('bot-color-stage');
+    const grid  = document.getElementById('bot-color-grid');
+    const cap   = document.getElementById('bot-color-caption');
+    if (!modal || !stage || !grid) return;
+    let sel = _botColorPref();
+    stage.innerHTML = '<svg class="ai-bot-svg" viewBox="114 114 1300 1300" aria-hidden="true" focusable="false">' +
+      '<defs><clipPath id="ai-bot-clip-pv"><ellipse data-bot="clip" cx="764.165" cy="764.165" rx="540" ry="540"></ellipse></clipPath></defs>' +
+      '<ellipse data-bot="body" cx="764.165" cy="764.165" rx="540" ry="540"></ellipse>' +
+      '<path data-bot="eyes" d="" clip-path="url(#ai-bot-clip-pv)"></path></svg>';
+    try { _botColorPv?.destroy(); } catch (_) {}
+    _botColorPv = _createAiBotChar(stage.querySelector('svg'), { always: true, fast: true });
+
+    const mk = (hex, label) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'bot-color-sw'; b.dataset.hex = hex; b.title = label; b.setAttribute('aria-label', label);
+      if (hex) b.style.background = hex; else b.classList.add('is-default');
+      return b;
+    };
+    const custom = document.createElement('label');
+    custom.className = 'bot-color-sw is-custom'; custom.title = _aiL('Personalizado', 'Custom');
+    const inp = document.createElement('input'); inp.type = 'color'; inp.value = sel || '#3b82f6';
+    custom.appendChild(inp);
+    const refresh = () => {
+      _botColorVars(stage, sel);
+      let on = false;
+      grid.querySelectorAll('.bot-color-sw').forEach(el => {
+        const h = el.dataset?.hex;
+        const isOn = el.classList.contains('is-custom') ? (!!sel && !_BOT_COLORS.some(c => c[0].toLowerCase() === sel.toLowerCase())) : (h || '') === (sel || '');
+        el.classList.toggle('selected', isOn); if (isOn) on = true;
+      });
+      if (cap) {
+        const named = _BOT_COLORS.find(c => sel && c[0].toLowerCase() === sel.toLowerCase());
+        cap.textContent = !sel ? _aiL('Predeterminado (color de acento)', 'Default (accent color)') : named ? _aiL(named[1], named[2]) : _aiL('Personalizado', 'Custom') + ' · ' + sel.toUpperCase();
+      }
+    };
+    grid.innerHTML = '';
+    grid.appendChild(mk('', _aiL('Predeterminado', 'Default')));
+    _BOT_COLORS.forEach(c => grid.appendChild(mk(c[0], _aiL(c[1], c[2]))));
+    grid.appendChild(custom);
+    grid.onclick = e => {
+      const b = e.target.closest('button.bot-color-sw'); if (!b) return;
+      sel = b.dataset.hex || ''; refresh();
+    };
+    inp.addEventListener('input', () => { sel = inp.value; refresh(); });
+    refresh();
+    modal.style.display = 'flex';
+
+    const close = () => {
+      modal.style.display = 'none';
+      try { _botColorPv?.destroy(); } catch (_) {} _botColorPv = null;
+      stage.innerHTML = '';
+    };
+    document.getElementById('bot-color-cancel').onclick = close;
+    document.getElementById('bot-color-backdrop').onclick = close;
+    document.getElementById('bot-color-accept').onclick = () => {
+      try { if (sel) localStorage.setItem('savart_bot_color', sel); else localStorage.removeItem('savart_bot_color'); } catch (_) {}
+      _applyBotColor();
+      close();
     };
   }
 
@@ -1626,11 +1711,13 @@ const App = (() => {
       try { _aiVoiceStop(); } catch (_) {}
       _aiStopSpeaking();
     }
-    ['speak', 'voice', 'lang'].forEach(k => document.getElementById('bot-row-' + k)?.classList.toggle('bot-dim', !enabled));
+    ['speak', 'voice', 'lang', 'color'].forEach(k => document.getElementById('bot-row-' + k)?.classList.toggle('bot-dim', !enabled));
     // v3.5.700: 'micrófono al tocar' solo tiene sentido con el bot y los comandos de voz activos
     document.getElementById('bot-row-automic')?.classList.toggle('bot-dim', !enabled || !_botPref('voice'));
   }
   function _initBotSettings() {
+    document.getElementById('bot-color-btn')?.addEventListener('click', () => _openBotColorModal());
+    _applyBotColor();
     const langSel = document.getElementById('bot-select-lang');
     if (langSel) {
       langSel.value = _botLangPref();
