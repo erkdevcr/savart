@@ -1,4 +1,4 @@
-window.SAVART_JS_VERSION = '3.5.712'; // debe coincidir con window.SAVART_VERSION de index.html (autocorrección de caché, ver index.html)
+window.SAVART_JS_VERSION = '3.5.713'; // debe coincidir con window.SAVART_VERSION de index.html (autocorrección de caché, ver index.html)
 /* ============================================================
    Savart — App entry point
    Wires Auth, Drive, DB, Player, and UI together.
@@ -1672,6 +1672,136 @@ const App = (() => {
     } catch (err) {
       console.error('[Download]', err);
       UI.showToast(UI.t('toast_download_error'), 'error');
+    }
+  }
+
+  /* ── Descargar carpeta como ZIP (v3.5.713) ───────────────────────────────
+     Baja las canciones que están directamente en la carpeta (las mismas que usa
+     "Reproducir"; sin subcarpetas) y arma un .zip SIN compresión (el mp3/m4a ya
+     viene comprimido: comprimir de nuevo solo gasta batería). Reusa el blob
+     cacheado en IDB si existe. El ZIP se arma como Blob de partes, así el
+     navegador no tiene que copiar todo a un solo buffer. Límite ~1.8 GB (ZIP
+     clásico, sin ZIP64, y memoria del móvil). Se puede cancelar. ─────────── */
+  let _zipJob = null;
+  const _CRC_TABLE = (() => {
+    const t = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; }
+    return t;
+  })();
+  function _crc32(u8) {
+    let c = 0xFFFFFFFF;
+    for (let i = 0; i < u8.length; i++) c = _CRC_TABLE[(c ^ u8[i]) & 0xFF] ^ (c >>> 8);
+    return (c ^ 0xFFFFFFFF) >>> 0;
+  }
+  function _zipSafeName(s, fallback) {
+    const n = String(s || '').replace(/[\\/:*?"<>|\x00-\x1f]+/g, '_').replace(/^\.+/, '').trim();
+    return n || fallback;
+  }
+  function _buildZipBlob(entries) {
+    // entries: [{ name, blob, crc, size }] — método 0 (store), nombres UTF-8 (flag 0x0800)
+    const enc = new TextEncoder();
+    const d = new Date();
+    const dosTime = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1);
+    const dosDate = ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
+    const parts = [], central = [];
+    let offset = 0;
+    for (const e of entries) {
+      const nm = enc.encode(e.name);
+      const lh = new DataView(new ArrayBuffer(30));
+      lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true);
+      lh.setUint16(8, 0, true); lh.setUint16(10, dosTime, true); lh.setUint16(12, dosDate, true);
+      lh.setUint32(14, e.crc, true); lh.setUint32(18, e.size, true); lh.setUint32(22, e.size, true);
+      lh.setUint16(26, nm.length, true); lh.setUint16(28, 0, true);
+      parts.push(lh.buffer, nm, e.blob);
+      const ch = new DataView(new ArrayBuffer(46));
+      ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true);
+      ch.setUint16(8, 0x0800, true); ch.setUint16(10, 0, true); ch.setUint16(12, dosTime, true);
+      ch.setUint16(14, dosDate, true); ch.setUint32(16, e.crc, true); ch.setUint32(20, e.size, true);
+      ch.setUint32(24, e.size, true); ch.setUint16(28, nm.length, true); ch.setUint16(30, 0, true);
+      ch.setUint16(32, 0, true); ch.setUint16(34, 0, true); ch.setUint16(36, 0, true);
+      ch.setUint32(38, 0, true); ch.setUint32(42, offset, true);
+      central.push(ch.buffer, nm);
+      offset += 30 + nm.length + e.size;
+    }
+    const cdSize = central.reduce((s, p) => s + p.byteLength, 0);
+    const eo = new DataView(new ArrayBuffer(22));
+    eo.setUint32(0, 0x06054b50, true); eo.setUint16(4, 0, true); eo.setUint16(6, 0, true);
+    eo.setUint16(8, entries.length, true); eo.setUint16(10, entries.length, true);
+    eo.setUint32(12, cdSize, true); eo.setUint32(16, offset, true); eo.setUint16(20, 0, true);
+    return new Blob([...parts, ...central, eo.buffer], { type: 'application/zip' });
+  }
+  function _zipProgressToast() {
+    const container = document.getElementById('toast-container');
+    const el = document.createElement('div');
+    el.className = 'toast toast-persist zip-toast';
+    const txt = document.createElement('span');
+    const btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'zip-toast-cancel'; btn.textContent = UI.t('zip_cancel');
+    el.append(txt, btn);
+    container?.appendChild(el);
+    return { el, set: (s) => { txt.textContent = s; }, onCancel: (fn) => btn.addEventListener('click', fn), remove: () => el.remove() };
+  }
+  async function _downloadFolderZip(folder) {
+    if (!folder || !folder.id) return;
+    if (_zipJob) { UI.showToast(UI.t('zip_busy')); return; }
+    const job = _zipJob = { cancelled: false };
+    const prog = _zipProgressToast();
+    prog.onCancel(() => { job.cancelled = true; prog.set(UI.t('zip_cancelling')); });
+    prog.set(UI.t('zip_preparing'));
+    try {
+      const { files } = await Drive.listFolderAll(folder.id);
+      const songs = files.filter(f => f.isPlayable && !String(f.id || '').startsWith('sd_'));
+      if (!songs.length) { prog.remove(); UI.showToast(UI.t('toast_folder_no_songs'), 'error'); return; }
+      const total = songs.reduce((s, f) => s + (Number(f.size) || 0), 0);
+      if (total > 1.8 * 1024 ** 3) { prog.remove(); UI.showToast(UI.t('zip_too_big'), 'error'); return; }
+      const mb = total ? ` · ${Math.round(total / 1048576)} MB` : '';
+      const results = new Array(songs.length);
+      let next = 0, done = 0, failed = 0;
+      const upd = () => prog.set(UI.t('zip_progress').replace('{n}', done).replace('{total}', songs.length) + mb);
+      upd();
+      async function worker() {
+        while (!job.cancelled && next < songs.length) {
+          const i = next++, f = songs[i];
+          try {
+            let blob = await DB.getCachedBlob(f.id).catch(() => null);
+            if (!blob) blob = await Drive.downloadFile(f.id);
+            if (job.cancelled) return;
+            const crc = _crc32(new Uint8Array(await blob.arrayBuffer()));
+            results[i] = { f, blob, crc, size: blob.size };
+          } catch (err) { failed++; console.warn('[ZIP] falló', f.name, err); }
+          done++; if (!job.cancelled) upd();
+        }
+      }
+      await Promise.all([worker(), worker(), worker()]);
+      if (job.cancelled) { prog.remove(); UI.showToast(UI.t('zip_cancelled')); return; }
+      const used = new Set(), entries = [];
+      for (const r of results) {
+        if (!r) continue;
+        let nm = _zipSafeName(r.f.name || r.f.displayName, 'cancion'), k = 2;
+        const dot = nm.lastIndexOf('.');
+        const base = dot > 0 ? nm.slice(0, dot) : nm, ext = dot > 0 ? nm.slice(dot) : '';
+        while (used.has(nm.toLowerCase())) nm = `${base} (${k++})${ext}`;
+        used.add(nm.toLowerCase());
+        entries.push({ name: nm, blob: r.blob, crc: r.crc, size: r.size });
+      }
+      if (!entries.length) { prog.remove(); UI.showToast(UI.t('zip_error'), 'error'); return; }
+      prog.set(UI.t('zip_building'));
+      const zip = _buildZipBlob(entries);
+      const url = URL.createObjectURL(zip);
+      const a = document.createElement('a');
+      a.href = url; a.download = _zipSafeName(folder.name, 'Savart') + '.zip'; a.style.display = 'none';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 120000);
+      prog.remove();
+      UI.showToast(failed
+        ? UI.t('zip_done_partial').replace('{n}', entries.length).replace('{f}', failed)
+        : UI.t('zip_done').replace('{n}', entries.length), failed ? 'default' : 'success');
+    } catch (err) {
+      console.error('[ZIP]', err);
+      prog.remove();
+      UI.showToast(UI.t('zip_error'), 'error');
+    } finally {
+      _zipJob = null;
     }
   }
 
@@ -18360,6 +18490,7 @@ const App = (() => {
     // Expose for context menu
     App.onSdDownload = (item) => _openSdSaveModal(item);
     App.onDownloadToDevice = (item) => _downloadSongToDevice(item);
+    App.onDownloadFolderZip = (folder) => _downloadFolderZip(folder);
 
     // ── Re-download warning modal ──────────────────────────────
     function _showSdRedownloadModal(track, playAfterSave = false) {

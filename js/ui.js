@@ -517,6 +517,18 @@ const UI = (() => {
       toast_download_error:       'Error al descargar',
       ctx_sd_download:            'Guardar en Drive',
       ctx_download:               'Descargar',
+      ctx_download_zip:           'Descargar ZIP',
+      zip_preparing:              'Preparando ZIP…',
+      zip_progress:               'ZIP · {n}/{total} canciones',
+      zip_building:               'Armando el ZIP…',
+      zip_cancel:                 'Cancelar',
+      zip_cancelling:             'Cancelando…',
+      zip_cancelled:              'Descarga ZIP cancelada',
+      zip_done:                   'ZIP listo · {n} canciones ✓',
+      zip_done_partial:           'ZIP listo · {n} canciones ({f} fallaron)',
+      zip_error:                  'Error al crear el ZIP',
+      zip_busy:                   'Ya hay un ZIP en curso',
+      zip_too_big:                'La carpeta es muy grande para un ZIP (máx. ~1.8 GB)',
       ctx_soundrop_delete:        'Eliminar',
       ctx_soundrop_delete_confirm:'¿Eliminar',
       ctx_soundrop_deleted:       'Eliminado de Soundrop',
@@ -1044,6 +1056,18 @@ const UI = (() => {
       toast_download_error:       'Error downloading',
       ctx_sd_download:            'Save to Drive',
       ctx_download:                'Download',
+      ctx_download_zip:            'Download ZIP',
+      zip_preparing:               'Preparing ZIP…',
+      zip_progress:                'ZIP · {n}/{total} songs',
+      zip_building:                'Building the ZIP…',
+      zip_cancel:                  'Cancel',
+      zip_cancelling:              'Cancelling…',
+      zip_cancelled:               'ZIP download cancelled',
+      zip_done:                    'ZIP ready · {n} songs ✓',
+      zip_done_partial:            'ZIP ready · {n} songs ({f} failed)',
+      zip_error:                   'Error creating the ZIP',
+      zip_busy:                    'A ZIP is already in progress',
+      zip_too_big:                 'This folder is too big for a ZIP (max ~1.8 GB)',
       ctx_soundrop_delete:        'Delete',
       ctx_soundrop_delete_confirm:'Delete',
       ctx_soundrop_deleted:       'Deleted from Soundrop',
@@ -3028,6 +3052,7 @@ const UI = (() => {
         _addCtxItem(menu, _iconCollection, t('ctx_go_to_collection'),  () => { App.onGoToLibraryCollection?.(item); hideContextMenu(); });
       }
       _addCtxItem(menu, _iconScan,      t('ctx_send_to_scan'),   () => { App.onSendToScan?.(item);            hideContextMenu(); });
+      if (!String(item.id || '').startsWith('sd_')) _addCtxItem(menu, _iconSdDownload, t('ctx_download_zip'), () => { App.onDownloadFolderZip?.(item); hideContextMenu(); });
       _addCtxDivider(menu);
       _addCtxItem(menu, iconStar(14),   t('ctx_add_fav_folder'), () => { App.onToggleStar(item);              hideContextMenu(); });
       _addCtxItem(menu, iconPin(14),    t('ctx_pin_to_home'),    () => { App.onTogglePin({ ...item, type: 'folder', isFolder: true, folderType: null }); hideContextMenu(); });
@@ -3207,6 +3232,7 @@ const UI = (() => {
       _addCtxDivider(menu);
       _addCtxItem(menu, _iconFolder,   t('ctx_go_to_folder'),   () => { App.onGoToFolder(item);          hideContextMenu(); });
       _addCtxItem(menu, _iconScan,     t('ctx_send_to_scan'),   () => { App.onSendToScan?.(item);        hideContextMenu(); });
+      if (!String(item.id || '').startsWith('sd_')) _addCtxItem(menu, _iconSdDownload, t('ctx_download_zip'), () => { App.onDownloadFolderZip?.(item); hideContextMenu(); });
       _addCtxDivider(menu);
       _addCtxItem(menu, iconPin(14),   t('ctx_pin_to_home'),    () => { App.onTogglePin(item);           hideContextMenu(); });
       _addCtxItem(menu, iconTrash(14), t('ctx_remove_history'), () => { App.onRemoveFromHistory(item);   hideContextMenu(); });
