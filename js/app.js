@@ -1,4 +1,4 @@
-window.SAVART_JS_VERSION = '3.5.739'; // debe coincidir con window.SAVART_VERSION de index.html (autocorrección de caché, ver index.html)
+window.SAVART_JS_VERSION = '3.5.740'; // debe coincidir con window.SAVART_VERSION de index.html (autocorrección de caché, ver index.html)
 /* ============================================================
    Savart — App entry point
    Wires Auth, Drive, DB, Player, and UI together.
@@ -7277,6 +7277,42 @@ const App = (() => {
    *
    * @param {Object[]} items — array of items with .id
    */
+  /* ── Solo portada (v3.5.740) ───────────────────────────────────────────────
+     Para canciones con datos "autoritativos" (re-escaneadas) que no tienen portada en este
+     dispositivo: baja la cabecera del archivo, saca la portada incrustada y guarda SOLO
+     coverBlob (+ 'id3' si no hay otra portada). No toca título/artista/álbum. De a una. */
+  async function _fetchCoversOnly(items) {
+    if (typeof Meta === 'undefined' || typeof Drive === 'undefined' || !Auth.isAuthenticated()) return;
+    for (const item of items) {
+      try {
+        const fresh = await DB.getMeta(item.id).catch(() => null);
+        if (fresh?.manualAt || fresh?.coverBlob || _isStableCoverUrl(fresh?.thumbnailUrl)) { _ensureCoverVisible(item.id, fresh); continue; }
+        let blob = await DB.getCachedBlob(item.id).catch(() => null);
+        const full = !!blob;
+        if (!blob) blob = await Drive.downloadFileHead(item.id, 300 * 1024).catch(() => null);
+        if (!blob) continue;
+        if (!full && blob.size >= 10) {
+          const hdr = new Uint8Array(await blob.slice(0, 10).arrayBuffer());
+          if (hdr[0] === 0x49 && hdr[1] === 0x44 && hdr[2] === 0x33) {
+            const needed = 10 + (((hdr[6] & 0x7f) << 21) | ((hdr[7] & 0x7f) << 14) | ((hdr[8] & 0x7f) << 7) | (hdr[9] & 0x7f));
+            if (needed > blob.size && needed < 12 * 1024 * 1024) {
+              const bigger = await Drive.downloadFileHead(item.id, needed + 1024).catch(() => null);
+              if (bigger) blob = bigger;
+            }
+          }
+        }
+        const parsed = await Meta.parse(item.id, blob, true).catch(() => null);
+        if (!parsed?.coverBlob) continue;
+        const patch = { coverBlob: parsed.coverBlob };
+        if (!fresh?.thumbnailUrl || fresh.thumbnailUrl === 'id3' || String(fresh.thumbnailUrl).startsWith('blob:')) patch.thumbnailUrl = 'id3';
+        await DB.setMeta(item.id, patch).catch(() => {});
+        _ensureCoverVisible(item.id, { ...(fresh || {}), ...patch });
+        const _qUrl = Meta.getCached(item.id)?.coverUrl;
+        if (_qUrl) { Player.patchQueueItem?.(item.id, { thumbnailUrl: _qUrl }); _updateQueueItemCover?.(item.id, _qUrl); }
+      } catch (_) { /* siguiente */ }
+    }
+  }
+
   async function _softScanItems(items, sharedMeta = null) {
     if (!items.length || typeof Meta === 'undefined') return;
 
@@ -7325,6 +7361,7 @@ const App = (() => {
 
     // ── Mandatory DB-read path (rescannedAt / manualAt) ─────────────────────
     // These items have authoritative data — paint whatever's in DB to DOM now.
+    const _coverOnly = [];
     toApply.forEach(item => {
       const m = metaMap.get(item.id);
       _ensureCoverVisible(item.id, m);
@@ -7332,7 +7369,17 @@ const App = (() => {
         _patchMetaText(item.id, { title: m.displayName || null, artist: m.artist || null,
                                   album: m.album || null, year: m.year || null });
       }
+      // v3.5.740: rescannedAt viaja por sync, la portada incrustada (coverBlob) NO. Una canción
+      // re-escaneada en otro dispositivo llegaba aquí sin portada local y nunca se buscaba
+      // (Home → Recientes quedaba en blanco aunque el reproductor sí la mostrara).
+      // Se baja SOLO la portada, sin tocar los textos re-escaneados.
+      if (!m?.manualAt && !m?.coverBlob && !_isStableCoverUrl(m?.thumbnailUrl)
+          && !String(item.id).startsWith('sd_') && !_sessionScannedIds.has('cov:' + item.id)) {
+        _sessionScannedIds.add('cov:' + item.id);
+        _coverOnly.push(item);
+      }
     });
+    if (_coverOnly.length) _fetchCoversOnly(_coverOnly).catch(() => {});
 
     // ── Already-scanned path — paint cover + text from DB meta or in-memory cache ──
     // Priority: Meta session cache (fresh Object URL) → DB coverBlob → external URL.
@@ -7384,6 +7431,9 @@ const App = (() => {
 
           // Use fresh DB data as existing baseline (beats stale metaMap snapshot)
           const existing = freshMeta || metaMap.get(item.id) || null;
+          // v3.5.740: si ya hay portada incrustada guardada en este dispositivo, pintarla YA
+          // (antes solo se pintaban URLs y la tarjeta esperaba a que terminara la descarga).
+          if (existing?.coverBlob) _ensureCoverVisible(item.id, existing);
 
           // ── Instant URL paint ────────────────────────────────────────────────────
           // If the item already has an external URL in DB, paint it immediately
