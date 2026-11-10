@@ -1,4 +1,4 @@
-window.SAVART_JS_VERSION = '3.5.720'; // debe coincidir con window.SAVART_VERSION de index.html (autocorrección de caché, ver index.html)
+window.SAVART_JS_VERSION = '3.5.721'; // debe coincidir con window.SAVART_VERSION de index.html (autocorrección de caché, ver index.html)
 /* ============================================================
    Savart — App entry point
    Wires Auth, Drive, DB, Player, and UI together.
@@ -1828,18 +1828,21 @@ const App = (() => {
     _aiBotChar = _createAiBotChar(svg);
   }
 
-  /* ── Video de YouTube en el reproductor (v3.5.720) ────────────────────────
+  /* ── Video de YouTube en el reproductor (v3.5.720 · v3.5.721) ──────────────
      Las pistas Soundrop suenan por el iframe de YouTube (1×1 px, fuera de vista).
-     Mover el iframe en el DOM lo recargaría (corta la canción), así que en modo
-     video se deja donde está y solo se POSICIONA encima de la portada con
-     position:fixed + transform:scale(). El transform no cambia el tamaño de
-     layout del iframe, así que YouTube no sube la calidad: se ve la misma
-     resolución que ya se está bajando (sin gasto extra de datos).
-     Se esconde solo si algo tapa la portada (letra, cola, menús) o si se cierra
-     el reproductor expandido; se apaga al pasar a una pista que no es de YouTube. */
+     Moverlo en el DOM lo recargaría (corta la canción), así que en modo video se
+     deja donde está y se POSICIONA encima de la portada con position:fixed +
+     transform:scale(). Mientras se ve, su tamaño de layout pasa a 16×9 px (para
+     que el video quede completo, sin recortes a los lados) — sigue siendo
+     diminuto para YouTube, así que no sube la calidad: misma resolución, sin
+     gasto extra de datos. La portada se cubre de negro (franjas arriba/abajo).
+     Se esconde si algo tapa la portada (letra, cola, menús) o al cerrar el
+     reproductor; se apaga al pasar a una pista que no es de YouTube. */
   const _ytVideo = (() => {
+    const LW = 16, LH = 9;   // tamaño de layout del iframe en modo video (16:9)
     let on = false, raf = 0, origStyle = null, shown = false;
     const iframe = () => { try { return Soundrop.yt.iframe(); } catch (_) { return null; } };
+    const art = () => document.getElementById('pexp-art');
     const isYtTrack = () => {
       const t = Player.getCurrentTrack();
       return !!(t?.isSoundrop && String(t.id || '').startsWith('sd_'));
@@ -1857,6 +1860,7 @@ const App = (() => {
         if (origStyle === null || origStyle === '') f.removeAttribute('style'); else f.setAttribute('style', origStyle);
       }
       shown = false;
+      art()?.classList.remove('yt-video-on');
     }
     function zAbove(el) {
       let z = 0;
@@ -1870,26 +1874,26 @@ const App = (() => {
       raf = 0;
       if (!on) return;
       if (!isYtTrack()) { off(); return; }
-      const f = iframe(), art = document.getElementById('pexp-art');
+      const f = iframe(), a = art();
       let visible = false, r = null;
-      if (f && art && Player.isSdActive?.()) {
-        r = art.getBoundingClientRect();
+      if (f && a && Player.isSdActive?.()) {
+        r = a.getBoundingClientRect();
         if (r.width > 20 && r.height > 20 && r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth) {
           const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
-          visible = !!(hit && art.contains(hit));
+          visible = !!(hit && a.contains(hit));
         }
       }
       if (visible) {
         if (!shown) { origStyle = f.getAttribute('style'); shown = true; }
-        // tamaño de layout actual del iframe (lo que YouTube "cree" que mide) — NO se cambia
-        const w0 = parseFloat(f.getAttribute('width')) || f.offsetWidth || 1;
-        const h0 = parseFloat(f.getAttribute('height')) || f.offsetHeight || 1;
-        const sx = r.width / w0, sy = r.height / h0;
-        const rad = parseFloat(getComputedStyle(art).borderTopLeftRadius) || 0;
-        f.style.cssText = `position:fixed;left:${r.left}px;top:${r.top}px;width:${w0}px;height:${h0}px;` +
+        a.classList.add('yt-video-on');
+        // Video completo (contain): ancho total y franjas negras arriba/abajo
+        let w = r.width, hh = w * LH / LW;
+        if (hh > r.height) { hh = r.height; w = hh * LW / LH; }
+        const s = w / LW;
+        const left = r.left + (r.width - w) / 2, top = r.top + (r.height - hh) / 2;
+        f.style.cssText = `position:fixed;left:${left}px;top:${top}px;width:${LW}px;height:${LH}px;` +
           `margin:0;border:0;pointer-events:none;background:#000;transform-origin:0 0;` +
-          `transform:scale(${sx},${sy});z-index:${zAbove(art)};` +
-          `clip-path:inset(0 round ${(rad / sx).toFixed(4)}px / ${(rad / sy).toFixed(4)}px);`;
+          `transform:scale(${s});z-index:${zAbove(a)};`;
       } else {
         park();
       }
