@@ -774,5 +774,19 @@ const Meta = (() => {
   }
 
   /* ── Expose ─────────────────────────────────────────────── */
-  return { parse, getCached, patchCached, forcePatch, revoke, injectCover, writeId3 };
+  /* v3.5.739: bitrate de un MP3 leyendo SOLO lo que hay justo después de la etiqueta ID3.
+     parse() recibe la primera 1 MB del archivo: si la etiqueta (portada grande) es más
+     grande que eso, el primer frame de audio queda fuera y el bitrate salía null ("— kbps"). */
+  async function mp3BitrateFromBlob(blob) {
+    try {
+      const hdr = new Uint8Array(await blob.slice(0, 10).arrayBuffer());
+      let start = 0;
+      if (hdr[0] === 0x49 && hdr[1] === 0x44 && hdr[2] === 0x33) start = 10 + _synchsafe4(hdr, 6) + ((hdr[5] & 0x10) ? 10 : 0);
+      if (start >= blob.size) return null;
+      const bytes = new Uint8Array(await blob.slice(start, start + 70000).arrayBuffer());
+      return _mp3Bitrate(bytes, 0);
+    } catch (_) { return null; }
+  }
+
+  return { parse, getCached, patchCached, forcePatch, revoke, injectCover, writeId3, mp3BitrateFromBlob };
 })();

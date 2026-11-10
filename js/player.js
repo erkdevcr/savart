@@ -2166,6 +2166,7 @@ const Player = (() => {
     resetEQ,
     // State
     isPlaying,
+    isFastStart: () => _fastStartActive, // v3.5.739: true mientras suena solo la cabeza (3 MB) del archivo
     isSdActive: () => _sdActive, // v3.5.720: true mientras la pista Soundrop suena por el iframe de YouTube
     getCurrentTime,
     getDuration,

@@ -1,4 +1,4 @@
-window.SAVART_JS_VERSION = '3.5.738'; // debe coincidir con window.SAVART_VERSION de index.html (autocorrección de caché, ver index.html)
+window.SAVART_JS_VERSION = '3.5.739'; // debe coincidir con window.SAVART_VERSION de index.html (autocorrección de caché, ver index.html)
 /* ============================================================
    Savart — App entry point
    Wires Auth, Drive, DB, Player, and UI together.
@@ -4178,8 +4178,26 @@ const App = (() => {
   // _onDurationReady: fires once per track via the player's loadedmetadata event.
   // audio.duration is accurate here. DB save happens in _playCurrentTrack (player.js)
   // as part of the same setMeta write — no separate DB call needed here.
+  // v3.5.739: si el archivo no declara bitrate (m4a, MP3 raros…), se calcula con el peso real
+  // y la duración real — nunca con la cabeza de 3 MB del arranque rápido (duración falsa).
+  function _fillMissingKbps(track) {
+    const cur = Player.getCurrentTrack();
+    if (!cur || !track || cur.id !== track.id || cur.isSoundrop || cur.isRadio) return;
+    if (Player.isFastStart?.()) return;
+    const dur = Player.getDuration();
+    const size = Number(cur.size) || 0;
+    if (!(dur > 0 && size > 0)) return;
+    if (Meta.getCached(cur.id)?.bitrate || cur.bitrate) return;
+    const kbps = Math.round((size * 8) / (dur * 1000));
+    if (!(kbps > 0 && kbps < 10000)) return;
+    Meta.patchCached(cur.id, { bitrate: kbps });
+    const el = document.getElementById('pexp-badge-kbps');
+    if (el && /—/.test(el.textContent)) el.textContent = `${kbps} kbps`;
+  }
+
   function _onDurationReady(track, durationSec) {
     if (!(durationSec > 0)) return;
+    setTimeout(() => _fillMissingKbps(track), 300);
     UI.updateBrowseSongDuration(track.id, durationSec);
     UI.updateLibrarySongDuration(track.id, durationSec);
     // Sync durationSec to other devices. Debounce is 2000ms — the DB write in
@@ -5065,10 +5083,18 @@ const App = (() => {
         }
       }
 
-      // Cache blob.size so _enrichTrack can always provide it
-      if (blob.size > 0) {
+      // Cache blob.size so _enrichTrack can always provide it — v3.5.739: SOLO si es el archivo
+      // completo. Con arranque rápido el blob es la cabeza de 3 MB: usarlo dejaba el chip y la
+      // línea del archivo en "3.0 MB" aunque Drive ya diera el peso real.
+      const _realSize = Number(item.size) || 0;
+      if (blob.size > 0 && !(_realSize > 0 && blob.size < _realSize * 0.95)) {
         _blobSizeCache.set(item.id, blob.size);
         item = { ...item, size: blob.size };
+      }
+      // v3.5.739: bitrate de MP3 cuando la etiqueta ID3 es más grande que la porción leída
+      if (!meta.bitrate && (/\.mp3$/i.test(item.name || '') || /mpeg/i.test(item.mimeType || ''))) {
+        const br = await Meta.mp3BitrateFromBlob(blob);
+        if (br) { meta = { ...meta, bitrate: br }; Meta.patchCached(item.id, { bitrate: br }); }
       }
 
       // Read DB meta first — needed to guard against overwriting manual edits
@@ -5321,6 +5347,8 @@ const App = (() => {
    */
   function _onFullBlobReady(item, blob) {
     _analyzeTrackLoudness(item.id, blob, /* force= */ true).catch(() => {});
+    // v3.5.739: terminado el arranque rápido ya hay duración real → completar kbps si faltaba
+    setTimeout(() => _fillMissingKbps(item), 4000);
   }
 
   /**
