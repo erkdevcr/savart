@@ -321,6 +321,36 @@ const Auth = (() => {
     console.log('[Auth] Inicializado (modo web).');
   }
 
+  /* ── Login sin mezclar permisos (v3.5.736) ──────────────────
+     El botón "Conectar YouTube" usa el MISMO client OAuth (CONFIG.YT_CLIENT_ID vacío),
+     así que una cuenta que ya conectó YouTube tiene youtube.readonly concedido a este
+     cliente. Con include_granted_scopes=true (lo que GIS manda por defecto) Google junta
+     los permisos ya concedidos con los del login (drive.file…) y rechaza la combinación
+     drive.file + youtube.readonly: "Error 400: invalid_request — scopes that cannot be
+     requested together". Pasaba al iniciar sesión en un navegador nuevo; en uno con
+     sesión activa no se nota porque renueva con refresh token sin abrir Google.
+     Igual que yt-auth.js: se reescribe la URL del popup para forzar
+     include_granted_scopes=false y dejar SOLO los scopes de Drive. */
+  function _noMerge(action) {
+    const origOpen = window.open.bind(window);
+    let restored = false;
+    const restore = () => { if (!restored) { restored = true; window.open = origOpen; } };
+    const safety = setTimeout(restore, 8000);
+    window.open = function patchedOpen(url, name, features) {
+      restore(); clearTimeout(safety);
+      if (typeof url === 'string' && url.includes('accounts.google.com/o/oauth2')) {
+        try {
+          const u = new URL(url);
+          u.searchParams.set('scope', CONFIG.SCOPES);
+          u.searchParams.set('include_granted_scopes', 'false');
+          return origOpen(u.toString(), name, features);
+        } catch (_) { /* URL inválida: abrir sin tocar */ }
+      }
+      return origOpen(url, name, features);
+    };
+    try { action(); } catch (e) { restore(); clearTimeout(safety); throw e; }
+  }
+
   /* ── Web-mode GIS helpers ───────────────────────────────── */
   function _tryCreateClient() {
     if (!window.google?.accounts?.oauth2) return;
@@ -328,6 +358,7 @@ const Auth = (() => {
       _tokenClient = google.accounts.oauth2.initTokenClient({
         client_id: CONFIG.CLIENT_ID,
         scope: CONFIG.SCOPES,
+        include_granted_scopes: false, // v3.5.736: ver _noMerge()
         callback: _handleTokenResponse,
         error_callback: _handleTokenError,
       });
@@ -337,6 +368,7 @@ const Auth = (() => {
       _codeClient = google.accounts.oauth2.initCodeClient({
         client_id: CONFIG.CLIENT_ID,
         scope: CONFIG.SCOPES,
+        include_granted_scopes: false, // v3.5.736: ver _noMerge()
         ux_mode: 'popup',
         callback: _handleCodeResponse,
         error_callback: _handleTokenError,
@@ -395,7 +427,7 @@ const Auth = (() => {
     _tryCreateClient();
     if (_onAutoLoginFail && _tokenClient) {
       console.log('[Auth] GIS cargado — ejecutando re-auth silenciosa diferida');
-      _tokenClient.requestAccessToken({ prompt: 'none' });
+      _noMerge(() => _tokenClient.requestAccessToken({ prompt: 'none' }));
     }
   }
 
@@ -514,7 +546,7 @@ const Auth = (() => {
       console.warn('[Auth] Renovación proactiva falló (' + err + ') — fallback a gesto');
       _fallbackToGestureRenewal();
     };
-    _tokenClient.requestAccessToken({ prompt: 'none' });
+    _noMerge(() => _tokenClient.requestAccessToken({ prompt: 'none' }));
   }
 
   function _fallbackToGestureRenewal() {
@@ -559,7 +591,7 @@ const Auth = (() => {
         console.warn('[Auth] Renovación por gesto falló:', err);
         _onExpiring();
       };
-      _tokenClient.requestAccessToken({ prompt: '' });
+      _noMerge(() => _tokenClient.requestAccessToken({ prompt: '' }));
     };
     document.addEventListener('click',      _attemptRenewal, { passive: true, capture: true });
     document.addEventListener('touchstart', _attemptRenewal, { passive: true, capture: true });
@@ -594,7 +626,7 @@ const Auth = (() => {
       return;
     }
     console.log('[Auth] Intentando re-auth silenciosa (prompt:none)...');
-    _tokenClient.requestAccessToken({ prompt: 'none' });
+    _noMerge(() => _tokenClient.requestAccessToken({ prompt: 'none' }));
   }
 
   async function fetchUserInfo() {
@@ -618,12 +650,12 @@ const Auth = (() => {
     // Con Worker configurado: code flow con consentimiento → además obtiene refresh token
     if (_codeClient) {
       console.log('[Auth] Solicitando code con pantalla de consentimiento');
-      _codeClient.requestCode();
+      _noMerge(() => _codeClient.requestCode());
       return;
     }
     if (!_tokenClient) return;
     console.log('[Auth] Solicitando token con pantalla de consentimiento');
-    _tokenClient.requestAccessToken({ prompt: 'consent' });
+    _noMerge(() => _tokenClient.requestAccessToken({ prompt: 'consent' }));
   }
 
   function requestToken() {
@@ -654,7 +686,7 @@ const Auth = (() => {
     // (renovación automática de por vida a partir de este login).
     if (_codeClient) {
       console.log('[Auth] Login vía code flow (obtendrá refresh token)…');
-      _codeClient.requestCode();
+      _noMerge(() => _codeClient.requestCode());
       return;
     }
     if (!_tokenClient) {
@@ -664,7 +696,7 @@ const Auth = (() => {
       }
       return;
     }
-    _tokenClient.requestAccessToken({ prompt: '' });
+    _noMerge(() => _tokenClient.requestAccessToken({ prompt: '' }));
   }
 
   function getValidToken() {
@@ -760,7 +792,7 @@ const Auth = (() => {
       _renewOnGesture = true;
     };
 
-    _tokenClient.requestAccessToken({ prompt: '' });
+    _noMerge(() => _tokenClient.requestAccessToken({ prompt: '' }));
   }
 
   async function logout() {
