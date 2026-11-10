@@ -1,4 +1,4 @@
-window.SAVART_JS_VERSION = '3.5.728'; // debe coincidir con window.SAVART_VERSION de index.html (autocorrección de caché, ver index.html)
+window.SAVART_JS_VERSION = '3.5.733'; // debe coincidir con window.SAVART_VERSION de index.html (autocorrección de caché, ver index.html)
 /* ============================================================
    Savart — App entry point
    Wires Auth, Drive, DB, Player, and UI together.
@@ -1836,8 +1836,8 @@ const App = (() => {
      diminuto para YouTube, así que no sube la calidad (sin gasto extra de datos).
      Siempre ocupa el mayor tamaño posible: de borde a borde del reproductor y, en
      alto, el panel de la portada, sin tapar título ni controles.
-     El botón imagen/video va en la esquina inferior izquierda del video y el chip SD
-     en la inferior derecha (siguen al video según lo estirado que esté). Como el
+     El botón imagen/video y, a su derecha, el chip SD van juntos en la esquina
+     inferior derecha del video (siguen al video según lo estirado que esté). Como el
      iframe está por encima del reproductor, su recorte deja "huecos" donde están
      el botón y el chip para que se vean encima.
      Se esconde si algo grande tapa la portada (letra, cola…) o al cerrar el
@@ -1901,12 +1901,18 @@ const App = (() => {
       if (f && a && Player.isSdActive?.()) {
         r = a.getBoundingClientRect();
         if (r.width > 20 && r.height > 20 && r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth) {
-          // 5 puntos (centro + 4 interiores): algo pequeño encima (p. ej. el bot IA arrastrado
-          // al centro) no apaga el video; solo una capa grande (letra, cola…) que tape la mayoría.
+          // 5 puntos (centro + 4 interiores). En cada uno se mira la pila completa: solo cuenta
+          // como "tapada" si lo que está encima de la portada es parte del propio reproductor
+          // (vista de letra, etc.), porque eso quedaría DEBAJO del video. Lo que está fuera del
+          // reproductor (hojas de velocidad/temporizador, menús, el bot IA…) ya se dibuja por
+          // encima del video, así que no lo apaga (v3.5.730).
+          const pe = document.getElementById('player-expanded');
           let hits = 0;
           for (const [fx, fy] of [[0.5, 0.5], [0.25, 0.25], [0.75, 0.25], [0.25, 0.75], [0.75, 0.75]]) {
-            const el = document.elementFromPoint(r.left + r.width * fx, r.top + r.height * fy);
-            if (el && a.contains(el)) hits++;
+            for (const el of document.elementsFromPoint(r.left + r.width * fx, r.top + r.height * fy)) {
+              if (a.contains(el)) { hits++; break; }
+              if (pe && pe.contains(el)) break;
+            }
           }
           visible = hits >= 3;
         }
@@ -1922,18 +1928,13 @@ const App = (() => {
         const s = vw / LW, vh = LH * s;
         const left = Math.max(pr.left, Math.min(r.left + r.width / 2 - vw / 2, pr.right - vw));
         const top = Math.max(vTop, Math.min(r.top + r.height / 2 - vh / 2, vBot - vh));
-        // Botón: esquina inferior izquierda del video · chip SD: inferior derecha
+        // Grupo [botón imagen/video][chip SD]: esquina inferior derecha del video
         // (coordenadas relativas a la portada, que en modo video deja ver lo que sale de ella)
-        const c = ctrls(), ch = chip();
+        const c = ctrls();
         if (c) {
           c.style.right = c.style.bottom = 'auto';
-          c.style.left = `${left + M - r.left}px`;
+          c.style.left = `${left + vw - M - c.offsetWidth - r.left}px`;
           c.style.top = `${top + vh - M - c.offsetHeight - r.top}px`;
-        }
-        if (ch) {
-          ch.style.right = ch.style.bottom = 'auto';
-          ch.style.left = `${left + vw - M - ch.offsetWidth - r.left}px`;
-          ch.style.top = `${top + vh - M - ch.offsetHeight - r.top}px`;
         }
         // Recorte: el video entero + "huecos" donde están el botón y el chip (si se ven)
         let clip = rr(0, 0, LW, LH, 0);
@@ -1970,6 +1971,22 @@ const App = (() => {
     (art()?.closest('.pexp-art-panel') || art())?.addEventListener('pointerdown', showCtrls);
     return { toggle, off, syncBtn };
   })();
+
+  /* ── Chip de calidad de video de YouTube (v3.5.732) ───────────────────────
+     Junto a los chips de tipo/kbps del reproductor: muestra la calidad que YouTube
+     reporta en vivo para la canción de Soundrop que suena (144p, 240p…). */
+  const _YT_Q = { tiny: '144p', small: '240p', medium: '360p', large: '480p', hd720: '720p', hd1080: '1080p', hd1440: '1440p', hd2160: '2160p', highres: '4K+' };
+  function _ytQualityTick() {
+    const el = document.getElementById('pexp-badge-ytq');
+    if (!el || document.hidden) return;
+    const t = Player.getCurrentTrack();
+    const isSd = !!(t?.isSoundrop && String(t.id || '').startsWith('sd_'));
+    const q = isSd && Player.isSdActive?.() ? (Soundrop.yt.quality?.() || '') : '';
+    const label = q && q !== 'unknown' ? (_YT_Q[q] || q) : '';
+    if (label) { const txt = label; if (el.textContent !== txt) el.textContent = txt; el.style.display = ''; }
+    else el.style.display = 'none';
+  }
+  setInterval(_ytQualityTick, 1500);
 
   /* ── Descargar copia al dispositivo (canciones de Drive, no Soundrop) ─────
      Reusa el blob ya cacheado en IDB (mismo cache que usa el player para
@@ -3114,6 +3131,7 @@ const App = (() => {
     else if (/^(?:quita|desactiva|resetea|reinicia) (?:el )?(?:ecualizador|eq)$/.test(q)) eqKey = 'flat';
     if (eqKey) {
       if (track?.isRadio) { setStatus(_aiL('✦ El ecualizador no se puede usar mientras suena una emisora', '✦ The equalizer can’t be used while a radio station is playing'), 'empty'); return true; }
+      if (track?.isSoundrop && String(track.id || '').startsWith('sd_')) { setStatus(_aiL('✦ El ecualizador no tiene efecto en canciones de Soundrop', '✦ The equalizer has no effect on Soundrop songs'), 'empty'); return true; }
       _applyEQPreset(eqKey);
       return done(`${_aiL('Ecualizador', 'Equalizer')}: ${_aiEn() ? (eqKey === 'bass' ? 'bass' : eqKey === 'classical' ? 'classical' : eqKey) : (eqKey === 'flat' ? 'plano' : eqKey === 'bass' ? 'bajos' : eqKey === 'classical' ? 'clásica' : eqKey)}`);
     }
@@ -3772,6 +3790,8 @@ const App = (() => {
     // _onProgress once RadioDvr has a buffered range to report (or never, for
     // a station that fell back to plain playback — see radio-dvr.js).
     document.body.classList.toggle('radio-track-active', !!track?.isRadio);
+    // v3.5.731: Soundrop (iframe de YouTube) no pasa por el grafo WebAudio → el EQ no tiene efecto
+    document.body.classList.toggle('sd-track-active', !!(track?.isSoundrop && String(track.id || '').startsWith('sd_')));
     if (track?.isRadio) UI.updateRadioSeekButtons(Player.getRadioDvrState());
     UI.setActiveSongRow(track?.id);
     document.title = track ? `${enriched.displayName} — Savart` : 'Savart';
@@ -18668,6 +18688,7 @@ const App = (() => {
     // explain why instead of silently doing nothing.
     document.getElementById('btn-pexp-eq-open')?.addEventListener('click', () => {
       if (Player.getCurrentTrack()?.isRadio) { UI.showToast(UI.t('toast_radio_no_speed_eq')); return; }
+      if (document.body.classList.contains('sd-track-active')) { UI.showToast(UI.t('toast_sd_no_eq')); return; }
       document.getElementById('overlay-eq')?.classList.add('visible');
     });
 

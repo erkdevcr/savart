@@ -480,6 +480,8 @@ const Soundrop = (() => {
       duration()   { return (_p && _ready) ? (_p.getDuration()    || 0) : 0; },
       isPaused()   { return _paused; },
       iframe()     { try { return (_p && _p.getIframe) ? _p.getIframe() : null; } catch (_) { return null; } },
+      // v3.5.732: calidad de video que YouTube está usando ahora ('tiny','small','medium'…; '' si no se sabe)
+      quality()    { try { return (_p && _ready && _p.getPlaybackQuality) ? (_p.getPlaybackQuality() || '') : ''; } catch (_) { return ''; } },
     };
   })();
 

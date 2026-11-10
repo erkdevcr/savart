@@ -9298,7 +9298,7 @@ body.bot-novoice #ai-search-mic { display: none !important; }
 
 /* v3.5.721 — Botón Video ⇄ Miniatura sobre la portada (esquina inferior izquierda,
    misma línea que el chip SD) + fondo negro (franjas) mientras se ve el video */
-.pexp-video-ctrls { position: absolute; left: 18px; bottom: 18px; z-index: 3; display: flex; gap: 8px; }
+.pexp-video-ctrls { position: absolute; right: 18px; bottom: 18px; z-index: 3; display: flex; align-items: center; gap: 8px; }
 .pexp-video-btn {
   height: 34px; min-width: 40px; padding: 0 10px;
   display: inline-flex; align-items: center; justify-content: center;
@@ -9338,3 +9338,12 @@ body.bot-novoice #ai-search-mic { display: none !important; }
 .pexp-art.yt-video-on::after { border-radius: inherit; }
 .pexp-art.yt-video-on > img,
 .pexp-art.yt-video-on > .pexp-art-placeholder { visibility: hidden; }
+
+/* v3.5.729 — Chip SD dentro del grupo de controles: a la derecha del botón imagen/video */
+.pexp-video-ctrls .sd-thumb-chip--exp { position: static; }
+
+/* v3.5.731 — EQ atenuado con canciones de Soundrop (no pasan por WebAudio); sigue tocable para el toast */
+body.sd-track-active #btn-pexp-eq-open { opacity: 0.35; }
+
+/* v3.5.733 — chip de calidad de video: '144p' en minúscula (los demás chips van en mayúsculas) */
+#pexp-badge-ytq { text-transform: none; }

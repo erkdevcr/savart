@@ -115,6 +115,7 @@ const UI = (() => {
       toast_radio_restored:     'Emisora restaurada',
       toast_radio_no_queue:     'No se puede agregar a la cola mientras suena una emisora de radio',
       toast_radio_no_speed_eq:  'Velocidad y EQ no están disponibles con una emisora de radio',
+      toast_sd_no_eq:           'El EQ no está disponible con canciones de Soundrop',
       radio_rec_btn:            'Grabar',
       radio_rec_title:          'Grabar emisora',
       radio_rec_from_now:       'Desde ahora',
@@ -664,6 +665,7 @@ const UI = (() => {
       toast_radio_restored:     'Station restored',
       toast_radio_no_queue:     "Can't add to the queue while a radio station is playing",
       toast_radio_no_speed_eq:  'Speed and EQ aren\'t available with a radio station',
+      toast_sd_no_eq:           'EQ isn\'t available with Soundrop songs',
       radio_rec_btn:            'Record',
       radio_rec_title:          'Record station',
       radio_rec_from_now:       'From now',
@@ -1415,8 +1417,13 @@ const UI = (() => {
       if (badgeKbps) { badgeKbps.textContent = kbps ? `${kbps} kbps` : '— kbps'; badgeKbps.style.display = ''; }
       if (badgeSize) { badgeSize.textContent = sizeStr;                           badgeSize.style.display = ''; }
       if (badgeRadioBuffer) badgeRadioBuffer.style.display = 'none';
+      const _ytq = document.getElementById('pexp-badge-ytq'); if (_ytq) _ytq.style.display = 'none';
       badgesEl.style.visibility = 'visible';
     } else if (badgesEl) {
+      // v3.5.732: el chip de calidad de video lo enciende app.js (_ytQualityTick) solo en Soundrop
+      if (!(track?.isSoundrop && String(track?.id || '').startsWith('sd_'))) {
+        const _ytq = document.getElementById('pexp-badge-ytq'); if (_ytq) _ytq.style.display = 'none';
+      }
       // SD track: hide Drive-only chips but keep badges row visible so the
       // speed chip (which applies to SD too) remains visible.
       if (badgeType) badgeType.style.display = 'none';
@@ -1461,7 +1468,8 @@ const UI = (() => {
       if (_showExp) {
         if (!sdChip) {
           sdChip = document.createElement('span');
-          artWrap.appendChild(sdChip);
+          // v3.5.729: dentro del grupo de controles (a la derecha del botón imagen/video)
+          (artWrap.querySelector('.pexp-video-ctrls') || artWrap).appendChild(sdChip);
         }
         sdChip.className = 'sd-thumb-chip sd-thumb-chip--exp';
         const _isCheck = (track?.isSoundrop && track?.sdCached) || track?.soundropSaved;
